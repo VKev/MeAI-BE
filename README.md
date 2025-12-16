@@ -2,6 +2,8 @@
 
 An opinionated .NET 9 boilerplate for API-first microservices (User, Guest) with an API Gateway, Redis, RabbitMQ, PostgreSQL, and optional n8n automation. Infrastructure is codified with Terraform so you can deploy either to AWS ECS/Fargate or to AWS EKS with Kubernetes manifests.
 
+docker compose -f docker-compose-production.yml up -d --build
+
 ## Quickstart (fresh clone)
 1. Clone: `git clone https://github.com/VKev/Microservices-Dot-Net-Template.git && cd Microservices-Dot-Net-Template`.
 2. Create private tfvars: copy files from `Terraform-vars/` to `terraform-var/` (same names) and fill real values (AWS account ID in ECR URLs, DB passwords, Cloudflare/CloudFront settings, etc.). Keep `terraform-var/` uncommitted.
