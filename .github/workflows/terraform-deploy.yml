@@ -1,0 +1,309 @@
+name: Deploy Infrastructure with Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "GitHub Environment to use."
+        type: string
+        default: infrastructure-khanghv2406
+        required: true
+      action:
+        description: "Terraform action to perform"
+        type: choice
+        options: [plan, apply, destroy]
+        default: plan
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ""
+  PROJECT_NAME: ""
+
+jobs:
+  terraform:
+    name: terraform-${{ inputs.action }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Write Terraform variables from secrets
+        working-directory: Terraform
+        env:
+          SECRETS_JSON: ${{ toJson(secrets) }}
+        run: |
+          set -euo pipefail
+
+          # Bring repo-provided defaults into working dir if present
+          if ls ../terraform-vars/*.auto.tfvars >/dev/null 2>&1; then
+            echo "Copying repo tfvars from terraform-vars/"
+            cp ../terraform-vars/*.auto.tfvars . || true
+          fi
+          if ls ../Terraform-vars/*.auto.tfvars >/dev/null 2>&1; then
+            echo "Copying repo tfvars from Terraform-vars/ (sanitized)"
+            cp ../Terraform-vars/*.auto.tfvars . || true
+          fi
+
+          # Ensure jq is available
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          # List keys once for visibility
+          echo "Found TERRAFORM_VARS_* secrets:"
+          echo "$SECRETS_JSON" \
+            | jq -r 'to_entries[] | select(.key | startswith("TERRAFORM_VARS_")) | .key' \
+            | sort
+          echo ""
+
+          # Create .auto.tfvars files from secrets (preserve multi-line values)
+          echo "$SECRETS_JSON" \
+            | jq -r 'to_entries[] | select(.key | startswith("TERRAFORM_VARS_")) | .key' \
+            | while read -r key; do
+                suffix=${key#TERRAFORM_VARS_}
+                norm=$(echo "$suffix" \
+                  | tr '[:upper:]' '[:lower:]' \
+                  | sed 's/^\s\+//;s/\s\+$//' \
+                  | tr ' /\\' '___' )
+                value=$(jq -r --arg k "$key" '.[$k]' <<< "$SECRETS_JSON")
+                if echo "$value" | jq -e . >/dev/null 2>&1; then
+                  case "$norm" in
+                    *.auto.tfvars.json|*.tfvars.json) filename="$norm";;
+                    *.auto.tfvars|*.tfvars)           filename="$norm.json";;
+                    *)                                 filename="$norm.auto.tfvars.json";;
+                  esac
+                  echo "Creating $filename from $key (JSON)"
+                  printf '%s' "$value" > "$filename"
+                else
+                  case "$norm" in
+                    *.auto.tfvars|*.tfvars)           filename="$norm";;
+                    *.auto.tfvars.json|*.tfvars.json) filename="${norm%.json}";;
+                    *)                                 filename="$norm.auto.tfvars";;
+                  esac
+                  echo "Creating $filename from $key (HCL/raw)"
+                  printf '%s' "$value" > "$filename"
+                fi
+
+                if [ -z "$suffix" ]; then
+                  echo "Skipping empty suffix for key: $key"
+                  continue
+                fi
+
+                if [ -f "$filename" ]; then
+                  echo "Successfully created $filename ($(wc -l < "$filename") lines)"
+                else
+                  echo "ERROR: Failed to create $filename"
+                fi
+              done
+
+          # Merge all HCL and JSON tfvars together using python-hcl2 for HCL files
+          echo "Merging all HCL/JSON tfvars into 00-all.auto.tfvars.json"
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y python3-pip >/dev/null
+          python3 -m pip install --user python-hcl2 >/dev/null
+          export PATH="$HOME/.local/bin:$PATH"
+          python3 scripts/merge_tfvars.py
+
+          # Remove all other tfvars so only the merged file is auto-loaded
+          for f in *.auto.tfvars *.auto.tfvars.json; do
+            [ "$f" = "00-all.auto.tfvars.json" ] && continue || true
+            rm -f "$f" || true
+          done
+
+          echo "\nCreated Terraform variable files dynamically:"
+          ls -la 00-all.auto.tfvars.json 2>/dev/null || echo "No .auto.tfvars files found"
+
+          echo "\nSanity check of merged variables:"
+          if [ -f 00-all.auto.tfvars.json ]; then
+            echo "Top-level keys:"
+            jq -r 'keys' 00-all.auto.tfvars.json || true
+            echo "Services keys:"
+            jq -r '.services | keys' 00-all.auto.tfvars.json || echo "(no services key)"
+          fi
+
+      - name: Refresh project/region from merged tfvars
+        working-directory: Terraform
+        run: python scripts/export_tf_env.py >> "$GITHUB_ENV"
+        env:
+          TF_ENV_FALLBACK_PROJECT: ${{ env.PROJECT_NAME }}
+          TF_ENV_FALLBACK_REGION: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Initialize Terraform with remote backend
+        working-directory: Terraform
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+          PROJECT_NAME: ${{ env.PROJECT_NAME }}
+        run: |
+          BUCKET="${PROJECT_NAME}-${AWS_REGION}-terraform-state"
+          TABLE="${PROJECT_NAME}-${AWS_REGION}-terraform-locks"
+          
+          echo "Initializing Terraform with backend:"
+          echo "  Bucket: ${BUCKET}"
+          echo "  Key: terraform/state.tfstate"
+          echo "  Region: ${AWS_REGION}"
+          echo "  DynamoDB Table: ${TABLE}"
+          
+          terraform init \
+            -backend-config="bucket=${BUCKET}" \
+            -backend-config="key=terraform/state.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TABLE}" \
+            -backend-config="encrypt=true" \
+            -input=false
+
+      - name: Validate Terraform
+        working-directory: Terraform
+        run: terraform validate
+
+      - name: Terraform format (auto-fix)
+        working-directory: Terraform
+        run: terraform fmt -recursive
+
+      - name: Format check
+        working-directory: Terraform
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: Terraform
+        env:
+          TF_VAR_region: ${{ env.AWS_REGION }}
+          TF_VAR_project_name: ${{ env.PROJECT_NAME }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+        run: |
+          set +e
+          terraform plan -input=false -out=tfplan -detailed-exitcode
+          exit_code=$?
+          set -e
+
+          echo "exitcode=$exit_code" >> "$GITHUB_OUTPUT"
+          if [ "$exit_code" -eq 1 ]; then
+            echo "Terraform plan failed!"
+            exit 1
+          fi
+
+          if [ "$exit_code" -eq 2 ]; then
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Show Plan
+        working-directory: Terraform
+        run: terraform show -no-color tfplan
+
+      - name: Terraform Apply
+        if: inputs.action == 'apply' && steps.plan.outcome == 'success'
+        working-directory: Terraform
+        env:
+          TF_VAR_region: ${{ env.AWS_REGION }}
+          TF_VAR_project_name: ${{ env.PROJECT_NAME }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+        run: |
+          echo "Applying Terraform changes..."
+          terraform apply -input=false -auto-approve tfplan
+
+      - name: Terraform Destroy
+        if: inputs.action == 'destroy'
+        working-directory: Terraform
+        env:
+          TF_VAR_region: ${{ env.AWS_REGION }}
+          TF_VAR_project_name: ${{ env.PROJECT_NAME }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+        run: |
+          echo "WARNING: This will destroy all infrastructure!"
+          echo "Sleeping for 10 seconds to allow cancellation..."
+          sleep 10
+          terraform destroy -input=false -auto-approve
+
+      - name: Show Outputs
+        if: inputs.action == 'apply'
+        working-directory: Terraform
+        run: |
+          echo "## Infrastructure Outputs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          terraform output >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate Summary
+        if: always()
+        run: |
+          echo "## Terraform Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment**: ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Action**: ${{ inputs.action }}" >> $GITHUB_STEP_SUMMARY
+          echo "**AWS Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Project**: ${{ env.PROJECT_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ inputs.action }}" == "plan" ]; then
+            echo "Plan completed successfully! Review the changes above." >> $GITHUB_STEP_SUMMARY
+            echo "To apply these changes, run this workflow again with action: 'apply'" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ inputs.action }}" == "apply" ] && [ "${{ job.status }}" == "success" ]; then
+            echo "Infrastructure deployed successfully!" >> $GITHUB_STEP_SUMMARY
+            echo "Check the outputs above for connection details." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ inputs.action }}" == "destroy" ] && [ "${{ job.status }}" == "success" ]; then
+            echo "Infrastructure destroyed successfully!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Deployment failed. Check the logs above for details." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload Terraform Plan
+        if: inputs.action == 'plan'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.sha }}
+          path: Terraform/tfplan
+          retention-days: 30
+
+      - name: Comment Plan on PR (if applicable)
+        if: inputs.action == 'plan' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+            
+            try {
+              const plan = execSync('cd Terraform && terraform show -no-color tfplan', { encoding: 'utf8' });
+              const comment = `## Terraform Plan 📋
+              
+              <details>
+              <summary>Show Plan</summary>
+              
+              \`\`\`
+              ${plan}
+              \`\`\`
+              
+              </details>
+              
+              **Action Required**: Review the plan and run with \`action: apply\` to deploy.
+              `;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } catch (error) {
+              console.log('Could not post plan comment:', error.message);
+            }

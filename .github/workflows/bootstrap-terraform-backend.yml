@@ -1,0 +1,146 @@
+name: Bootstrap Terraform Backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "GitHub Environment to use."
+        type: string
+        default: infrastructure-khanghv2406
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ""
+  PROJECT_NAME: ""
+
+jobs:
+  bootstrap:
+    name: create-backend
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write Terraform variables from secrets (merge)
+        working-directory: Terraform
+        env:
+          SECRETS_JSON: ${{ toJson(secrets) }}
+        run: |
+          set -euo pipefail
+
+          cp ../terraform-vars/*.auto.tfvars . 2>/dev/null || true
+          cp ../Terraform-vars/*.auto.tfvars . 2>/dev/null || true
+
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          echo "$SECRETS_JSON" \
+            | jq -r 'to_entries[] | select(.key | startswith("TERRAFORM_VARS_")) | .key' \
+            | while read -r key; do
+                suffix=${key#TERRAFORM_VARS_}
+                norm=$(echo "$suffix" \
+                  | tr '[:upper:]' '[:lower:]' \
+                  | sed 's/^\s\+//;s/\s\+$//' \
+                  | tr ' /\\' '___' )
+                value=$(jq -r --arg k "$key" '.[$k]' <<< "$SECRETS_JSON")
+                if echo "$value" | jq -e . >/dev/null 2>&1; then
+                  case "$norm" in
+                    *.auto.tfvars.json|*.tfvars.json) filename="$norm";;
+                    *.auto.tfvars|*.tfvars)           filename="$norm.json";;
+                    *)                                 filename="$norm.auto.tfvars.json";;
+                  esac
+                  printf '%s' "$value" > "$filename"
+                else
+                  case "$norm" in
+                    *.auto.tfvars|*.tfvars)           filename="$norm";;
+                    *.auto.tfvars.json|*.tfvars.json) filename="${norm%.json}";;
+                    *)                                 filename="$norm.auto.tfvars";;
+                  esac
+                  printf '%s' "$value" > "$filename"
+                fi
+              done
+
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y python3-pip >/dev/null
+          python3 -m pip install --user python-hcl2 >/dev/null
+          export PATH="$HOME/.local/bin:$PATH"
+          python3 scripts/merge_tfvars.py
+
+          for f in *.auto.tfvars *.auto.tfvars.json; do
+            [ "$f" = "00-all.auto.tfvars.json" ] && continue || true
+            rm -f "$f" || true
+          done
+
+      - name: Load project/region from Terraform vars
+        working-directory: Terraform
+        run: python scripts/export_tf_env.py >> "$GITHUB_ENV"
+        env:
+          TF_ENV_FALLBACK_PROJECT: ${{ env.PROJECT_NAME }}
+          TF_ENV_FALLBACK_REGION: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Init (local backend)
+        working-directory: Terraform/bootstrap
+        run: terraform init -input=false
+
+      - name: Validate
+        working-directory: Terraform/bootstrap
+        run: terraform validate
+
+      - name: Plan
+        id: plan
+        working-directory: Terraform/bootstrap
+        env:
+          TF_VAR_region: ${{ env.AWS_REGION }}
+          TF_VAR_project_name: ${{ env.PROJECT_NAME }}
+        run: |
+          terraform plan -input=false -out=tfplan -var="project_name=${PROJECT_NAME}" -var="region=${AWS_REGION}"
+
+      - name: Apply
+        if: ${{ steps.plan.outcome == 'success' }}
+        working-directory: Terraform/bootstrap
+        env:
+          TF_VAR_region: ${{ env.AWS_REGION }}
+          TF_VAR_project_name: ${{ env.PROJECT_NAME }}
+        run: |
+          terraform apply -input=false -auto-approve tfplan
+
+      - name: Show outputs
+        working-directory: Terraform/bootstrap
+        run: |
+          terraform output -json | jq .
+
+      - name: Init root Terraform with remote backend
+        working-directory: Terraform
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+          PROJECT_NAME: ${{ env.PROJECT_NAME }}
+        run: |
+          BUCKET="${PROJECT_NAME}-${AWS_REGION}-terraform-state"
+          TABLE="${PROJECT_NAME}-${AWS_REGION}-terraform-locks"
+          terraform init \
+            -backend-config="bucket=${BUCKET}" \
+            -backend-config="key=terraform/state.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TABLE}" \
+            -backend-config="encrypt=true" \
+            -input=false
+
+

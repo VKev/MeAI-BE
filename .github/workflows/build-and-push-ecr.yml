@@ -1,0 +1,295 @@
+name: Build and Push Microservices to ECR
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "GitHub Environment to use."
+        type: string
+        default: infrastructure-khanghv2406
+        required: true
+
+# Top-level env falls back to repo vars if env vars are absent.
+env:
+  AWS_REGION: ""
+  PROJECT_NAME: ""
+
+permissions:
+  contents: read
+
+jobs:
+  discover-services:
+    name: Discover Microservices
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.get-services.outputs.services }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Discover microservices
+        id: get-services
+        run: |
+          services=()
+          BASE="Backend/Microservices"
+          if [ -d "$BASE" ]; then
+            for dir in "$BASE"/*/; do
+              [ -d "$dir" ] || continue
+              service_name=$(basename "$dir")
+              if [[ ! "$service_name" =~ ^(SharedLibrary|sharedlibrary)$ ]]; then
+                if [ -f "${dir}Dockerfile" ] || [ -f "${dir}dockerfile" ] || [ -f "${dir}DockerFile" ]; then
+                  services+=("$service_name")
+                  echo "Found microservice: $service_name with Dockerfile"
+                else
+                  echo "Skipping $service_name (no Dockerfile found)"
+                fi
+              fi
+            done
+          fi
+          if [ ${#services[@]} -eq 0 ]; then
+            echo "services=[]" >> "$GITHUB_OUTPUT"
+          else
+            services_json=$(printf '%s\n' "${services[@]}" | jq -R . | jq -s -c .)
+            echo "services=$services_json" >> "$GITHUB_OUTPUT"
+            echo "Discovered services: $services_json"
+          fi
+
+  build-and-push:
+    name: Build and Push
+    runs-on: ubuntu-latest
+    needs: discover-services
+    if: ${{ needs.discover-services.outputs.services != '[]' }}
+    environment:
+      name: ${{ inputs.environment }}   # use environment-level secrets/vars
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.discover-services.outputs.services) }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Load project/region from Terraform vars
+        run: python Terraform/scripts/export_tf_env.py >> "$GITHUB_ENV"
+        env:
+          TF_ENV_FALLBACK_PROJECT: ${{ env.PROJECT_NAME }}
+          TF_ENV_FALLBACK_REGION: ${{ env.AWS_REGION }}
+
+      - name: Derive ECR repo name from project/env
+        run: |
+          REPO="${{ env.ECR_REPO_NAME }}"
+          if [ -z "$REPO" ] || [ "$REPO" = "default" ]; then
+            REPO="${PROJECT_NAME:-default}-${{ inputs.environment }}-ecr"
+          fi
+          echo "ECR_REPO_NAME=$REPO" >> "$GITHUB_ENV"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}          # environment secret
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}  # environment secret
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set image tag
+        id: set-tag
+        run: echo "IMAGE_TAG=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Create ECR repository if it doesn't exist
+        run: |
+          REPO_NAME="${{ env.ECR_REPO_NAME }}"
+          aws ecr describe-repositories --repository-names "$REPO_NAME" --region "${{ env.AWS_REGION }}" \
+          || aws ecr create-repository --repository-name "$REPO_NAME" --region "${{ env.AWS_REGION }}"
+          echo "REPO_NAME=$REPO_NAME" >> "$GITHUB_ENV"
+
+      - name: Detect Dockerfile path
+        id: dockerfile
+        run: |
+          BASE="Backend/Microservices/${{ matrix.service }}"
+          for name in Dockerfile dockerfile DockerFile; do
+            if [ -f "$BASE/$name" ]; then
+              echo "path=$BASE/$name" >> "$GITHUB_OUTPUT"
+              echo "Found Dockerfile at: $BASE/$name"
+              exit 0
+            fi
+          done
+          echo "No Dockerfile found under $BASE" >&2
+          exit 1
+
+      # IMPORTANT: Use the SAME CONTEXT as docker compose (parent folder)
+      - name: Build and push image to Amazon ECR with cache
+        id: build-image
+        uses: docker/build-push-action@v5
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.set-tag.outputs.IMAGE_TAG }}
+        with:
+          context: Backend/Microservices
+          file: ${{ steps.dockerfile.outputs.path }}
+          build-args: |
+            SERVICE_NAME=${{ matrix.service }}
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO_NAME }}:${{ matrix.service }}-${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO_NAME }}:${{ matrix.service }}-latest
+          cache-from: |
+            type=gha,scope=${{ matrix.service }}
+            type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO_NAME }}:${{ matrix.service }}-cache
+          cache-to: |
+            type=gha,mode=max,scope=${{ matrix.service }}
+            type=registry,ref=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPO_NAME }}:${{ matrix.service }}-cache,mode=max
+          platforms: linux/amd64
+
+      - name: Output build information
+        run: |
+          echo "Successfully built and pushed ${{ matrix.service }}"
+          echo "Image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_NAME }}:${{ matrix.service }}-${{ steps.set-tag.outputs.IMAGE_TAG }}"
+          echo ""
+          echo "=== Terraform Configuration ==="
+          echo "For service '${{ matrix.service }}', update your Terraform variables.tf:"
+          echo ""
+          echo "ecs_container_image_repository_url = \"${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_NAME }}\""
+          echo "ecs_container_image_tag            = \"${{ matrix.service }}-${{ steps.set-tag.outputs.IMAGE_TAG }}\""
+          echo ""
+          echo "Or use latest tag:"
+          echo "ecs_container_image_tag            = \"${{ matrix.service }}-latest\""
+          echo "=================================="
+
+      - name: Output image details
+        run: |
+          echo "### ✅ Build Summary for ${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | ${{ matrix.service }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Project | ${{ env.PROJECT_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Repository | ${{ env.ECR_REPO_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | ${{ env.AWS_REGION }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Tag | ${{ matrix.service }}-${{ steps.set-tag.outputs.IMAGE_TAG }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### 📦 ECR Repository URL" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### 🔧 Terraform Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`hcl" >> $GITHUB_STEP_SUMMARY
+          echo "# Copy these values to your Terraform .tfvars file" >> $GITHUB_STEP_SUMMARY
+          echo "ecs_container_image_repository_url = \"${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPO_NAME }}\"" >> $GITHUB_STEP_SUMMARY
+          echo "ecs_container_image_tag            = \"${{ matrix.service }}-${{ steps.set-tag.outputs.IMAGE_TAG }}\"" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Or use latest tag:" >> $GITHUB_STEP_SUMMARY
+          echo "ecs_container_image_tag            = \"${{ matrix.service }}-latest\"" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [discover-services, build-and-push]
+    if: always()
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Load project/region from Terraform vars
+        run: python Terraform/scripts/export_tf_env.py >> "$GITHUB_ENV"
+        env:
+          TF_ENV_FALLBACK_PROJECT: ${{ env.PROJECT_NAME }}
+          TF_ENV_FALLBACK_REGION: ${{ env.AWS_REGION }}
+
+      - name: Derive ECR repo name from project/env
+        run: |
+          REPO="${{ env.ECR_REPO_NAME }}"
+          if [ -z "$REPO" ] || [ "$REPO" = "default" ]; then
+            REPO="${PROJECT_NAME:-default}-${{ inputs.environment }}-ecr"
+          fi
+          echo "ECR_REPO_NAME=$REPO" >> "$GITHUB_ENV"
+
+      - name: Configure AWS credentials for summary
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR for summary
+        id: login-ecr-summary
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Generate summary
+        run: |
+          echo "## 🎉 Microservices Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| AWS Region | ${{ env.AWS_REGION }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Project | ${{ env.PROJECT_NAME }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Status | ${{ needs.build-and-push.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.build-and-push.result }}" == "success" ]; then
+            echo "### ✅ All Microservices Built Successfully!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            SERVICES='${{ needs.discover-services.outputs.services }}'
+            SERVICE_COUNT=$(echo "$SERVICES" | jq 'length')
+            echo "**Services Built**: $SERVICE_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            echo "### 📦 ECR Repository URL" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All services are stored in this repository:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.login-ecr-summary.outputs.registry }}/${{ env.ECR_REPO_NAME }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            echo "### 🔧 Terraform Configuration" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Copy these values to your Terraform \`.tfvars\` files:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`hcl" >> $GITHUB_STEP_SUMMARY
+            echo "# Common repository URL for all services:" >> $GITHUB_STEP_SUMMARY
+            echo "ecs_container_image_repository_url = \"${{ steps.login-ecr-summary.outputs.registry }}/${{ env.ECR_REPO_NAME }}\"" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Parse the services JSON and output each service
+            echo "# Service-specific image tags:" >> $GITHUB_STEP_SUMMARY
+            echo "$SERVICES" | jq -r '.[]' | while read service; do
+              echo "# For $service:" >> $GITHUB_STEP_SUMMARY
+              echo "ecs_container_image_tag = \"${service}-latest\"  # or use specific SHA tag" >> $GITHUB_STEP_SUMMARY
+            done
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            echo "### 📋 Built Services:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "$SERVICES" | jq -r '.[]' | while read service; do
+              echo "- ✅ **$service**: \`${service}-latest\`" >> $GITHUB_STEP_SUMMARY
+            done
+            
+          elif [ "${{ needs.build-and-push.result }}" == "failure" ]; then
+            echo "### ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Some microservices failed to build. Check the logs above for details." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ Build Completed with Warnings" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Build completed with warnings or was skipped." >> $GITHUB_STEP_SUMMARY
+          fi

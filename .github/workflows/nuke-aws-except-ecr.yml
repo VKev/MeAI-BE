@@ -1,0 +1,363 @@
+name: Nuke AWS (except ECR)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "GitHub Environment to use."
+        type: string
+        default: infrastructure-khanghv2406
+        required: true
+      confirm:
+        description: "Type NUKE to confirm irreversible deletion (except ECR)"
+        required: true
+        default: ""
+
+env:
+  AWS_REGION: ""
+
+permissions:
+  contents: read
+
+jobs:
+  nuke:
+    name: aws-nuke
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.confirm == 'NUKE' }}
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Merge tfvars (repo + sanitized + secrets)
+        working-directory: Terraform
+        env:
+          SECRETS_JSON: ${{ toJson(secrets) }}
+        run: |
+          set -euo pipefail
+
+          cp ../terraform-vars/*.auto.tfvars . 2>/dev/null || true
+          cp ../Terraform-vars/*.auto.tfvars . 2>/dev/null || true
+
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          echo "$SECRETS_JSON" \
+            | jq -r 'to_entries[] | select(.key | startswith("TERRAFORM_VARS_")) | .key' \
+            | while read -r key; do
+                suffix=${key#TERRAFORM_VARS_}
+                norm=$(echo "$suffix" \
+                  | tr '[:upper:]' '[:lower:]' \
+                  | sed 's/^\s\+//;s/\s\+$//' \
+                  | tr ' /\\' '___' )
+                value=$(jq -r --arg k "$key" '.[$k]' <<< "$SECRETS_JSON")
+                if echo "$value" | jq -e . >/dev/null 2>&1; then
+                  case "$norm" in
+                    *.auto.tfvars.json|*.tfvars.json) filename="$norm";;
+                    *.auto.tfvars|*.tfvars)           filename="$norm.json";;
+                    *)                                 filename="$norm.auto.tfvars.json";;
+                  esac
+                  printf '%s' "$value" > "$filename"
+                else
+                  case "$norm" in
+                    *.auto.tfvars|*.tfvars)           filename="$norm";;
+                    *.auto.tfvars.json|*.tfvars.json) filename="${norm%.json}";;
+                    *)                                 filename="$norm.auto.tfvars";;
+                  esac
+                  printf '%s' "$value" > "$filename"
+                fi
+              done
+
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y python3-pip >/dev/null
+          python3 -m pip install --user python-hcl2 >/dev/null
+          export PATH="$HOME/.local/bin:$PATH"
+          python3 scripts/merge_tfvars.py
+
+          for f in *.auto.tfvars *.auto.tfvars.json; do
+            [ "$f" = "00-all.auto.tfvars.json" ] && continue || true
+            rm -f "$f" || true
+          done
+
+      - name: Load project/region from Terraform vars
+        working-directory: Terraform
+        run: python scripts/export_tf_env.py >> "$GITHUB_ENV"
+        env:
+          TF_ENV_FALLBACK_PROJECT: ""
+          TF_ENV_FALLBACK_REGION: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          aws sts get-caller-identity
+
+      - name: Get AWS Account ID
+        id: acct
+        shell: bash
+        run: |
+          echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
+
+      - name: Show account ID
+        shell: bash
+        run: |
+          echo 'Target Account: ${{ steps.acct.outputs.account_id }}'
+
+      - name: Install aws-nuke
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=3.58.0
+          # Try multiple possible asset URLs (ekristen primary, rebuy-de fallback)
+          URLS=(
+            "https://github.com/ekristen/aws-nuke/releases/download/v${VERSION}/aws-nuke-v${VERSION}-linux-amd64.tar.gz"
+            "https://github.com/ekristen/aws-nuke/releases/download/v${VERSION}/aws-nuke_${VERSION}_linux_amd64.tar.gz"
+            "https://github.com/ekristen/aws-nuke/releases/download/v${VERSION}/aws-nuke_${VERSION}_linux_x86_64.tar.gz"
+            "https://github.com/rebuy-de/aws-nuke/releases/download/v${VERSION}/aws-nuke-v${VERSION}-linux-amd64.tar.gz"
+          )
+          success=false
+          for URL in "${URLS[@]}"; do
+            echo "Attempting download: $URL"
+            if curl -fLsS -o aws-nuke.tgz "$URL"; then
+              success=true
+              break
+            fi
+          done
+          if [ "$success" != true ]; then
+            echo "::error::Failed to download aws-nuke v${VERSION} from all known URLs" >&2
+            exit 1
+          fi
+          tar -xzf aws-nuke.tgz
+          BIN=""
+          if [ -d "aws-nuke-v${VERSION}-linux-amd64" ] && [ -f "aws-nuke-v${VERSION}-linux-amd64/aws-nuke" ]; then
+            BIN="aws-nuke-v${VERSION}-linux-amd64/aws-nuke"
+          elif [ -f "aws-nuke-v${VERSION}-linux-amd64" ]; then
+            BIN="aws-nuke-v${VERSION}-linux-amd64"
+          elif [ -f "aws-nuke" ]; then
+            BIN="aws-nuke"
+          else
+            BIN=$(find . -maxdepth 2 -type f -name 'aws-nuke*linux-amd64*' -o -name 'aws-nuke' | head -n 1 || true)
+          fi
+          if [ -z "$BIN" ]; then
+            echo "::error::aws-nuke binary not found after extraction" >&2
+            ls -la
+            exit 1
+          fi
+          echo "Using binary: $BIN"
+          sudo mv "$BIN" /usr/local/bin/aws-nuke
+          sudo chmod +x /usr/local/bin/aws-nuke
+          /usr/local/bin/aws-nuke version
+
+      - name: Build final config (inject account ID)
+        id: buildcfg
+        shell: bash
+        run: |
+          BASE=Terraform/aws_nuke/nuke-config.yaml
+          FINAL=Terraform/aws_nuke/nuke-config.final.yaml
+          ACCOUNT_ID="${{ steps.acct.outputs.account_id }}"
+          cp "$BASE" "$FINAL"
+          {
+            echo "bypass-alias-check-accounts:";
+            echo "  - \"$ACCOUNT_ID\"";
+            echo "";
+            echo "accounts:";
+            echo "  \"$ACCOUNT_ID\": {}";
+          } >> "$FINAL"
+          echo '----- Final Config -----'
+          cat "$FINAL"
+
+      - name: Run aws-nuke (DESTRUCTIVE)
+        shell: bash
+        run: |
+          aws-nuke run --config Terraform/aws_nuke/nuke-config.final.yaml --no-dry-run --force --force-sleep 3 --no-alias-check --quiet
+
+      - name: Finished
+        run: echo "Nuke completed"
+
+  cloudflare-nuke:
+    name: cloudflare-nuke
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.confirm == 'NUKE' }}
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Merge tfvars (repo + sanitized + secrets)
+        working-directory: Terraform
+        env:
+          SECRETS_JSON: ${{ toJson(secrets) }}
+        run: |
+          set -euo pipefail
+
+          cp ../terraform-vars/*.auto.tfvars . 2>/dev/null || true
+          cp ../Terraform-vars/*.auto.tfvars . 2>/dev/null || true
+
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          echo "$SECRETS_JSON" \
+            | jq -r 'to_entries[] | select(.key | startswith("TERRAFORM_VARS_")) | .key' \
+            | while read -r key; do
+                suffix=${key#TERRAFORM_VARS_}
+                norm=$(echo "$suffix" \
+                  | tr '[:upper:]' '[:lower:]' \
+                  | sed 's/^\s\+//;s/\s\+$//' \
+                  | tr ' /\\' '___' )
+                value=$(jq -r --arg k "$key" '.[$k]' <<< "$SECRETS_JSON")
+                if echo "$value" | jq -e . >/dev/null 2>&1; then
+                  case "$norm" in
+                    *.auto.tfvars.json|*.tfvars.json) filename="$norm";;
+                    *.auto.tfvars|*.tfvars)           filename="$norm.json";;
+                    *)                                 filename="$norm.auto.tfvars.json";;
+                  esac
+                  printf '%s' "$value" > "$filename"
+                else
+                  case "$norm" in
+                    *.auto.tfvars|*.tfvars)           filename="$norm";;
+                    *.auto.tfvars.json|*.tfvars.json) filename="${norm%.json}";;
+                    *)                                 filename="$norm.auto.tfvars";;
+                  esac
+                  printf '%s' "$value" > "$filename"
+                fi
+              done
+
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y python3-pip >/dev/null
+          python3 -m pip install --user python-hcl2 >/dev/null
+          export PATH="$HOME/.local/bin:$PATH"
+          python3 scripts/merge_tfvars.py
+
+          for f in *.auto.tfvars *.auto.tfvars.json; do
+            [ "$f" = "00-all.auto.tfvars.json" ] && continue || true
+            rm -f "$f" || true
+          done
+
+      - name: Load Cloudflare values from tfvars
+        id: cfvars
+        working-directory: Terraform
+        run: |
+          set -euo pipefail
+          FILE="00-all.auto.tfvars.json"
+          if [ ! -f "$FILE" ]; then
+            echo "::error::Merged tfvars not found: $FILE" >&2
+            exit 1
+          fi
+
+          CF_ACCOUNT_ID=$(jq -r '.cloudflare_account_id // empty' "$FILE")
+          CF_GLOBAL_API_KEY=$(jq -r '.cloudflare_global_api_key // empty' "$FILE")
+          CF_ZONE_ID=$(jq -r '.cloudflare_zone_id // empty' "$FILE")
+          CF_DOMAIN_NAME=$(jq -r '.domain_name // empty' "$FILE")
+          CF_USER_EMAIL=$(jq -r '.cloudflare_user_email // .cloudflare_email // empty' "$FILE")
+
+          if [ -z "$CF_ACCOUNT_ID" ] || [ -z "$CF_GLOBAL_API_KEY" ] || [ -z "$CF_USER_EMAIL" ]; then
+            echo "::error::cloudflare_account_id, cloudflare_global_api_key, or cloudflare_user_email missing from merged tfvars" >&2
+            exit 1
+          fi
+
+          echo "::add-mask::$CF_GLOBAL_API_KEY"
+          echo "::add-mask::$CF_ACCOUNT_ID"
+          [ -n "$CF_ZONE_ID" ] && echo "::add-mask::$CF_ZONE_ID"
+          echo "::add-mask::$CF_USER_EMAIL"
+
+          {
+            echo "CF_ACCOUNT_ID=$CF_ACCOUNT_ID"
+            echo "CF_GLOBAL_API_KEY=$CF_GLOBAL_API_KEY"
+            [ -n "$CF_ZONE_ID" ] && echo "CF_ZONE_ID=$CF_ZONE_ID"
+            [ -n "$CF_DOMAIN_NAME" ] && echo "CF_DOMAIN_NAME=$CF_DOMAIN_NAME"
+            echo "CF_USER_EMAIL=$CF_USER_EMAIL"
+          } >> "$GITHUB_ENV"
+
+      - name: Build Cloudflare nuke config
+        working-directory: Terraform
+        env:
+          CF_DOMAIN_NAME: ${{ env.CF_DOMAIN_NAME }}
+          CF_ZONE_ID: ${{ env.CF_ZONE_ID }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user --quiet pyyaml
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          import yaml
+
+          base = Path("cloudflare_nuke/nuke-config.yaml")
+          final = Path("cloudflare_nuke/nuke-config.final.yaml")
+
+          with base.open("r", encoding="utf-8") as f:
+              data = yaml.safe_load(f) or {}
+
+          if not isinstance(data, dict):
+              raise SystemExit("Base Cloudflare nuke config must be a mapping")
+
+          zones = data.get("zones") or {}
+          zone_excludes = zones.get("excludes") or []
+          domain = os.environ.get("CF_DOMAIN_NAME", "").strip()
+          if domain and domain not in zone_excludes:
+              zone_excludes.append(domain)
+          data["zones"] = {"excludes": zone_excludes}
+
+          resource_ids = data.get("resource-ids") or {}
+          rid_excludes = resource_ids.get("excludes") or []
+          zone_id = os.environ.get("CF_ZONE_ID", "").strip()
+          if zone_id and not any(isinstance(item, dict) and item.get("id") == zone_id for item in rid_excludes):
+              rid_excludes.append({"resourceType": "zone", "id": zone_id})
+          data["resource-ids"] = {"excludes": rid_excludes}
+
+          final.parent.mkdir(parents=True, exist_ok=True)
+          with final.open("w", encoding="utf-8") as f:
+              yaml.safe_dump(data, f, sort_keys=False)
+
+          print("----- Final Cloudflare nuke config -----")
+          print(final.read_text())
+          PY
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build cf-nuke (without R2 collector)
+        working-directory: Terraform
+        run: |
+          set -euo pipefail
+          TMP_DIR="$(mktemp -d)"
+          git clone --depth 1 https://github.com/VKev/Cloudflare-Nuke.git "$TMP_DIR"
+          rm -f "$TMP_DIR/resources/r2.go"
+          (cd "$TMP_DIR" && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$OLDPWD/cf-nuke-linux-amd64" .)
+          chmod +x cf-nuke-linux-amd64
+
+      - name: Run cf-nuke (DESTRUCTIVE)
+        working-directory: Terraform
+        env:
+          CF_GLOBAL_API_KEY: ${{ env.CF_GLOBAL_API_KEY }}
+          CF_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
+          CF_USER_EMAIL: ${{ env.CF_USER_EMAIL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CF_ACCOUNT_ID:-}" ] || [ -z "${CF_GLOBAL_API_KEY:-}" ] || [ -z "${CF_USER_EMAIL:-}" ]; then
+            echo "::error::Missing Cloudflare credentials" >&2
+            exit 1
+          fi
+
+          printf 'yes\n' | ./cf-nuke-linux-amd64 nuke \
+            --mode account \
+            -c cloudflare_nuke/nuke-config.final.yaml \
+            -a "$CF_ACCOUNT_ID" \
+            -k "$CF_GLOBAL_API_KEY" \
+            -u "$CF_USER_EMAIL" \
+            --no-dry-run
+
+      - name: Finished
+        run: echo "Cloudflare nuke completed"

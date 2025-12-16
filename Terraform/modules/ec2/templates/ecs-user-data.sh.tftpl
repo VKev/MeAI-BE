@@ -1,0 +1,9 @@
+#!/bin/bash
+
+echo 'ECS_CLUSTER=${cluster_name}' >> /etc/ecs/ecs.config
+%{ if instance_attributes != "{}" }
+echo 'ECS_INSTANCE_ATTRIBUTES=${instance_attributes}' >> /etc/ecs/ecs.config
+%{ endif }
+%{ if length(trimspace(extra_user_data)) > 0 }
+${extra_user_data}
+%{ endif }

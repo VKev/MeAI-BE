@@ -1,0 +1,27 @@
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /App
+
+# Copy solution file if it exists
+COPY Microservices.sln ./
+
+# Copy SharedLibrary
+COPY SharedLibrary/ ./SharedLibrary/
+
+# Copy ApiGateway
+COPY ApiGateway/ ./ApiGateway/
+
+# Restore and build
+WORKDIR /App/ApiGateway/src
+RUN dotnet restore
+RUN dotnet publish -c Release -o /App/out
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
+WORKDIR /App
+
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+COPY --from=build /App/out .
+
+ENTRYPOINT ["dotnet", "src.dll"]

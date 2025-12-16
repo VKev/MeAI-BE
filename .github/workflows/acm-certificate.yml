@@ -1,0 +1,249 @@
+name: Request ACM Certificate (Cloudflare DNS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "GitHub Environment to use."
+        type: string
+        default: infrastructure-khanghv2406
+        required: true
+      action:
+        description: "Terraform action to perform"
+        type: choice
+        options: [plan, apply, destroy]
+        default: apply
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ""
+  PROJECT_NAME: ""
+  ACM_DOMAIN_NAME: ""
+  ACM_SANS: "[]"
+  CLOUDFLARE_ZONE_ID: ""
+
+jobs:
+  acm:
+    name: acm-${{ inputs.action }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Write Terraform variables from secrets (merge)
+        working-directory: Terraform
+        env:
+          SECRETS_JSON: ${{ toJson(secrets) }}
+        run: |
+          set -euo pipefail
+
+          # Bring repo-provided defaults (both private and sanitized) into working dir
+          cp ../terraform-vars/*.auto.tfvars . 2>/dev/null || true
+          cp ../Terraform-vars/*.auto.tfvars . 2>/dev/null || true
+
+          # Ensure jq
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          echo "Found TERRAFORM_VARS_* secrets:"
+          echo "$SECRETS_JSON" \
+            | jq -r 'to_entries[] | select(.key | startswith("TERRAFORM_VARS_")) | .key' \
+            | sort
+          echo ""
+
+          # Create .auto.tfvars files from secrets (JSON vs HCL)
+          echo "$SECRETS_JSON" \
+            | jq -r 'to_entries[] | select(.key | startswith("TERRAFORM_VARS_")) | .key' \
+            | while read -r key; do
+                suffix=${key#TERRAFORM_VARS_}
+                norm=$(echo "$suffix" \
+                  | tr '[:upper:]' '[:lower:]' \
+                  | sed 's/^\s\+//;s/\s\+$//' \
+                  | tr ' /\\' '___' )
+                value=$(jq -r --arg k "$key" '.[$k]' <<< "$SECRETS_JSON")
+                if echo "$value" | jq -e . >/dev/null 2>&1; then
+                  case "$norm" in
+                    *.auto.tfvars.json|*.tfvars.json) filename="$norm";;
+                    *.auto.tfvars|*.tfvars)           filename="$norm.json";;
+                    *)                                 filename="$norm.auto.tfvars.json";;
+                  esac
+                  printf '%s' "$value" > "$filename"
+                else
+                  case "$norm" in
+                    *.auto.tfvars|*.tfvars)           filename="$norm";;
+                    *.auto.tfvars.json|*.tfvars.json) filename="${norm%.json}";;
+                    *)                                 filename="$norm.auto.tfvars";;
+                  esac
+                  printf '%s' "$value" > "$filename"
+                fi
+                [ -f "$filename" ] && echo "Created $filename"
+              done
+
+          # Merge all tfvars into one
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y python3-pip >/dev/null
+          python3 -m pip install --user python-hcl2 >/dev/null
+          export PATH="$HOME/.local/bin:$PATH"
+          python3 scripts/merge_tfvars.py
+
+          # Keep only merged file
+          for f in *.auto.tfvars *.auto.tfvars.json; do
+            [ "$f" = "00-all.auto.tfvars.json" ] && continue || true
+            rm -f "$f" || true
+          done
+
+          ls -la 00-all.auto.tfvars.json 2>/dev/null || true
+
+      - name: Refresh project/region/domain from merged tfvars
+        working-directory: Terraform
+        run: python scripts/export_tf_env.py >> "$GITHUB_ENV"
+        env:
+          TF_ENV_FALLBACK_PROJECT: ${{ env.PROJECT_NAME }}
+          TF_ENV_FALLBACK_REGION: ${{ env.AWS_REGION }}
+          TF_ENV_FALLBACK_DOMAIN: ${{ inputs.domain_name }}
+          TF_ENV_FALLBACK_SANS: ${{ inputs.subject_alternative_names || '[]' }}
+          TF_ENV_FALLBACK_CF_ZONE: ${{ inputs.cloudflare_zone_id }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Validate required inputs
+        working-directory: Terraform
+        env:
+          ACM_DOMAIN_NAME: ${{ env.ACM_DOMAIN_NAME }}
+          CLOUDFLARE_ZONE_ID: ${{ env.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Read token from merged tfvars if present
+          file_token=""
+          if [ -f 00-all.auto.tfvars.json ]; then
+            file_token=$(jq -r 'try(.cloudflare_api_token // "")' 00-all.auto.tfvars.json || echo "")
+          fi
+
+          env_token="${CLOUDFLARE_API_TOKEN:-}"
+
+          if [ -z "${ACM_DOMAIN_NAME}" ]; then
+            echo "ACM_DOMAIN_NAME is required (input or tfvars domain_name)." >&2
+            exit 1
+          fi
+          if [ -z "${CLOUDFLARE_ZONE_ID}" ]; then
+            echo "CLOUDFLARE_ZONE_ID is required (input or tfvars cloudflare_zone_id)." >&2
+            exit 1
+          fi
+          if [ -z "$env_token" ] && [ -z "$file_token" ]; then
+            echo "CLOUDFLARE_API_TOKEN is required (set env secret or provide cloudflare_api_token in tfvars)." >&2
+            exit 1
+          fi
+
+          # Export TF_VAR only when token provided via secret to avoid overriding tfvars with empty value
+          if [ -n "$env_token" ]; then
+            echo "TF_VAR_cloudflare_api_token=$env_token" >> "$GITHUB_ENV"
+          fi
+
+      - name: Export Cloudflare token from tfvars (fallback if secret unset)
+        if: ${{ env.TF_VAR_cloudflare_api_token == '' }}
+        working-directory: Terraform
+        run: |
+          set -euo pipefail
+          if [ -f 00-all.auto.tfvars.json ]; then
+            token=$(jq -r 'try(.cloudflare_api_token // "")' 00-all.auto.tfvars.json || echo "")
+            if [ -n "$token" ]; then
+              echo "TF_VAR_cloudflare_api_token=$token" >> "$GITHUB_ENV"
+              echo "Cloudflare token exported from tfvars."
+            fi
+          fi
+
+      - name: Initialize Terraform (remote backend)
+        working-directory: Terraform/acm
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+          PROJECT_NAME: ${{ env.PROJECT_NAME }}
+        run: |
+          BUCKET="${PROJECT_NAME}-${AWS_REGION}-terraform-state"
+          TABLE="${PROJECT_NAME}-${AWS_REGION}-terraform-locks"
+          terraform init \
+            -backend-config="bucket=${BUCKET}" \
+            -backend-config="key=terraform/acm.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="dynamodb_table=${TABLE}" \
+            -backend-config="encrypt=true" \
+            -input=false
+
+      - name: Validate Terraform
+        working-directory: Terraform/acm
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: Terraform/acm
+        env:
+          TF_VAR_domain_name: ${{ env.ACM_DOMAIN_NAME }}
+          TF_VAR_subject_alternative_names: ${{ env.ACM_SANS }}
+          TF_VAR_cloudflare_zone_id: ${{ env.CLOUDFLARE_ZONE_ID }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+        run: |
+          set +e
+          terraform plan \
+            -input=false \
+            -out=tfplan \
+            -var="domain_name=${TF_VAR_domain_name}" \
+            -var="cloudflare_zone_id=${TF_VAR_cloudflare_zone_id}" \
+            -var="subject_alternative_names=${TF_VAR_subject_alternative_names}" \
+            -var="aws_region=${TF_VAR_aws_region}"
+          exit_code=$?
+          set -e
+          echo "exitcode=$exit_code" >> "$GITHUB_OUTPUT"
+          if [ "$exit_code" -eq 1 ]; then
+            echo "Terraform plan failed!"
+            exit 1
+          fi
+
+      - name: Show Plan
+        working-directory: Terraform/acm
+        run: terraform show -no-color tfplan
+
+      - name: Terraform Apply
+        if: inputs.action == 'apply' && steps.plan.outcome == 'success'
+        working-directory: Terraform/acm
+        env:
+          TF_VAR_domain_name: ${{ env.ACM_DOMAIN_NAME }}
+          TF_VAR_subject_alternative_names: ${{ env.ACM_SANS }}
+          TF_VAR_cloudflare_zone_id: ${{ env.CLOUDFLARE_ZONE_ID }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+        run: |
+          terraform apply -input=false -auto-approve tfplan
+
+      - name: Show Outputs
+        if: inputs.action == 'apply'
+        working-directory: Terraform/acm
+        run: |
+          echo "## ACM Outputs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          terraform output >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Terraform Plan
+        if: inputs.action == 'plan'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-acm-plan-${{ github.sha }}
+          path: Terraform/acm/tfplan
+          retention-days: 7

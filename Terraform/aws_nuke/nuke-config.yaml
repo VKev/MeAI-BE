@@ -1,0 +1,34 @@
+## Base aws-nuke configuration (no account IDs hardcoded; they are injected at runtime by CI)
+## The GitHub Actions workflow generates a final config by appending the dynamic
+## 'bypass-alias-check-accounts' and 'accounts' sections using the caller account ID.
+
+regions:
+  - global
+  - us-east-1
+  - ap-southeast-1
+
+blocklist:
+  # Keep a placeholder or real protected account(s) here if needed
+  - "999999999999"
+
+resource-types:
+  excludes:
+    - IAMUser
+    - IAMUserPolicyAttachment
+    - IAMUserPolicy
+    - IAMUserAccessKey
+    - IAMGroup
+    - IAMUserGroupAttachment
+    - IAMGroupPolicyAttachment
+    # Preserve all ECR repositories
+    - ECRRepository
+    - ECRRepositoryPolicy
+    - ECRPublicRepository
+    - ECRPublicRepositoryPolicy
+
+# Runtime (CI) will append:
+# bypass-alias-check-accounts:
+#   - "<ACCOUNT_ID>"
+# accounts:
+#   "<ACCOUNT_ID>": {}
+

@@ -1,0 +1,112 @@
+name: Nuke ECR Repositories
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "GitHub Environment to use (secrets/vars)."
+        type: string
+        default: infrastructure-khanghv2406
+        required: true
+      dry_run:
+        description: "Preview only (do NOT delete)."
+        type: boolean
+        required: true
+        default: true
+      confirm:
+        description: 'Type "ERASE" to confirm.'
+        type: string
+        required: true
+        default: ""
+
+env:
+  AWS_REGION: ""
+
+permissions:
+  contents: read
+
+jobs:
+  nuke-ecr:
+    name: Nuke ECR (single region)
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Load project/region from Terraform vars
+        run: python Terraform/scripts/export_tf_env.py >> "$GITHUB_ENV"
+        env:
+          TF_ENV_FALLBACK_PROJECT: ""
+          TF_ENV_FALLBACK_REGION: ${{ env.AWS_REGION }}
+
+      - name: Safety check
+        run: |
+          echo "WARNING: This workflow can DELETE ALL ECR repositories in region ${{ env.AWS_REGION }}."
+          if [ "${{ inputs.confirm }}" != "ERASE" ]; then
+            echo "::error::Confirmation failed. Set 'confirm' to 'ERASE' to proceed."
+            exit 1
+          fi
+          echo "Confirmation OK."
+
+      - name: Configure AWS credentials (Environment secrets)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+
+      - name: List and optionally delete all ECR repos in region
+        env:
+          NO_PAGER: ""
+        run: |
+          set -euo pipefail
+          export AWS_PAGER=""
+          DRY="${{ inputs.dry_run }}"
+          REGION="${{ env.AWS_REGION }}"
+          SUMMARY_FILE="$GITHUB_STEP_SUMMARY"
+
+          echo "## ECR Delete Summary (region: $REGION)" >> "$SUMMARY_FILE"
+          echo "" >> "$SUMMARY_FILE"
+          echo "- **Dry run**: $DRY" >> "$SUMMARY_FILE"
+
+          repos_json=$(aws ecr describe-repositories \
+            --region "$REGION" \
+            --query 'repositories[].repositoryName' \
+            --output json \
+            --no-cli-pager || echo '[]')
+
+          count=$(echo "$repos_json" | jq 'length')
+          echo "Found $count repositories in $REGION"
+          echo "- Found: $count" >> "$SUMMARY_FILE"
+
+          if [ "$count" -eq 0 ]; then
+            echo "- Nothing to delete." >> "$SUMMARY_FILE"
+            exit 0
+          fi
+
+          echo "- Repos:" >> "$SUMMARY_FILE"
+          echo "$repos_json" | jq -r '.[]' | sed 's/^/  - /' >> "$SUMMARY_FILE"
+
+          if [ "$DRY" = "true" ]; then
+            echo "- Dry-run enabled: skipping deletions" >> "$SUMMARY_FILE"
+            exit 0
+          fi
+
+          deleted=0
+          for NAME in $(echo "$repos_json" | jq -r '.[]'); do
+            echo "Deleting $NAME in $REGION..."
+            aws ecr delete-repository --repository-name "$NAME" --force --region "$REGION" --no-cli-pager
+            deleted=$((deleted+1))
+          done
+
+          echo "- Deleted: $deleted" >> "$SUMMARY_FILE"
+          echo "" >> "$SUMMARY_FILE"
