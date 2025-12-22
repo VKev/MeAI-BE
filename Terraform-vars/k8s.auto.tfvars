@@ -75,7 +75,7 @@ k8s_resources = {
       memory = "64Mi"
     }
   }
-  guest = {
+  ai = {
     replicas = 1
     requests = {
       cpu    = "100m"
@@ -552,17 +552,17 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: guest-microservice
+  name: ai-microservice
   namespace: TERRAFORM_NAMESPACE
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: guest-microservice
+      app: ai-microservice
   template:
     metadata:
       labels:
-        app: guest-microservice
+        app: ai-microservice
     spec:
       affinity:
         podAntiAffinity:
@@ -572,10 +572,10 @@ spec:
                 topologyKey: kubernetes.io/hostname
                 labelSelector:
                   matchLabels:
-                    app: guest-microservice
+                    app: ai-microservice
       containers:
-        - name: guest-microservice
-          image: your-aws-id.dkr.ecr.us-east-1.amazonaws.com/vkev2406-infrastructure-khanghv2406-infrastructure-khanghv2406-ecr:Guest.Microservice-latest
+        - name: ai-microservice
+          image: your-aws-id.dkr.ecr.us-east-1.amazonaws.com/vkev2406-infrastructure-khanghv2406-infrastructure-khanghv2406-ecr:Ai.Microservice-latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5001
@@ -585,17 +585,17 @@ spec:
             - name: ASPNETCORE_URLS
               value: http://+:5001
             - name: Database__Host
-              value: "TERRAFORM_RDS_HOST_GUEST_DEFAULTDB"
+              value: "TERRAFORM_RDS_HOST_AI_DEFAULTDB"
             - name: Database__Port
-              value: "TERRAFORM_RDS_PORT_GUEST_DEFAULTDB"
+              value: "TERRAFORM_RDS_PORT_AI_DEFAULTDB"
             - name: Database__Name
-              value: "TERRAFORM_RDS_DB_GUEST_DEFAULTDB"
+              value: "TERRAFORM_RDS_DB_AI_DEFAULTDB"
             - name: Database__Username
-              value: "TERRAFORM_RDS_USERNAME_GUEST_DEFAULTDB"
+              value: "TERRAFORM_RDS_USERNAME_AI_DEFAULTDB"
             - name: Database__Password
-              value: "TERRAFORM_RDS_PASSWORD_GUEST_DEFAULTDB"
+              value: "TERRAFORM_RDS_PASSWORD_AI_DEFAULTDB"
             - name: Database__Provider
-              value: "TERRAFORM_RDS_PROVIDER_GUEST_DEFAULTDB"
+              value: "TERRAFORM_RDS_PROVIDER_AI_DEFAULTDB"
             - name: RabbitMq__Host
               value: rabbit-mq
             - name: RabbitMq__Port
@@ -631,11 +631,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: guest-microservice
+  name: ai-microservice
   namespace: TERRAFORM_NAMESPACE
 spec:
   selector:
-    app: guest-microservice
+    app: ai-microservice
   ports:
     - port: 5001
       targetPort: 5001
@@ -780,9 +780,9 @@ spec:
               value: user-microservice
             - name: Services__User__Port
               value: "5002"
-            - name: Services__Guest__Host
-              value: guest-microservice
-            - name: Services__Guest__Port
+            - name: Services__Ai__Host
+              value: ai-microservice
+            - name: Services__Ai__Port
               value: "5001"
             - name: Jwt__SecretKey
               value: "<REDACTED>"

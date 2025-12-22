@@ -58,11 +58,11 @@ services = {
         value = "5002"
       },
       {
-        name  = "Services__Guest__Host"
-        value = "guest-service"
+        name  = "Services__Ai__Host"
+        value = "ai-service"
       },
       {
-        name  = "Services__Guest__Port"
+        name  = "Services__Ai__Port"
         value = "5001"
       },
       {

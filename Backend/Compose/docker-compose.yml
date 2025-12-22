@@ -1,18 +1,18 @@
 services:
-  guest-microservice:
+  ai-microservice:
     build:
       context: ../Microservices
-      dockerfile: ./Guest.Microservice/Dockerfile
+      dockerfile: ./Ai.Microservice/Dockerfile
       args:
-        SERVICE_NAME: Guest.Microservice
-    image: guest-microservice
-    container_name: guest-microservice
+        SERVICE_NAME: Ai.Microservice
+    image: ai-microservice
+    container_name: ai-microservice
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:5001
       Database__Host: postgres
       Database__Port: 5432
-      Database__Name: guestdb
+      Database__Name: aidb
       Database__Username: postgres
       Database__Password: changeme
       Database__Provider: postgres
@@ -95,8 +95,8 @@ services:
       ASPNETCORE_URLS: http://+:8080
       Services__User__Host: user-microservice
       Services__User__Port: 5002
-      Services__Guest__Host: guest-microservice
-      Services__Guest__Port: 5001
+      Services__Ai__Host: ai-microservice
+      Services__Ai__Port: 5001
       Jwt__SecretKey: changeme-at-least-32-chars----------------
       Jwt__Issuer: UserMicroservice
       Jwt__Audience: MicroservicesApp

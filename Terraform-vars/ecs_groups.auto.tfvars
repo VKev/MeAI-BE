@@ -35,7 +35,7 @@ ecs_service_groups = {
   server-2 = {
     desired_count = 1
     containers = [
-      "guest",
+      "ai",
       "apigateway"
     ]
     volumes = []

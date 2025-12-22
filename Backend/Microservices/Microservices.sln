@@ -3,17 +3,17 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Guest.Microservice", "Guest.Microservice", "{67E59A64-B5DA-46B9-96E0-62978ED4A7FE}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Ai.Microservice", "Ai.Microservice", "{67E59A64-B5DA-46B9-96E0-62978ED4A7FE}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{4F287354-5F66-40AE-81EF-D8CC88C3FDFF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebApi", "Guest.Microservice\src\WebApi\WebApi.csproj", "{1A3169F1-3CA1-4CD5-B1A5-500D1E400F30}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebApi", "Ai.Microservice\src\WebApi\WebApi.csproj", "{1A3169F1-3CA1-4CD5-B1A5-500D1E400F30}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Infrastructure", "Guest.Microservice\src\Infrastructure\Infrastructure.csproj", "{40AEADD2-E615-4F44-A257-DEC64C15DDE3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Infrastructure", "Ai.Microservice\src\Infrastructure\Infrastructure.csproj", "{40AEADD2-E615-4F44-A257-DEC64C15DDE3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Application", "Guest.Microservice\src\Application\Application.csproj", "{50DAD754-9D44-4127-9B35-D72A8657B056}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Application", "Ai.Microservice\src\Application\Application.csproj", "{50DAD754-9D44-4127-9B35-D72A8657B056}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain", "Guest.Microservice\src\Domain\Domain.csproj", "{BFFB8D0E-D7C0-482D-9F7E-B3E42E14A42F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain", "Ai.Microservice\src\Domain\Domain.csproj", "{BFFB8D0E-D7C0-482D-9F7E-B3E42E14A42F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "User.Microservice", "User.Microservice", "{2C6AFFC0-B340-4B5C-9762-3DA26AE84965}"
 EndProject

@@ -183,9 +183,9 @@ var defaultServices = new[]
     },
     new
     {
-        Prefix = "GUEST",
-        Service = "Guest",
-        ContainerHost = "guest-microservice",
+        Prefix = "AI",
+        Service = "Ai",
+        ContainerHost = "ai-microservice",
         ContainerPort = 5001,
         LocalPort = 5001
     }

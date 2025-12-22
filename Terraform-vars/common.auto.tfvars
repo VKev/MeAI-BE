@@ -41,7 +41,7 @@ rds = {
     password          = "<REDACTED>"
     allocated_storage = 5
   }
-  guest = {
+  ai = {
     db_names = [
       "defaultdb"
     ]

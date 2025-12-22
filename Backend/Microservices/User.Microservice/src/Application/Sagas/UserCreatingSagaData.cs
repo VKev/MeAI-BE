@@ -14,7 +14,7 @@ namespace Application.Sagas
 
         public bool UserCreated { get; set; }
 
-        public bool GuestCreated { get; set; }
+        public bool AiCreated { get; set; }
 
         public int RetryCount { get; set; }
         public int Version { get; set; }
