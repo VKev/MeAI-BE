@@ -30,9 +30,9 @@ spec:
               value: user-microservice
             - name: Services__User__Port
               value: "5002"
-            - name: Services__Guest__Host
-              value: guest-microservice
-            - name: Services__Guest__Port
+            - name: Services__Ai__Host
+              value: ai-microservice
+            - name: Services__Ai__Port
               value: "5001"
             - name: Jwt__SecretKey
               value: changeme-at-least-32-chars----------------

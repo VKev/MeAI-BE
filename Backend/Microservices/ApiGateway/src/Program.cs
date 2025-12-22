@@ -180,14 +180,6 @@ var defaultServices = new[]
         ContainerHost = "user-microservice",
         ContainerPort = 5002,
         LocalPort = 5002
-    },
-    new
-    {
-        Prefix = "AI",
-        Service = "Ai",
-        ContainerHost = "ai-microservice",
-        ContainerPort = 5001,
-        LocalPort = 5001
     }
 };
 
