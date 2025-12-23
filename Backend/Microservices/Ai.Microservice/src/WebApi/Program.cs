@@ -9,7 +9,6 @@ using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using SharedLibrary.Configs;
-using SharedLibrary.Middleware;
 using SharedLibrary.Migrations;
 
 var solutionDirectory = Directory.GetParent(Directory.GetCurrentDirectory())?.FullName ?? "";
@@ -75,6 +74,7 @@ builder.Host.UseSerilog((hostingContext, loggerConfiguration) =>
         .Enrich.FromLogContext()
         .WriteTo.Console());
 
+builder.Services.AddSingleton<EnvironmentConfig>();
 builder.Services.ConfigureOptions<DatabaseConfigSetup>();
 builder.Services.AddDbContext<MyDbContext>((serviceProvider, options) =>
 {
@@ -151,8 +151,6 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
-
-app.UseMiddleware<JwtMiddleware>();
 
 app.UseAuthorization();
 

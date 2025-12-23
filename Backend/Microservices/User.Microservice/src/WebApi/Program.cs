@@ -10,7 +10,6 @@ using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models; // Needed for JWT in Swagger
 using Serilog;
 using SharedLibrary.Configs;
-using SharedLibrary.Middleware;
 using SharedLibrary.Migrations;
 using SharedLibrary.Utils;
 using System;
@@ -115,6 +114,7 @@ builder.Host.UseSerilog((hostingContext, loggerConfiguration) =>
         .Enrich.FromLogContext()
         .WriteTo.Console());
 
+builder.Services.AddSingleton<EnvironmentConfig>();
 builder.Services.ConfigureOptions<DatabaseConfigSetup>();
 builder.Services.AddDbContext<MyDbContext>((serviceProvider, options) =>
 {
@@ -265,7 +265,6 @@ if (app.Environment.IsDevelopment())
 
 // 7) Auth pipeline
 app.UseRouting();
-app.UseMiddleware<JwtMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 

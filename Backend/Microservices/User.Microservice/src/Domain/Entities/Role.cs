@@ -1,15 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-
 namespace Domain.Entities;
 
-public partial class Role
+public sealed class Role
 {
-    public Guid RoleId { get; set; }
+    public Guid Id { get; set; }
 
-    public string RoleName { get; set; } = null!;
+    public string Name { get; set; } = null!;
+
+    public string? Description { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 
-    public virtual ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+    public DateTime? UpdatedAt { get; set; }
+
+    public DateTime? DeletedAt { get; set; }
+
+    public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 }

@@ -1,12 +1,12 @@
 namespace Domain.Entities;
 
-public sealed class UserRole
+public sealed class ChatSession
 {
     public Guid Id { get; set; }
 
     public Guid UserId { get; set; }
 
-    public Guid RoleId { get; set; }
+    public string? SessionName { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 
@@ -14,7 +14,5 @@ public sealed class UserRole
 
     public DateTime? DeletedAt { get; set; }
 
-    public User User { get; set; } = null!;
-
-    public Role Role { get; set; } = null!;
+    public ICollection<Chat> Chats { get; set; } = new List<Chat>();
 }

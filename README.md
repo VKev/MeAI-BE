@@ -1,6 +1,6 @@
 ﻿# Microservices .NET Template
 
-An opinionated .NET 9 boilerplate for API-first microservices (User, Guest) with an API Gateway, Redis, RabbitMQ, PostgreSQL, and optional n8n automation. Infrastructure is codified with Terraform so you can deploy either to AWS ECS/Fargate or to AWS EKS with Kubernetes manifests.
+An opinionated .NET 10 boilerplate for API-first microservices (User, Guest) with an API Gateway, Redis, RabbitMQ, PostgreSQL, and optional n8n automation. Infrastructure is codified with Terraform so you can deploy either to AWS ECS/Fargate or to AWS EKS with Kubernetes manifests.
 
 docker compose -f docker-compose-production.yml up -d --build
 
@@ -26,7 +26,7 @@ docker compose -f docker-compose-production.yml up -d --build
    Omit `k8s.auto.tfvars` when deploying ECS-only.
 
 ## Stack
-- .NET 9 WebAPI services: User, Guest, API Gateway (reverse proxy/aggregator)
+- .NET 10 WebAPI services: User, Guest, API Gateway (reverse proxy/aggregator)
 - Data plane: PostgreSQL, Redis, RabbitMQ
 - Optional: n8n + nginx sidecar, service discovery via ECS Service Connect
 - AWS: VPC, ALB/CloudFront/Cloudflare, ECR, RDS, ECS/Fargate, EKS
@@ -39,7 +39,7 @@ docker compose -f docker-compose-production.yml up -d --build
 - `Terraform-vars/` - sanitized tfvars templates (redacted secrets) used for CI/reference.
 
 ## Prerequisites
-- .NET 9 SDK
+- .NET 10 SDK
 - Docker and Docker Compose
 - Terraform >= 1.6
 - AWS CLI configured with an account that can create VPC/ECR/RDS/ALB/ECS/EKS

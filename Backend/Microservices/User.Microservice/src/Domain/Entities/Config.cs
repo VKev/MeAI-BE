@@ -1,20 +1,18 @@
 namespace Domain.Entities;
 
-public sealed class UserRole
+public sealed class Config
 {
     public Guid Id { get; set; }
 
-    public Guid UserId { get; set; }
+    public string? ChatModel { get; set; }
 
-    public Guid RoleId { get; set; }
+    public string? MediaAspectRatio { get; set; }
+
+    public int? NumberOfVariances { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 
     public DateTime? DeletedAt { get; set; }
-
-    public User User { get; set; } = null!;
-
-    public Role Role { get; set; } = null!;
 }
