@@ -1,12 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+namespace WebApi;
 
-namespace WebApi
+public static class AssemblyReference
 {
-    public static class AssemblyReference
-    {
-        
-    }
 }

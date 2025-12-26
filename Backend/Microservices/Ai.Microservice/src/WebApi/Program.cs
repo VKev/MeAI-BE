@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using Microsoft.OpenApi.Models;
 using Serilog;
 using SharedLibrary.Configs;
 using SharedLibrary.Middleware;
@@ -34,38 +33,6 @@ var environment = builder.Environment;
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "Ai API",
-        Version = "v1"
-    });
-
-    var jwtSecurityScheme = new OpenApiSecurityScheme
-    {
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
-        Description = "Paste your JWT token here (no need to type 'Bearer ').",
-        Reference = new OpenApiReference
-        {
-            Id = "Bearer",
-            Type = ReferenceType.SecurityScheme
-        }
-    };
-
-    c.AddSecurityDefinition(jwtSecurityScheme.Reference.Id, jwtSecurityScheme);
-
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        { jwtSecurityScheme, Array.Empty<string>() }
-    });
-
-});
 
 builder.Services.AddAuthorization();
 
@@ -107,13 +74,13 @@ if (shouldAutoApplyMigrations)
         var pending = dbContext.Database.GetPendingMigrations().ToList();
         if (pending.Count > 0)
         {
-          app.Logger.LogInformation("Applying {Count} pending EF Core migrations: {Migrations}", pending.Count, string.Join(", ", pending));
-          dbContext.Database.Migrate();
-          app.Logger.LogInformation("EF Core migrations applied successfully at startup.");
+            app.Logger.LogInformation("Applying {Count} pending EF Core migrations: {Migrations}", pending.Count, string.Join(", ", pending));
+            dbContext.Database.Migrate();
+            app.Logger.LogInformation("EF Core migrations applied successfully at startup.");
         }
         else
         {
-          app.Logger.LogInformation("No pending EF Core migrations detected; skipping apply.");
+            app.Logger.LogInformation("No pending EF Core migrations detected; skipping apply.");
         }
     }
     catch (Exception ex)
@@ -128,22 +95,6 @@ else
 
 app.MapGet("/health", () => new { status = "ok" });
 app.MapGet("/api/health", () => new { status = "ok" });
-
-app.UseSwagger();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Ai API V1");
-    c.RoutePrefix = "swagger";
-});
-
-if (app.Environment.IsDevelopment())
-{
-    app.MapGet("/", context =>
-    {
-        context.Response.Redirect("/swagger");
-        return Task.CompletedTask;
-    });
-}
 
 app.UseSerilogRequestLogging();
 

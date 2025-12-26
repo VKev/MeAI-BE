@@ -2,3 +2,7 @@
 .terraform
 .terraform.lock.hcl
 terraform-var
+/Backend/Microservices/.idea
+/Backend/Microservices/User.Microservice/.dotnet
+/Backend/Microservices/User.Microservice/.config
+Backend/Microservices/User.Microservice/global.json

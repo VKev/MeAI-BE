@@ -1,5 +1,5 @@
 <Project>
-  <PropertyGroup>
-    <MSBuildProjectExtensionsPath>$(MSBuildProjectDirectory)\Build\obj\</MSBuildProjectExtensionsPath>
-  </PropertyGroup>
+    <PropertyGroup>
+        <MSBuildProjectExtensionsPath>$(MSBuildProjectDirectory)\Build\obj\</MSBuildProjectExtensionsPath>
+    </PropertyGroup>
 </Project>

@@ -1,17 +1,24 @@
-﻿using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
 namespace Domain.Entities;
 
-public partial class UserRole
+[Index(nameof(UserId))]
+public sealed class UserRole
 {
+    [Key] public Guid Id { get; set; }
+
     public Guid UserId { get; set; }
 
     public Guid RoleId { get; set; }
 
-    public DateTime? AssignedAt { get; set; }
+    [Column(TypeName = "timestamp")]
+    public DateTime? CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public virtual Role Role { get; set; } = null!;
+    [Column(TypeName = "timestamp")]
+    public DateTime? UpdatedAt { get; set; }
 
-    public virtual User User { get; set; } = null!;
+    [Column(TypeName = "timestamp")]
+    public DateTime? DeletedAt { get; set; }
 }

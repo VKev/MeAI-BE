@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using MMLib.SwaggerForOcelot.DependencyInjection;
+using Scalar.AspNetCore;
 using Ocelot.DependencyInjection;
 using Ocelot.Middleware;
 using SharedLibrary.Authentication;
@@ -42,7 +39,7 @@ string ResolveHost(string? envHost, string containerDefault)
 
 const string CorsPolicyName = "AllowFrontend";
 var configuredOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
-var allowedCorsOrigins = (configuredOrigins ?? Array.Empty<string>())
+var allowedCorsOrigins = (configuredOrigins ?? [])
     .Select(origin => origin?.Trim())
     .Where(origin => !string.IsNullOrWhiteSpace(origin))
     .Select(origin => origin!) // filter above ensures non-null
@@ -116,7 +113,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor |
                                ForwardedHeaders.XForwardedProto |
                                ForwardedHeaders.XForwardedHost;
-    options.KnownNetworks.Clear();
+    options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
@@ -125,15 +122,13 @@ var routes = new JsonArray();
 string ToServiceSegment(string prefix)
 {
     var lower = prefix.ToLowerInvariant();
-    var parts = lower.Split(new[] { '_', '-' }, StringSplitOptions.RemoveEmptyEntries);
+    var parts = lower.Split(['_', '-'], StringSplitOptions.RemoveEmptyEntries);
     return string.Concat(parts.Select(p => char.ToUpperInvariant(p[0]) + p.Substring(1)));
 }
 
 void AddRoute(string prefix, string serviceSegment, string host, int port)
 {
-    var swaggerKey = prefix.ToLowerInvariant();
-
-    JsonObject BuildRoute(string upstreamTemplate, string downstreamTemplate, bool includeSwaggerKey)
+    JsonObject BuildRoute(string upstreamTemplate, string downstreamTemplate)
     {
         var route = new JsonObject
         {
@@ -148,17 +143,12 @@ void AddRoute(string prefix, string serviceSegment, string host, int port)
             ["DownstreamPathTemplate"] = downstreamTemplate
         };
 
-        if (includeSwaggerKey)
-        {
-            route["SwaggerKey"] = swaggerKey;
-        }
-
         return route;
     }
 
     // Ensure both root and nested endpoints are forwarded.
-    routes.Add(BuildRoute($"/api/{serviceSegment}", $"/api/{serviceSegment}", includeSwaggerKey: false));
-    routes.Add(BuildRoute($"/api/{serviceSegment}/{{everything}}", $"/api/{serviceSegment}/{{everything}}", includeSwaggerKey: true));
+    routes.Add(BuildRoute($"/api/{serviceSegment}", "/"));
+    routes.Add(BuildRoute($"/api/{serviceSegment}/{{everything}}", "/{everything}"));
 }
 
 int ResolvePort(string? envPort, int containerDefault, int localDefault)
@@ -227,17 +217,19 @@ foreach (var prefix in prefixes)
     addedServices.Add(serviceSegment);
 }
 
+var configuredBaseUrl = configuration["BASE_URL"] ?? "http://localhost:2406";
+
 var ocelotConfig = new JsonObject
 {
     ["Routes"] = routes,
     ["GlobalConfiguration"] = new JsonObject
     {
-        ["BaseUrl"] = configuration["BASE_URL"] ?? "http://localhost:2406"
+        ["BaseUrl"] = configuredBaseUrl
     }
 };
 
 var endpointData = new List<(string Key, string Name, string Url)>();
-var addedSwaggerServices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+var addedOpenApiServices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 foreach (var s in defaultServices)
 {
@@ -246,78 +238,44 @@ foreach (var s in defaultServices)
 
     var key = s.Prefix.ToLowerInvariant();
     var name = $"{s.Service} API";
-    var url = $"http://{host}:{port}/swagger/v1/swagger.json";
+    var url = $"http://{host}:{port}/openapi/v1.json";
 
     endpointData.Add((key, name, url));
-    addedSwaggerServices.Add(s.Service);
+    addedOpenApiServices.Add(s.Service);
 }
 
 foreach (var prefix in prefixes)
 {
     var serviceSegment = ToServiceSegment(prefix);
-    if (addedSwaggerServices.Contains(serviceSegment)) continue;
+    if (addedOpenApiServices.Contains(serviceSegment)) continue;
 
     var host = GetHostForPrefix(prefix, serviceSegment, $"{prefix.ToLowerInvariant()}-microservice");
     var port = ResolvePort(GetPortForPrefix(prefix, serviceSegment), 80, 80);
 
     var key = prefix.ToLowerInvariant();
     var name = $"{serviceSegment} API";
-    var url = $"http://{host}:{port}/swagger/v1/swagger.json";
+    var url = $"http://{host}:{port}/openapi/v1.json";
 
     endpointData.Add((key, name, url));
-    addedSwaggerServices.Add(serviceSegment);
+    addedOpenApiServices.Add(serviceSegment);
 }
-
-JsonArray BuildSwaggerEndpoints()
-{
-    var endpoints = new JsonArray();
-    foreach (var (key, name, url) in endpointData)
-    {
-        endpoints.Add(new JsonObject
-        {
-            ["Key"] = key,
-            ["TransformByOcelotConfig"] = true,
-            ["Config"] = new JsonArray(new JsonObject
-            {
-                ["Name"] = name,
-                ["Version"] = "v1",
-                ["Url"] = url
-            })
-        });
-    }
-    return endpoints;
-}
-
-var swaggerConfig = new JsonObject
-{
-    ["SwaggerForOcelot"] = new JsonObject
-    {
-        ["SwaggerEndPoints"] = BuildSwaggerEndpoints()
-    },
-    ["SwaggerEndPoints"] = BuildSwaggerEndpoints()
-};
 
 var contentRoot = builder.Environment.ContentRootPath;
 var ocelotFileName = "ocelot.runtime.json";
-var swaggerFileName = "swagger.runtime.json";
 var runtimeConfigPath = Path.Combine(contentRoot, ocelotFileName);
-var swaggerConfigPath = Path.Combine(contentRoot, swaggerFileName);
 
 File.WriteAllText(runtimeConfigPath, ocelotConfig.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-File.WriteAllText(swaggerConfigPath, swaggerConfig.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
 
 builder.Configuration
     .SetBasePath(contentRoot)
     .AddJsonFile(ocelotFileName, optional: false, reloadOnChange: true)
-    .AddJsonFile(swaggerFileName, optional: false, reloadOnChange: true)
     .AddEnvironmentVariables();
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerForOcelot(builder.Configuration);
 builder.Services.AddOcelot(builder.Configuration);
+builder.Services.AddHttpClient("OpenApiProxy");
 
-bool enableSwaggerUi = configuration.GetValue<bool>("ENABLE_SWAGGER_UI");
+bool enableDocsUi = configuration.GetValue<bool>("ENABLE_DOCS_UI");
 
 var app = builder.Build();
 
@@ -371,77 +329,194 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
-if (enableSwaggerUi || app.Environment.IsDevelopment())
-{
-    app.UseSwaggerForOcelotUI(
-        ocelotUi =>
-        {
-            ocelotUi.PathToSwaggerGenerator = "/swagger/docs";
-            ocelotUi.ReConfigureUpstreamSwaggerJson = AlterUpstreamSwaggerJson;
-        },
-        swaggerUi =>
-        {
-            swaggerUi.RoutePrefix = "swagger";
-            swaggerUi.DocumentTitle = "API Gateway - Swagger";
-            swaggerUi.ConfigObject.AdditionalItems["persistAuthorization"] = true;
-        }
-    );
-}
-
 app.UseWhen(ctx =>
-    !ctx.Request.Path.StartsWithSegments("/swagger") &&
+    !ctx.Request.Path.StartsWithSegments("/scalar") &&
+    !ctx.Request.Path.StartsWithSegments("/openapi") &&
     !ctx.Request.Path.StartsWithSegments("/health") &&
     !ctx.Request.Path.StartsWithSegments("/api/health"),
     branch => branch.UseMiddleware<JwtMiddleware>());
 
-bool uiEnabledNow = enableSwaggerUi || app.Environment.IsDevelopment();
+bool uiEnabledNow = true;
+//enableDocsUi || app.Environment.IsDevelopment();
 
 app.Use(async (ctx, next) =>
 {
     if (uiEnabledNow && (ctx.Request.Path == "/" || string.IsNullOrEmpty(ctx.Request.Path)))
     {
-        ctx.Response.Redirect("/swagger", permanent: false);
+        ctx.Response.Redirect("/scalar", permanent: false);
         return;
     }
     await next();
 });
 
-await app.UseOcelot();
+var openApiLookup = endpointData.ToDictionary(
+    entry => entry.Key,
+    entry => (Title: entry.Name, Url: entry.Url),
+    StringComparer.OrdinalIgnoreCase);
+
+app.MapGet("/openapi", (HttpContext ctx) =>
+{
+    var service = ctx.Request.Query["service"].FirstOrDefault();
+    if (!string.IsNullOrWhiteSpace(service) && openApiLookup.ContainsKey(service))
+    {
+        ctx.Response.Redirect($"/openapi/{service}", permanent: false);
+        return Task.CompletedTask;
+    }
+
+    ctx.Response.ContentType = "application/json";
+    var payload = openApiLookup.Select(item => new { key = item.Key, title = item.Value.Title });
+    return ctx.Response.WriteAsync(JsonSerializer.Serialize(payload));
+});
+
+app.MapGet("/openapi/{service}", async (HttpContext ctx, string service, IHttpClientFactory httpClientFactory) =>
+{
+    if (!openApiLookup.TryGetValue(service, out var entry))
+    {
+        ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+        ctx.Response.ContentType = "application/json";
+        await ctx.Response.WriteAsync(JsonSerializer.Serialize(new { error = "Unknown service", service }));
+        return;
+    }
+
+    var client = httpClientFactory.CreateClient("OpenApiProxy");
+    using var response = await client.GetAsync(entry.Url, ctx.RequestAborted);
+    var content = await response.Content.ReadAsStringAsync(ctx.RequestAborted);
+
+    ctx.Response.StatusCode = (int)response.StatusCode;
+    ctx.Response.ContentType = "application/json";
+
+    if (!response.IsSuccessStatusCode)
+    {
+        await ctx.Response.WriteAsync(content);
+        return;
+    }
+
+    var serviceSegment = ToServiceSegment(service);
+    var patched = TryPatchOpenApiServers(ctx, content, configuredBaseUrl, serviceSegment);
+    await ctx.Response.WriteAsync(patched);
+});
+
+if (uiEnabledNow)
+{
+    app.MapScalarApiReference("scalar", opts =>
+    {
+        opts.WithTitle("API Gateway - Scalar");
+        opts.WithOpenApiRoutePattern("/openapi/{documentName}");
+
+        var isDefault = true;
+        foreach (var entry in openApiLookup.OrderBy(e => e.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            opts.AddDocument(entry.Key, entry.Value.Title, routePattern: null, isDefault: isDefault);
+            isDefault = false;
+        }
+    });
+}
+
+app.UseWhen(ctx =>
+    ctx.Request.Path.StartsWithSegments("/api") &&
+    !ctx.Request.Path.StartsWithSegments("/api/health"),
+    branch => branch.UseOcelot().Wait());
+
+if (routes is not null)
+{
+    var routeTemplates = routes
+        .Select(route => route?["UpstreamPathTemplate"]?.GetValue<string>())
+        .Where(template => !string.IsNullOrWhiteSpace(template))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(template => template, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+    app.Logger.LogInformation("Ocelot routes registered: {Count} -> {Routes}", routeTemplates.Length, string.Join(", ", routeTemplates));
+}
 app.Run();
 
-static string AlterUpstreamSwaggerJson(HttpContext context, string swaggerJson)
+static string ResolveRequestScheme(HttpContext context)
 {
-    var swagger = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(swaggerJson);
-    if (swagger != null)
+    var protoHeader = context.Request.Headers["CloudFront-Forwarded-Proto"].FirstOrDefault()
+                      ?? context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault();
+    var cfVisitor = context.Request.Headers["CF-Visitor"].FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(protoHeader) && !string.IsNullOrWhiteSpace(cfVisitor))
     {
-        var protoHeader = context.Request.Headers["CloudFront-Forwarded-Proto"].FirstOrDefault()
-                          ?? context.Request.Headers["X-Forwarded-Proto"].FirstOrDefault();
-        var cfVisitor = context.Request.Headers["CF-Visitor"].FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(protoHeader) && !string.IsNullOrWhiteSpace(cfVisitor))
+        var schemeVal = cfVisitor.Split('"').FirstOrDefault(s => s.Equals("https", StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(schemeVal))
         {
-            var schemeVal = cfVisitor.Split('"').FirstOrDefault(s => s.Equals("https", StringComparison.OrdinalIgnoreCase));
-            if (!string.IsNullOrWhiteSpace(schemeVal))
-            {
-                protoHeader = schemeVal;
-            }
+            protoHeader = schemeVal;
         }
-        var scheme = protoHeader?.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                        .FirstOrDefault()
-                        ?.Trim();
-        if (string.IsNullOrEmpty(scheme))
-        {
-            scheme = context.Request.Scheme;
-        }
+    }
+    var scheme = protoHeader?.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .FirstOrDefault()
+                    ?.Trim();
+    if (string.IsNullOrEmpty(scheme))
+    {
+        scheme = context.Request.Scheme;
+    }
 
-        var servers = new Newtonsoft.Json.Linq.JArray
+    return scheme;
+}
+
+static string TryPatchOpenApiServers(HttpContext context, string openApiJson, string configuredBaseUrl, string serviceSegment)
+{
+    var openApi = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(openApiJson);
+    if (openApi == null)
+    {
+        return openApiJson;
+    }
+
+    var scheme = ResolveRequestScheme(context);
+    var servicePath = $"/api/{serviceSegment}";
+    var serverUrl = $"{scheme}://{context.Request.Host}{servicePath}";
+    if (Uri.TryCreate(configuredBaseUrl, UriKind.Absolute, out var baseUri))
+    {
+        var builder = new UriBuilder(baseUri);
+        if (!string.IsNullOrWhiteSpace(scheme))
+        {
+            builder.Scheme = scheme;
+            builder.Port = scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
+                ? (baseUri.Port == 80 ? 443 : baseUri.Port)
+                : (baseUri.Port == 443 ? 80 : baseUri.Port);
+        }
+        var basePath = builder.Path?.TrimEnd('/') ?? "";
+        builder.Path = string.IsNullOrWhiteSpace(basePath) || basePath == "/" ? servicePath : $"{basePath}{servicePath}";
+        serverUrl = builder.Uri.ToString().TrimEnd('/');
+    }
+
+    var servers = new Newtonsoft.Json.Linq.JArray
+    {
+        new Newtonsoft.Json.Linq.JObject
+        {
+            ["url"] = serverUrl
+        }
+    };
+
+    openApi["servers"] = servers;
+
+    var components = openApi["components"] as Newtonsoft.Json.Linq.JObject ?? new Newtonsoft.Json.Linq.JObject();
+    var securitySchemes = components["securitySchemes"] as Newtonsoft.Json.Linq.JObject ?? new Newtonsoft.Json.Linq.JObject();
+
+    if (securitySchemes["Bearer"] == null)
+    {
+        securitySchemes["Bearer"] = new Newtonsoft.Json.Linq.JObject
+        {
+            ["type"] = "http",
+            ["scheme"] = "bearer",
+            ["bearerFormat"] = "JWT",
+            ["in"] = "header"
+        };
+    }
+
+    components["securitySchemes"] = securitySchemes;
+    openApi["components"] = components;
+
+    if (openApi["security"] is not Newtonsoft.Json.Linq.JArray securityArray || securityArray.Count == 0)
+    {
+        openApi["security"] = new Newtonsoft.Json.Linq.JArray
         {
             new Newtonsoft.Json.Linq.JObject
             {
-                ["url"] = $"{scheme}://{context.Request.Host}"
+                ["Bearer"] = new Newtonsoft.Json.Linq.JArray()
             }
         };
-        swagger["servers"] = servers;
-        return swagger.ToString();
     }
-    return swaggerJson;
+
+    return openApi.ToString();
 }

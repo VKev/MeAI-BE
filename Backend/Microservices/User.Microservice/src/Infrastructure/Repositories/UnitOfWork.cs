@@ -1,24 +1,17 @@
 using Application.Abstractions.Data;
-using Infrastructure.Context;
+using Infrastructure.Persistence.Context;
 
 namespace Infrastructure.Repositories;
 
-public sealed class UnitOfWork : IUnitOfWork, IDisposable
+public sealed class UnitOfWork(MyDbContext context) : IUnitOfWork, IDisposable
 {
-    private readonly MyDbContext _context;
-
-    public UnitOfWork(MyDbContext context)
+    public void Dispose()
     {
-        _context = context;
+        context.Dispose();
     }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        return _context.SaveChangesAsync(cancellationToken);
-    }
-
-    public void Dispose()
-    {
-        _context.Dispose();
+        return context.SaveChangesAsync(cancellationToken);
     }
 }

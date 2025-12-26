@@ -5,7 +5,6 @@ using Domain.Repositories;
 using Infrastructure.Repositories;
 using Infrastructure.Common;
 using MassTransit;
-using Application.Consumers;
 using Application.Abstractions.Data;
 
 namespace Infrastructure
@@ -22,7 +21,6 @@ namespace Infrastructure
             services.AddMassTransit(busConfigurator =>
             {
                 busConfigurator.SetKebabCaseEndpointNameFormatter();
-                busConfigurator.AddConsumer<UserCreatedConsumer>();
                 busConfigurator.UsingRabbitMq((context, cfg) =>
                 {
                     var env = context.GetRequiredService<EnvironmentConfig>();
