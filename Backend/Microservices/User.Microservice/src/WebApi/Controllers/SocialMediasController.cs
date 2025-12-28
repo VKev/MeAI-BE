@@ -3,12 +3,15 @@ using System.Text.Json;
 using Application.SocialMedias.Commands.CreateSocialMedia;
 using Application.SocialMedias.Commands.DeleteSocialMedia;
 using Application.SocialMedias.Commands.UpdateSocialMedia;
+using Application.SocialMedias.Contracts;
 using Application.SocialMedias.Queries.GetSocialMediaById;
 using Application.SocialMedias.Queries.GetSocialMedias;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SharedLibrary.Attributes;
 using SharedLibrary.Common;
+using WebApi.Contracts;
 
 namespace WebApi.Controllers;
 
@@ -17,11 +20,14 @@ namespace WebApi.Controllers;
 public sealed class SocialMediasController(IMediator mediator) : ApiController(mediator)
 {
     [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<SocialMediaResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { message = "Unauthorized" });
+            return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
         var result = await _mediator.Send(new GetSocialMediasQuery(userId), cancellationToken);
@@ -34,11 +40,14 @@ public sealed class SocialMediasController(IMediator mediator) : ApiController(m
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(SocialMediaResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { message = "Unauthorized" });
+            return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
         var result = await _mediator.Send(new GetSocialMediaByIdQuery(id, userId), cancellationToken);
@@ -51,12 +60,15 @@ public sealed class SocialMediasController(IMediator mediator) : ApiController(m
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(SocialMediaResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateSocialMediaRequest request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { message = "Unauthorized" });
+            return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
         var metadata = request.Metadata.HasValue
@@ -74,12 +86,15 @@ public sealed class SocialMediasController(IMediator mediator) : ApiController(m
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(SocialMediaResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateSocialMediaRequest request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { message = "Unauthorized" });
+            return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
         var metadata = request.Metadata.HasValue
@@ -97,11 +112,14 @@ public sealed class SocialMediasController(IMediator mediator) : ApiController(m
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { message = "Unauthorized" });
+            return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
         var result = await _mediator.Send(new DeleteSocialMediaCommand(id, userId), cancellationToken);

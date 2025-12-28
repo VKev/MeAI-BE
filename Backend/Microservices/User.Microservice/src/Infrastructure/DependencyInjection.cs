@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Security;
 using Domain.Repositories;
 using Infrastructure.Common;
 using Infrastructure.Configs;
@@ -6,6 +7,7 @@ using Infrastructure.Repositories;
 using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using SharedLibrary.Configs;
+using StackExchange.Redis;
 
 namespace Infrastructure;
 
@@ -25,6 +27,10 @@ public static class DependencyInjection
         using var provider = services.BuildServiceProvider();
         var env = provider.GetRequiredService<EnvironmentConfig>();
         var redisConnection = $"{env.RedisHost}:{env.RedisPort},password={env.RedisPassword}";
+        var multiplexer = ConnectionMultiplexer.Connect(redisConnection);
+
+        services.AddSingleton<IConnectionMultiplexer>(_ => multiplexer);
+        services.AddSingleton<IVerificationCodeStore, RedisVerificationCodeStore>();
 
         services.AddMassTransit(busConfigurator =>
         {

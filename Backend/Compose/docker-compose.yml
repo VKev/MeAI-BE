@@ -70,6 +70,14 @@ services:
       Cors__AllowedOrigins__0: http://localhost:5173
       Cors__AllowedOrigins__1: https://your-frontend.example.com
       Cors__AllowedOrigins__2: http://localhost:2406
+      Email__Host: mailpit
+      Email__Port: 1025
+      Email__Username: ""
+      Email__Password: ""
+      Email__UseStartTls: "false"
+      Email__UseSsl: "false"
+      Email__FromEmail: no-reply@meai.local
+      Email__FromName: MeAI
       AutoApply__Migrations: "true"
     depends_on:
       postgres:
@@ -78,6 +86,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     networks:
       - app-network
 
@@ -101,6 +111,15 @@ services:
       Jwt__Issuer: UserMicroservice
       Jwt__Audience: MicroservicesApp
       Jwt__ExpirationMinutes: 60
+    networks:
+      - app-network
+
+  mailpit:
+    image: axllent/mailpit:v1.19
+    container_name: mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
     networks:
       - app-network
 

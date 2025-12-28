@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Application.Users.Commands.Register;
+using Application.Abstractions.Security;
 using Domain.Entities;
 using Domain.Repositories;
 using FluentAssertions;
@@ -18,6 +19,8 @@ namespace test.Users.Commands
         private readonly Mock<IRepository<RefreshToken>> _refreshTokenRepositoryMock;
         private readonly Mock<IPasswordHasher> _passwordHasherMock;
         private readonly Mock<IJwtTokenService> _jwtTokenServiceMock;
+        private readonly Mock<IEmailRepository> _emailRepositoryMock;
+        private readonly Mock<IVerificationCodeStore> _verificationCodeStoreMock;
         private readonly IConfiguration _configuration;
 
         public RegisterUserCommandHandlerTests()
@@ -28,6 +31,8 @@ namespace test.Users.Commands
             _refreshTokenRepositoryMock = new();
             _passwordHasherMock = new();
             _jwtTokenServiceMock = new();
+            _emailRepositoryMock = new();
+            _verificationCodeStoreMock = new();
             _configuration = new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>
                 {
@@ -38,6 +43,20 @@ namespace test.Users.Commands
             _jwtTokenServiceMock.Setup(j => j.GenerateToken(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<List<string>>()))
                 .Returns("access-token");
             _jwtTokenServiceMock.Setup(j => j.GenerateRefreshToken()).Returns("refresh-token");
+            _emailRepositoryMock.Setup(e => e.SendEmailAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string?>(),
+                    default))
+                .Returns(Task.CompletedTask);
+            _verificationCodeStoreMock.Setup(v => v.StoreAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<string>(),
+                    It.IsAny<TimeSpan>(),
+                    default))
+                .Returns(Task.CompletedTask);
         }
 
         [Fact]
@@ -59,7 +78,9 @@ namespace test.Users.Commands
                 _refreshTokenRepositoryMock.Object,
                 _passwordHasherMock.Object,
                 _jwtTokenServiceMock.Object,
-                _configuration);
+                _configuration,
+                _emailRepositoryMock.Object,
+                _verificationCodeStoreMock.Object);
 
             Result<LoginResponse> result = await handler.Handle(command, default);
             result.IsSuccess.Should().BeTrue();

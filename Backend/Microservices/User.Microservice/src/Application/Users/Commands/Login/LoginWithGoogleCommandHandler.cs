@@ -77,6 +77,7 @@ internal sealed class LoginWithGoogleCommandHandler(
                 PasswordHash = passwordHasher.HashPassword(Guid.NewGuid().ToString("N")),
                 FullName = string.IsNullOrWhiteSpace(payload.Name) ? null : payload.Name.Trim(),
                 Provider = "google",
+                EmailVerified = true,
                 CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
             };
 

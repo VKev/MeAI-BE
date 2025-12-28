@@ -4,6 +4,8 @@ using System.Text;
 using Domain.Entities;
 using Domain.Repositories;
 using Microsoft.Extensions.Configuration;
+using Application.Abstractions.Security;
+using Application.Users.Helpers;
 using SharedLibrary.Abstractions.Messaging;
 using SharedLibrary.Authentication;
 using SharedLibrary.Common.ResponseModel;
@@ -18,11 +20,14 @@ internal sealed class RegisterUserCommandHandler(
     IRepository<RefreshToken> refreshTokenRepository,
     IPasswordHasher passwordHasher,
     IJwtTokenService jwtTokenService,
-    IConfiguration configuration)
+    IConfiguration configuration,
+    IEmailRepository emailRepository,
+    IVerificationCodeStore verificationCodeStore)
     : ICommandHandler<RegisterUserCommand, LoginResponse>
 {
     private const int RefreshTokenDays = 7;
     private const int AccessTokenMinutesFallback = 60;
+    private const int VerificationCodeMinutes = 10;
     private readonly int _accessTokenMinutes = int.TryParse(
         configuration["Jwt:ExpirationMinutes"], out var minutes)
         ? minutes
@@ -56,10 +61,12 @@ internal sealed class RegisterUserCommandHandler(
             FullName = string.IsNullOrWhiteSpace(request.FullName) ? null : request.FullName.Trim(),
             PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
             Provider = "local",
+            EmailVerified = false,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
         await userRepository.AddAsync(user, cancellationToken);
+        await SendVerificationCodeAsync(user, emailRepository, verificationCodeStore, cancellationToken);
 
         var role = await GetOrCreateDefaultRole(roleRepository, cancellationToken);
         var userRole = new UserRole
@@ -172,5 +179,26 @@ internal sealed class RegisterUserCommandHandler(
 
         await roleRepository.AddAsync(role, cancellationToken);
         return role;
+    }
+
+    private static async Task SendVerificationCodeAsync(
+        User user,
+        IEmailRepository emailRepository,
+        IVerificationCodeStore verificationCodeStore,
+        CancellationToken cancellationToken)
+    {
+        var code = VerificationCodeGenerator.GenerateNumericCode();
+        await verificationCodeStore.StoreAsync(
+            VerificationCodePurpose.EmailVerification,
+            user.Email,
+            code,
+            TimeSpan.FromMinutes(VerificationCodeMinutes),
+            cancellationToken);
+
+        const string subject = "Verify your email";
+        var htmlBody = $"<p>Your verification code is <strong>{code}</strong>.</p>";
+        var textBody = $"Your verification code is {code}.";
+
+        await emailRepository.SendEmailAsync(user.Email, subject, htmlBody, textBody, cancellationToken);
     }
 }

@@ -19,6 +19,8 @@ public sealed class User
     [Required]
     public string Email { get; set; } = null!;
 
+    public bool EmailVerified { get; set; }
+
     public string? FullName { get; set; }
 
     [Column(TypeName = "date")]

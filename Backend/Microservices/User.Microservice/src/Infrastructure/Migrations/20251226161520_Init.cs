@@ -91,6 +91,7 @@ namespace Infrastructure.Migrations
                     Username = table.Column<string>(type: "text", nullable: false),
                     PasswordHash = table.Column<string>(type: "text", nullable: false),
                     Email = table.Column<string>(type: "text", nullable: false),
+                    EmailVerified = table.Column<bool>(type: "boolean", nullable: false),
                     FullName = table.Column<string>(type: "text", nullable: true),
                     Birthday = table.Column<DateTime>(type: "date", nullable: true),
                     PhoneNumber = table.Column<string>(type: "text", nullable: true),

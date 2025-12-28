@@ -2,12 +2,15 @@ using System.Security.Claims;
 using Application.Resources.Commands.CreateResource;
 using Application.Resources.Commands.DeleteResource;
 using Application.Resources.Commands.UpdateResource;
+using Application.Resources.Contracts;
 using Application.Resources.Queries.GetResourceById;
 using Application.Resources.Queries.GetResources;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SharedLibrary.Attributes;
 using SharedLibrary.Common;
+using WebApi.Contracts;
 
 namespace WebApi.Controllers;
 
@@ -16,11 +19,14 @@ namespace WebApi.Controllers;
 public sealed class ResourcesController(IMediator mediator) : ApiController(mediator)
 {
     [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<ResourceResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { message = "Unauthorized" });
+            return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
         var result = await _mediator.Send(new GetResourcesQuery(userId), cancellationToken);
@@ -33,11 +39,14 @@ public sealed class ResourcesController(IMediator mediator) : ApiController(medi
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(ResourceResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { message = "Unauthorized" });
+            return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
         var result = await _mediator.Send(new GetResourceByIdQuery(id, userId), cancellationToken);
@@ -50,12 +59,15 @@ public sealed class ResourcesController(IMediator mediator) : ApiController(medi
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(ResourceResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create([FromBody] CreateResourceRequest request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { message = "Unauthorized" });
+            return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
         var command = new CreateResourceCommand(
@@ -75,12 +87,15 @@ public sealed class ResourcesController(IMediator mediator) : ApiController(medi
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(ResourceResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateResourceRequest request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { message = "Unauthorized" });
+            return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
         var command = new UpdateResourceCommand(
@@ -101,11 +116,14 @@ public sealed class ResourcesController(IMediator mediator) : ApiController(medi
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { message = "Unauthorized" });
+            return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
         var result = await _mediator.Send(new DeleteResourceCommand(id, userId), cancellationToken);

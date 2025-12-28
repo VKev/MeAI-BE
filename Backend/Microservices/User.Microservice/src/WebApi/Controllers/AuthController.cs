@@ -2,11 +2,15 @@ using System;
 using Application.Users.Commands.Login;
 using Application.Users.Commands.Refresh;
 using Application.Users.Commands.Register;
+using Application.Users.Commands.ForgotPassword;
+using Application.Users.Commands.VerifyEmail;
 using MediatR;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using SharedLibrary.Attributes;
 using SharedLibrary.Authentication;
 using SharedLibrary.Common;
+using WebApi.Contracts;
 
 namespace WebApi.Controllers;
 
@@ -19,6 +23,8 @@ public class AuthController(IMediator mediator) : ApiController(mediator)
 
     [HttpPost("register")]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register([FromBody] RegisterUserCommand request,
         CancellationToken cancellationToken)
     {
@@ -34,6 +40,8 @@ public class AuthController(IMediator mediator) : ApiController(mediator)
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Login([FromBody] LoginWithPasswordCommand request,
         CancellationToken cancellationToken)
     {
@@ -49,6 +57,8 @@ public class AuthController(IMediator mediator) : ApiController(mediator)
 
     [HttpPost("login/google")]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> LoginWithGoogle([FromBody] GoogleLoginRequest request,
         CancellationToken cancellationToken)
     {
@@ -64,12 +74,15 @@ public class AuthController(IMediator mediator) : ApiController(mediator)
 
     [HttpPost("refresh")]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Refresh(CancellationToken cancellationToken)
     {
         if (!Request.Cookies.TryGetValue(RefreshTokenCookie, out var refreshToken) ||
             string.IsNullOrWhiteSpace(refreshToken))
         {
-            return Unauthorized(new { message = "Missing refresh token" });
+            return Unauthorized(new MessageResponse("Missing refresh token"));
         }
 
         var result = await _mediator.Send(new RefreshTokenCommand(refreshToken), cancellationToken);
@@ -80,6 +93,38 @@ public class AuthController(IMediator mediator) : ApiController(mediator)
 
         SetAuthCookies(result.Value);
         return Ok(result.Value);
+    }
+
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordCommand request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(request, cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(new MessageResponse("If the email exists, a reset code was sent."));
+    }
+
+    [HttpPost("verify-email")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailCommand request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(request, cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(new MessageResponse("Email verified successfully."));
     }
 
     private void SetAuthCookies(LoginResponse response)
