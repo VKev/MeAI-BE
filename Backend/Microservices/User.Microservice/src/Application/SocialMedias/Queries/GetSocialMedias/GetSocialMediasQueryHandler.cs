@@ -12,7 +12,12 @@ internal sealed class GetSocialMediasQueryHandler(ISocialMediaRepository socialM
     public async Task<Result<IReadOnlyList<SocialMediaResponse>>> Handle(GetSocialMediasQuery request,
         CancellationToken cancellationToken)
     {
-        var socialMedias = await socialMediaRepository.GetForUserAsync(request.UserId, cancellationToken);
+        var socialMedias = await socialMediaRepository.GetForUserAsync(
+            request.UserId,
+            request.CursorCreatedAt,
+            request.CursorId,
+            request.Limit,
+            cancellationToken);
         var response = socialMedias.Select(SocialMediaMapping.ToResponse).ToList();
         return Result.Success<IReadOnlyList<SocialMediaResponse>>(response);
     }

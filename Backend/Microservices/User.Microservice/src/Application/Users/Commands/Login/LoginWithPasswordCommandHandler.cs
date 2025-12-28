@@ -34,10 +34,10 @@ internal sealed class LoginWithPasswordCommandHandler(
         var normalizedEmail = NormalizeEmail(request.Email);
 
         var users = await userRepository.FindAsync(
-            user => user.Email.Equals(normalizedEmail, StringComparison.CurrentCultureIgnoreCase),
+            user => user.Email.ToLower() == normalizedEmail,
             cancellationToken);
 
-        var user = users[0];
+        var user = users.FirstOrDefault();
         if (user == null)
         {
             return Result.Failure<LoginResponse>(
@@ -59,7 +59,7 @@ internal sealed class LoginWithPasswordCommandHandler(
 
         var refreshTokenEntity = new RefreshToken
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             UserId = user.Id,
             TokenHash = HashToken(refreshToken),
             AccessTokenJti = ExtractAccessTokenJti(accessToken),

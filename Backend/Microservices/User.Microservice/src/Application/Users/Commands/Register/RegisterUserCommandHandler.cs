@@ -10,6 +10,11 @@ using SharedLibrary.Abstractions.Messaging;
 using SharedLibrary.Authentication;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
+using System;
+using System.Threading.Tasks;
+using System.Threading;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Application.Users.Commands.Register;
 
@@ -54,7 +59,7 @@ internal sealed class RegisterUserCommandHandler(
 
         var user = new User
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Username = request.Username.Trim(),
             Email = normalizedEmail,
             PasswordHash = passwordHasher.HashPassword(request.Password),
@@ -66,12 +71,13 @@ internal sealed class RegisterUserCommandHandler(
         };
 
         await userRepository.AddAsync(user, cancellationToken);
-        await SendVerificationCodeAsync(user, emailRepository, verificationCodeStore, cancellationToken);
+        var appName = ResolveAppName(configuration);
+        await SendVerificationCodeAsync(user, emailRepository, appName, verificationCodeStore, cancellationToken);
 
         var role = await GetOrCreateDefaultRole(roleRepository, cancellationToken);
         var userRole = new UserRole
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             UserId = user.Id,
             RoleId = role.Id,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
@@ -88,7 +94,7 @@ internal sealed class RegisterUserCommandHandler(
 
         var refreshTokenEntity = new RefreshToken
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             UserId = user.Id,
             TokenHash = HashToken(refreshToken),
             AccessTokenJti = ExtractAccessTokenJti(accessToken),
@@ -116,6 +122,23 @@ internal sealed class RegisterUserCommandHandler(
 
     private static string NormalizeUsername(string username) =>
         username.Trim().ToLowerInvariant();
+
+    private static string ResolveAppName(IConfiguration configuration)
+    {
+        var fromName = configuration["Email:FromName"];
+        if (!string.IsNullOrWhiteSpace(fromName))
+        {
+            return fromName;
+        }
+
+        var fromEmail = configuration["Email:FromEmail"];
+        if (!string.IsNullOrWhiteSpace(fromEmail))
+        {
+            return fromEmail;
+        }
+
+        return "Application";
+    }
 
     private static string HashToken(string token)
     {
@@ -171,7 +194,7 @@ internal sealed class RegisterUserCommandHandler(
 
         role = new Role
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "USER",
             Description = "Standard user",
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
@@ -184,6 +207,7 @@ internal sealed class RegisterUserCommandHandler(
     private static async Task SendVerificationCodeAsync(
         User user,
         IEmailRepository emailRepository,
+        string appName,
         IVerificationCodeStore verificationCodeStore,
         CancellationToken cancellationToken)
     {
@@ -196,9 +220,20 @@ internal sealed class RegisterUserCommandHandler(
             cancellationToken);
 
         const string subject = "Verify your email";
-        var htmlBody = $"<p>Your verification code is <strong>{code}</strong>.</p>";
-        var textBody = $"Your verification code is {code}.";
+        var tokens = new Dictionary<string, string>
+        {
+            ["SUBJECT"] = subject,
+            ["TITLE"] = subject,
+            ["BODY"] = "Use the code below to verify your email address.",
+            ["CODE"] = code,
+            ["FOOTNOTE"] = "This code expires in 10 minutes.",
+            ["APP_NAME"] = appName
+        };
 
-        await emailRepository.SendEmailAsync(user.Email, subject, htmlBody, textBody, cancellationToken);
+        await emailRepository.SendEmailByKeyAsync(
+            user.Email,
+            EmailTemplateKeys.EmailVerification,
+            tokens,
+            cancellationToken);
     }
 }

@@ -15,7 +15,7 @@ internal sealed class CreateResourceCommandHandler(IResourceRepository resourceR
     {
         var resource = new Resource
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             UserId = request.UserId,
             Link = request.Link.Trim(),
             Status = request.Status?.Trim(),

@@ -21,6 +21,7 @@ internal sealed class DeleteSocialMediaCommandHandler(ISocialMediaRepository soc
         }
 
         socialMedia.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        socialMedia.IsDeleted = true;
         socialMedia.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         socialMediaRepository.Update(socialMedia);
 

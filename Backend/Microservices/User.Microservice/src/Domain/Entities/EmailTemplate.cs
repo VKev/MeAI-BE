@@ -16,12 +16,14 @@ public sealed class EmailTemplate
 
     public bool IsActive { get; set; } = true;
 
-    [Column(TypeName = "timestamp")]
-    public DateTime? CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column(TypeName = "timestamptz")]
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    [Column(TypeName = "timestamp")]
+    [Column(TypeName = "timestamptz")]
     public DateTime? UpdatedAt { get; set; }
 
-    [Column(TypeName = "timestamp")]
+    [Column(TypeName = "timestamptz")]
     public DateTime? DeletedAt { get; set; }
+
+    public bool IsDeleted { get; set; }
 }

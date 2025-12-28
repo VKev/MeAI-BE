@@ -11,7 +11,12 @@ internal sealed class GetResourcesQueryHandler(IResourceRepository resourceRepos
     public async Task<Result<IReadOnlyList<ResourceResponse>>> Handle(GetResourcesQuery request,
         CancellationToken cancellationToken)
     {
-        var resources = await resourceRepository.GetForUserAsync(request.UserId, cancellationToken);
+        var resources = await resourceRepository.GetForUserAsync(
+            request.UserId,
+            request.CursorCreatedAt,
+            request.CursorId,
+            request.Limit,
+            cancellationToken);
         var response = resources.Select(ResourceMapping.ToResponse).ToList();
         return Result.Success<IReadOnlyList<ResourceResponse>>(response);
     }

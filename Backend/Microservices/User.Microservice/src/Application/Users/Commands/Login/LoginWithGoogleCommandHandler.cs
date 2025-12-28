@@ -71,10 +71,10 @@ internal sealed class LoginWithGoogleCommandHandler(
 
             user = new User
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 Username = username,
                 Email = normalizedEmail,
-                PasswordHash = passwordHasher.HashPassword(Guid.NewGuid().ToString("N")),
+                PasswordHash = passwordHasher.HashPassword(Guid.CreateVersion7().ToString("N")),
                 FullName = string.IsNullOrWhiteSpace(payload.Name) ? null : payload.Name.Trim(),
                 Provider = "google",
                 EmailVerified = true,
@@ -86,7 +86,7 @@ internal sealed class LoginWithGoogleCommandHandler(
             var role = await GetOrCreateDefaultRole(roleRepository, cancellationToken);
             var userRole = new UserRole
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.CreateVersion7(),
                 UserId = user.Id,
                 RoleId = role.Id,
                 CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
@@ -114,7 +114,7 @@ internal sealed class LoginWithGoogleCommandHandler(
 
         var refreshTokenEntity = new RefreshToken
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             UserId = user.Id,
             TokenHash = HashToken(refreshToken),
             AccessTokenJti = ExtractAccessTokenJti(accessToken),
@@ -215,7 +215,7 @@ internal sealed class LoginWithGoogleCommandHandler(
 
         role = new Role
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             Name = "USER",
             Description = "Standard user",
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
@@ -247,7 +247,7 @@ internal sealed class LoginWithGoogleCommandHandler(
             }
         }
 
-        var fallback = $"{baseName}_{Guid.NewGuid():N}";
+        var fallback = $"{baseName}_{Guid.CreateVersion7():N}";
         return fallback.Length > 30 ? fallback[..30] : fallback;
     }
 }

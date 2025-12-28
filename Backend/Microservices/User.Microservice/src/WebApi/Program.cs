@@ -30,6 +30,7 @@ builder.Services
 
 var app = builder.Build();
 app.ApplyMigrationsIfEnabled(shouldAutoApplyMigrations);
+await app.SeedEmailTemplatesAsync();
 app.MapHealthEndpoints();
 app.MapDebugEndpoints();
 

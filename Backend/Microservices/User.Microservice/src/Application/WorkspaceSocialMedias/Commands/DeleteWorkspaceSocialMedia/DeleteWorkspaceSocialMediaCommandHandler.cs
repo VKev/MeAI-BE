@@ -34,6 +34,7 @@ internal sealed class DeleteWorkspaceSocialMediaCommandHandler(
         }
 
         link.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        link.IsDeleted = true;
         link.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         workspaceSocialMediaRepository.Update(link);
 

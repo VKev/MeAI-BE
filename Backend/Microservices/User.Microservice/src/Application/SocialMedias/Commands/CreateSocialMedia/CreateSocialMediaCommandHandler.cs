@@ -15,7 +15,7 @@ internal sealed class CreateSocialMediaCommandHandler(ISocialMediaRepository soc
     {
         var socialMedia = new SocialMedia
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             UserId = request.UserId,
             Type = request.Type.Trim(),
             Metadata = request.Metadata,

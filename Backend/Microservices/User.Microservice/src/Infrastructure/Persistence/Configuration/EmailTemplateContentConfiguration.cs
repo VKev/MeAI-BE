@@ -8,6 +8,9 @@ public sealed class EmailTemplateContentConfiguration : IEntityTypeConfiguration
 {
     public void Configure(EntityTypeBuilder<EmailTemplateContent> builder)
     {
+        builder.HasIndex(e => e.EmailTemplateId)
+            .IsUnique();
+
         builder.HasOne<EmailTemplate>()
             .WithMany()
             .HasForeignKey(e => e.EmailTemplateId)

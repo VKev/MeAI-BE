@@ -6,5 +6,8 @@ namespace Application.WorkspaceSocialMedias.Queries.GetWorkspaceSocialMedias;
 
 public sealed record GetWorkspaceSocialMediasQuery(
     [Required] Guid WorkspaceId,
-    [Required] Guid UserId)
+    [Required] Guid UserId,
+    DateTime? CursorCreatedAt,
+    Guid? CursorId,
+    int? Limit)
     : IQuery<IReadOnlyList<SocialMediaResponse>>;

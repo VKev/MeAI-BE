@@ -5,6 +5,7 @@ using Domain.Repositories;
 using SharedLibrary.Abstractions.Messaging;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
+using System.Linq;
 
 namespace Application.Users.Commands.VerifyEmail;
 

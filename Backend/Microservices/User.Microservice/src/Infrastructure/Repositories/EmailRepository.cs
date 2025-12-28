@@ -14,10 +14,10 @@ public sealed class EmailRepository(MyDbContext context, IOptions<EmailOptions> 
 {
     private readonly EmailOptions _options = options.Value;
 
-    public async Task<EmailTemplateContent?> GetTemplateContentAsync(string templateKey, string language,
+    public async Task<EmailTemplateContent?> GetTemplateContentAsync(string templateKey,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(templateKey) || string.IsNullOrWhiteSpace(language))
+        if (string.IsNullOrWhiteSpace(templateKey))
         {
             return null;
         }
@@ -33,19 +33,16 @@ public sealed class EmailRepository(MyDbContext context, IOptions<EmailOptions> 
 
         var content = await context.Set<EmailTemplateContent>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.EmailTemplateId == template.Id && c.Language == language, cancellationToken);
+            .FirstOrDefaultAsync(c => c.EmailTemplateId == template.Id, cancellationToken);
 
         return content;
     }
 
-    public async Task SendEmailByKeyAsync(string to, string templateKey, string language,
+    public async Task SendEmailByKeyAsync(string to, string templateKey,
         IDictionary<string, string>? tokens = null, CancellationToken cancellationToken = default)
     {
-        var content = await GetTemplateContentAsync(templateKey, language, cancellationToken);
-        if (content == null)
-        {
-            throw new InvalidOperationException("Email template content not found.");
-        }
+        var content = await GetTemplateContentAsync(templateKey, cancellationToken)
+            ?? throw new InvalidOperationException("Email template content not found.");
 
         var subject = ApplyTokens(content.Subject, tokens);
         var htmlBody = ApplyTokens(content.HtmlBody, tokens);

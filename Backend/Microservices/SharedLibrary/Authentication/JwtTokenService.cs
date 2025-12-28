@@ -28,12 +28,12 @@ public class JwtTokenService : IJwtTokenService
     {
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.ASCII.GetBytes(_secretKey);
-        
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, userId.ToString()),
             new(ClaimTypes.Email, email),
-            new("jti", Guid.NewGuid().ToString())
+            new("jti", Guid.CreateVersion7().ToString())
         };
 
         // Add role claims

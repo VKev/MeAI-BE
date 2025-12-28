@@ -66,7 +66,7 @@ namespace test.Users.Commands
             _userRepositoryMock.Setup(r => r.FindAsync(It.IsAny<Expression<Func<User, bool>>>(), default))
                 .ReturnsAsync(Array.Empty<User>());
             _roleRepositoryMock.Setup(r => r.FindAsync(It.IsAny<Expression<Func<Role, bool>>>(), default))
-                .ReturnsAsync(new[] { new Role { Id = Guid.NewGuid(), Name = "USER" } });
+                .ReturnsAsync(new[] { new Role { Id = Guid.CreateVersion7(), Name = "USER" } });
             _refreshTokenRepositoryMock
                 .Setup(r => r.FindAsync(It.IsAny<Expression<Func<RefreshToken, bool>>>(), default))
                 .ReturnsAsync(Array.Empty<RefreshToken>());

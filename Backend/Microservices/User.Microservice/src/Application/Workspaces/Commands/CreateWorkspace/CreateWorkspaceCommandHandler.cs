@@ -15,7 +15,7 @@ internal sealed class CreateWorkspaceCommandHandler(IWorkspaceRepository workspa
     {
         var workspace = new Workspace
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             UserId = request.UserId,
             Name = request.Name.Trim(),
             Type = string.IsNullOrWhiteSpace(request.Type) ? null : request.Type.Trim(),

@@ -21,6 +21,7 @@ internal sealed class DeleteResourceCommandHandler(IResourceRepository resourceR
         }
 
         resource.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        resource.IsDeleted = true;
         resource.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         resourceRepository.Update(resource);
 

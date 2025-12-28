@@ -29,7 +29,7 @@ internal sealed class CreateWorkspaceSocialMediaCommandHandler(
 
         var socialMedia = new SocialMedia
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             UserId = request.UserId,
             Type = request.Type.Trim(),
             Metadata = request.Metadata,
@@ -40,7 +40,7 @@ internal sealed class CreateWorkspaceSocialMediaCommandHandler(
 
         var link = new WorkspaceSocialMedia
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             UserId = request.UserId,
             WorkspaceId = request.WorkspaceId,
             SocialMediaId = socialMedia.Id,

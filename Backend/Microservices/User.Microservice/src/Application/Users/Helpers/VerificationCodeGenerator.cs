@@ -3,9 +3,9 @@ using System.Text;
 
 namespace Application.Users.Helpers;
 
-internal static class VerificationCodeGenerator
+public static class VerificationCodeGenerator
 {
-    internal const int CodeLength = 6;
+    private const int CodeLength = 6;
 
     public static string GenerateNumericCode()
     {

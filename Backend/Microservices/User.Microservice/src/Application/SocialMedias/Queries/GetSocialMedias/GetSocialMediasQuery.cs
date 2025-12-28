@@ -5,4 +5,7 @@ using System.ComponentModel.DataAnnotations;
 namespace Application.SocialMedias.Queries.GetSocialMedias;
 
 public sealed record GetSocialMediasQuery(
-    [Required] Guid UserId) : IQuery<IReadOnlyList<SocialMediaResponse>>;
+    [Required] Guid UserId,
+    DateTime? CursorCreatedAt,
+    Guid? CursorId,
+    int? Limit) : IQuery<IReadOnlyList<SocialMediaResponse>>;

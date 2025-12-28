@@ -3,6 +3,8 @@ using Application.Users.Commands.Login;
 using Application.Users.Commands.Refresh;
 using Application.Users.Commands.Register;
 using Application.Users.Commands.ForgotPassword;
+using Application.Users.Commands.ResetPassword;
+using Application.Users.Commands.SendEmailVerificationCode;
 using Application.Users.Commands.VerifyEmail;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -111,6 +113,38 @@ public class AuthController(IMediator mediator) : ApiController(mediator)
         return Ok(new MessageResponse("If the email exists, a reset code was sent."));
     }
 
+    [HttpPost("reset-password")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordCommand request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(request, cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(new MessageResponse("Password reset successfully."));
+    }
+
+    [HttpPost("send-verification-code")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SendVerificationCode([FromBody] SendEmailVerificationCodeCommand request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(request, cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(new MessageResponse("If the email exists, a verification code was sent."));
+    }
+
     [HttpPost("verify-email")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status200OK)]
@@ -156,7 +190,7 @@ public class AuthController(IMediator mediator) : ApiController(mediator)
                 Secure = secure,
                 SameSite = sameSite,
                 Expires = DateTimeOffset.UtcNow.AddDays(RefreshTokenDays),
-                Path = "/api/auth/refresh"
+                Path = "/api/User/Auth/refresh"
             });
     }
 }

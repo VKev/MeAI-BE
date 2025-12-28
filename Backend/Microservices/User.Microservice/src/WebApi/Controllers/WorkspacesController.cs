@@ -22,14 +22,17 @@ public sealed class WorkspacesController(IMediator mediator) : ApiController(med
     [ProducesResponseType(typeof(IReadOnlyList<WorkspaceResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAll([FromQuery] DateTime? cursorCreatedAt, [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit, CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new GetWorkspacesQuery(userId), cancellationToken);
+        var result = await _mediator.Send(
+            new GetWorkspacesQuery(userId, cursorCreatedAt, cursorId, limit),
+            cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);

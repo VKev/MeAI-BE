@@ -29,6 +29,9 @@ internal sealed class GetWorkspaceSocialMediasQueryHandler(
         var socialMedias = await workspaceSocialMediaRepository.GetSocialMediasForWorkspaceAsync(
             request.WorkspaceId,
             request.UserId,
+            request.CursorCreatedAt,
+            request.CursorId,
+            request.Limit,
             cancellationToken);
 
         var response = socialMedias.Select(SocialMediaMapping.ToResponse).ToList();

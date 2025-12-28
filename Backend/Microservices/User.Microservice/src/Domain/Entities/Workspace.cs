@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Domain.Entities;
 
-[Index(nameof(UserId))]
+[Index(nameof(UserId), nameof(CreatedAt), nameof(Id))]
 public sealed class Workspace
 {
     [Key] public Guid Id { get; set; }
@@ -18,12 +18,14 @@ public sealed class Workspace
 
     public string? Description { get; set; }
 
-    [Column(TypeName = "timestamp")]
-    public DateTime? CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column(TypeName = "timestamptz")]
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    [Column(TypeName = "timestamp")]
+    [Column(TypeName = "timestamptz")]
     public DateTime? UpdatedAt { get; set; }
 
-    [Column(TypeName = "timestamp")]
+    [Column(TypeName = "timestamptz")]
     public DateTime? DeletedAt { get; set; }
+
+    public bool IsDeleted { get; set; }
 }

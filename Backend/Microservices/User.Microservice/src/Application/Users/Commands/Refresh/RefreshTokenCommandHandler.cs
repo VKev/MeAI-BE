@@ -63,7 +63,7 @@ internal sealed class RefreshTokenCommandHandler(
 
         var newTokenEntity = new RefreshToken
         {
-            Id = Guid.NewGuid(),
+            Id = Guid.CreateVersion7(),
             UserId = user.Id,
             TokenHash = HashToken(newRefreshToken),
             AccessTokenJti = ExtractAccessTokenJti(accessToken),

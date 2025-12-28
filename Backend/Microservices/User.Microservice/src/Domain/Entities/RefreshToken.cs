@@ -18,15 +18,15 @@ public sealed class RefreshToken
 
     public string? AccessTokenJti { get; set; }
 
-    [Column(TypeName = "timestamp")]
+    [Column(TypeName = "timestamptz")]
     public DateTime ExpiresAt { get; set; }
 
-    [Column(TypeName = "timestamp")]
+    [Column(TypeName = "timestamptz")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    [Column(TypeName = "timestamp")]
+    [Column(TypeName = "timestamptz")]
     public DateTime? RevokedAt { get; set; }
 
-    [Column(TypeName = "timestamp")]
+    [Column(TypeName = "timestamptz")]
     public DateTime? AccessTokenRevokedAt { get; set; }
 }

@@ -5,4 +5,7 @@ using System.ComponentModel.DataAnnotations;
 namespace Application.Workspaces.Queries.GetWorkspaces;
 
 public sealed record GetWorkspacesQuery(
-    [Required] Guid UserId) : IQuery<IReadOnlyList<WorkspaceResponse>>;
+    [Required] Guid UserId,
+    DateTime? CursorCreatedAt,
+    Guid? CursorId,
+    int? Limit) : IQuery<IReadOnlyList<WorkspaceResponse>>;

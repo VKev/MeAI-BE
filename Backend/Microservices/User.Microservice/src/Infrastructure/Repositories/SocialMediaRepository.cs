@@ -7,12 +7,31 @@ namespace Infrastructure.Repositories;
 
 public sealed class SocialMediaRepository(MyDbContext context) : ISocialMediaRepository
 {
-    public async Task<IReadOnlyList<SocialMedia>> GetForUserAsync(Guid userId,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SocialMedia>> GetForUserAsync(Guid userId, DateTime? cursorCreatedAt, Guid? cursorId,
+        int? limit, CancellationToken cancellationToken = default)
     {
-        return await context.Set<SocialMedia>()
-            .Where(sm => sm.UserId == userId && sm.DeletedAt == null)
-            .OrderBy(sm => sm.CreatedAt)
+        const int defaultPageSize = 50;
+        const int maxPageSize = 100;
+        var pageSize = Math.Clamp(limit ?? defaultPageSize, 1, maxPageSize);
+
+        var query = context.Set<SocialMedia>()
+            .Where(sm => sm.UserId == userId && !sm.IsDeleted)
+            .AsQueryable();
+
+        if (cursorCreatedAt.HasValue && cursorId.HasValue)
+        {
+            var createdAt = cursorCreatedAt.Value;
+            var lastId = cursorId.Value;
+            query = query.Where(sm =>
+                EF.Functions.LessThanOrEqual(
+                    ValueTuple.Create(sm.CreatedAt, sm.Id),
+                    ValueTuple.Create(createdAt, lastId)));
+        }
+
+        return await query
+            .OrderByDescending(sm => sm.CreatedAt)
+            .ThenBy(sm => sm.Id)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
     }
 
@@ -21,7 +40,7 @@ public sealed class SocialMediaRepository(MyDbContext context) : ISocialMediaRep
     {
         return await context.Set<SocialMedia>()
             .FirstOrDefaultAsync(
-                sm => sm.Id == id && sm.UserId == userId && sm.DeletedAt == null,
+                sm => sm.Id == id && sm.UserId == userId && !sm.IsDeleted,
                 cancellationToken);
     }
 

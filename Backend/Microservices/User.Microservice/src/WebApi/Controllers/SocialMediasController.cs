@@ -23,14 +23,17 @@ public sealed class SocialMediasController(IMediator mediator) : ApiController(m
     [ProducesResponseType(typeof(IReadOnlyList<SocialMediaResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAll([FromQuery] DateTime? cursorCreatedAt, [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit, CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new GetSocialMediasQuery(userId), cancellationToken);
+        var result = await _mediator.Send(
+            new GetSocialMediasQuery(userId, cursorCreatedAt, cursorId, limit),
+            cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);

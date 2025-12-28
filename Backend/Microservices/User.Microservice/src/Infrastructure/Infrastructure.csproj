@@ -11,6 +11,7 @@
 
     <ItemGroup>
         <PackageReference Include="DotNetEnv" Version="3.1.1"/>
+        <PackageReference Include="EFCore.NamingConventions" Version="10.0.0-rc.2"/>
         <PackageReference Include="MailKit" Version="4.7.1"/>
         <PackageReference Include="MassTransit.EntityFrameworkCore" Version="8.5.7"/>
         <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.7"/>
@@ -38,6 +39,13 @@
 
     <ItemGroup>
         <Folder Include="Persistence\Configuration\"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="EmailTemplates\*.html">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+            <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+        </Content>
     </ItemGroup>
 
     <Target Name="CopyEFCoreTargetsFile" BeforeTargets="BeforeBuild">

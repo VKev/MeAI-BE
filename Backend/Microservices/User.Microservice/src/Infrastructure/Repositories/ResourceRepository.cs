@@ -7,12 +7,31 @@ namespace Infrastructure.Repositories;
 
 public sealed class ResourceRepository(MyDbContext context) : IResourceRepository
 {
-    public async Task<IReadOnlyList<Resource>> GetForUserAsync(Guid userId,
-        CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Resource>> GetForUserAsync(Guid userId, DateTime? cursorCreatedAt, Guid? cursorId,
+        int? limit, CancellationToken cancellationToken = default)
     {
-        return await context.Set<Resource>()
-            .Where(resource => resource.UserId == userId && resource.DeletedAt == null)
-            .OrderBy(resource => resource.CreatedAt)
+        const int defaultPageSize = 50;
+        const int maxPageSize = 100;
+        var pageSize = Math.Clamp(limit ?? defaultPageSize, 1, maxPageSize);
+
+        var query = context.Set<Resource>()
+            .Where(resource => resource.UserId == userId && !resource.IsDeleted)
+            .AsQueryable();
+
+        if (cursorCreatedAt.HasValue && cursorId.HasValue)
+        {
+            var createdAt = cursorCreatedAt.Value;
+            var lastId = cursorId.Value;
+            query = query.Where(resource =>
+                EF.Functions.LessThanOrEqual(
+                    ValueTuple.Create(resource.CreatedAt, resource.Id),
+                    ValueTuple.Create(createdAt, lastId)));
+        }
+
+        return await query
+            .OrderByDescending(resource => resource.CreatedAt)
+            .ThenBy(resource => resource.Id)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
     }
 
@@ -21,7 +40,7 @@ public sealed class ResourceRepository(MyDbContext context) : IResourceRepositor
     {
         return await context.Set<Resource>()
             .FirstOrDefaultAsync(
-                resource => resource.Id == id && resource.UserId == userId && resource.DeletedAt == null,
+                resource => resource.Id == id && resource.UserId == userId && !resource.IsDeleted,
                 cancellationToken);
     }
 

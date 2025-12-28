@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.AddMassTransit(busConfigurator =>
         {
             busConfigurator.SetKebabCaseEndpointNameFormatter();
+            busConfigurator.AddConsumer<Application.Consumers.WelcomeEmailConsumer>();
 
             busConfigurator.UsingRabbitMq((context, cfg) =>
             {

@@ -2,6 +2,7 @@ using Application.Abstractions.Security;
 using Application.Users.Helpers;
 using Domain.Entities;
 using Domain.Repositories;
+using Microsoft.Extensions.Configuration;
 using SharedLibrary.Abstractions.Messaging;
 using SharedLibrary.Common.ResponseModel;
 
@@ -10,10 +11,12 @@ namespace Application.Users.Commands.ForgotPassword;
 internal sealed class ForgotPasswordCommandHandler(
     IRepository<User> userRepository,
     IEmailRepository emailRepository,
-    IVerificationCodeStore verificationCodeStore)
+    IVerificationCodeStore verificationCodeStore,
+    IConfiguration configuration)
     : ICommandHandler<ForgotPasswordCommand>
 {
     private const int CodeTtlMinutes = 10;
+    private readonly string _appName = ResolveAppName(configuration);
 
     public async Task<Result> Handle(ForgotPasswordCommand request, CancellationToken cancellationToken)
     {
@@ -37,13 +40,41 @@ internal sealed class ForgotPasswordCommandHandler(
             cancellationToken);
 
         const string subject = "Password reset code";
-        var htmlBody = $"<p>Use this code to reset your password: <strong>{code}</strong>.</p>";
-        var textBody = $"Use this code to reset your password: {code}.";
+        var tokens = new Dictionary<string, string>
+        {
+            ["SUBJECT"] = subject,
+            ["TITLE"] = "Reset your password",
+            ["BODY"] = "Use the code below to reset your password.",
+            ["CODE"] = code,
+            ["FOOTNOTE"] = "This code expires in 10 minutes.",
+            ["APP_NAME"] = _appName
+        };
 
-        await emailRepository.SendEmailAsync(user.Email, subject, htmlBody, textBody, cancellationToken);
+        await emailRepository.SendEmailByKeyAsync(
+            user.Email,
+            EmailTemplateKeys.PasswordReset,
+            tokens,
+            cancellationToken);
         return Result.Success();
     }
 
     private static string NormalizeEmail(string email) =>
         email.Trim().ToLowerInvariant();
+
+    private static string ResolveAppName(IConfiguration configuration)
+    {
+        var fromName = configuration["Email:FromName"];
+        if (!string.IsNullOrWhiteSpace(fromName))
+        {
+            return fromName;
+        }
+
+        var fromEmail = configuration["Email:FromEmail"];
+        if (!string.IsNullOrWhiteSpace(fromEmail))
+        {
+            return fromEmail;
+        }
+
+        return "Application";
+    }
 }

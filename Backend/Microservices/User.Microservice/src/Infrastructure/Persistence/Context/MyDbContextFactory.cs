@@ -41,6 +41,7 @@ public class MyDbContextFactory : IDesignTimeDbContextFactory<MyDbContext>
 
         var optionsBuilder = new DbContextOptionsBuilder<MyDbContext>();
         optionsBuilder.UseNpgsql(connectionString!);
+        optionsBuilder.UseSnakeCaseNamingConvention();
         return new MyDbContext(optionsBuilder.Options);
     }
 }

@@ -21,6 +21,7 @@ internal sealed class DeleteWorkspaceCommandHandler(IWorkspaceRepository workspa
         }
 
         workspace.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        workspace.IsDeleted = true;
         workspace.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         workspaceRepository.Update(workspace);
 

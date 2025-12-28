@@ -5,4 +5,7 @@ using System.ComponentModel.DataAnnotations;
 namespace Application.Resources.Queries.GetResources;
 
 public sealed record GetResourcesQuery(
-    [Required] Guid UserId) : IQuery<IReadOnlyList<ResourceResponse>>;
+    [Required] Guid UserId,
+    DateTime? CursorCreatedAt,
+    Guid? CursorId,
+    int? Limit) : IQuery<IReadOnlyList<ResourceResponse>>;

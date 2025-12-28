@@ -12,7 +12,12 @@ internal sealed class GetWorkspacesQueryHandler(IWorkspaceRepository workspaceRe
     public async Task<Result<IReadOnlyList<WorkspaceResponse>>> Handle(GetWorkspacesQuery request,
         CancellationToken cancellationToken)
     {
-        var workspaces = await workspaceRepository.GetForUserAsync(request.UserId, cancellationToken);
+        var workspaces = await workspaceRepository.GetForUserAsync(
+            request.UserId,
+            request.CursorCreatedAt,
+            request.CursorId,
+            request.Limit,
+            cancellationToken);
         var response = workspaces.Select(WorkspaceMapping.ToResponse).ToList();
         return Result.Success<IReadOnlyList<WorkspaceResponse>>(response);
     }
