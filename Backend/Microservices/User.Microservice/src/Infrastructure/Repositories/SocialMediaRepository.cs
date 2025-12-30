@@ -23,14 +23,14 @@ public sealed class SocialMediaRepository(MyDbContext context) : ISocialMediaRep
             var createdAt = cursorCreatedAt.Value;
             var lastId = cursorId.Value;
             query = query.Where(sm =>
-                EF.Functions.LessThanOrEqual(
+                EF.Functions.LessThan(
                     ValueTuple.Create(sm.CreatedAt, sm.Id),
                     ValueTuple.Create(createdAt, lastId)));
         }
 
         return await query
             .OrderByDescending(sm => sm.CreatedAt)
-            .ThenBy(sm => sm.Id)
+            .ThenByDescending(sm => sm.Id)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
     }

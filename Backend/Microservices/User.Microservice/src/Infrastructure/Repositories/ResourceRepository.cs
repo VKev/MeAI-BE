@@ -23,14 +23,14 @@ public sealed class ResourceRepository(MyDbContext context) : IResourceRepositor
             var createdAt = cursorCreatedAt.Value;
             var lastId = cursorId.Value;
             query = query.Where(resource =>
-                EF.Functions.LessThanOrEqual(
+                EF.Functions.LessThan(
                     ValueTuple.Create(resource.CreatedAt, resource.Id),
                     ValueTuple.Create(createdAt, lastId)));
         }
 
         return await query
             .OrderByDescending(resource => resource.CreatedAt)
-            .ThenBy(resource => resource.Id)
+            .ThenByDescending(resource => resource.Id)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
     }

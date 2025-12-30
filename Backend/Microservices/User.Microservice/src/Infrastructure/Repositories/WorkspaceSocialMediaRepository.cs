@@ -28,14 +28,14 @@ public sealed class WorkspaceSocialMediaRepository(MyDbContext context) : IWorks
             var createdAt = cursorCreatedAt.Value;
             var lastId = cursorId.Value;
             query = query.Where(social =>
-                EF.Functions.LessThanOrEqual(
+                EF.Functions.LessThan(
                     ValueTuple.Create(social.CreatedAt, social.Id),
                     ValueTuple.Create(createdAt, lastId)));
         }
 
         return await query
             .OrderByDescending(social => social.CreatedAt)
-            .ThenBy(social => social.Id)
+            .ThenByDescending(social => social.Id)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
     }

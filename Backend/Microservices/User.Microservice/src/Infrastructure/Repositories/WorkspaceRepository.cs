@@ -23,14 +23,14 @@ public sealed class WorkspaceRepository(MyDbContext context) : IWorkspaceReposit
             var createdAt = cursorCreatedAt.Value;
             var lastId = cursorId.Value;
             query = query.Where(w =>
-                EF.Functions.LessThanOrEqual(
+                EF.Functions.LessThan(
                     ValueTuple.Create(w.CreatedAt, w.Id),
                     ValueTuple.Create(createdAt, lastId)));
         }
 
         return await query
             .OrderByDescending(w => w.CreatedAt)
-            .ThenBy(w => w.Id)
+            .ThenByDescending(w => w.Id)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
     }
