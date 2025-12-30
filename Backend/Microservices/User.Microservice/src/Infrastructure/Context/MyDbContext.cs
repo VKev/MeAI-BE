@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace Infrastructure.Context;
 
@@ -42,9 +44,9 @@ public partial class MyDbContext : DbContext
             entity.Property(e => e.ChatModel).HasColumnName("chat_model");
             entity.Property(e => e.MediaAspectRatio).HasColumnName("media_aspect_ratio");
             entity.Property(e => e.NumberOfVariances).HasColumnName("number_of_variances");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp");
-            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
         });
 
         modelBuilder.Entity<Resource>(entity =>
@@ -59,9 +61,9 @@ public partial class MyDbContext : DbContext
             entity.Property(e => e.Status).HasColumnName("status");
             entity.Property(e => e.ResourceType).HasColumnName("type");
             entity.Property(e => e.ContentType).HasColumnName("content_type");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp");
-            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
 
             entity.HasOne(d => d.User).WithMany(p => p.Resources)
                 .HasForeignKey(d => d.UserId)
@@ -79,9 +81,9 @@ public partial class MyDbContext : DbContext
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.Name).HasColumnName("name").IsRequired();
             entity.Property(e => e.Description).HasColumnName("description");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp");
-            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
         });
 
         modelBuilder.Entity<Subscription>(entity =>
@@ -92,13 +94,26 @@ public partial class MyDbContext : DbContext
 
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.Name).HasColumnName("name");
-            entity.Property(e => e.NumberOfSocialAccounts).HasColumnName("number_of_social_accounts");
             entity.Property(e => e.MeAiCoin).HasColumnName("me_ai_coin").HasColumnType("numeric(18,2)");
-            entity.Property(e => e.RateLimitForContentCreation).HasColumnName("rate_limit_for_content_creation");
-            entity.Property(e => e.NumberOfWorkspaces).HasColumnName("number_of_workspaces");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp");
-            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
+
+            var limitsJsonOptions = new JsonSerializerOptions();
+            var limitsComparer = new ValueComparer<SubscriptionLimits?>(
+                (left, right) => SubscriptionLimitsEquals(left, right),
+                value => SubscriptionLimitsHashCode(value),
+                value => SubscriptionLimitsSnapshot(value));
+
+            entity.Property(e => e.Limits)
+                .HasColumnName("limits")
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    limits => limits == null ? null : JsonSerializer.Serialize(limits, limitsJsonOptions),
+                    json => string.IsNullOrWhiteSpace(json)
+                        ? null
+                        : JsonSerializer.Deserialize<SubscriptionLimits>(json, limitsJsonOptions))
+                .Metadata.SetValueComparer(limitsComparer);
         });
 
         modelBuilder.Entity<Transaction>(entity =>
@@ -116,9 +131,9 @@ public partial class MyDbContext : DbContext
             entity.Property(e => e.TokenUsed).HasColumnName("token_used");
             entity.Property(e => e.PaymentMethod).HasColumnName("payment_method");
             entity.Property(e => e.Status).HasColumnName("status");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp");
-            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
 
             entity.HasOne(d => d.User).WithMany(p => p.Transactions)
                 .HasForeignKey(d => d.UserId)
@@ -148,9 +163,9 @@ public partial class MyDbContext : DbContext
                 .HasColumnName("me_ai_coin")
                 .HasColumnType("numeric(18,2)")
                 .HasDefaultValue(0m);
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp");
-            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
         });
 
         modelBuilder.Entity<UserRole>(entity =>
@@ -162,9 +177,9 @@ public partial class MyDbContext : DbContext
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.UserId).HasColumnName("user_id");
             entity.Property(e => e.RoleId).HasColumnName("role_id");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp");
-            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
 
             entity.HasOne(d => d.Role).WithMany(p => p.UserRoles)
                 .HasForeignKey(d => d.RoleId)
@@ -184,12 +199,12 @@ public partial class MyDbContext : DbContext
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.UserId).HasColumnName("user_id");
             entity.Property(e => e.SubscriptionId).HasColumnName("subscription_id");
-            entity.Property(e => e.ActiveDate).HasColumnName("active_date").HasColumnType("timestamp");
-            entity.Property(e => e.EndDate).HasColumnName("end_date").HasColumnType("timestamp");
+            entity.Property(e => e.ActiveDate).HasColumnName("active_date").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.EndDate).HasColumnName("end_date").HasColumnType("timestamp with time zone");
             entity.Property(e => e.Status).HasColumnName("status");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp");
-            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+            entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
 
             entity.HasOne(d => d.User).WithMany(p => p.UserSubscriptions)
                 .HasForeignKey(d => d.UserId)
@@ -204,4 +219,49 @@ public partial class MyDbContext : DbContext
     }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
+
+    private static bool SubscriptionLimitsEquals(SubscriptionLimits? left, SubscriptionLimits? right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left is null || right is null)
+        {
+            return false;
+        }
+
+        return left.NumberOfSocialAccounts == right.NumberOfSocialAccounts
+            && left.RateLimitForContentCreation == right.RateLimitForContentCreation
+            && left.NumberOfWorkspaces == right.NumberOfWorkspaces;
+    }
+
+    private static int SubscriptionLimitsHashCode(SubscriptionLimits? value)
+    {
+        if (value is null)
+        {
+            return 0;
+        }
+
+        return HashCode.Combine(
+            value.NumberOfSocialAccounts,
+            value.RateLimitForContentCreation,
+            value.NumberOfWorkspaces);
+    }
+
+    private static SubscriptionLimits? SubscriptionLimitsSnapshot(SubscriptionLimits? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        return new SubscriptionLimits
+        {
+            NumberOfSocialAccounts = value.NumberOfSocialAccounts,
+            RateLimitForContentCreation = value.RateLimitForContentCreation,
+            NumberOfWorkspaces = value.NumberOfWorkspaces
+        };
+    }
 }

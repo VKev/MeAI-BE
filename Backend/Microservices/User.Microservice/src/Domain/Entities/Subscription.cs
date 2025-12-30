@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Domain.Entities;
 
 public sealed class Subscription
@@ -6,13 +8,9 @@ public sealed class Subscription
 
     public string? Name { get; set; }
 
-    public int? NumberOfSocialAccounts { get; set; }
+    public SubscriptionLimits? Limits { get; set; }
 
     public decimal? MeAiCoin { get; set; }
-
-    public int? RateLimitForContentCreation { get; set; }
-
-    public int? NumberOfWorkspaces { get; set; }
 
     public DateTime? CreatedAt { get; set; }
 
@@ -20,5 +18,6 @@ public sealed class Subscription
 
     public DateTime? DeletedAt { get; set; }
 
+    [JsonIgnore]
     public ICollection<UserSubscription> UserSubscriptions { get; set; } = new List<UserSubscription>();
 }

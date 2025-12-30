@@ -1,21 +1,21 @@
 using Application;
 using Infrastructure;
+using Infrastructure.Configuration;
 using Infrastructure.Context;
+using Infrastructure.Seeding;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models; // Needed for JWT in Swagger
 using Serilog;
 using SharedLibrary.Configs;
-using SharedLibrary.Migrations;
-using SharedLibrary.Utils;
+using SharedLibrary.Middleware;
 using System;
 using System.IO;
 using System.Linq;
 using Serilog.Events;
+using WebApi.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 // Allow automatic EF Core migrations when enabled via env
@@ -23,11 +23,6 @@ const string AutoApplyMigrationsEnvVar = "AutoApply__Migrations";
 var autoApplySetting = builder.Configuration["AutoApply:Migrations"]
                         ?? builder.Configuration[AutoApplyMigrationsEnvVar];
 var shouldAutoApplyMigrations = bool.TryParse(autoApplySetting, out var parsedAutoApply) && parsedAutoApply;
-
-if (!shouldAutoApplyMigrations)
-{
-    builder.Services.Replace(ServiceDescriptor.Scoped<IMigrator, NoOpMigrator>());
-}
 
 var environment = builder.Environment;
 const string CorsPolicyName = "AllowFrontend";
@@ -116,6 +111,8 @@ builder.Host.UseSerilog((hostingContext, loggerConfiguration) =>
 
 builder.Services.AddSingleton<EnvironmentConfig>();
 builder.Services.ConfigureOptions<DatabaseConfigSetup>();
+builder.Services.Configure<AdminSeedOptions>(
+    builder.Configuration.GetSection(AdminSeedOptions.SectionName));
 builder.Services.AddDbContext<MyDbContext>((serviceProvider, options) =>
 {
     var databaseConfig = serviceProvider.GetRequiredService<IOptions<DatabaseConfig>>().Value;
@@ -164,6 +161,20 @@ else
 {
     app.Logger.LogInformation("EF Core migrations skipped (set {EnvVar}=true to enable).", AutoApplyMigrationsEnvVar);
 }
+
+// Seed admin user if configured
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var seeder = scope.ServiceProvider.GetRequiredService<AdminUserSeeder>();
+        await seeder.SeedAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Failed to seed admin user at startup.");
+    }
+}
 // Health check endpoints
 app.MapGet("/health", () => new { status = "ok" });
 app.MapGet("/api/health", () => new { status = "ok" });
@@ -202,16 +213,19 @@ app.Use((ctx, next) =>
 // 3) Logging
 app.UseSerilogRequestLogging();
 
-// 4) Only redirect to HTTPS if scheme is already corrected by step #2
+// 4) FluentValidation errors
+app.UseMiddleware<ValidationExceptionMiddleware>();
+
+// 5) Only redirect to HTTPS if scheme is already corrected by step #2
 if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
 
-// 5) CORS
+// 6) CORS
 app.UseCors(CorsPolicyName);
 
-// 6) Swagger (server URL patched via PreSerialize)
+// 7) Swagger (server URL patched via PreSerialize)
 app.UseSwagger(c =>
 {
     c.PreSerializeFilters.Add((swagger, httpReq) =>
@@ -263,8 +277,9 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// 7) Auth pipeline
+// 8) Auth pipeline
 app.UseRouting();
+app.UseMiddleware<JwtMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 

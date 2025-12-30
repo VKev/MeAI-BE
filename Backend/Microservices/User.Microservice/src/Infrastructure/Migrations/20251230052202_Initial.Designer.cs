@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(MyDbContext))]
-    [Migration("20251223131739_Initial")]
+    [Migration("20251230052202_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -162,6 +162,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp")
                         .HasColumnName("deleted_at");
 
+                    b.Property<string>("Limits")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("limits");
+
                     b.Property<decimal?>("MeAiCoin")
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("me_ai_coin");
@@ -169,18 +173,6 @@ namespace Infrastructure.Migrations
                     b.Property<string>("Name")
                         .HasColumnType("text")
                         .HasColumnName("name");
-
-                    b.Property<int?>("NumberOfSocialAccounts")
-                        .HasColumnType("integer")
-                        .HasColumnName("number_of_social_accounts");
-
-                    b.Property<int?>("NumberOfWorkspaces")
-                        .HasColumnType("integer")
-                        .HasColumnName("number_of_workspaces");
-
-                    b.Property<int?>("RateLimitForContentCreation")
-                        .HasColumnType("integer")
-                        .HasColumnName("rate_limit_for_content_creation");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp")
