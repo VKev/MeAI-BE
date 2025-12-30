@@ -2,14 +2,11 @@ using Application;
 using Infrastructure;
 using Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using SharedLibrary.Configs;
-using SharedLibrary.Migrations;
 
 var solutionDirectory = Directory.GetParent(Directory.GetCurrentDirectory())?.FullName ?? "";
 if (!string.IsNullOrWhiteSpace(solutionDirectory))
@@ -23,11 +20,6 @@ const string AutoApplyMigrationsEnvVar = "AutoApply__Migrations";
 var autoApplySetting = builder.Configuration["AutoApply:Migrations"]
                         ?? builder.Configuration[AutoApplyMigrationsEnvVar];
 var shouldAutoApplyMigrations = bool.TryParse(autoApplySetting, out var parsedAutoApply) && parsedAutoApply;
-
-if (!shouldAutoApplyMigrations)
-{
-    builder.Services.Replace(ServiceDescriptor.Scoped<IMigrator, NoOpMigrator>());
-}
 
 var environment = builder.Environment;
 

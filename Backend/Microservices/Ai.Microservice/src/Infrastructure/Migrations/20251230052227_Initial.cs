@@ -35,7 +35,7 @@ namespace Infrastructure.Migrations
                     user_id = table.Column<Guid>(type: "uuid", nullable: false),
                     social_media_id = table.Column<Guid>(type: "uuid", nullable: true),
                     title = table.Column<string>(type: "text", nullable: true),
-                    content = table.Column<string>(type: "text", nullable: true),
+                    content = table.Column<string>(type: "jsonb", nullable: true),
                     status = table.Column<string>(type: "text", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp", nullable: true),
                     updated_at = table.Column<DateTime>(type: "timestamp", nullable: true),

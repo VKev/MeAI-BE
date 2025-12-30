@@ -50,10 +50,8 @@ namespace Infrastructure.Migrations
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     name = table.Column<string>(type: "text", nullable: true),
-                    number_of_social_accounts = table.Column<int>(type: "integer", nullable: true),
+                    limits = table.Column<string>(type: "jsonb", nullable: true),
                     me_ai_coin = table.Column<decimal>(type: "numeric(18,2)", nullable: true),
-                    rate_limit_for_content_creation = table.Column<int>(type: "integer", nullable: true),
-                    number_of_workspaces = table.Column<int>(type: "integer", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp", nullable: true),
                     updated_at = table.Column<DateTime>(type: "timestamp", nullable: true),
                     deleted_at = table.Column<DateTime>(type: "timestamp", nullable: true)

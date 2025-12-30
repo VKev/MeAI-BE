@@ -138,7 +138,7 @@ void AddRoute(string prefix, string serviceSegment, string host, int port)
         var route = new JsonObject
         {
             ["UpstreamPathTemplate"] = upstreamTemplate,
-            ["UpstreamHttpMethod"] = new JsonArray("Get", "Post", "Put", "Delete", "Options"),
+            ["UpstreamHttpMethod"] = new JsonArray("Get", "Post", "Put", "Patch", "Delete", "Options"),
             ["DownstreamScheme"] = "http",
             ["DownstreamHostAndPorts"] = new JsonArray(new JsonObject
             {

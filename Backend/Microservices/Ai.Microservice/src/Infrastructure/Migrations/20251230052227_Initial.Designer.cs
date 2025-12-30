@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(MyDbContext))]
-    [Migration("20251223170837_Initial")]
+    [Migration("20251230052227_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -113,7 +113,7 @@ namespace Infrastructure.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("Content")
-                        .HasColumnType("text")
+                        .HasColumnType("jsonb")
                         .HasColumnName("content");
 
                     b.Property<DateTime?>("CreatedAt")
