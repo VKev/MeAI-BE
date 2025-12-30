@@ -1,5 +1,3 @@
-using System;
-using System.Linq;
 using Application.Users.Contracts;
 using Domain.Entities;
 using Domain.Repositories;
@@ -23,7 +21,7 @@ internal sealed class GetUsersQueryHandler(
 
         if (users.Count == 0)
         {
-            return Result.Success<IReadOnlyList<AdminUserResponse>>(Array.Empty<AdminUserResponse>());
+            return Result.Success<IReadOnlyList<AdminUserResponse>>([]);
         }
 
         var userIds = users.Select(user => user.Id).ToList();
@@ -33,7 +31,7 @@ internal sealed class GetUsersQueryHandler(
 
         var roleIds = userRoles.Select(ur => ur.RoleId).Distinct().ToList();
         var roles = roleIds.Count == 0
-            ? new List<Role>()
+            ? []
             : (await roleRepository.FindAsync(role => roleIds.Contains(role.Id), cancellationToken)).ToList();
 
         var roleLookup = roles
@@ -55,20 +53,20 @@ internal sealed class GetUsersQueryHandler(
 
     private static List<string> ResolveUserRoles(
         Guid userId,
-        IReadOnlyDictionary<Guid, List<UserRole>> rolesByUser,
-        IReadOnlyDictionary<Guid, string> roleLookup)
+        Dictionary<Guid, List<UserRole>> rolesByUser,
+        Dictionary<Guid, string> roleLookup)
     {
         if (!rolesByUser.TryGetValue(userId, out var userRoles) || userRoles.Count == 0)
         {
-            return new List<string> { UserRoleConstants.User };
+            return [UserRoleConstants.User];
         }
 
         var roleNames = userRoles
-            .Select(ur => roleLookup.TryGetValue(ur.RoleId, out var roleName) ? roleName : null)
+            .Select(ur => roleLookup.TryGetValue(ur.RoleId, out var roleName) ? roleName : string.Empty)
             .Where(roleName => !string.IsNullOrWhiteSpace(roleName))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return roleNames.Count == 0 ? new List<string> { UserRoleConstants.User } : roleNames;
+        return roleNames.Count == 0 ? [UserRoleConstants.User] : roleNames;
     }
 }

@@ -1,5 +1,3 @@
-using System;
-using System.Linq;
 using Application.Users.Contracts;
 using Domain.Entities;
 using Domain.Repositories;
@@ -38,7 +36,7 @@ internal sealed class GetUserByIdQueryHandler(
             cancellationToken);
         if (userRoles.Count == 0)
         {
-            return new List<string> { UserRoleConstants.User };
+            return [UserRoleConstants.User];
         }
 
         var roleIds = userRoles.Select(ur => ur.RoleId).ToList();
@@ -47,6 +45,6 @@ internal sealed class GetUserByIdQueryHandler(
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .ToList();
 
-        return roleNames.Count == 0 ? new List<string> { UserRoleConstants.User } : roleNames;
+        return roleNames.Count == 0 ? [UserRoleConstants.User] : roleNames;
     }
 }
