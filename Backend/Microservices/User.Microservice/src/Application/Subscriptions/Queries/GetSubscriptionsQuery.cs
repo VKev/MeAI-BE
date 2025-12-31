@@ -3,13 +3,14 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedLibrary.Common;
+using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Subscriptions.Queries;
 
-public sealed record GetSubscriptionsQuery : IRequest<IReadOnlyList<Subscription>>;
+public sealed record GetSubscriptionsQuery : IRequest<Result<List<Subscription>>>;
 
 public sealed class GetSubscriptionsQueryHandler
-    : IRequestHandler<GetSubscriptionsQuery, IReadOnlyList<Subscription>>
+    : IRequestHandler<GetSubscriptionsQuery, Result<List<Subscription>>>
 {
     private readonly IRepository<Subscription> _repository;
 
@@ -18,13 +19,15 @@ public sealed class GetSubscriptionsQueryHandler
         _repository = unitOfWork.Repository<Subscription>();
     }
 
-    public async Task<IReadOnlyList<Subscription>> Handle(
+    public async Task<Result<List<Subscription>>> Handle(
         GetSubscriptionsQuery request,
         CancellationToken cancellationToken)
     {
-        return await _repository.GetAll()
+        var subscriptions = await _repository.GetAll()
             .AsNoTracking()
             .OrderBy(s => s.Name)
             .ToListAsync(cancellationToken);
+
+        return Result.Success(subscriptions);
     }
 }

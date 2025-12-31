@@ -1,7 +1,11 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Domain.Entities;
 
 public sealed class Resource
 {
+    [Key]
     public Guid Id { get; set; }
 
     public Guid UserId { get; set; }
@@ -14,11 +18,14 @@ public sealed class Resource
 
     public string? ContentType { get; set; }
 
+    [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 
+    [Column(TypeName = "timestamp with time zone")]
     public DateTime? UpdatedAt { get; set; }
 
+    [Column(TypeName = "timestamp with time zone")]
     public DateTime? DeletedAt { get; set; }
 
-    public User User { get; set; } = null!;
+    public bool IsDeleted { get; set; }
 }

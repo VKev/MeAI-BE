@@ -15,8 +15,8 @@ public sealed class CreateSubscriptionCommandValidator : AbstractValidator<Creat
             .GreaterThanOrEqualTo(0)
             .When(x => x.MeAiCoin.HasValue);
 
-        RuleFor(x => x.Limits)
-            .SetValidator(new SubscriptionLimitsValidator()!)
+        RuleFor(x => x.Limits!)
+            .SetValidator(new SubscriptionLimitsValidator())
             .When(x => x.Limits != null);
     }
 }

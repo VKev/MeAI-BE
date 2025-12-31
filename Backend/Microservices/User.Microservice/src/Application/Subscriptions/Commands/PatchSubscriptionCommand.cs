@@ -3,6 +3,7 @@ using Application.Subscriptions.Helpers;
 using Domain.Entities;
 using MediatR;
 using SharedLibrary.Common;
+using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Subscriptions.Commands;
 
@@ -10,10 +11,10 @@ public sealed record PatchSubscriptionCommand(
     Guid Id,
     string? Name,
     decimal? MeAiCoin,
-    SubscriptionLimits? Limits) : IRequest<Subscription?>;
+    SubscriptionLimits? Limits) : IRequest<Result<Subscription>>;
 
 public sealed class PatchSubscriptionCommandHandler
-    : IRequestHandler<PatchSubscriptionCommand, Subscription?>
+    : IRequestHandler<PatchSubscriptionCommand, Result<Subscription>>
 {
     private readonly IRepository<Subscription> _repository;
 
@@ -22,14 +23,15 @@ public sealed class PatchSubscriptionCommandHandler
         _repository = unitOfWork.Repository<Subscription>();
     }
 
-    public async Task<Subscription?> Handle(
+    public async Task<Result<Subscription>> Handle(
         PatchSubscriptionCommand request,
         CancellationToken cancellationToken)
     {
         Subscription? subscription = await _repository.GetByIdAsync(request.Id, cancellationToken);
         if (subscription == null)
         {
-            return null;
+            return Result.Failure<Subscription>(
+                new Error("Subscription.NotFound", "Subscription not found."));
         }
 
         var updated = false;
@@ -57,6 +59,6 @@ public sealed class PatchSubscriptionCommandHandler
             subscription.UpdatedAt = DateTime.UtcNow;
         }
 
-        return subscription;
+        return Result.Success(subscription);
     }
 }

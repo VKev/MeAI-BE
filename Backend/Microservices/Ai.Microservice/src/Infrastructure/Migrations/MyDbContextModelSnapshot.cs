@@ -272,36 +272,22 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Entities.Chat", b =>
                 {
-                    b.HasOne("Domain.Entities.ChatSession", "Session")
-                        .WithMany("Chats")
+                    b.HasOne("Domain.Entities.ChatSession", null)
+                        .WithMany()
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("chats_session_id_fkey");
-
-                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("Domain.Entities.PostResource", b =>
                 {
-                    b.HasOne("Domain.Entities.Post", "Post")
-                        .WithMany("PostResources")
+                    b.HasOne("Domain.Entities.Post", null)
+                        .WithMany()
                         .HasForeignKey("PostId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("post_resources_post_id_fkey");
-
-                    b.Navigation("Post");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ChatSession", b =>
-                {
-                    b.Navigation("Chats");
-                });
-
-            modelBuilder.Entity("Domain.Entities.Post", b =>
-                {
-                    b.Navigation("PostResources");
                 });
 #pragma warning restore 612, 618
         }

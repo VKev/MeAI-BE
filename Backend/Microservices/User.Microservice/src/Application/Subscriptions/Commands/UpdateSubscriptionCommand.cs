@@ -3,6 +3,7 @@ using Application.Subscriptions.Helpers;
 using Domain.Entities;
 using MediatR;
 using SharedLibrary.Common;
+using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Subscriptions.Commands;
 
@@ -10,10 +11,10 @@ public sealed record UpdateSubscriptionCommand(
     Guid Id,
     string? Name,
     decimal? MeAiCoin,
-    SubscriptionLimits? Limits) : IRequest<Subscription?>;
+    SubscriptionLimits? Limits) : IRequest<Result<Subscription>>;
 
 public sealed class UpdateSubscriptionCommandHandler
-    : IRequestHandler<UpdateSubscriptionCommand, Subscription?>
+    : IRequestHandler<UpdateSubscriptionCommand, Result<Subscription>>
 {
     private readonly IRepository<Subscription> _repository;
 
@@ -22,14 +23,15 @@ public sealed class UpdateSubscriptionCommandHandler
         _repository = unitOfWork.Repository<Subscription>();
     }
 
-    public async Task<Subscription?> Handle(
+    public async Task<Result<Subscription>> Handle(
         UpdateSubscriptionCommand request,
         CancellationToken cancellationToken)
     {
         Subscription? subscription = await _repository.GetByIdAsync(request.Id, cancellationToken);
         if (subscription == null)
         {
-            return null;
+            return Result.Failure<Subscription>(
+                new Error("Subscription.NotFound", "Subscription not found."));
         }
 
         subscription.Name = SubscriptionHelpers.NormalizeName(request.Name);
@@ -37,6 +39,6 @@ public sealed class UpdateSubscriptionCommandHandler
         subscription.Limits = request.Limits;
         subscription.UpdatedAt = DateTime.UtcNow;
 
-        return subscription;
+        return Result.Success(subscription);
     }
 }

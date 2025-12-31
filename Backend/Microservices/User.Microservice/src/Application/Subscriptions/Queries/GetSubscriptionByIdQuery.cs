@@ -3,13 +3,14 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedLibrary.Common;
+using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Subscriptions.Queries;
 
-public sealed record GetSubscriptionByIdQuery(Guid Id) : IRequest<Subscription?>;
+public sealed record GetSubscriptionByIdQuery(Guid Id) : IRequest<Result<Subscription>>;
 
 public sealed class GetSubscriptionByIdQueryHandler
-    : IRequestHandler<GetSubscriptionByIdQuery, Subscription?>
+    : IRequestHandler<GetSubscriptionByIdQuery, Result<Subscription>>
 {
     private readonly IRepository<Subscription> _repository;
 
@@ -18,12 +19,20 @@ public sealed class GetSubscriptionByIdQueryHandler
         _repository = unitOfWork.Repository<Subscription>();
     }
 
-    public async Task<Subscription?> Handle(
+    public async Task<Result<Subscription>> Handle(
         GetSubscriptionByIdQuery request,
         CancellationToken cancellationToken)
     {
-        return await _repository.GetAll()
+        var subscription = await _repository.GetAll()
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == request.Id, cancellationToken);
+
+        if (subscription == null)
+        {
+            return Result.Failure<Subscription>(
+                new Error("Subscription.NotFound", "Subscription not found."));
+        }
+
+        return Result.Success(subscription);
     }
 }

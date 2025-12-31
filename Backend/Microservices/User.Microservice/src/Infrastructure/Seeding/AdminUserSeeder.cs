@@ -40,14 +40,12 @@ public sealed class AdminUserSeeder
         var adminUsername = _options.Username.Trim();
         var adminEmail = _options.Email.Trim();
         var roleName = string.IsNullOrWhiteSpace(_options.RoleName) ? "Admin" : _options.RoleName.Trim();
-        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var now = DateTime.UtcNow;
 
         var normalizedUsername = adminUsername.ToLowerInvariant();
         var normalizedEmail = adminEmail.ToLowerInvariant();
 
         var existingUser = await _dbContext.Users
-            .Include(u => u.UserRoles)
-            .ThenInclude(ur => ur.Role)
             .FirstOrDefaultAsync(
                 u => u.Username.ToLower() == normalizedUsername || u.Email.ToLower() == normalizedEmail,
                 cancellationToken);
@@ -84,8 +82,8 @@ public sealed class AdminUserSeeder
             _dbContext.UserRoles.Add(new UserRole
             {
                 Id = Guid.NewGuid(),
-                User = adminUser,
-                Role = adminRole,
+                UserId = adminUser.Id,
+                RoleId = adminRole.Id,
                 CreatedAt = now
             });
 
@@ -94,8 +92,10 @@ public sealed class AdminUserSeeder
             return;
         }
 
-        var hasAdminRole = existingUser.UserRoles.Any(ur =>
-            ur.Role != null && string.Equals(ur.Role.Name, roleName, StringComparison.OrdinalIgnoreCase));
+        var hasAdminRole = await _dbContext.UserRoles
+            .AnyAsync(
+                ur => ur.UserId == existingUser.Id && ur.RoleId == adminRole.Id,
+                cancellationToken);
 
         if (!hasAdminRole)
         {
