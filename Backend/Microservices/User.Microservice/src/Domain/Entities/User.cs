@@ -1,7 +1,11 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Domain.Entities;
 
 public sealed class User
 {
+    [Key]
     public Guid Id { get; set; }
 
     public string Username { get; set; } = null!;
@@ -10,8 +14,11 @@ public sealed class User
 
     public string Email { get; set; } = null!;
 
+    public bool EmailVerified { get; set; }
+
     public string? FullName { get; set; }
 
+    [Column(TypeName = "date")]
     public DateTime? Birthday { get; set; }
 
     public string? PhoneNumber { get; set; }
@@ -22,19 +29,17 @@ public sealed class User
 
     public string? Address { get; set; }
 
+    [Column(TypeName = "numeric(18,2)")]
     public decimal? MeAiCoin { get; set; }
 
+    [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 
+    [Column(TypeName = "timestamp with time zone")]
     public DateTime? UpdatedAt { get; set; }
 
+    [Column(TypeName = "timestamp with time zone")]
     public DateTime? DeletedAt { get; set; }
 
-    public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
-
-    public ICollection<Resource> Resources { get; set; } = new List<Resource>();
-
-    public ICollection<UserSubscription> UserSubscriptions { get; set; } = new List<UserSubscription>();
-
-    public ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
+    public bool IsDeleted { get; set; }
 }

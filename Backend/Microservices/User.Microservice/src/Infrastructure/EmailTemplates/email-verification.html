@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{SUBJECT}}</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #f3f4f6;
+        font-family: Arial, Helvetica, sans-serif;
+        color: #111827;
+      }
+      .container {
+        width: 100%;
+        padding: 24px 12px;
+      }
+      .card {
+        max-width: 600px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 4px 12px rgba(17, 24, 39, 0.08);
+        overflow: hidden;
+      }
+      .header {
+        padding: 20px 24px 0 24px;
+      }
+      .title {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .content {
+        padding: 16px 24px 24px 24px;
+        font-size: 15px;
+        line-height: 1.6;
+      }
+      .code {
+        display: inline-block;
+        margin: 12px 0;
+        padding: 10px 16px;
+        background: #f9fafb;
+        border: 1px dashed #d1d5db;
+        border-radius: 8px;
+        font-size: 18px;
+        letter-spacing: 2px;
+        font-weight: 700;
+      }
+      .footer {
+        padding: 16px 24px 24px 24px;
+        font-size: 12px;
+        color: #6b7280;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <div class="header">
+          <p class="title">{{TITLE}}</p>
+        </div>
+        <div class="content">
+          <p>{{BODY}}</p>
+          <div class="code">{{CODE}}</div>
+          <p>{{FOOTNOTE}}</p>
+        </div>
+        <div class="footer">
+          {{APP_NAME}}
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

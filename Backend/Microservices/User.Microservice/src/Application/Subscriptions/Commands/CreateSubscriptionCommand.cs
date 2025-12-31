@@ -3,16 +3,17 @@ using Application.Subscriptions.Helpers;
 using Domain.Entities;
 using MediatR;
 using SharedLibrary.Common;
+using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Subscriptions.Commands;
 
 public sealed record CreateSubscriptionCommand(
     string? Name,
     decimal? MeAiCoin,
-    SubscriptionLimits? Limits) : IRequest<Subscription>;
+    SubscriptionLimits? Limits) : IRequest<Result<Subscription>>;
 
 public sealed class CreateSubscriptionCommandHandler
-    : IRequestHandler<CreateSubscriptionCommand, Subscription>
+    : IRequestHandler<CreateSubscriptionCommand, Result<Subscription>>
 {
     private readonly IRepository<Subscription> _repository;
 
@@ -21,7 +22,7 @@ public sealed class CreateSubscriptionCommandHandler
         _repository = unitOfWork.Repository<Subscription>();
     }
 
-    public async Task<Subscription> Handle(
+    public async Task<Result<Subscription>> Handle(
         CreateSubscriptionCommand request,
         CancellationToken cancellationToken)
     {
@@ -38,6 +39,6 @@ public sealed class CreateSubscriptionCommandHandler
 
         await _repository.AddAsync(subscription, cancellationToken);
 
-        return subscription;
+        return Result.Success(subscription);
     }
 }

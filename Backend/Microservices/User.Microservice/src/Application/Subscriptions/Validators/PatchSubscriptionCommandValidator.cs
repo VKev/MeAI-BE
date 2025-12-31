@@ -23,7 +23,7 @@ public sealed class PatchSubscriptionCommandValidator : AbstractValidator<PatchS
             .GreaterThanOrEqualTo(0)
             .When(x => x.MeAiCoin.HasValue);
 
-        RuleFor(x => x.Limits)
+        RuleFor(x => x.Limits!)
             .SetValidator(new SubscriptionLimitsValidator())
             .When(x => x.Limits != null);
     }

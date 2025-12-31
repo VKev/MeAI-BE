@@ -33,7 +33,7 @@ public class JwtTokenService : IJwtTokenService
         {
             new(ClaimTypes.NameIdentifier, userId.ToString()),
             new(ClaimTypes.Email, email),
-            new("jti", Guid.NewGuid().ToString())
+            new("jti", Guid.CreateVersion7().ToString())
         };
 
         // Add role claims
