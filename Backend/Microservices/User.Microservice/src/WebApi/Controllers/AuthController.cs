@@ -215,6 +215,7 @@ public sealed record RegisterRequest(
     string Username,
     string Email,
     string Password,
+    string Code,
     string? FullName,
     string? PhoneNumber);
 

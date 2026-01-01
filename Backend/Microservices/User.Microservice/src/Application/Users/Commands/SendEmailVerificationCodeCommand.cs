@@ -17,7 +17,8 @@ public sealed record SendEmailVerificationCodeCommand(string Email) : IRequest<R
 public sealed class SendEmailVerificationCodeCommandHandler
     : IRequestHandler<SendEmailVerificationCodeCommand, Result<MessageResponse>>
 {
-    private const int CodeTtlMinutes = 10;
+    private const int CodeTtlMinutes = 5;
+    private static readonly TimeSpan SendCooldown = TimeSpan.FromMinutes(1);
     private readonly IRepository<User> _userRepository;
     private readonly IEmailRepository _emailRepository;
     private readonly IVerificationCodeStore _verificationCodeStore;
@@ -43,7 +44,17 @@ public sealed class SendEmailVerificationCodeCommandHandler
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail, cancellationToken);
 
-        if (user == null || user.EmailVerified)
+        if (user is { EmailVerified: true })
+        {
+            return Result.Success(new MessageResponse("If the email exists, a verification code was sent."));
+        }
+
+        var canSend = await _verificationCodeStore.TryAcquireSendLockAsync(
+            VerificationCodePurpose.EmailVerification,
+            normalizedEmail,
+            SendCooldown,
+            cancellationToken);
+        if (!canSend)
         {
             return Result.Success(new MessageResponse("If the email exists, a verification code was sent."));
         }
@@ -63,12 +74,12 @@ public sealed class SendEmailVerificationCodeCommandHandler
             ["TITLE"] = subject,
             ["BODY"] = "Use the code below to verify your email address.",
             ["CODE"] = code,
-            ["FOOTNOTE"] = "This code expires in 10 minutes.",
+            ["FOOTNOTE"] = "This code expires in 5 minutes.",
             ["APP_NAME"] = _appName
         };
 
         await _emailRepository.SendEmailByKeyAsync(
-            user.Email,
+            normalizedEmail,
             EmailTemplateKeys.EmailVerification,
             tokens,
             cancellationToken);

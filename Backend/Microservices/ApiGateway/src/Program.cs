@@ -1,4 +1,4 @@
-﻿using Ocelot.DependencyInjection;
+using Ocelot.DependencyInjection;
 using SharedLibrary.Authentication;
 using src.Setups;
 
@@ -31,7 +31,7 @@ var uiEnabledNow = enableDocsUi || app.Environment.IsDevelopment();
 app.UseRootRedirectToScalar(uiEnabledNow);
 app.MapGatewayOpenApi(gatewayConfig.OpenApiDocuments, gatewayConfig.ConfiguredBaseUrl);
 
-if (uiEnabledNow)
+if (true)
 {
     app.MapGatewayScalarUi(gatewayConfig.OpenApiDocuments);
 }

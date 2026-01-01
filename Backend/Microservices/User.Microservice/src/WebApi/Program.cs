@@ -15,7 +15,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddAuthorization();
 builder.Services.AddOpenApi();
-builder.Services.AddAutoMapper(typeof(WebApi.AssemblyReference).Assembly);
+builder.Services.AddAutoMapper(_ => { }, typeof(WebApi.AssemblyReference).Assembly);
 
 builder.Services.ConfigureForwardedHeaders();
 var corsPolicyName = builder.AddCorsPolicy();

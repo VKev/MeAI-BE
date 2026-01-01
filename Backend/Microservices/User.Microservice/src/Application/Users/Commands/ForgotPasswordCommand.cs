@@ -18,6 +18,7 @@ public sealed class ForgotPasswordCommandHandler
     : IRequestHandler<ForgotPasswordCommand, Result<MessageResponse>>
 {
     private const int CodeTtlMinutes = 10;
+    private static readonly TimeSpan SendCooldown = TimeSpan.FromMinutes(1);
     private readonly IRepository<User> _userRepository;
     private readonly IEmailRepository _emailRepository;
     private readonly IVerificationCodeStore _verificationCodeStore;
@@ -44,6 +45,16 @@ public sealed class ForgotPasswordCommandHandler
             .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail, cancellationToken);
 
         if (user == null)
+        {
+            return Result.Success(new MessageResponse("If the email exists, a reset code was sent."));
+        }
+
+        var canSend = await _verificationCodeStore.TryAcquireSendLockAsync(
+            VerificationCodePurpose.PasswordReset,
+            normalizedEmail,
+            SendCooldown,
+            cancellationToken);
+        if (!canSend)
         {
             return Result.Success(new MessageResponse("If the email exists, a reset code was sent."));
         }
