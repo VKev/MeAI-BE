@@ -161,19 +161,22 @@ public sealed class SubscriptionsController : ApiController
 public sealed record CreateSubscriptionRequest(
     string? Name,
     float? Cost,
+    int DurationMonths,
     decimal? MeAiCoin,
     SubscriptionLimits? Limits);
 
 public sealed record UpdateSubscriptionRequest(
     string? Name,
     float? Cost,
+    int DurationMonths,
     decimal? MeAiCoin,
     SubscriptionLimits? Limits);
 
 public sealed record PatchSubscriptionRequest(
     string? Name,
     float? Cost,
+    int? DurationMonths,
     decimal? MeAiCoin,
     SubscriptionLimits? Limits);
 
-public sealed record PurchaseSubscriptionRequest(string? PaymentMethodId);
+public sealed record PurchaseSubscriptionRequest(string? PaymentMethodId, bool Renew);

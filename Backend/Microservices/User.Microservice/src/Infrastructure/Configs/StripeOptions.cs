@@ -10,7 +10,7 @@ public sealed class StripeOptions
 
     public string WebhookSecret { get; set; } = string.Empty;
 
-    public string Currency { get; set; } = "usd";
+    public string Currency { get; set; } = "vnd";
 
-    public int CurrencyDecimals { get; set; } = 2;
+    public int CurrencyDecimals { get; set; } = 0;
 }

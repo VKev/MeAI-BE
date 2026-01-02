@@ -16,6 +16,10 @@ public sealed class CreateSubscriptionCommandValidator : AbstractValidator<Creat
             .WithMessage("Subscription cost is required.")
             .GreaterThanOrEqualTo(0);
 
+        RuleFor(x => x.DurationMonths)
+            .GreaterThan(0)
+            .WithMessage("Subscription duration must be greater than zero.");
+
         RuleFor(x => x.MeAiCoin)
             .GreaterThanOrEqualTo(0)
             .When(x => x.MeAiCoin.HasValue);

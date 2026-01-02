@@ -11,6 +11,7 @@ public sealed record PatchSubscriptionCommand(
     Guid Id,
     string? Name,
     float? Cost,
+    int? DurationMonths,
     decimal? MeAiCoin,
     SubscriptionLimits? Limits) : IRequest<Result<Subscription>>;
 
@@ -46,6 +47,12 @@ public sealed class PatchSubscriptionCommandHandler
         if (request.Cost.HasValue)
         {
             subscription.Cost = request.Cost;
+            updated = true;
+        }
+
+        if (request.DurationMonths.HasValue)
+        {
+            subscription.DurationMonths = request.DurationMonths.Value;
             updated = true;
         }
 

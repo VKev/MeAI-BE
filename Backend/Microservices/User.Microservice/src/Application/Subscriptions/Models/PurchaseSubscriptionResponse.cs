@@ -5,9 +5,11 @@ public sealed record PurchaseSubscriptionResponse(
     float Cost,
     string Currency,
     long Amount,
-    string PaymentIntentId,
+    string? PaymentIntentId,
     string? ClientSecret,
     string Status,
+    string? StripeSubscriptionId,
+    bool Renew,
     Guid TransactionId,
     bool SubscriptionActivated,
     Guid? UserSubscriptionId);
