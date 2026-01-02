@@ -11,6 +11,11 @@ public sealed class CreateSubscriptionCommandValidator : AbstractValidator<Creat
             .NotEmpty()
             .WithMessage("Subscription name is required.");
 
+        RuleFor(x => x.Cost)
+            .NotNull()
+            .WithMessage("Subscription cost is required.")
+            .GreaterThanOrEqualTo(0);
+
         RuleFor(x => x.MeAiCoin)
             .GreaterThanOrEqualTo(0)
             .When(x => x.MeAiCoin.HasValue);

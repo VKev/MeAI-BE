@@ -10,6 +10,7 @@ namespace Application.Subscriptions.Commands;
 public sealed record PatchSubscriptionCommand(
     Guid Id,
     string? Name,
+    float? Cost,
     decimal? MeAiCoin,
     SubscriptionLimits? Limits) : IRequest<Result<Subscription>>;
 
@@ -39,6 +40,12 @@ public sealed class PatchSubscriptionCommandHandler
         if (request.Name != null)
         {
             subscription.Name = SubscriptionHelpers.NormalizeName(request.Name);
+            updated = true;
+        }
+
+        if (request.Cost.HasValue)
+        {
+            subscription.Cost = request.Cost;
             updated = true;
         }
 

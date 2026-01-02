@@ -16,6 +16,7 @@ public sealed class SubscriptionConfiguration : IEntityTypeConfiguration<Subscri
 
         entity.Property(e => e.Id).HasColumnName("id");
         entity.Property(e => e.Name).HasColumnName("name");
+        entity.Property(e => e.Cost).HasColumnName("cost").HasColumnType("real");
         entity.Property(e => e.MeAiCoin).HasColumnName("me_ai_coin").HasColumnType("numeric(18,2)");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");

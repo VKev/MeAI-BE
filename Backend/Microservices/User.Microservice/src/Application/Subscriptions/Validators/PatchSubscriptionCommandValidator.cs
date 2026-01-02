@@ -19,6 +19,10 @@ public sealed class PatchSubscriptionCommandValidator : AbstractValidator<PatchS
             .When(x => x.Name != null)
             .WithMessage("Subscription name cannot be empty.");
 
+        RuleFor(x => x.Cost)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.Cost.HasValue);
+
         RuleFor(x => x.MeAiCoin)
             .GreaterThanOrEqualTo(0)
             .When(x => x.MeAiCoin.HasValue);
@@ -30,7 +34,7 @@ public sealed class PatchSubscriptionCommandValidator : AbstractValidator<PatchS
 
     private static bool HasAnyChanges(PatchSubscriptionCommand command)
     {
-        if (command.Name != null || command.MeAiCoin.HasValue)
+        if (command.Name != null || command.Cost.HasValue || command.MeAiCoin.HasValue)
         {
             return true;
         }

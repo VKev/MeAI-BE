@@ -1,5 +1,8 @@
+using System.Security.Claims;
 using Application.Subscriptions.Commands;
+using Application.Subscriptions.Models;
 using Application.Subscriptions.Queries;
+using Application.Users.Models;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;
@@ -13,7 +16,6 @@ namespace WebApi.Controllers;
 
 [ApiController]
 [Route("api/User/subscriptions")]
-[Authorize("Admin")]
 public sealed class SubscriptionsController : ApiController
 {
     private readonly IMapper _mapper;
@@ -39,6 +41,7 @@ public sealed class SubscriptionsController : ApiController
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize("Admin")]
     [ProducesResponseType(typeof(Result<Subscription>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
     {
@@ -52,6 +55,7 @@ public sealed class SubscriptionsController : ApiController
     }
 
     [HttpPost]
+    [Authorize("Admin")]
     [ProducesResponseType(typeof(Result<Subscription>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Create(
         [FromBody] CreateSubscriptionRequest request,
@@ -68,6 +72,7 @@ public sealed class SubscriptionsController : ApiController
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize("Admin")]
     [ProducesResponseType(typeof(Result<Subscription>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Update(
         Guid id,
@@ -85,6 +90,7 @@ public sealed class SubscriptionsController : ApiController
     }
 
     [HttpPatch("{id:guid}")]
+    [Authorize("Admin")]
     [ProducesResponseType(typeof(Result<Subscription>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Patch(
         Guid id,
@@ -102,6 +108,7 @@ public sealed class SubscriptionsController : ApiController
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize("Admin")]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
@@ -113,19 +120,60 @@ public sealed class SubscriptionsController : ApiController
 
         return Ok(result);
     }
+
+    [HttpPost("{subscriptionId:guid}/purchase")]
+    [Authorize]
+    [ProducesResponseType(typeof(Result<PurchaseSubscriptionResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Purchase(
+        Guid subscriptionId,
+        [FromBody] PurchaseSubscriptionRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var command = _mapper.Map<PurchaseSubscriptionCommand>(request) with
+        {
+            SubscriptionId = subscriptionId,
+            UserId = userId
+        };
+
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    private bool TryGetUserId(out Guid userId)
+    {
+        var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claimValue, out userId);
+    }
 }
 
 public sealed record CreateSubscriptionRequest(
     string? Name,
+    float? Cost,
     decimal? MeAiCoin,
     SubscriptionLimits? Limits);
 
 public sealed record UpdateSubscriptionRequest(
     string? Name,
+    float? Cost,
     decimal? MeAiCoin,
     SubscriptionLimits? Limits);
 
 public sealed record PatchSubscriptionRequest(
     string? Name,
+    float? Cost,
     decimal? MeAiCoin,
     SubscriptionLimits? Limits);
+
+public sealed record PurchaseSubscriptionRequest(string? PaymentMethodId);
