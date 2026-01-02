@@ -10,6 +10,8 @@ namespace Application.Subscriptions.Commands;
 public sealed record UpdateSubscriptionCommand(
     Guid Id,
     string? Name,
+    float? Cost,
+    int DurationMonths,
     decimal? MeAiCoin,
     SubscriptionLimits? Limits) : IRequest<Result<Subscription>>;
 
@@ -35,6 +37,8 @@ public sealed class UpdateSubscriptionCommandHandler
         }
 
         subscription.Name = SubscriptionHelpers.NormalizeName(request.Name);
+        subscription.Cost = request.Cost;
+        subscription.DurationMonths = request.DurationMonths;
         subscription.MeAiCoin = request.MeAiCoin;
         subscription.Limits = request.Limits;
         subscription.UpdatedAt = DateTime.UtcNow;

@@ -39,7 +39,7 @@ metadata:
   namespace: microservices
 data:
   init.sql: |
-    CREATE DATABASE guestdb;
+    CREATE DATABASE aidb;
     CREATE DATABASE userdb;
-    GRANT ALL PRIVILEGES ON DATABASE guestdb TO postgres;
+    GRANT ALL PRIVILEGES ON DATABASE aidb TO postgres;
     GRANT ALL PRIVILEGES ON DATABASE userdb TO postgres;

@@ -46,6 +46,8 @@ public sealed class SubscriptionSeeder
             {
                 Id = Guid.NewGuid(),
                 Name = seed.Name,
+                Cost = (float)(seed.Coin * 10m),
+                DurationMonths = 1,
                 MeAiCoin = seed.Coin,
                 Limits = new SubscriptionLimits
                 {

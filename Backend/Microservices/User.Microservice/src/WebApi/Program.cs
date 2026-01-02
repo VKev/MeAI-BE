@@ -26,6 +26,8 @@ builder.Services.Configure<AdminSeedOptions>(
     builder.Configuration.GetSection(AdminSeedOptions.SectionName));
 builder.Services.Configure<EmailOptions>(
     builder.Configuration.GetSection("Email"));
+builder.Services.Configure<StripeOptions>(
+    builder.Configuration.GetSection(StripeOptions.SectionName));
 builder.AddDatabase();
 
 builder.Services

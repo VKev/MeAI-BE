@@ -9,6 +9,8 @@ namespace Application.Subscriptions.Commands;
 
 public sealed record CreateSubscriptionCommand(
     string? Name,
+    float? Cost,
+    int DurationMonths,
     decimal? MeAiCoin,
     SubscriptionLimits? Limits) : IRequest<Result<Subscription>>;
 
@@ -31,6 +33,8 @@ public sealed class CreateSubscriptionCommandHandler
         {
             Id = Guid.NewGuid(),
             Name = SubscriptionHelpers.NormalizeName(request.Name),
+            Cost = request.Cost,
+            DurationMonths = request.DurationMonths,
             MeAiCoin = request.MeAiCoin,
             Limits = request.Limits,
             CreatedAt = now,
