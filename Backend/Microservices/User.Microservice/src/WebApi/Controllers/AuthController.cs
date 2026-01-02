@@ -209,7 +209,7 @@ public sealed class AuthController : ApiController
     }
 }
 
-public sealed record LoginRequest(string Email, string Password);
+public sealed record LoginRequest(string EmailOrUsername, string Password);
 
 public sealed record RegisterRequest(
     string Username,

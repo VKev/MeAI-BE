@@ -7,9 +7,10 @@ public sealed class LoginWithPasswordCommandValidator : AbstractValidator<LoginW
 {
     public LoginWithPasswordCommandValidator()
     {
-        RuleFor(x => x.Email)
+        RuleFor(x => x.EmailOrUsername)
             .NotEmpty()
-            .EmailAddress();
+            .MinimumLength(5)
+            .WithMessage("Email or username must be at least 5 characters");
 
         RuleFor(x => x.Password)
             .NotEmpty();

@@ -8,7 +8,9 @@ public sealed class RegisterUserCommandValidator : AbstractValidator<RegisterUse
     public RegisterUserCommandValidator()
     {
         RuleFor(x => x.Username)
-            .NotEmpty();
+            .NotEmpty()
+            .MinimumLength(5)
+            .WithMessage("Username must be at least 5 characters");
 
         RuleFor(x => x.Email)
             .NotEmpty()

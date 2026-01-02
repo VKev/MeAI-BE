@@ -14,7 +14,7 @@ using SharedLibrary.Extensions;
 
 namespace Application.Users.Commands;
 
-public sealed record LoginWithPasswordCommand(string Email, string Password) : IRequest<Result<LoginResponse>>;
+public sealed record LoginWithPasswordCommand(string EmailOrUsername, string Password) : IRequest<Result<LoginResponse>>;
 
 public sealed class LoginWithPasswordCommandHandler
     : IRequestHandler<LoginWithPasswordCommand, Result<LoginResponse>>
@@ -49,16 +49,18 @@ public sealed class LoginWithPasswordCommandHandler
     public async Task<Result<LoginResponse>> Handle(LoginWithPasswordCommand request,
         CancellationToken cancellationToken)
     {
-        var normalizedEmail = NormalizeEmail(request.Email);
+        var normalizedIdentifier = NormalizeIdentifier(request.EmailOrUsername);
 
         var user = await _userRepository.GetAll()
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail, cancellationToken);
+            .FirstOrDefaultAsync(
+                u => u.Email.ToLower() == normalizedIdentifier || u.Username.ToLower() == normalizedIdentifier,
+                cancellationToken);
 
         if (user == null || !_passwordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
             return Result.Failure<LoginResponse>(
-                new Error("Auth.InvalidCredentials", "Invalid email or password"));
+                new Error("Auth.InvalidCredentials", "Invalid email/username or password"));
         }
 
         var roles = await ResolveRolesAsync(user.Id, _roleRepository, _userRoleRepository, cancellationToken);
@@ -93,8 +95,8 @@ public sealed class LoginWithPasswordCommandHandler
         return Result.Success(response);
     }
 
-    private static string NormalizeEmail(string email) =>
-        email.Trim().ToLowerInvariant();
+    private static string NormalizeIdentifier(string identifier) =>
+        identifier.Trim().ToLowerInvariant();
 
     private static string HashToken(string token)
     {
