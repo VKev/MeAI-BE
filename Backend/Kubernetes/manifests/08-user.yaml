@@ -19,11 +19,12 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5002
+            - containerPort: 5004
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
             - name: ASPNETCORE_URLS
-              value: http://+:5002
+              value: http://+:5002;http://+:5004
             - name: Database__Host
               value: postgres
             - name: Database__Port
@@ -75,6 +76,30 @@ spec:
               value: MicroservicesApp
             - name: Jwt__ExpirationMinutes
               value: "60"
+            - name: Admin__Username
+              value: admin
+            - name: Admin__Password
+              value: "12345678"
+            - name: Admin__Email
+              value: admin@gmail.com
+            - name: Admin__FullName
+              value: MeAI Admin
+            - name: Email__Host
+              value: smtp.example.com
+            - name: Email__Port
+              value: "587"
+            - name: Email__Username
+              value: ""
+            - name: Email__Password
+              value: ""
+            - name: Email__UseStartTls
+              value: "true"
+            - name: Email__UseSsl
+              value: "false"
+            - name: Email__FromEmail
+              value: no-reply@meai.local
+            - name: Email__FromName
+              value: MeAI
             - name: Cors__AllowedOrigins__0
               value: http://localhost:5173
             - name: Cors__AllowedOrigins__1

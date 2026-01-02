@@ -20,7 +20,7 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            - name: ENABLE_SWAGGER_UI
+            - name: ENABLE_DOCS_UI
               value: "true"
             - name: ASPNETCORE_ENVIRONMENT
               value: Production

@@ -1,6 +1,8 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Payments;
 using Application.Abstractions.Security;
 using Domain.Repositories;
+using Infrastructure.Payments;
 using Infrastructure.Repositories;
 using Infrastructure.Seeding;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +22,7 @@ namespace Infrastructure
             services.AddScoped<SubscriptionSeeder>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<IEmailRepository, EmailRepository>();
+            services.AddSingleton<IStripePaymentService, StripePaymentService>();
             services.AddSingleton<IConnectionMultiplexer>(sp =>
             {
                 var env = sp.GetRequiredService<EnvironmentConfig>();

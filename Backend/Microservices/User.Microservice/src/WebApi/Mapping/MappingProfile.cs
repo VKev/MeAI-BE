@@ -3,6 +3,7 @@ using Application.Configs.Commands;
 using Application.Resources.Commands;
 using Application.SocialMedias.Commands;
 using Application.Subscriptions.Commands;
+using Application.Transactions.Commands;
 using Application.Users.Commands;
 using Application.Workspaces.Commands;
 using Application.WorkspaceSocialMedias.Commands;
@@ -23,6 +24,9 @@ public sealed class MappingProfile : Profile
         CreateMap<SendVerificationCodeRequest, SendEmailVerificationCodeCommand>();
         CreateMap<VerifyEmailRequest, VerifyEmailCommand>();
         CreateMap<CreateSubscriptionRequest, CreateSubscriptionCommand>();
+        CreateMap<PurchaseSubscriptionRequest, PurchaseSubscriptionCommand>()
+            .ForCtorParam("SubscriptionId", opt => opt.MapFrom(_ => Guid.Empty))
+            .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<UpdateSubscriptionRequest, UpdateSubscriptionCommand>()
             .ForCtorParam("Id", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<PatchSubscriptionRequest, PatchSubscriptionCommand>()
@@ -33,6 +37,11 @@ public sealed class MappingProfile : Profile
             .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<UpdateUserRoleRequest, SetUserRoleCommand>()
             .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty));
+        CreateMap<CreateTransactionRequest, CreateTransactionCommand>();
+        CreateMap<UpdateTransactionRequest, UpdateTransactionCommand>()
+            .ForCtorParam("Id", opt => opt.MapFrom(_ => Guid.Empty));
+        CreateMap<PatchTransactionRequest, PatchTransactionCommand>()
+            .ForCtorParam("Id", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<CreateResourceRequest, CreateResourceCommand>()
             .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<UpdateResourceRequest, UpdateResourceCommand>()

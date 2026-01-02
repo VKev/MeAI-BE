@@ -12,6 +12,12 @@ public sealed class Subscription
     [Column(TypeName = "jsonb")]
     public SubscriptionLimits? Limits { get; set; }
 
+    [Column(TypeName = "real")]
+    public float? Cost { get; set; }
+
+    [Column(TypeName = "integer")]
+    public int DurationMonths { get; set; }
+
     [Column(TypeName = "numeric(18,2)")]
     public decimal? MeAiCoin { get; set; }
 

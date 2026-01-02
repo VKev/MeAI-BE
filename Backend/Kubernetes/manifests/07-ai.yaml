@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: guest-microservice
+  name: ai-microservice
   namespace: microservices
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: guest-microservice
+      app: ai-microservice
   template:
     metadata:
       labels:
-        app: guest-microservice
+        app: ai-microservice
     spec:
       containers:
-        - name: guest-microservice
-          image: guest-microservice:latest
+        - name: ai-microservice
+          image: ai-microservice:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5001
@@ -29,7 +29,7 @@ spec:
             - name: Database__Port
               value: "5432"
             - name: Database__Name
-              value: guestdb
+              value: aidb
             - name: Database__Username
               valueFrom:
                 secretKeyRef:
@@ -82,12 +82,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: guest-microservice
+  name: ai-microservice
   namespace: microservices
 spec:
   type: NodePort
   selector:
-    app: guest-microservice
+    app: ai-microservice
   ports:
     - port: 5001
       targetPort: 5001

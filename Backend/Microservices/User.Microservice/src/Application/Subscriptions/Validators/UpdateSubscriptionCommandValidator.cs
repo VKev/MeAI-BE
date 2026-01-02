@@ -15,6 +15,14 @@ public sealed class UpdateSubscriptionCommandValidator : AbstractValidator<Updat
             .When(x => x.Name != null)
             .WithMessage("Subscription name cannot be empty.");
 
+        RuleFor(x => x.Cost)
+            .GreaterThanOrEqualTo(0)
+            .When(x => x.Cost.HasValue);
+
+        RuleFor(x => x.DurationMonths)
+            .GreaterThan(0)
+            .WithMessage("Subscription duration must be greater than zero.");
+
         RuleFor(x => x.MeAiCoin)
             .GreaterThanOrEqualTo(0)
             .When(x => x.MeAiCoin.HasValue);
