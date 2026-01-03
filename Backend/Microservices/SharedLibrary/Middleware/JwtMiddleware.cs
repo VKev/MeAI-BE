@@ -18,7 +18,7 @@ public class JwtMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var token = ExtractToken(context);
-        
+
         if (!string.IsNullOrEmpty(token))
         {
             var principal = _jwtTokenService.ValidateToken(token);
@@ -33,8 +33,18 @@ public class JwtMiddleware
 
     private static string? ExtractToken(HttpContext context)
     {
+        var cookieNames = new[] { "access_token" };
+        foreach (var name in cookieNames)
+        {
+            if (context.Request.Cookies.TryGetValue(name, out var cookieToken) &&
+                !string.IsNullOrWhiteSpace(cookieToken))
+            {
+                return cookieToken.Trim();
+            }
+        }
+
         var authorizationHeader = context.Request.Headers.Authorization.FirstOrDefault();
-        
+
         if (string.IsNullOrEmpty(authorizationHeader))
             return null;
 
