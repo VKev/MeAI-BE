@@ -3,3 +3,4 @@
 .terraform.lock.hcl
 terraform-var
 vinh-branch
+/Backend/Microservices/.idea

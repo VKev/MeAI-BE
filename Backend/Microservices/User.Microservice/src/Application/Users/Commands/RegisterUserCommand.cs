@@ -21,6 +21,7 @@ public sealed record RegisterUserCommand(
     string Username,
     string Email,
     string Password,
+    string Code,
     string? FullName,
     string? PhoneNumber) : IRequest<Result<LoginResponse>>;
 
@@ -29,25 +30,21 @@ public sealed class RegisterUserCommandHandler
 {
     private const int RefreshTokenDays = 7;
     private const int AccessTokenMinutesFallback = 60;
-    private const int VerificationCodeMinutes = 10;
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
     private readonly IRepository<RefreshToken> _refreshTokenRepository;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenService _jwtTokenService;
-    private readonly IEmailRepository _emailRepository;
     private readonly IVerificationCodeStore _verificationCodeStore;
     private readonly int _accessTokenMinutes;
-    private readonly string _appName;
 
     public RegisterUserCommandHandler(
         IUnitOfWork unitOfWork,
         IPasswordHasher passwordHasher,
         IJwtTokenService jwtTokenService,
-        IConfiguration configuration,
-        IEmailRepository emailRepository,
-        IVerificationCodeStore verificationCodeStore)
+        IVerificationCodeStore verificationCodeStore,
+        IConfiguration configuration)
     {
         _userRepository = unitOfWork.Repository<User>();
         _roleRepository = unitOfWork.Repository<Role>();
@@ -55,12 +52,10 @@ public sealed class RegisterUserCommandHandler
         _refreshTokenRepository = unitOfWork.Repository<RefreshToken>();
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
-        _emailRepository = emailRepository;
         _verificationCodeStore = verificationCodeStore;
         _accessTokenMinutes = int.TryParse(configuration["Jwt:ExpirationMinutes"], out var minutes)
             ? minutes
             : AccessTokenMinutesFallback;
-        _appName = ResolveAppName(configuration);
     }
 
     public async Task<Result<LoginResponse>> Handle(RegisterUserCommand request,
@@ -84,6 +79,17 @@ public sealed class RegisterUserCommandHandler
             return Result.Failure<LoginResponse>(new Error("Auth.UsernameTaken", "Username is already taken"));
         }
 
+        var otpValid = await _verificationCodeStore.ValidateAsync(
+            VerificationCodePurpose.EmailVerification,
+            normalizedEmail,
+            request.Code,
+            cancellationToken);
+        if (!otpValid)
+        {
+            return Result.Failure<LoginResponse>(
+                new Error("Auth.InvalidVerificationCode", "Invalid or expired code"));
+        }
+
         var user = new User
         {
             Id = Guid.CreateVersion7(),
@@ -93,12 +99,11 @@ public sealed class RegisterUserCommandHandler
             FullName = string.IsNullOrWhiteSpace(request.FullName) ? null : request.FullName.Trim(),
             PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim(),
             Provider = "local",
-            EmailVerified = false,
+            EmailVerified = true,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
         await _userRepository.AddAsync(user, cancellationToken);
-        await SendVerificationCodeAsync(user, _emailRepository, _appName, _verificationCodeStore, cancellationToken);
 
         var role = await GetOrCreateDefaultRole(_roleRepository, cancellationToken);
         var userRole = new UserRole
@@ -140,6 +145,11 @@ public sealed class RegisterUserCommandHandler
             user.Email,
             roles);
 
+        await _verificationCodeStore.RemoveAsync(
+            VerificationCodePurpose.EmailVerification,
+            normalizedEmail,
+            cancellationToken);
+
         return Result.Success(response);
     }
 
@@ -148,23 +158,6 @@ public sealed class RegisterUserCommandHandler
 
     private static string NormalizeUsername(string username) =>
         username.Trim().ToLowerInvariant();
-
-    private static string ResolveAppName(IConfiguration configuration)
-    {
-        var fromName = configuration["Email:FromName"];
-        if (!string.IsNullOrWhiteSpace(fromName))
-        {
-            return fromName;
-        }
-
-        var fromEmail = configuration["Email:FromEmail"];
-        if (!string.IsNullOrWhiteSpace(fromEmail))
-        {
-            return fromEmail;
-        }
-
-        return "Application";
-    }
 
     private static string HashToken(string token)
     {
@@ -232,38 +225,5 @@ public sealed class RegisterUserCommandHandler
 
         await roleRepository.AddAsync(role, cancellationToken);
         return role;
-    }
-
-    private static async Task SendVerificationCodeAsync(
-        User user,
-        IEmailRepository emailRepository,
-        string appName,
-        IVerificationCodeStore verificationCodeStore,
-        CancellationToken cancellationToken)
-    {
-        var code = VerificationCodeGenerator.GenerateNumericCode();
-        await verificationCodeStore.StoreAsync(
-            VerificationCodePurpose.EmailVerification,
-            user.Email,
-            code,
-            TimeSpan.FromMinutes(VerificationCodeMinutes),
-            cancellationToken);
-
-        const string subject = "Verify your email";
-        var tokens = new Dictionary<string, string>
-        {
-            ["SUBJECT"] = subject,
-            ["TITLE"] = subject,
-            ["BODY"] = "Use the code below to verify your email address.",
-            ["CODE"] = code,
-            ["FOOTNOTE"] = "This code expires in 10 minutes.",
-            ["APP_NAME"] = appName
-        };
-
-        await emailRepository.SendEmailByKeyAsync(
-            user.Email,
-            EmailTemplateKeys.EmailVerification,
-            tokens,
-            cancellationToken);
     }
 }

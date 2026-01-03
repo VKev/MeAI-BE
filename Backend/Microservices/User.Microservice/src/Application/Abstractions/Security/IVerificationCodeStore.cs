@@ -2,6 +2,9 @@ namespace Application.Abstractions.Security;
 
 public interface IVerificationCodeStore
 {
+    Task<bool> TryAcquireSendLockAsync(string purpose, string email, TimeSpan lockTtl,
+        CancellationToken cancellationToken = default);
+
     Task StoreAsync(string purpose, string email, string code, TimeSpan ttl,
         CancellationToken cancellationToken = default);
 

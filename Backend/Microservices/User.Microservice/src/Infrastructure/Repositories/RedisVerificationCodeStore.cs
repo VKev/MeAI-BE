@@ -10,6 +10,13 @@ public sealed class RedisVerificationCodeStore(IConnectionMultiplexer multiplexe
 {
     private readonly IDatabase _database = multiplexer.GetDatabase();
 
+    public async Task<bool> TryAcquireSendLockAsync(string purpose, string email, TimeSpan lockTtl,
+        CancellationToken cancellationToken = default)
+    {
+        var key = BuildSendLockKey(purpose, email);
+        return await _database.StringSetAsync(key, "1", lockTtl, When.NotExists);
+    }
+
     public async Task StoreAsync(string purpose, string email, string code, TimeSpan ttl,
         CancellationToken cancellationToken = default)
     {
@@ -40,6 +47,9 @@ public sealed class RedisVerificationCodeStore(IConnectionMultiplexer multiplexe
 
     private static string BuildKey(string purpose, string email) =>
         $"verification:{purpose}:{email.Trim().ToLowerInvariant()}";
+
+    private static string BuildSendLockKey(string purpose, string email) =>
+        $"verification:send_lock:{purpose}:{email.Trim().ToLowerInvariant()}";
 
     private static bool FixedTimeEquals(string left, string right)
     {
