@@ -1,5 +1,6 @@
 using Application.Users.Commands;
 using Application.Users.Models;
+using Application.Users.Queries;
 using AutoMapper;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using SharedLibrary.Attributes;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
+using System.Security.Claims;
 
 namespace WebApi.Controllers;
 
@@ -102,6 +104,48 @@ public sealed class AuthController : ApiController
         }
 
         SetAuthCookies(result.Value);
+        return Ok(result);
+    }
+
+    [HttpGet("me")]
+    [Authorize]
+    [ProducesResponseType(typeof(Result<AdminUserResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(new GetUserByIdQuery(userId), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPost("logout")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(Result<MessageResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Logout(CancellationToken cancellationToken)
+    {
+        var accessToken = TryGetAccessToken();
+        var refreshToken = Request.Cookies.TryGetValue(RefreshTokenCookie, out var refreshCookie)
+            ? refreshCookie
+            : null;
+
+        var result = await _mediator.Send(new LogoutCommand(accessToken, refreshToken), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        ClearAuthCookies();
         return Ok(result);
     }
 
@@ -206,6 +250,60 @@ public sealed class AuthController : ApiController
                 Expires = DateTimeOffset.UtcNow.AddDays(RefreshTokenDays),
                 Path = "/api/User/auth/refresh"
             });
+    }
+
+    private void ClearAuthCookies()
+    {
+        var secure = Request.IsHttps;
+        var sameSite = secure ? SameSiteMode.None : SameSiteMode.Lax;
+
+        Response.Cookies.Delete(
+            AccessTokenCookie,
+            new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = secure,
+                SameSite = sameSite,
+                Path = "/"
+            });
+
+        Response.Cookies.Delete(
+            RefreshTokenCookie,
+            new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = secure,
+                SameSite = sameSite,
+                Path = "/api/User/auth/refresh"
+            });
+    }
+
+    private string? TryGetAccessToken()
+    {
+        if (Request.Cookies.TryGetValue(AccessTokenCookie, out var accessToken) &&
+            !string.IsNullOrWhiteSpace(accessToken))
+        {
+            return accessToken.Trim();
+        }
+
+        var authorizationHeader = Request.Headers.Authorization.FirstOrDefault();
+        if (string.IsNullOrEmpty(authorizationHeader))
+        {
+            return null;
+        }
+
+        if (authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            return authorizationHeader["Bearer ".Length..].Trim();
+        }
+
+        return null;
+    }
+
+    private bool TryGetUserId(out Guid userId)
+    {
+        var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claimValue, out userId);
     }
 }
 

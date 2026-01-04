@@ -3,6 +3,7 @@ using Application.Abstractions.Payments;
 using Application.Abstractions.Security;
 using Domain.Repositories;
 using Infrastructure.Payments;
+using Infrastructure.Security;
 using Infrastructure.Repositories;
 using Infrastructure.Seeding;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,7 +17,8 @@ namespace Infrastructure
     {
         public static IServiceCollection AddInfrastructure(this IServiceCollection services)
         {
-            services.AddScoped<IJwtTokenService, JwtTokenService>();
+            services.AddScoped<JwtTokenService>();
+            services.AddScoped<IJwtTokenService, RevocationAwareJwtTokenService>();
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddScoped<AdminUserSeeder>();
             services.AddScoped<SubscriptionSeeder>();
