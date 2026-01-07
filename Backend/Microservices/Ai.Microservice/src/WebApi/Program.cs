@@ -1,5 +1,6 @@
 ﻿using Application;
 using Infrastructure;
+using Infrastructure.Configs;
 using Scalar.AspNetCore;
 using Serilog;
 using SharedLibrary.Configs;
@@ -21,6 +22,8 @@ builder.Services.AddOpenApi();
 
 builder.ConfigureSerilogLogging();
 builder.Services.AddSingleton<EnvironmentConfig>();
+builder.Services.Configure<VeoOptions>(
+    builder.Configuration.GetSection(VeoOptions.SectionName));
 builder.AddDatabase();
 
 builder.Services
