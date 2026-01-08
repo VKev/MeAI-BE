@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Application.Veo.Commands;
 using Application.Veo.Models;
 using Application.Veo.Queries;
@@ -11,6 +12,7 @@ namespace WebApi.Controllers;
 
 [ApiController]
 [Route("api/Ai/veo")]
+[Authorize]
 public sealed class VeoController : ApiController
 {
     public VeoController(IMediator mediator) : base(mediator)
@@ -18,14 +20,20 @@ public sealed class VeoController : ApiController
     }
 
     [HttpPost("generate")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(Result<GenerateVideoCommandResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GenerateVideo(
         [FromBody] GenerateVideoRequest request,
         CancellationToken cancellationToken)
     {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
         var command = new GenerateVideoCommand(
+            UserId: userId,
             Prompt: request.Prompt,
             ImageUrls: request.ImageUrls,
             Model: request.Model ?? "veo3_fast",
@@ -46,14 +54,20 @@ public sealed class VeoController : ApiController
     }
 
     [HttpPost("extend")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(Result<ExtendVideoCommandResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExtendVideo(
         [FromBody] ExtendVideoRequest request,
         CancellationToken cancellationToken)
     {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
         var command = new ExtendVideoCommand(
+            UserId: userId,
             OriginalCorrelationId: request.CorrelationId,
             Prompt: request.Prompt,
             Seeds: request.Seeds,
@@ -70,7 +84,6 @@ public sealed class VeoController : ApiController
     }
 
     [HttpGet("status/{correlationId:guid}")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(Result<VideoTaskStatusResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetStatus(
@@ -103,7 +116,6 @@ public sealed class VeoController : ApiController
     }
 
     [HttpGet("record-info/{correlationId:guid}")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(Result<Application.Abstractions.VeoRecordInfoResult>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetRecordInfo(
@@ -122,7 +134,6 @@ public sealed class VeoController : ApiController
     }
 
     [HttpGet("get-1080p-video/{correlationId:guid}")]
-    [AllowAnonymous]
     [ProducesResponseType(typeof(Result<Application.Abstractions.Veo1080PResult>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Get1080PVideo(
@@ -139,6 +150,12 @@ public sealed class VeoController : ApiController
         }
 
         return Ok(result);
+    }
+
+    private bool TryGetUserId(out Guid userId)
+    {
+        var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(claimValue, out userId);
     }
 }
 
@@ -157,3 +174,4 @@ public sealed record ExtendVideoRequest(
     string Prompt,
     int? Seeds = null,
     string? Watermark = null);
+

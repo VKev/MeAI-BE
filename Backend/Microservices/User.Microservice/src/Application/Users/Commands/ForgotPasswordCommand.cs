@@ -46,7 +46,8 @@ public sealed class ForgotPasswordCommandHandler
 
         if (user == null)
         {
-            return Result.Success(new MessageResponse("If the email exists, a reset code was sent."));
+            return Result.Failure<MessageResponse>(
+                new Error("Auth.EmailNotFound", "Email not found"));
         }
 
         var canSend = await _verificationCodeStore.TryAcquireSendLockAsync(

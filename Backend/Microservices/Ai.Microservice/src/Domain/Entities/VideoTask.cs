@@ -8,6 +8,8 @@ public sealed class VideoTask
     [Key]
     public Guid Id { get; set; }
 
+    public Guid UserId { get; set; }
+
     public Guid CorrelationId { get; set; }
 
     public string? VeoTaskId { get; set; }

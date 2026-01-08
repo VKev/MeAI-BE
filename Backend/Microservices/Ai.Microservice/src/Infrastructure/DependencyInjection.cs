@@ -1,10 +1,12 @@
 using Application.Abstractions;
+using Domain.Repositories;
 using Infrastructure.Consumers;
-using Infrastructure.Handlers;
+using Infrastructure.Repositories;
 using Infrastructure.Sagas;
 using Infrastructure.Services;
 using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
+using SharedLibrary.Authentication;
 using SharedLibrary.Configs;
 using StackExchange.Redis;
 
@@ -16,7 +18,10 @@ namespace Infrastructure
         {
             services.AddHttpClient<IVeoVideoService, VeoVideoService>();
 
-            services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<GetVideoStatusQueryHandler>());
+            services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
+            services.AddScoped<IJwtTokenService, JwtTokenService>();
+
+            services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Application.AssemblyReference).Assembly));
 
             services.AddSingleton<IConnectionMultiplexer>(sp =>
             {

@@ -325,13 +325,63 @@ public sealed class VeoVideoService : IVeoVideoService
     {
         public string? TaskId { get; set; }
         public string? ParamJson { get; set; }
+
+        [JsonConverter(typeof(UnixTimestampToDateTimeConverter))]
         public DateTime? CompleteTime { get; set; }
         public VeoRecordInfoResponseData? Response { get; set; }
         public int SuccessFlag { get; set; }
         public int? ErrorCode { get; set; }
         public string? ErrorMessage { get; set; }
+
+        [JsonConverter(typeof(UnixTimestampToDateTimeConverter))]
         public DateTime? CreateTime { get; set; }
         public bool FallbackFlag { get; set; }
+    }
+
+    private sealed class UnixTimestampToDateTimeConverter : JsonConverter<DateTime?>
+    {
+        public override DateTime? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.Null)
+            {
+                return null;
+            }
+
+            if (reader.TokenType == JsonTokenType.Number)
+            {
+                // Unix timestamp in milliseconds
+                var timestamp = reader.GetInt64();
+                return DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime;
+            }
+
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                var stringValue = reader.GetString();
+                if (string.IsNullOrEmpty(stringValue))
+                {
+                    return null;
+                }
+
+                if (DateTime.TryParse(stringValue, out var dateTime))
+                {
+                    return dateTime;
+                }
+            }
+
+            return null;
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTime? value, JsonSerializerOptions options)
+        {
+            if (value.HasValue)
+            {
+                writer.WriteNumberValue(new DateTimeOffset(value.Value).ToUnixTimeMilliseconds());
+            }
+            else
+            {
+                writer.WriteNullValue();
+            }
+        }
     }
 
     private sealed class VeoRecordInfoResponseData

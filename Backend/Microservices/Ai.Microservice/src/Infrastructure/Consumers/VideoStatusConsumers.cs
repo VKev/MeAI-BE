@@ -1,10 +1,8 @@
-using Domain.Entities;
 using Infrastructure.Context;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Contracts.VideoGenerating;
-using SharedLibrary.Extensions;
 
 namespace Infrastructure.Consumers;
 

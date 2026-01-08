@@ -52,4 +52,4 @@ namespace SharedLibrary.Common.ResponseModel
         public static implicit operator Result<TValue>(TValue? value) =>
             value is not null ? Success(value) : Failure<TValue>(Error.NullValue);
     }
-} 
+}

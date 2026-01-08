@@ -4,6 +4,8 @@ public class VideoGenerationStarted
 {
     public Guid CorrelationId { get; set; }
 
+    public Guid UserId { get; set; }
+
     public string Prompt { get; set; } = null!;
 
     public List<string>? ImageUrls { get; set; }

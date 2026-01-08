@@ -36,6 +36,7 @@ public class SubmitVideoTaskConsumer : IConsumer<VideoGenerationStarted>
         var videoTask = new VideoTask
         {
             Id = Guid.CreateVersion7(),
+            UserId = message.UserId,
             CorrelationId = message.CorrelationId,
             Prompt = message.Prompt,
             Model = message.Model,

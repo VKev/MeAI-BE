@@ -1,4 +1,4 @@
-﻿using Application;
+using Application;
 using Infrastructure;
 using Infrastructure.Configs;
 using Scalar.AspNetCore;
@@ -42,7 +42,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.UseAuthorization();
+app.UseAuthenticationPipeline();
 
 app.MapOpenApi();
 app.MapScalarApiReference("docs", opts =>
