@@ -85,17 +85,23 @@ public sealed class VeoController : ApiController
 
     [HttpGet("status/{correlationId:guid}")]
     [ProducesResponseType(typeof(Result<VideoTaskStatusResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetStatus(
         Guid correlationId,
         CancellationToken cancellationToken)
     {
-        var query = new GetVideoStatusQuery(correlationId);
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var query = new GetVideoStatusQuery(userId, correlationId);
         var result = await _mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)
         {
-            return NotFound(result);
+            return HandleFailure(result);
         }
 
         return Ok(result);
@@ -117,12 +123,18 @@ public sealed class VeoController : ApiController
 
     [HttpGet("record-info/{correlationId:guid}")]
     [ProducesResponseType(typeof(Result<Application.Abstractions.VeoRecordInfoResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetRecordInfo(
         Guid correlationId,
         CancellationToken cancellationToken)
     {
-        var query = new GetVeoRecordInfoQuery(correlationId);
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var query = new GetVeoRecordInfoQuery(userId, correlationId);
         var result = await _mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)
@@ -135,19 +147,65 @@ public sealed class VeoController : ApiController
 
     [HttpGet("get-1080p-video/{correlationId:guid}")]
     [ProducesResponseType(typeof(Result<Application.Abstractions.Veo1080PResult>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Get1080PVideo(
         Guid correlationId,
         [FromQuery] int index = 0,
         CancellationToken cancellationToken = default)
     {
-        var query = new Get1080PVideoQuery(correlationId, index);
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var query = new Get1080PVideoQuery(userId, correlationId, index);
         var result = await _mediator.Send(query, cancellationToken);
 
         if (result.IsFailure)
         {
             return HandleFailure(result);
         }
+
+        return Ok(result);
+    }
+
+    [HttpPost("refresh-status/{correlationId:guid}")]
+    [ProducesResponseType(typeof(Result<RefreshVideoStatusResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RefreshStatus(
+        Guid correlationId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var command = new RefreshVideoStatusCommand(userId, correlationId);
+        var result = await _mediator.Send(command, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("my-tasks")]
+    [ProducesResponseType(typeof(Result<IEnumerable<UserVideoTaskResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyVideoTasks(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var query = new GetUserVideoTasksQuery(userId);
+        var result = await _mediator.Send(query, cancellationToken);
 
         return Ok(result);
     }

@@ -5,7 +5,7 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Veo.Queries;
 
-public sealed record Get1080PVideoQuery(Guid CorrelationId, int Index = 0) : IRequest<Result<Veo1080PResult>>;
+public sealed record Get1080PVideoQuery(Guid UserId, Guid CorrelationId, int Index = 0) : IRequest<Result<Veo1080PResult>>;
 
 public sealed class Get1080PVideoQueryHandler
     : IRequestHandler<Get1080PVideoQuery, Result<Veo1080PResult>>
@@ -33,6 +33,11 @@ public sealed class Get1080PVideoQueryHandler
         if (task is null)
         {
             return Result.Failure<Veo1080PResult>(VeoErrors.TaskNotFound);
+        }
+
+        if (task.UserId != request.UserId)
+        {
+            return Result.Failure<Veo1080PResult>(VeoErrors.Unauthorized);
         }
 
         if (string.IsNullOrEmpty(task.VeoTaskId))

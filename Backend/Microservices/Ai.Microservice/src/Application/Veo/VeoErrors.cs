@@ -16,6 +16,8 @@ public static class VeoErrors
 
     public static readonly Error TaskNotCompleted = new("Veo.TaskNotCompleted", "Video task has not completed yet. VeoTaskId is not available.");
 
+    public static readonly Error Unauthorized = new("Veo.Unauthorized", "You are not authorized to access this video task");
+
     public static Error ApiError(int code, string message) => new($"Veo.ApiError.{code}", message);
 }
 

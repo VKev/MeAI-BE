@@ -5,7 +5,7 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Veo.Queries;
 
-public sealed record GetVeoRecordInfoQuery(Guid CorrelationId) : IRequest<Result<VeoRecordInfoResult>>;
+public sealed record GetVeoRecordInfoQuery(Guid UserId, Guid CorrelationId) : IRequest<Result<VeoRecordInfoResult>>;
 
 public sealed class GetVeoRecordInfoQueryHandler
     : IRequestHandler<GetVeoRecordInfoQuery, Result<VeoRecordInfoResult>>
@@ -33,6 +33,11 @@ public sealed class GetVeoRecordInfoQueryHandler
         if (task is null)
         {
             return Result.Failure<VeoRecordInfoResult>(VeoErrors.TaskNotFound);
+        }
+
+        if (task.UserId != request.UserId)
+        {
+            return Result.Failure<VeoRecordInfoResult>(VeoErrors.Unauthorized);
         }
 
         if (string.IsNullOrEmpty(task.VeoTaskId))

@@ -26,6 +26,11 @@ public sealed class VideoTaskRepository : IVideoTaskRepository
         _dbSet.Update(entity);
     }
 
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        return _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<VideoTask?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
         return await _dbSet.FindAsync(new object?[] { id }, cancellationToken);
@@ -34,6 +39,11 @@ public sealed class VideoTaskRepository : IVideoTaskRepository
     public async Task<VideoTask?> GetByCorrelationIdAsync(Guid correlationId, CancellationToken cancellationToken)
     {
         return await _dbSet.AsNoTracking().FirstOrDefaultAsync(t => t.CorrelationId == correlationId, cancellationToken);
+    }
+
+    public async Task<VideoTask?> GetByCorrelationIdForUpdateAsync(Guid correlationId, CancellationToken cancellationToken)
+    {
+        return await _dbSet.FirstOrDefaultAsync(t => t.CorrelationId == correlationId, cancellationToken);
     }
 
     public async Task<VideoTask?> GetByVeoTaskIdAsync(string veoTaskId, CancellationToken cancellationToken)
@@ -46,4 +56,5 @@ public sealed class VideoTaskRepository : IVideoTaskRepository
         return await _dbSet.AsNoTracking().Where(t => t.UserId == userId).ToListAsync(cancellationToken);
     }
 }
+
 
