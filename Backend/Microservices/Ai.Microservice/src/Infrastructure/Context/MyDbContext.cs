@@ -26,6 +26,8 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<Workspace> Workspaces { get; set; }
 
+    public virtual DbSet<VideoTask> VideoTasks { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MyDbContext).Assembly);

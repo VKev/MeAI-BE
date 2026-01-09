@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class RemoveEntityNavigations : Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -64,6 +64,30 @@ namespace Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("social_medias_pkey", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "video_tasks",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    correlation_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    veo_task_id = table.Column<string>(type: "text", nullable: true),
+                    prompt = table.Column<string>(type: "text", nullable: false),
+                    model = table.Column<string>(type: "text", nullable: false),
+                    aspect_ratio = table.Column<string>(type: "text", nullable: false),
+                    status = table.Column<string>(type: "text", nullable: false),
+                    result_urls = table.Column<string>(type: "jsonb", nullable: true),
+                    resolution = table.Column<string>(type: "text", nullable: true),
+                    error_message = table.Column<string>(type: "text", nullable: true),
+                    error_code = table.Column<int>(type: "integer", nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    completed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("video_tasks_pkey", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
@@ -139,6 +163,16 @@ namespace Infrastructure.Migrations
                 name: "IX_post_resources_post_id",
                 table: "post_resources",
                 column: "post_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_video_tasks_correlation_id",
+                table: "video_tasks",
+                column: "correlation_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_video_tasks_user_id",
+                table: "video_tasks",
+                column: "user_id");
         }
 
         /// <inheritdoc />
@@ -152,6 +186,9 @@ namespace Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "social_medias");
+
+            migrationBuilder.DropTable(
+                name: "video_tasks");
 
             migrationBuilder.DropTable(
                 name: "workspaces");

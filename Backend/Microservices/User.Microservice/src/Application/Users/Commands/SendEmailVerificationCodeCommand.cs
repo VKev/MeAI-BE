@@ -46,7 +46,7 @@ public sealed class SendEmailVerificationCodeCommandHandler
 
         if (user is { EmailVerified: true })
         {
-            return Result.Success(new MessageResponse("If the email exists, a verification code was sent."));
+            return Result.Success(new MessageResponse("A verification code was sent."));
         }
 
         var canSend = await _verificationCodeStore.TryAcquireSendLockAsync(
@@ -56,7 +56,7 @@ public sealed class SendEmailVerificationCodeCommandHandler
             cancellationToken);
         if (!canSend)
         {
-            return Result.Success(new MessageResponse("If the email exists, a verification code was sent."));
+            return Result.Success(new MessageResponse("A verification code was sent."));
         }
 
         var code = VerificationCodeGenerator.GenerateNumericCode();
@@ -84,7 +84,7 @@ public sealed class SendEmailVerificationCodeCommandHandler
             tokens,
             cancellationToken);
 
-        return Result.Success(new MessageResponse("If the email exists, a verification code was sent."));
+        return Result.Success(new MessageResponse("A verification code was sent."));
     }
 
     private static string NormalizeEmail(string email) =>
