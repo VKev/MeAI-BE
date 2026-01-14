@@ -34,6 +34,8 @@ spec:
               value: ai-microservice
             - name: Services__Ai__Port
               value: "5001"
+            - name: Cors__AllowedOrigins__0
+              value: https://vkev.me
             - name: Jwt__SecretKey
               value: changeme-at-least-32-chars----------------
             - name: Jwt__Issuer

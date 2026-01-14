@@ -19,6 +19,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddAuthorization();
 builder.Services.AddOpenApi();
+var corsPolicyName = builder.AddCorsPolicy();
 
 builder.ConfigureSerilogLogging();
 builder.Services.AddSingleton<EnvironmentConfig>();
@@ -42,6 +43,7 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
+app.UseCors(corsPolicyName);
 app.UseAuthenticationPipeline();
 
 app.MapOpenApi();
