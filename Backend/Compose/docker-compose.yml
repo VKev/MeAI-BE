@@ -73,6 +73,9 @@ services:
       Cors__AllowedOrigins__1: https://your-frontend.example.com
       Cors__AllowedOrigins__2: http://localhost:2406
       Google__ClientId: your-google-client-id
+      TikTok__ClientKey: your-tiktok-client-key
+      TikTok__ClientSecret: your-tiktok-client-secret
+      TikTok__RedirectUri: http://api-gateway:8080/api/User/tiktok/callback
       AutoApply__Migrations: "true"
     depends_on:
       postgres:

@@ -1,11 +1,13 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Payments;
 using Application.Abstractions.Security;
+using Application.Abstractions.TikTok;
 using Domain.Repositories;
 using Infrastructure.Payments;
 using Infrastructure.Security;
 using Infrastructure.Repositories;
 using Infrastructure.Seeding;
+using Infrastructure.TikTok;
 using Microsoft.Extensions.DependencyInjection;
 using SharedLibrary.Authentication;
 using SharedLibrary.Configs;
@@ -25,6 +27,8 @@ namespace Infrastructure
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<IEmailRepository, EmailRepository>();
             services.AddSingleton<IStripePaymentService, StripePaymentService>();
+            services.AddHttpClient("TikTok");
+            services.AddScoped<ITikTokOAuthService, TikTokOAuthService>();
             services.AddSingleton<IConnectionMultiplexer>(sp =>
             {
                 var env = sp.GetRequiredService<EnvironmentConfig>();
