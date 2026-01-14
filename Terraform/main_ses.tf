@@ -41,14 +41,5 @@ resource "aws_iam_access_key" "ses_smtp" {
 locals {
   ses_smtp_username = local.ses_enabled ? aws_iam_access_key.ses_smtp[0].id : ""
   ses_smtp_secret   = local.ses_enabled ? aws_iam_access_key.ses_smtp[0].secret : ""
-
-  ses_smtp_k_date    = local.ses_enabled ? hmacsha256("AWS4${local.ses_smtp_secret}", "11111111") : ""
-  ses_smtp_k_region  = local.ses_enabled ? hmacsha256(base64decode(local.ses_smtp_k_date), var.aws_region) : ""
-  ses_smtp_k_service = local.ses_enabled ? hmacsha256(base64decode(local.ses_smtp_k_region), "ses") : ""
-  ses_smtp_k_signing = local.ses_enabled ? hmacsha256(base64decode(local.ses_smtp_k_service), "aws4_request") : ""
-  ses_smtp_signature = local.ses_enabled ? hmacsha256(base64decode(local.ses_smtp_k_signing), "SendRawEmail") : ""
-
-  ses_smtp_password_v4 = local.ses_enabled ? base64encode(
-    join("", [format("%c", 4), base64decode(local.ses_smtp_signature)])
-  ) : ""
+  ses_smtp_password_v4 = local.ses_enabled ? aws_iam_access_key.ses_smtp[0].ses_smtp_password_v4 : ""
 }
