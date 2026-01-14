@@ -104,6 +104,14 @@ resource "aws_security_group" "vpc_endpoints" {
     cidr_blocks = [aws_vpc.main.cidr_block]
   }
 
+  ingress {
+    description = "VPC internal SMTP (SES)"
+    from_port   = 587
+    to_port     = 587
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+
   # Allow responses back out
   egress {
     from_port   = 0
@@ -193,6 +201,19 @@ resource "aws_vpc_endpoint" "logs" {
 
   tags = {
     Name = "${var.project_name}-vpce-logs"
+  }
+}
+
+resource "aws_vpc_endpoint" "ses_smtp" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.email-smtp"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "${var.project_name}-vpce-ses-smtp"
   }
 }
 

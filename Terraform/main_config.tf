@@ -86,6 +86,19 @@ locals {
       ]...)
     )
   ]...)
+
+  ses_placeholder_map = merge(
+    {
+      "TERRAFORM_AWS_REGION" = var.aws_region
+      "TERRAFORM_DOMAIN_NAME" = var.domain_name
+    },
+    local.ses_enabled ? {
+      "TERRAFORM_SES_SMTP_USERNAME" = local.ses_smtp_username
+      "TERRAFORM_SES_SMTP_PASSWORD" = local.ses_smtp_password_v4
+    } : {}
+  )
+
+  placeholder_map = merge(local.rds_placeholder_map, local.ses_placeholder_map)
 }
 
 # VPC Module
