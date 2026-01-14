@@ -73,6 +73,8 @@ spec:
               value: MicroservicesApp
             - name: Jwt__ExpirationMinutes
               value: "60"
+            - name: Cors__AllowedOrigins__0
+              value: https://vkev.me
             - name: AutoApply__Migrations
               value: "true"
           resources:
