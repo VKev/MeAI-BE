@@ -49,6 +49,6 @@ locals {
   ses_smtp_signature = local.ses_enabled ? hmacsha256(base64decode(local.ses_smtp_k_signing), "SendRawEmail") : ""
 
   ses_smtp_password_v4 = local.ses_enabled ? base64encode(
-    join("", ["\x04", base64decode(local.ses_smtp_signature)])
+    join("", [format("%c", 4), base64decode(local.ses_smtp_signature)])
   ) : ""
 }
