@@ -43,7 +43,7 @@ data "external" "resolve_manifest" {
       idx => doc
     })
     replacements_json = jsonencode(merge(
-      local.rds_placeholder_map,
+      local.placeholder_map,
       {
         "TERRAFORM_NAMESPACE" = local.eks_namespace
       }

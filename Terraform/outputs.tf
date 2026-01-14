@@ -50,6 +50,32 @@ output "rds_passwords" {
   sensitive   = true
 }
 
+output "ses_domain_verification_token" {
+  description = "TXT token to verify SES domain identity (add to DNS)."
+  value       = try(aws_ses_domain_identity.main[0].verification_token, null)
+}
+
+output "ses_domain_dkim_tokens" {
+  description = "DKIM CNAME tokens for SES domain identity."
+  value       = try(aws_ses_domain_dkim.main[0].dkim_tokens, [])
+}
+
+output "ses_smtp_endpoint" {
+  description = "SES SMTP endpoint for the current region."
+  value       = "email-smtp.${var.aws_region}.amazonaws.com"
+}
+
+output "ses_smtp_username" {
+  description = "SES SMTP username (IAM access key ID)."
+  value       = local.ses_smtp_username
+}
+
+output "ses_smtp_password" {
+  description = "SES SMTP password derived from IAM access key."
+  value       = local.ses_smtp_password_v4
+  sensitive   = true
+}
+
 
 # VPC Outputs
 output "vpc_id" {
