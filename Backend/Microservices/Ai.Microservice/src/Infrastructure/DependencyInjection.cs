@@ -19,6 +19,7 @@ namespace Infrastructure
             services.AddHttpClient<IVeoVideoService, VeoVideoService>();
 
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
+            services.AddScoped<IPostRepository, PostRepository>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
 
             services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Application.AssemblyReference).Assembly));
