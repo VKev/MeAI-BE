@@ -5,14 +5,22 @@ using Infrastructure.Context;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
 
 namespace Infrastructure.Repositories;
 
-public sealed class EmailRepository(MyDbContext context, IOptions<EmailOptions> options) : IEmailRepository
+public sealed class EmailRepository(
+    MyDbContext context,
+    IOptions<EmailOptions> options,
+    IHostEnvironment environment,
+    ILogger<EmailRepository> logger) : IEmailRepository
 {
     private readonly EmailOptions _options = options.Value;
+    private readonly bool _disableSmtp = environment.IsProduction();
+    private readonly ILogger<EmailRepository> _logger = logger;
 
     public async Task<EmailTemplateContent?> GetTemplateContentAsync(string templateKey,
         CancellationToken cancellationToken = default)
@@ -54,6 +62,12 @@ public sealed class EmailRepository(MyDbContext context, IOptions<EmailOptions> 
     public async Task SendEmailAsync(string to, string subject, string htmlBody, string? textBody = null,
         CancellationToken cancellationToken = default)
     {
+        if (_disableSmtp)
+        {
+            _logger.LogWarning("SMTP is disabled in Production; skipping email to {Email}.", to);
+            return;
+        }
+
         var message = new MimeMessage();
         var fromEmail = string.IsNullOrWhiteSpace(_options.FromEmail) ? _options.Username : _options.FromEmail;
 
