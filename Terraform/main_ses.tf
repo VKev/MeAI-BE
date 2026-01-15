@@ -26,13 +26,15 @@ resource "cloudflare_record" "ses_domain_verification" {
 
 resource "cloudflare_record" "ses_dkim" {
   for_each = local.ses_cloudflare_enabled ? {
-    for token in aws_ses_domain_dkim.main[0].dkim_tokens : token => token
+    "0" = 0
+    "1" = 1
+    "2" = 2
   } : {}
 
   zone_id         = var.cloudflare_zone_id
-  name            = "${each.value}._domainkey"
+  name            = "${aws_ses_domain_dkim.main[0].dkim_tokens[each.value]}._domainkey"
   type            = "CNAME"
-  content         = "${each.value}.dkim.amazonses.com"
+  content         = "${aws_ses_domain_dkim.main[0].dkim_tokens[each.value]}.dkim.amazonses.com"
   ttl             = 1
   proxied         = false
   allow_overwrite = true
