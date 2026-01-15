@@ -1,5 +1,6 @@
 locals {
   ses_enabled = var.domain_name != ""
+  ses_cloudflare_enabled = local.ses_enabled && var.use_cloudflare && var.cloudflare_zone_id != ""
 }
 
 resource "aws_ses_domain_identity" "main" {
@@ -10,6 +11,41 @@ resource "aws_ses_domain_identity" "main" {
 resource "aws_ses_domain_dkim" "main" {
   count  = local.ses_enabled ? 1 : 0
   domain = aws_ses_domain_identity.main[0].domain
+}
+
+resource "cloudflare_record" "ses_domain_verification" {
+  count           = local.ses_cloudflare_enabled ? 1 : 0
+  zone_id         = var.cloudflare_zone_id
+  name            = "_amazonses"
+  type            = "TXT"
+  content         = aws_ses_domain_identity.main[0].verification_token
+  ttl             = 1
+  proxied         = false
+  allow_overwrite = true
+}
+
+resource "cloudflare_record" "ses_dkim" {
+  for_each = local.ses_cloudflare_enabled ? {
+    for token in aws_ses_domain_dkim.main[0].dkim_tokens : token => token
+  } : {}
+
+  zone_id         = var.cloudflare_zone_id
+  name            = "${each.value}._domainkey"
+  type            = "CNAME"
+  content         = "${each.value}.dkim.amazonses.com"
+  ttl             = 1
+  proxied         = false
+  allow_overwrite = true
+}
+
+resource "aws_ses_domain_identity_verification" "main" {
+  count  = local.ses_cloudflare_enabled ? 1 : 0
+  domain = aws_ses_domain_identity.main[0].domain
+
+  depends_on = [
+    cloudflare_record.ses_domain_verification,
+    cloudflare_record.ses_dkim
+  ]
 }
 
 resource "aws_iam_user" "ses_smtp" {

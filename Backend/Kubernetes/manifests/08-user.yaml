@@ -96,6 +96,8 @@ spec:
               value: "true"
             - name: Email__UseSsl
               value: "false"
+            - name: Email__DisableCertificateRevocationCheck
+              value: "true"
             - name: Email__FromEmail
               value: no-reply@meai.local
             - name: Email__FromName
