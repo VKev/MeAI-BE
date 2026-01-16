@@ -12,16 +12,16 @@ using SharedLibrary.Common.ResponseModel;
 namespace WebApi.Controllers;
 
 [ApiController]
-[Route("api/User/tiktok")]
-public sealed class TikTokController : ApiController
+[Route("api/User/threads")]
+public sealed class ThreadsController : ApiController
 {
-    public TikTokController(IMediator mediator) : base(mediator)
+    public ThreadsController(IMediator mediator) : base(mediator)
     {
     }
 
     [HttpGet("authorize")]
     [Authorize]
-    [ProducesResponseType(typeof(Result<TikTokOAuthInitiationResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<ThreadsOAuthInitiationResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Authorize(
         [FromQuery] string? scopes,
@@ -33,7 +33,7 @@ public sealed class TikTokController : ApiController
         }
 
         var result = await _mediator.Send(
-            new InitiateTikTokOAuthCommand(userId, scopes ?? "user.info.basic"),
+            new InitiateThreadsOAuthCommand(userId, scopes ?? "threads_basic"),
             cancellationToken);
 
         if (result.IsFailure)
@@ -56,7 +56,7 @@ public sealed class TikTokController : ApiController
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new CompleteTikTokOAuthCommand(code ?? "", state ?? "", error, errorDescription),
+            new CompleteThreadsOAuthCommand(code ?? "", state ?? "", error, errorDescription),
             cancellationToken);
 
         if (result.IsFailure)
@@ -82,7 +82,7 @@ public sealed class TikTokController : ApiController
         }
 
         var result = await _mediator.Send(
-            new RefreshTikTokTokenCommand(socialMediaId, userId),
+            new RefreshThreadsTokenCommand(socialMediaId, userId),
             cancellationToken);
 
         if (result.IsFailure)

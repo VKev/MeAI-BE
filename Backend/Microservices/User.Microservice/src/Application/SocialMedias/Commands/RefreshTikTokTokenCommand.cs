@@ -9,7 +9,7 @@ using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
 
-namespace Application.SocialMedias.TikTok;
+namespace Application.SocialMedias.Commands;
 
 public sealed record RefreshTikTokTokenCommand(
     Guid SocialMediaId,

@@ -3,7 +3,7 @@ using MediatR;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 
-namespace Application.SocialMedias.TikTok;
+namespace Application.SocialMedias.Commands;
 
 public sealed record InitiateTikTokOAuthCommand(
     Guid UserId,

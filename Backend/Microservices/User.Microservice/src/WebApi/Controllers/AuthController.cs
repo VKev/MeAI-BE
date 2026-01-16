@@ -221,6 +221,31 @@ public sealed class AuthController : ApiController
         return Ok(result);
     }
 
+    [HttpPut("profile")]
+    [Authorize]
+    [ProducesResponseType(typeof(Result<AdminUserResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> EditProfile(
+        [FromBody] EditProfileRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var command = _mapper.Map<EditProfileCommand>(request) with { UserId = userId };
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+
     private void SetAuthCookies(LoginResponse response)
     {
         var secure = Request.IsHttps;
@@ -326,3 +351,11 @@ public sealed record ResetPasswordRequest(string Email, string Code, string NewP
 public sealed record SendVerificationCodeRequest(string Email);
 
 public sealed record VerifyEmailRequest(string Email, string Code);
+
+public sealed record EditProfileRequest(
+    string? FullName,
+    string? PhoneNumber,
+    string? Address,
+    DateTime? Birthday,
+    Guid? AvatarResourceId);
+
