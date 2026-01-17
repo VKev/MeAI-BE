@@ -5,9 +5,9 @@ namespace Application.Abstractions.TikTok;
 
 public interface ITikTokOAuthService
 {
-    (string AuthorizationUrl, string State) GenerateAuthorizationUrl(Guid userId, string scopes);
+    (string AuthorizationUrl, string State, string CodeVerifier) GenerateAuthorizationUrl(Guid userId, string scopes);
 
-    Task<Result<TikTokTokenResponse>> ExchangeCodeForTokenAsync(string code, CancellationToken cancellationToken);
+    Task<Result<TikTokTokenResponse>> ExchangeCodeForTokenAsync(string code, string codeVerifier, CancellationToken cancellationToken);
 
     Task<Result<TikTokTokenResponse>> RefreshTokenAsync(string refreshToken, CancellationToken cancellationToken);
 

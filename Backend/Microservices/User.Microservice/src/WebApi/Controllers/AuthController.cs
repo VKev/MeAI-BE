@@ -109,7 +109,7 @@ public sealed class AuthController : ApiController
 
     [HttpGet("me")]
     [Authorize]
-    [ProducesResponseType(typeof(Result<AdminUserResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<UserProfileResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Me(CancellationToken cancellationToken)
@@ -119,7 +119,7 @@ public sealed class AuthController : ApiController
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new GetUserByIdQuery(userId), cancellationToken);
+        var result = await _mediator.Send(new GetMeQuery(userId), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);
@@ -223,7 +223,7 @@ public sealed class AuthController : ApiController
 
     [HttpPut("profile")]
     [Authorize]
-    [ProducesResponseType(typeof(Result<AdminUserResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<UserProfileResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> EditProfile(

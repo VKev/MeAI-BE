@@ -5,33 +5,26 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
-using SharedLibrary.Extensions;
 
-namespace Application.Users.Commands;
+namespace Application.Users.Queries;
 
-public sealed record EditProfileCommand(
-    Guid UserId,
-    string? FullName,
-    string? PhoneNumber,
-    string? Address,
-    DateTime? Birthday,
-    Guid? AvatarResourceId) : IRequest<Result<UserProfileResponse>>;
+public sealed record GetMeQuery(Guid UserId) : IRequest<Result<UserProfileResponse>>;
 
-public sealed class EditProfileCommandHandler
-    : IRequestHandler<EditProfileCommand, Result<UserProfileResponse>>
+public sealed class GetMeQueryHandler
+    : IRequestHandler<GetMeQuery, Result<UserProfileResponse>>
 {
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
 
-    public EditProfileCommandHandler(IUnitOfWork unitOfWork)
+    public GetMeQueryHandler(IUnitOfWork unitOfWork)
     {
         _userRepository = unitOfWork.Repository<User>();
         _roleRepository = unitOfWork.Repository<Role>();
         _userRoleRepository = unitOfWork.Repository<UserRole>();
     }
 
-    public async Task<Result<UserProfileResponse>> Handle(EditProfileCommand request,
+    public async Task<Result<UserProfileResponse>> Handle(GetMeQuery request,
         CancellationToken cancellationToken)
     {
         var user = await _userRepository.GetAll()
@@ -41,34 +34,6 @@ public sealed class EditProfileCommandHandler
         {
             return Result.Failure<UserProfileResponse>(new Error("User.NotFound", "User not found"));
         }
-
-        if (request.FullName != null)
-        {
-            user.FullName = string.IsNullOrWhiteSpace(request.FullName) ? null : request.FullName.Trim();
-        }
-
-        if (request.PhoneNumber != null)
-        {
-            user.PhoneNumber = string.IsNullOrWhiteSpace(request.PhoneNumber) ? null : request.PhoneNumber.Trim();
-        }
-
-        if (request.Address != null)
-        {
-            user.Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
-        }
-
-        if (request.Birthday.HasValue)
-        {
-            user.Birthday = request.Birthday;
-        }
-
-        if (request.AvatarResourceId.HasValue)
-        {
-            user.AvatarResourceId = request.AvatarResourceId;
-        }
-
-        user.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
-        _userRepository.Update(user);
 
         var roles = await ResolveRolesAsync(user.Id, cancellationToken);
         return Result.Success(UserProfileMapping.ToResponse(user, roles));
@@ -83,7 +48,7 @@ public sealed class EditProfileCommandHandler
 
         if (userRoles.Count == 0)
         {
-            return [UserRoleConstants.User];
+            return new List<string> { UserRoleConstants.User };
         }
 
         var roleIds = userRoles.Select(ur => ur.RoleId).ToList();
@@ -97,6 +62,6 @@ public sealed class EditProfileCommandHandler
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .ToList();
 
-        return roleNames.Count == 0 ? [UserRoleConstants.User] : roleNames;
+        return roleNames.Count == 0 ? new List<string> { UserRoleConstants.User } : roleNames;
     }
 }

@@ -5,6 +5,7 @@ using Application.SocialMedias.Models;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
@@ -22,13 +23,16 @@ public sealed class CompleteTikTokOAuthCommandHandler
 {
     private readonly ITikTokOAuthService _tikTokOAuthService;
     private readonly IRepository<SocialMedia> _socialMediaRepository;
+    private readonly IMemoryCache _memoryCache;
 
     public CompleteTikTokOAuthCommandHandler(
         ITikTokOAuthService tikTokOAuthService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IMemoryCache memoryCache)
     {
         _tikTokOAuthService = tikTokOAuthService;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
+        _memoryCache = memoryCache;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(
@@ -53,7 +57,18 @@ public sealed class CompleteTikTokOAuthCommandHandler
                 new Error("TikTok.InvalidState", "Invalid or expired state token"));
         }
 
-        var tokenResult = await _tikTokOAuthService.ExchangeCodeForTokenAsync(request.Code, cancellationToken);
+        // Retrieve code_verifier from cache
+        var cacheKey = $"tiktok_code_verifier_{request.State}";
+        if (!_memoryCache.TryGetValue<string>(cacheKey, out var codeVerifier) || string.IsNullOrEmpty(codeVerifier))
+        {
+            return Result.Failure<SocialMediaResponse>(
+                new Error("TikTok.MissingCodeVerifier", "Code verifier not found or expired"));
+        }
+
+        // Remove from cache after retrieval (one-time use)
+        _memoryCache.Remove(cacheKey);
+
+        var tokenResult = await _tikTokOAuthService.ExchangeCodeForTokenAsync(request.Code, codeVerifier, cancellationToken);
         if (tokenResult.IsFailure)
         {
             return Result.Failure<SocialMediaResponse>(tokenResult.Error);

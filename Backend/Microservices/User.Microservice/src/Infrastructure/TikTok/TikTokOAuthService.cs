@@ -37,10 +37,14 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
         _httpClient = httpClientFactory.CreateClient("TikTok");
     }
 
-    public (string AuthorizationUrl, string State) GenerateAuthorizationUrl(Guid userId, string scopes)
+    public (string AuthorizationUrl, string State, string CodeVerifier) GenerateAuthorizationUrl(Guid userId, string scopes)
     {
         var stateData = $"{userId}|{GenerateRandomString(16)}";
         var state = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateData));
+
+        // Generate PKCE parameters
+        var codeVerifier = GenerateCodeVerifier();
+        var codeChallenge = GenerateCodeChallenge(codeVerifier);
 
         var queryParams = new Dictionary<string, string>
         {
@@ -48,16 +52,19 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
             ["scope"] = scopes,
             ["response_type"] = "code",
             ["redirect_uri"] = _redirectUri,
-            ["state"] = state
+            ["state"] = state,
+            ["code_challenge"] = codeChallenge,
+            ["code_challenge_method"] = "S256"
         };
 
         var queryString = string.Join("&",
             queryParams.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
 
-        return ($"{AuthorizationBaseUrl}?{queryString}", state);
+        return ($"{AuthorizationBaseUrl}?{queryString}", state, codeVerifier);
     }
 
     public async Task<Result<TikTokTokenResponse>> ExchangeCodeForTokenAsync(string code,
+        string codeVerifier,
         CancellationToken cancellationToken)
     {
         var formData = new Dictionary<string, string>
@@ -66,7 +73,8 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
             ["client_secret"] = _clientSecret,
             ["code"] = code,
             ["grant_type"] = "authorization_code",
-            ["redirect_uri"] = _redirectUri
+            ["redirect_uri"] = _redirectUri,
+            ["code_verifier"] = codeVerifier
         };
 
         return await SendTokenRequestAsync(formData, cancellationToken);
@@ -164,6 +172,27 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(bytes);
         return Convert.ToBase64String(bytes)[..length].Replace("+", "").Replace("/", "").Replace("=", "");
+    }
+
+    private static string GenerateCodeVerifier()
+    {
+        var bytes = new byte[32]; // 32 bytes = 43 characters in base64url
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(bytes);
+        return Convert.ToBase64String(bytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .Replace("=", "");
+    }
+
+    private static string GenerateCodeChallenge(string codeVerifier)
+    {
+        using var sha256 = SHA256.Create();
+        var challengeBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(codeVerifier));
+        return Convert.ToBase64String(challengeBytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .Replace("=", "");
     }
 
     private sealed class TikTokApiTokenResponse
