@@ -76,8 +76,9 @@ services:
       TikTok__ClientKey: your-tiktok-client-key
       TikTok__ClientSecret: your-tiktok-client-secret
       TikTok__RedirectUri: http://api-gateway:8080/api/User/tiktok/callback
-      Threads__ClientId: your-threads-client-id
-      Threads__ClientSecret: your-threads-client-secret
+      Meta__AppId: your-meta-app-id
+      Meta__AppSecret: your-meta-app-secret
+
       Threads__RedirectUri: http://api-gateway:8080/api/User/threads/callback
       AutoApply__Migrations: "true"
     depends_on:
