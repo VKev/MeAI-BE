@@ -25,6 +25,33 @@ data "aws_availability_zones" "available" {
 
 data "aws_region" "current" {}
 
+data "aws_vpc_endpoint_service" "ses_smtp" {
+  service      = "email-smtp"
+  service_type = "Interface"
+}
+
+locals {
+  az_name_to_id = {
+    for idx, name in data.aws_availability_zones.available.names :
+    name => data.aws_availability_zones.available.zone_ids[idx]
+  }
+
+  # Handle service AZ identifiers that may be AZ names (us-east-1a) or AZ IDs (use1-az2).
+  ses_smtp_supported_az_ids = distinct([
+    for az in try(data.aws_vpc_endpoint_service.ses_smtp.availability_zones, []) :
+    (
+      can(regex(".*-az[0-9]+$", az)) ? az : lookup(local.az_name_to_id, az, null)
+    )
+    if (can(regex(".*-az[0-9]+$", az)) ? az : lookup(local.az_name_to_id, az, null)) != null
+  ])
+
+  ses_smtp_subnet_ids = [
+    for subnet in aws_subnet.private :
+    subnet.id
+    if contains(local.ses_smtp_supported_az_ids, subnet.availability_zone_id)
+  ]
+}
+
 # Create public subnet
 resource "aws_subnet" "public" {
   count                   = var.public_subnet_count
@@ -100,6 +127,14 @@ resource "aws_security_group" "vpc_endpoints" {
     description = "VPC internal HTTPS"
     from_port   = 443
     to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+
+  ingress {
+    description = "VPC internal SMTP (SES)"
+    from_port   = 587
+    to_port     = 587
     protocol    = "tcp"
     cidr_blocks = [aws_vpc.main.cidr_block]
   }
@@ -193,6 +228,19 @@ resource "aws_vpc_endpoint" "logs" {
 
   tags = {
     Name = "${var.project_name}-vpce-logs"
+  }
+}
+
+resource "aws_vpc_endpoint" "ses_smtp" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${data.aws_region.current.name}.email-smtp"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = local.ses_smtp_subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "${var.project_name}-vpce-ses-smtp"
   }
 }
 

@@ -26,6 +26,8 @@ spec:
               value: Production
             - name: ASPNETCORE_URLS
               value: http://+:8080
+            - name: BASE_URL
+              value: https://vkev.me
             - name: Services__User__Host
               value: user-microservice
             - name: Services__User__Port
@@ -34,6 +36,8 @@ spec:
               value: ai-microservice
             - name: Services__Ai__Port
               value: "5001"
+            - name: Cors__AllowedOrigins__0
+              value: https://vkev.me
             - name: Jwt__SecretKey
               value: changeme-at-least-32-chars----------------
             - name: Jwt__Issuer

@@ -68,7 +68,10 @@ public sealed class EmailRepository(MyDbContext context, IOptions<EmailOptions> 
         };
         message.Body = bodyBuilder.ToMessageBody();
 
-        using var client = new SmtpClient();
+        using var client = new SmtpClient
+        {
+            CheckCertificateRevocation = !_options.DisableCertificateRevocationCheck
+        };
         var secureSocket = ResolveSecureSocketOptions();
 
         await client.ConnectAsync(_options.Host, _options.Port, secureSocket, cancellationToken);

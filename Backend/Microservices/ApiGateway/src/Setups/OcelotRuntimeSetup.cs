@@ -85,7 +85,13 @@ internal static class OcelotRuntimeSetup
                 Service: "User",
                 ContainerHost: "user-microservice",
                 ContainerPort: 5002,
-                LocalPort: 5002)
+                LocalPort: 5002),
+            new ServiceDefinition(
+                Prefix: "AI",
+                Service: "Ai",
+                ContainerHost: "ai-microservice",
+                ContainerPort: 5001,
+                LocalPort: 5001)
         };
 
         var addedServices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

@@ -96,6 +96,8 @@ spec:
               value: "true"
             - name: Email__UseSsl
               value: "false"
+            - name: Email__DisableCertificateRevocationCheck
+              value: "true"
             - name: Email__FromEmail
               value: no-reply@meai.local
             - name: Email__FromName
@@ -106,6 +108,10 @@ spec:
               value: https://your-frontend.example.com
             - name: Cors__AllowedOrigins__2
               value: http://localhost:2406
+            - name: Cors__AllowedOrigins__3
+              value: http://localhost:3000
+            - name: Cors__AllowedOrigins__4
+              value: https://vkev.me
             - name: AutoApply__Migrations
               value: "true"
           resources:
