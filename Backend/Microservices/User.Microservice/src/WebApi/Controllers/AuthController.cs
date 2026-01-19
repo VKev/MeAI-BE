@@ -5,6 +5,7 @@ using AutoMapper;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using SharedLibrary.Attributes;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
@@ -17,14 +18,16 @@ namespace WebApi.Controllers;
 public sealed class AuthController : ApiController
 {
     private readonly IMapper _mapper;
+    private readonly IConfiguration _configuration;
     private const string AccessTokenCookie = "access_token";
     private const string RefreshTokenCookie = "refresh_token";
     private const int RefreshTokenDays = 7;
 
-    public AuthController(IMediator mediator, IMapper mapper)
+    public AuthController(IMediator mediator, IMapper mapper, IConfiguration configuration)
         : base(mediator)
     {
         _mapper = mapper;
+        _configuration = configuration;
     }
 
     [HttpPost("register")]
@@ -81,6 +84,21 @@ public sealed class AuthController : ApiController
         }
 
         SetAuthCookies(result.Value);
+        return Ok(result);
+    }
+
+    [HttpGet("login/meta")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(Result<MetaLoginUrlResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public IActionResult LoginWithMeta()
+    {
+        var result = BuildMetaLoginUrl();
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
         return Ok(result);
     }
 
@@ -305,6 +323,26 @@ public sealed class AuthController : ApiController
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(claimValue, out userId);
     }
+
+    private Result<MetaLoginUrlResponse> BuildMetaLoginUrl()
+    {
+        var appId = _configuration["Meta:AppId"];
+        var redirectUri = _configuration["Meta:RedirectUri"];
+        var configId = _configuration["Meta:ConfigId"];
+
+        if (string.IsNullOrWhiteSpace(appId) || string.IsNullOrWhiteSpace(redirectUri) || string.IsNullOrWhiteSpace(configId))
+        {
+            return Result.Failure<MetaLoginUrlResponse>(new Error(
+                "Auth.MetaNotConfigured",
+                "Meta AppId, ConfigId, or RedirectUri is not configured."));
+        }
+
+        var state = Guid.NewGuid().ToString("N");
+        var url =
+            $"https://www.facebook.com/v20.0/dialog/oauth?client_id={Uri.EscapeDataString(appId)}&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code&config_id={Uri.EscapeDataString(configId)}&override_default_response_type=true&state={Uri.EscapeDataString(state)}";
+
+        return Result.Success(new MetaLoginUrlResponse(url, state));
+    }
 }
 
 public sealed record LoginRequest(string EmailOrUsername, string Password);
@@ -318,6 +356,8 @@ public sealed record RegisterRequest(
     string? PhoneNumber);
 
 public sealed record GoogleLoginRequest(string IdToken);
+
+public sealed record MetaLoginUrlResponse(string Url, string State);
 
 public sealed record ForgotPasswordRequest(string Email);
 
