@@ -30,10 +30,10 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
 
     public ThreadsOAuthService(IConfiguration configuration, IHttpClientFactory httpClientFactory)
     {
-        _clientId = configuration["Meta:AppId"]
-                     ?? throw new InvalidOperationException("Meta:AppId is not configured");
-        _clientSecret = configuration["Meta:AppSecret"]
-                        ?? throw new InvalidOperationException("Meta:AppSecret is not configured");
+        _clientId = configuration["Threads:AppId"]
+                     ?? throw new InvalidOperationException("Threads:AppId is not configured");
+        _clientSecret = configuration["Threads:AppSecret"]
+                        ?? throw new InvalidOperationException("Threads:AppSecret is not configured");
         _redirectUri = configuration["Threads:RedirectUri"]
                        ?? throw new InvalidOperationException("Threads:RedirectUri is not configured");
         _httpClient = httpClientFactory.CreateClient("Threads");
