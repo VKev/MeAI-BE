@@ -14,6 +14,8 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
 {
     private const string AuthorizationBaseUrl = "https://www.tiktok.com/v2/auth/authorize/";
     private const string TokenEndpoint = "https://open.tiktokapis.com/v2/oauth/token/";
+    private const string VideoPublishInitEndpoint = "https://open.tiktokapis.com/v2/post/publish/video/init/";
+    private const string PublishStatusEndpoint = "https://open.tiktokapis.com/v2/post/publish/status/fetch/";
 
     private readonly string _clientKey;
     private readonly string _clientSecret;
@@ -166,6 +168,155 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
         }
     }
 
+    public async Task<Result<TikTokVideoInitResponse>> InitiateVideoPublishAsync(
+        string accessToken,
+        TikTokPostInfo postInfo,
+        TikTokVideoSourceInfo sourceInfo,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var requestBody = new TikTokVideoPublishRequest
+            {
+                PostInfo = new TikTokApiPostInfo
+                {
+                    Title = postInfo.Title,
+                    PrivacyLevel = postInfo.PrivacyLevel,
+                    DisableDuet = postInfo.DisableDuet,
+                    DisableComment = postInfo.DisableComment,
+                    DisableStitch = postInfo.DisableStitch,
+                    VideoCoverTimestampMs = postInfo.VideoCoverTimestampMs
+                },
+                SourceInfo = sourceInfo.Source == "FILE_UPLOAD"
+                    ? new TikTokApiSourceInfo
+                    {
+                        Source = "FILE_UPLOAD",
+                        VideoSize = sourceInfo.VideoSize,
+                        ChunkSize = sourceInfo.ChunkSize ?? 10000000,
+                        TotalChunkCount = sourceInfo.TotalChunkCount ?? 1
+                    }
+                    : new TikTokApiSourceInfo
+                    {
+                        Source = "PULL_FROM_URL",
+                        VideoUrl = sourceInfo.VideoUrl
+                    }
+            };
+
+            var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
+            using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, VideoPublishInitEndpoint);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            var apiResponse = JsonSerializer.Deserialize<TikTokApiVideoInitResponse>(responseBody, JsonOptions);
+
+            if (apiResponse?.Error?.Code != null && apiResponse.Error.Code != "ok")
+            {
+                return Result.Failure<TikTokVideoInitResponse>(
+                    new Error("TikTok.PublishError", apiResponse.Error.Message ?? "Unknown TikTok publish error"));
+            }
+
+            return Result.Success(new TikTokVideoInitResponse
+            {
+                PublishId = apiResponse?.Data?.PublishId ?? string.Empty,
+                UploadUrl = apiResponse?.Data?.UploadUrl
+            });
+        }
+        catch (HttpRequestException ex)
+        {
+            return Result.Failure<TikTokVideoInitResponse>(
+                new Error("TikTok.NetworkError", $"Network error: {ex.Message}"));
+        }
+        catch (JsonException ex)
+        {
+            return Result.Failure<TikTokVideoInitResponse>(
+                new Error("TikTok.ParseError", $"JSON parse error: {ex.Message}"));
+        }
+    }
+
+    public async Task<Result<bool>> UploadVideoFileAsync(
+        string uploadUrl,
+        Stream videoStream,
+        long videoSize,
+        string contentType,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var streamContent = new StreamContent(videoStream);
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+            streamContent.Headers.Add("Content-Range", $"bytes 0-{videoSize - 1}/{videoSize}");
+
+            using var request = new HttpRequestMessage(HttpMethod.Put, uploadUrl);
+            request.Content = streamContent;
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                return Result.Failure<bool>(
+                    new Error("TikTok.UploadError", $"Upload failed: {response.StatusCode} - {errorBody}"));
+            }
+
+            return Result.Success(true);
+        }
+        catch (HttpRequestException ex)
+        {
+            return Result.Failure<bool>(
+                new Error("TikTok.NetworkError", $"Network error during upload: {ex.Message}"));
+        }
+    }
+
+    public async Task<Result<TikTokPublishStatusResponse>> GetPublishStatusAsync(
+        string accessToken,
+        string publishId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var requestBody = new { publish_id = publishId };
+            var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
+            using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, PublishStatusEndpoint);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            var apiResponse = JsonSerializer.Deserialize<TikTokApiPublishStatusResponse>(responseBody, JsonOptions);
+
+            if (apiResponse?.Error?.Code != null && apiResponse.Error.Code != "ok")
+            {
+                return Result.Failure<TikTokPublishStatusResponse>(
+                    new Error("TikTok.StatusError", apiResponse.Error.Message ?? "Unknown error"));
+            }
+
+            return Result.Success(new TikTokPublishStatusResponse
+            {
+                Status = apiResponse?.Data?.Status ?? "UNKNOWN",
+                PublishedItemId = apiResponse?.Data?.PubliclyAvailablePostId?.FirstOrDefault(),
+                FailReason = apiResponse?.Data?.FailReason
+            });
+        }
+        catch (HttpRequestException ex)
+        {
+            return Result.Failure<TikTokPublishStatusResponse>(
+                new Error("TikTok.NetworkError", $"Network error: {ex.Message}"));
+        }
+        catch (JsonException ex)
+        {
+            return Result.Failure<TikTokPublishStatusResponse>(
+                new Error("TikTok.ParseError", $"JSON parse error: {ex.Message}"));
+        }
+    }
+
     private static string GenerateRandomString(int length)
     {
         var bytes = new byte[length];
@@ -194,28 +345,5 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
             .Replace("/", "_")
             .Replace("=", "");
     }
-
-    private sealed class TikTokApiTokenResponse
-    {
-        [JsonPropertyName("open_id")]
-        public string? OpenId { get; set; }
-
-        [JsonPropertyName("access_token")]
-        public string? AccessToken { get; set; }
-
-        [JsonPropertyName("refresh_token")]
-        public string? RefreshToken { get; set; }
-
-        [JsonPropertyName("expires_in")]
-        public int ExpiresIn { get; set; }
-
-        [JsonPropertyName("refresh_expires_in")]
-        public int RefreshExpiresIn { get; set; }
-
-        [JsonPropertyName("scope")]
-        public string? Scope { get; set; }
-
-        [JsonPropertyName("token_type")]
-        public string? TokenType { get; set; }
-    }
 }
+

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Application.Abstractions.TikTok;
 using Application.SocialMedias.Models;
 using Application.SocialMedias.Commands;
 using Application.Users.Models;
@@ -93,9 +94,83 @@ public sealed class TikTokController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("{socialMediaId:guid}/publish")]
+    [Authorize]
+    [ProducesResponseType(typeof(Result<TikTokPublishResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> PublishVideo(
+        Guid socialMediaId,
+        [FromBody] PublishVideoRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new PublishTikTokVideoCommand(
+                userId,
+                socialMediaId,
+                request.Title,
+                request.PrivacyLevel,
+                request.VideoUrl,
+                request.DisableDuet,
+                request.DisableComment,
+                request.DisableStitch,
+                request.VideoCoverTimestampMs),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("{socialMediaId:guid}/publish/{publishId}/status")]
+    [Authorize]
+    [ProducesResponseType(typeof(Result<TikTokPublishStatusResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetPublishStatus(
+        Guid socialMediaId,
+        string publishId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new GetTikTokPublishStatusQuery(userId, socialMediaId, publishId),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(claimValue, out userId);
     }
 }
+
+public sealed record PublishVideoRequest(
+    string Title,
+    string PrivacyLevel,
+    string VideoUrl,
+    bool DisableDuet = false,
+    bool DisableComment = false,
+    bool DisableStitch = false,
+    int? VideoCoverTimestampMs = null
+);
+
