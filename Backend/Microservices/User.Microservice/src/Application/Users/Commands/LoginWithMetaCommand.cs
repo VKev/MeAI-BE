@@ -1,4 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -17,22 +16,21 @@ using SharedLibrary.Extensions;
 
 namespace Application.Users.Commands;
 
-public sealed record LoginWithMetaCommand(string AccessToken) : IRequest<Result<LoginResponse>>;
+public sealed record LoginWithMetaCommand(string? Code) : IRequest<Result<LoginResponse>>;
 
-public sealed class LoginWithMetaCommandHandler
-    : IRequestHandler<LoginWithMetaCommand, Result<LoginResponse>>
+public sealed class LoginWithMetaCommandHandler : IRequestHandler<LoginWithMetaCommand, Result<LoginResponse>>
 {
     private const int RefreshTokenDays = 7;
     private const int AccessTokenMinutesFallback = 60;
+
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
     private readonly IRepository<RefreshToken> _refreshTokenRepository;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly IConfiguration _configuration;
     private readonly int _accessTokenMinutes;
-    private readonly string? _metaAppId;
-    private readonly string? _metaAppSecret;
 
     public LoginWithMetaCommandHandler(
         IUnitOfWork unitOfWork,
@@ -46,37 +44,41 @@ public sealed class LoginWithMetaCommandHandler
         _refreshTokenRepository = unitOfWork.Repository<RefreshToken>();
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
+        _configuration = configuration;
         _accessTokenMinutes = int.TryParse(configuration["Jwt:ExpirationMinutes"], out var minutes)
             ? minutes
             : AccessTokenMinutesFallback;
-        _metaAppId = configuration["Meta:AppId"];
-        _metaAppSecret = configuration["Meta:AppSecret"];
     }
 
-    public async Task<Result<LoginResponse>> Handle(LoginWithMetaCommand request,
-        CancellationToken cancellationToken)
+    public async Task<Result<LoginResponse>> Handle(LoginWithMetaCommand request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.AccessToken))
+        if (string.IsNullOrWhiteSpace(request.Code))
         {
-            return Result.Failure<LoginResponse>(new Error("Auth.InvalidMetaToken", "Missing Meta access token"));
+            return Result.Failure<LoginResponse>(new Error("Auth.InvalidMetaCode", "Missing Meta authorization code."));
         }
 
-        if (string.IsNullOrWhiteSpace(_metaAppId) || string.IsNullOrWhiteSpace(_metaAppSecret))
+        var appId = _configuration["Meta:AppId"];
+        var appSecret = _configuration["Meta:AppSecret"];
+        var redirectUri = _configuration["Meta:RedirectUri"];
+
+        if (string.IsNullOrWhiteSpace(appId) || string.IsNullOrWhiteSpace(appSecret) || string.IsNullOrWhiteSpace(redirectUri))
         {
-            return Result.Failure<LoginResponse>(new Error("Auth.MetaNotConfigured", "Meta OAuth is not configured"));
+            return Result.Failure<LoginResponse>(new Error("Auth.MetaNotConfigured", "Meta OAuth is not configured."));
         }
 
-        using var client = new HttpClient();
+        var accessToken = await ExchangeCodeForAccessTokenAsync(request.Code, appId, appSecret, redirectUri, cancellationToken);
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return Result.Failure<LoginResponse>(new Error("Auth.InvalidMetaCode", "Failed to exchange Meta code for access token."));
+        }
 
-        var debugToken = await ValidateTokenAsync(client, request.AccessToken, _metaAppId, _metaAppSecret,
-            cancellationToken);
-        if (debugToken == null || !debugToken.IsValid || !string.Equals(debugToken.AppId, _metaAppId,
-                StringComparison.Ordinal))
+        var debugToken = await ValidateTokenAsync(accessToken, appId, appSecret, cancellationToken);
+        if (debugToken == null || !debugToken.IsValid || !string.Equals(debugToken.AppId, appId, StringComparison.Ordinal))
         {
             return Result.Failure<LoginResponse>(new Error("Auth.InvalidMetaToken", "Invalid Meta access token"));
         }
 
-        var profile = await FetchProfileAsync(client, request.AccessToken, cancellationToken);
+        var profile = await FetchProfileAsync(accessToken, cancellationToken);
         if (profile == null || string.IsNullOrWhiteSpace(profile.Email))
         {
             return Result.Failure<LoginResponse>(
@@ -130,7 +132,7 @@ public sealed class LoginWithMetaCommandHandler
             roles = await ResolveRolesAsync(user.Id, _roleRepository, _userRoleRepository, cancellationToken);
         }
 
-        var accessToken = _jwtTokenService.GenerateToken(user.Id, user.Email, roles);
+        var jwtAccessToken = _jwtTokenService.GenerateToken(user.Id, user.Email, roles);
         var refreshToken = await GenerateUniqueRefreshTokenAsync(
             _jwtTokenService,
             _refreshTokenRepository,
@@ -141,7 +143,7 @@ public sealed class LoginWithMetaCommandHandler
             Id = Guid.CreateVersion7(),
             UserId = user.Id,
             TokenHash = HashToken(refreshToken),
-            AccessTokenJti = ExtractAccessTokenJti(accessToken),
+            AccessTokenJti = ExtractAccessTokenJti(jwtAccessToken),
             ExpiresAt = DateTimeExtensions.PostgreSqlUtcNow.AddDays(RefreshTokenDays),
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
@@ -150,7 +152,7 @@ public sealed class LoginWithMetaCommandHandler
 
         var displayName = string.IsNullOrWhiteSpace(user.FullName) ? user.Username : user.FullName;
         var response = new LoginResponse(
-            accessToken,
+            jwtAccessToken,
             refreshToken,
             DateTimeExtensions.PostgreSqlUtcNow.AddMinutes(_accessTokenMinutes),
             user.Id,
@@ -159,6 +161,70 @@ public sealed class LoginWithMetaCommandHandler
             roles);
 
         return Result.Success(response);
+    }
+
+    private static async Task<string?> ExchangeCodeForAccessTokenAsync(
+        string code,
+        string appId,
+        string appSecret,
+        string redirectUri,
+        CancellationToken cancellationToken)
+    {
+        var tokenUrl =
+            $"https://graph.facebook.com/v20.0/oauth/access_token?client_id={Uri.EscapeDataString(appId)}&redirect_uri={Uri.EscapeDataString(redirectUri)}&client_secret={Uri.EscapeDataString(appSecret)}&code={Uri.EscapeDataString(code)}";
+
+        using var client = new HttpClient();
+        using var response = await client.GetAsync(tokenUrl, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        var parsed = JsonSerializer.Deserialize<FacebookAccessTokenResponse>(payload,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        return parsed?.AccessToken;
+    }
+
+    private static async Task<MetaDebugToken?> ValidateTokenAsync(
+        string accessToken,
+        string appId,
+        string appSecret,
+        CancellationToken cancellationToken)
+    {
+        var url =
+            $"https://graph.facebook.com/debug_token?input_token={Uri.EscapeDataString(accessToken)}&access_token={appId}|{appSecret}";
+        using var client = new HttpClient();
+        using var response = await client.GetAsync(url, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        var debug = JsonSerializer.Deserialize<MetaDebugTokenResponse>(payload,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        return debug?.Data;
+    }
+
+    private static async Task<MetaProfile?> FetchProfileAsync(
+        string accessToken,
+        CancellationToken cancellationToken)
+    {
+        var url =
+            $"https://graph.facebook.com/me?fields=id,name,email&access_token={Uri.EscapeDataString(accessToken)}";
+        using var client = new HttpClient();
+        using var response = await client.GetAsync(url, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize<MetaProfile>(payload,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
     }
 
     private static string NormalizeEmail(string email) =>
@@ -175,10 +241,10 @@ public sealed class LoginWithMetaCommandHandler
 
     private static string ExtractAccessTokenJti(string accessToken)
     {
-        var handler = new JwtSecurityTokenHandler();
+        var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
         var jwt = handler.ReadJwtToken(accessToken);
         var jti = jwt.Claims.FirstOrDefault(claim =>
-            string.Equals(claim.Type, JwtRegisteredClaimNames.Jti, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(claim.Type, System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(claim.Type, "jti", StringComparison.OrdinalIgnoreCase))?.Value;
 
         if (string.IsNullOrWhiteSpace(jti))
@@ -293,45 +359,7 @@ public sealed class LoginWithMetaCommandHandler
         return fallback.Length > 30 ? fallback[..30] : fallback;
     }
 
-    private static async Task<MetaDebugToken?> ValidateTokenAsync(
-        HttpClient client,
-        string accessToken,
-        string appId,
-        string appSecret,
-        CancellationToken cancellationToken)
-    {
-        var url =
-            $"https://graph.facebook.com/debug_token?input_token={Uri.EscapeDataString(accessToken)}&access_token={appId}|{appSecret}";
-        using var response = await client.GetAsync(url, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-        var debug = JsonSerializer.Deserialize<MetaDebugTokenResponse>(payload,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-        return debug?.Data;
-    }
-
-    private static async Task<MetaProfile?> FetchProfileAsync(
-        HttpClient client,
-        string accessToken,
-        CancellationToken cancellationToken)
-    {
-        var url =
-            $"https://graph.facebook.com/me?fields=id,name,email&access_token={Uri.EscapeDataString(accessToken)}";
-        using var response = await client.GetAsync(url, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
-
-        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-        return JsonSerializer.Deserialize<MetaProfile>(payload,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-    }
+    private sealed record FacebookAccessTokenResponse(string AccessToken, int ExpiresIn);
 
     private sealed record MetaDebugTokenResponse([property: JsonPropertyName("data")] MetaDebugToken? Data);
 

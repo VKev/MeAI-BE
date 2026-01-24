@@ -18,6 +18,30 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
+# NAT gateway resources (single AZ)
+resource "aws_eip" "nat" {
+  count = var.enable_nat_gateway ? 1 : 0
+
+  domain = "vpc"
+
+  tags = {
+    Name = "${var.project_name}-nat-eip"
+  }
+}
+
+resource "aws_nat_gateway" "this" {
+  count = var.enable_nat_gateway ? 1 : 0
+
+  allocation_id = aws_eip.nat[0].id
+  subnet_id     = aws_subnet.public[0].id
+
+  tags = {
+    Name = "${var.project_name}-nat-gw"
+  }
+
+  depends_on = [aws_internet_gateway.main]
+}
+
 # Get availability zones
 data "aws_availability_zones" "available" {
   state = "available"
@@ -102,6 +126,15 @@ resource "aws_route_table" "private" {
   }
 }
 
+# Route private subnets to NAT for internet egress
+resource "aws_route" "private_internet_egress" {
+  count = var.enable_nat_gateway ? 1 : 0
+
+  route_table_id         = aws_route_table.private.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.this[0].id
+}
+
 # Associate public subnet with public route table
 resource "aws_route_table_association" "public" {
   count          = var.public_subnet_count
@@ -152,7 +185,7 @@ resource "aws_security_group" "vpc_endpoints" {
   }
 }
 
-# Interface endpoints for EKS bootstrap traffic from private subnets (no NAT)
+# Interface endpoints for EKS bootstrap traffic from private subnets (reduces NAT traffic)
 resource "aws_vpc_endpoint" "sts" {
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${data.aws_region.current.name}.sts"

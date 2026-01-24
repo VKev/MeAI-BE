@@ -109,6 +109,7 @@ module "vpc" {
   public_subnet_cidrs  = var.public_subnet_cidrs
   public_subnet_count  = 2
   private_subnet_cidrs = var.private_subnet_cidrs
+  enable_nat_gateway   = var.enable_nat_gateway
 }
 
 # Shared ECS Resources (created once, used by all services)

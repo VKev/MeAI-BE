@@ -239,6 +239,22 @@ public sealed class AuthController : ApiController
         return Ok(result);
     }
 
+    [HttpGet("/api/auth/meta/callback")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(Result<LoginResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> MetaCallback([FromQuery] string? code, [FromQuery] string? state, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new LoginWithMetaCommand(code), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        SetAuthCookies(result.Value);
+        return Ok(result);
+    }
+
     private void SetAuthCookies(LoginResponse response)
     {
         var secure = Request.IsHttps;
