@@ -31,6 +31,12 @@ variable "private_subnet_cidrs" {
   default     = ["10.0.3.0/24", "10.0.4.0/24"]
 }
 
+variable "enable_nat_gateway" {
+  description = "Create a NAT gateway for private subnet internet egress"
+  type        = bool
+  default     = true
+}
+
 # EC2 Variables
 variable "instance_type" {
   description = "EC2 instance type (free tier eligible: t2.micro)"
