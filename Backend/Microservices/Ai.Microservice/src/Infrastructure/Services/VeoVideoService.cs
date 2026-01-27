@@ -52,7 +52,7 @@ public sealed class VeoVideoService : IVeoVideoService
             Seeds = request.Seeds,
             EnableTranslation = request.EnableTranslation,
             Watermark = request.Watermark,
-            CallBackUrl = string.IsNullOrWhiteSpace(_options.CallbackUrl) ? null : _options.CallbackUrl
+            CallBackUrl = BuildCallbackUrl(request.CorrelationId)
         };
 
         try
@@ -113,7 +113,7 @@ public sealed class VeoVideoService : IVeoVideoService
             Prompt = request.Prompt,
             Seeds = request.Seeds,
             Watermark = request.Watermark,
-            CallBackUrl = string.IsNullOrWhiteSpace(_options.CallbackUrl) ? null : _options.CallbackUrl
+            CallBackUrl = BuildCallbackUrl(request.CorrelationId)
         };
 
         try
@@ -278,6 +278,22 @@ public sealed class VeoVideoService : IVeoVideoService
             _logger.LogError(ex, "Unexpected error while calling Veo API");
             return new Veo1080PResult(false, 500, $"Unexpected error: {ex.Message}", null);
         }
+    }
+
+    private string? BuildCallbackUrl(Guid? correlationId)
+    {
+        if (string.IsNullOrWhiteSpace(_options.CallbackUrl))
+        {
+            return null;
+        }
+
+        if (correlationId.HasValue)
+        {
+            var baseUrl = _options.CallbackUrl.TrimEnd('/');
+            return $"{baseUrl}/{correlationId.Value}";
+        }
+
+        return _options.CallbackUrl;
     }
 
     private sealed class VeoApiRequest
