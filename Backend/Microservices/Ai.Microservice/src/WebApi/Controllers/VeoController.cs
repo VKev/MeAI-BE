@@ -107,15 +107,16 @@ public sealed class VeoController : ApiController
         return Ok(result);
     }
 
-    [HttpPost("callback")]
+    [HttpPost("callback/{correlationId:guid}")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> HandleCallback(
+        Guid correlationId,
         [FromBody] VeoCallbackPayload payload,
         CancellationToken cancellationToken)
     {
-        var command = new HandleVideoCallbackCommand(payload);
+        var command = new HandleVideoCallbackCommand(correlationId, payload);
         var result = await _mediator.Send(command, cancellationToken);
 
         return Ok(result);

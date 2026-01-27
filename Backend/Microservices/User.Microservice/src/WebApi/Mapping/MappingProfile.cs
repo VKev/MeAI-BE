@@ -23,6 +23,8 @@ public sealed class MappingProfile : Profile
         CreateMap<ResetPasswordRequest, ResetPasswordCommand>();
         CreateMap<SendVerificationCodeRequest, SendEmailVerificationCodeCommand>();
         CreateMap<VerifyEmailRequest, VerifyEmailCommand>();
+        CreateMap<EditProfileRequest, EditProfileCommand>()
+            .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<CreateSubscriptionRequest, CreateSubscriptionCommand>();
         CreateMap<PurchaseSubscriptionRequest, PurchaseSubscriptionCommand>()
             .ForCtorParam("SubscriptionId", opt => opt.MapFrom(_ => Guid.Empty))

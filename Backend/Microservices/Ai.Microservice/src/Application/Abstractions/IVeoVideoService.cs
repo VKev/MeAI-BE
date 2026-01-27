@@ -16,7 +16,8 @@ public sealed record VeoGenerateRequest(
     string AspectRatio = "16:9",
     int? Seeds = null,
     bool EnableTranslation = true,
-    string? Watermark = null);
+    string? Watermark = null,
+    Guid? CorrelationId = null);
 
 public sealed record VeoGenerateResult(
     bool Success,
@@ -28,7 +29,8 @@ public sealed record VeoExtendRequest(
     string TaskId,
     string Prompt,
     int? Seeds = null,
-    string? Watermark = null);
+    string? Watermark = null,
+    Guid? CorrelationId = null);
 
 public sealed record VeoExtendResult(
     bool Success,

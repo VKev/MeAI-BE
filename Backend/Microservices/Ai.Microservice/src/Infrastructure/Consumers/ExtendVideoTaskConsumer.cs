@@ -52,7 +52,8 @@ public class ExtendVideoTaskConsumer : IConsumer<VideoExtensionStarted>
             TaskId: message.OriginalVeoTaskId,
             Prompt: message.Prompt,
             Seeds: message.Seeds,
-            Watermark: message.Watermark);
+            Watermark: message.Watermark,
+            CorrelationId: message.CorrelationId);
 
         var result = await _veoVideoService.ExtendVideoAsync(request, context.CancellationToken);
 

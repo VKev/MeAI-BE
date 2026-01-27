@@ -22,11 +22,13 @@ public sealed class LoginWithMetaCommandHandler : IRequestHandler<LoginWithMetaC
 {
     private const int RefreshTokenDays = 7;
     private const int AccessTokenMinutesFallback = 60;
+    private const string MetaSocialMediaType = "meta";
 
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
     private readonly IRepository<RefreshToken> _refreshTokenRepository;
+    private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IConfiguration _configuration;
@@ -42,6 +44,7 @@ public sealed class LoginWithMetaCommandHandler : IRequestHandler<LoginWithMetaC
         _roleRepository = unitOfWork.Repository<Role>();
         _userRoleRepository = unitOfWork.Repository<UserRole>();
         _refreshTokenRepository = unitOfWork.Repository<RefreshToken>();
+        _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
         _configuration = configuration;
@@ -131,6 +134,8 @@ public sealed class LoginWithMetaCommandHandler : IRequestHandler<LoginWithMetaC
 
             roles = await ResolveRolesAsync(user.Id, _roleRepository, _userRoleRepository, cancellationToken);
         }
+
+        await EnsureMetaSocialMediaAsync(user, profile, cancellationToken);
 
         var jwtAccessToken = _jwtTokenService.GenerateToken(user.Id, user.Email, roles);
         var refreshToken = await GenerateUniqueRefreshTokenAsync(
@@ -357,6 +362,58 @@ public sealed class LoginWithMetaCommandHandler : IRequestHandler<LoginWithMetaC
 
         var fallback = $"{baseName}_{Guid.CreateVersion7():N}";
         return fallback.Length > 30 ? fallback[..30] : fallback;
+    }
+
+    private async Task EnsureMetaSocialMediaAsync(
+        User user,
+        MetaProfile profile,
+        CancellationToken cancellationToken)
+    {
+        var existing = await _socialMediaRepository.GetAll()
+            .FirstOrDefaultAsync(item =>
+                    item.UserId == user.Id &&
+                    item.Type == MetaSocialMediaType &&
+                    !item.IsDeleted,
+                cancellationToken);
+
+        var metadata = BuildMetaMetadata(profile);
+
+        if (existing != null)
+        {
+            existing.Metadata = metadata;
+            existing.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            _socialMediaRepository.Update(existing);
+            return;
+        }
+
+        var socialMedia = new SocialMedia
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = user.Id,
+            Type = MetaSocialMediaType,
+            Metadata = metadata,
+            CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
+        };
+
+        await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
+    }
+
+    private static JsonDocument BuildMetaMetadata(MetaProfile profile)
+    {
+        var payload = new Dictionary<string, string?>
+        {
+            ["provider"] = MetaSocialMediaType,
+            ["id"] = profile.Id,
+            ["name"] = profile.Name,
+            ["email"] = profile.Email
+        };
+
+        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        });
+
+        return JsonDocument.Parse(json);
     }
 
     private sealed record FacebookAccessTokenResponse(string AccessToken, int ExpiresIn);

@@ -73,6 +73,12 @@ services:
       Cors__AllowedOrigins__1: https://your-frontend.example.com
       Cors__AllowedOrigins__2: http://localhost:2406
       Google__ClientId: your-google-client-id
+      TikTok__ClientKey: your-tiktok-client-key
+      TikTok__ClientSecret: your-tiktok-client-secret
+      TikTok__RedirectUri: http://api-gateway:8080/api/User/tiktok/callback
+      Threads__AppId: your-meta-app-id
+      Threads__AppSecret: your-meta-app-secret
+      Threads__RedirectUri: http://api-gateway:2406/api/User/threads/callback
       AutoApply__Migrations: "true"
     depends_on:
       postgres:
@@ -137,7 +143,7 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "redis-cli","-a", "changeme", "ping"]
+      test: ["CMD", "redis-cli", "-a", "changeme", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
