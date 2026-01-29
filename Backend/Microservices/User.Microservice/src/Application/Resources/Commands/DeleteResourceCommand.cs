@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Storage;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -13,10 +14,12 @@ public sealed record DeleteResourceCommand(Guid ResourceId, Guid UserId) : IRequ
 public sealed class DeleteResourceCommandHandler : IRequestHandler<DeleteResourceCommand, Result<bool>>
 {
     private readonly IRepository<Resource> _repository;
+    private readonly IObjectStorageService _objectStorageService;
 
-    public DeleteResourceCommandHandler(IUnitOfWork unitOfWork)
+    public DeleteResourceCommandHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
     {
         _repository = unitOfWork.Repository<Resource>();
+        _objectStorageService = objectStorageService;
     }
 
     public async Task<Result<bool>> Handle(DeleteResourceCommand request, CancellationToken cancellationToken)
@@ -31,6 +34,12 @@ public sealed class DeleteResourceCommandHandler : IRequestHandler<DeleteResourc
         if (resource == null)
         {
             return Result.Failure<bool>(new Error("Resource.NotFound", "Resource not found"));
+        }
+
+        var deleteResult = await _objectStorageService.DeleteAsync(resource.Link, cancellationToken);
+        if (deleteResult.IsFailure)
+        {
+            return Result.Failure<bool>(deleteResult.Error);
         }
 
         resource.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;

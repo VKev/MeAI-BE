@@ -3,7 +3,7 @@ using Infrastructure.Configs;
 using Microsoft.Extensions.Options;
 using Stripe;
 
-namespace Infrastructure.Payments;
+namespace Infrastructure.Logic.Payments;
 
 public sealed class StripePaymentService : IStripePaymentService
 {
@@ -161,3 +161,4 @@ public sealed class StripePaymentService : IStripePaymentService
             amountMinor);
     }
 }
+

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedLibrary.Authentication;
 
-namespace Infrastructure.Seeding;
+namespace Infrastructure.Logic.Seeding;
 
 public sealed class AdminUserSeeder
 {
@@ -120,3 +120,4 @@ public sealed class AdminUserSeeder
         _logger.LogInformation("Admin user {Username} already exists; seeding skipped.", existingUser.Username);
     }
 }
+

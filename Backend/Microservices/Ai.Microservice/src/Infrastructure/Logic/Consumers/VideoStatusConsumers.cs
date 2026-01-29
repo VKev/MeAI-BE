@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Contracts.VideoGenerating;
 
-namespace Infrastructure.Consumers;
+namespace Infrastructure.Logic.Consumers;
 
 public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
 {
@@ -95,3 +95,4 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
         }
     }
 }
+

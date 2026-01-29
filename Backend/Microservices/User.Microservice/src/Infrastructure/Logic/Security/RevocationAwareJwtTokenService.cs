@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using SharedLibrary.Authentication;
 using SharedLibrary.Common;
 
-namespace Infrastructure.Security;
+namespace Infrastructure.Logic.Security;
 
 public sealed class RevocationAwareJwtTokenService : IJwtTokenService
 {
@@ -57,3 +57,4 @@ public sealed class RevocationAwareJwtTokenService : IJwtTokenService
 
     public bool IsTokenExpired(string token) => _inner.IsTokenExpired(token);
 }
+

@@ -3,7 +3,7 @@ using Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Seeding;
+namespace Infrastructure.Logic.Seeding;
 
 public sealed class SubscriptionSeeder
 {
@@ -71,3 +71,4 @@ public sealed class SubscriptionSeeder
         _logger.LogInformation("Seeded {Count} subscription(s).", toAdd.Count);
     }
 }
+

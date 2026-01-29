@@ -8,7 +8,7 @@ using Microsoft.Extensions.Configuration;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 
-namespace Infrastructure.Threads;
+namespace Infrastructure.Logic.Threads;
 
 public sealed class ThreadsOAuthService : IThreadsOAuthService
 {
@@ -235,3 +235,4 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         public string? TokenType { get; set; }
     }
 }
+

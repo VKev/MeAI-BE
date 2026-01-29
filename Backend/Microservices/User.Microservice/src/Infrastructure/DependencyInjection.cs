@@ -1,15 +1,17 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Payments;
 using Application.Abstractions.Security;
+using Application.Abstractions.Storage;
 using Application.Abstractions.TikTok;
 using Application.Abstractions.Threads;
 using Domain.Repositories;
-using Infrastructure.Payments;
-using Infrastructure.Security;
+using Infrastructure.Logic.Payments;
+using Infrastructure.Logic.Security;
+using Infrastructure.Logic.Storage;
 using Infrastructure.Repositories;
-using Infrastructure.Seeding;
-using Infrastructure.TikTok;
-using Infrastructure.Threads;
+using Infrastructure.Logic.Seeding;
+using Infrastructure.Logic.TikTok;
+using Infrastructure.Logic.Threads;
 using Microsoft.Extensions.DependencyInjection;
 using SharedLibrary.Authentication;
 using SharedLibrary.Configs;
@@ -33,6 +35,7 @@ namespace Infrastructure
             services.AddScoped<ITikTokOAuthService, TikTokOAuthService>();
             services.AddHttpClient("Threads");
             services.AddScoped<IThreadsOAuthService, ThreadsOAuthService>();
+            services.AddSingleton<IObjectStorageService, S3ObjectStorageService>();
             services.AddSingleton<IConnectionMultiplexer>(sp =>
             {
                 var env = sp.GetRequiredService<EnvironmentConfig>();
