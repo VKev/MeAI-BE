@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Storage;
 using Application.Resources.Models;
 using Domain.Entities;
 using MediatR;
@@ -14,10 +15,12 @@ public sealed class GetResourceByIdQueryHandler
     : IRequestHandler<GetResourceByIdQuery, Result<ResourceResponse>>
 {
     private readonly IRepository<Resource> _repository;
+    private readonly IObjectStorageService _objectStorageService;
 
-    public GetResourceByIdQueryHandler(IUnitOfWork unitOfWork)
+    public GetResourceByIdQueryHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
     {
         _repository = unitOfWork.Repository<Resource>();
+        _objectStorageService = objectStorageService;
     }
 
     public async Task<Result<ResourceResponse>> Handle(GetResourceByIdQuery request,
@@ -36,6 +39,12 @@ public sealed class GetResourceByIdQueryHandler
             return Result.Failure<ResourceResponse>(new Error("Resource.NotFound", "Resource not found"));
         }
 
-        return Result.Success(ResourceMapping.ToResponse(resource));
+        var presignedResult = _objectStorageService.GetPresignedUrl(resource.Link);
+        if (presignedResult.IsFailure)
+        {
+            return Result.Failure<ResourceResponse>(presignedResult.Error);
+        }
+
+        return Result.Success(ResourceMapping.ToResponse(resource, presignedResult.Value));
     }
 }

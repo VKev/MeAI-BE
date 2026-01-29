@@ -1,6 +1,6 @@
 using MassTransit;
 
-namespace Infrastructure.Sagas;
+namespace Infrastructure.Logic.Sagas;
 
 public class VideoTaskState : SagaStateMachineInstance, ISagaVersion
 {
@@ -36,3 +36,4 @@ public class VideoTaskState : SagaStateMachineInstance, ISagaVersion
 
     public DateTime? CompletedAt { get; set; }
 }
+

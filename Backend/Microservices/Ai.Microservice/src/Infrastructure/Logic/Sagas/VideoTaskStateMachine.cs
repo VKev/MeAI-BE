@@ -1,7 +1,7 @@
 using MassTransit;
 using SharedLibrary.Contracts.VideoGenerating;
 
-namespace Infrastructure.Sagas;
+namespace Infrastructure.Logic.Sagas;
 
 public class VideoTaskStateMachine : MassTransitStateMachine<VideoTaskState>
 {
@@ -118,3 +118,4 @@ public class VideoGenerationTimeout
 {
     public Guid CorrelationId { get; set; }
 }
+

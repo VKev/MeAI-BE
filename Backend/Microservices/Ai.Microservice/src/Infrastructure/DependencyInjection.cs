@@ -1,9 +1,9 @@
 using Application.Abstractions;
 using Domain.Repositories;
-using Infrastructure.Consumers;
+using Infrastructure.Logic.Consumers;
 using Infrastructure.Repositories;
-using Infrastructure.Sagas;
-using Infrastructure.Services;
+using Infrastructure.Logic.Sagas;
+using Infrastructure.Logic.Services;
 using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using SharedLibrary.Authentication;

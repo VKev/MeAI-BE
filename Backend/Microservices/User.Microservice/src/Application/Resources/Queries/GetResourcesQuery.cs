@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Storage;
 using Application.Resources.Models;
 using Domain.Entities;
 using MediatR;
@@ -20,10 +21,12 @@ public sealed class GetResourcesQueryHandler
     private const int DefaultPageSize = 50;
     private const int MaxPageSize = 100;
     private readonly IRepository<Resource> _repository;
+    private readonly IObjectStorageService _objectStorageService;
 
-    public GetResourcesQueryHandler(IUnitOfWork unitOfWork)
+    public GetResourcesQueryHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
     {
         _repository = unitOfWork.Repository<Resource>();
+        _objectStorageService = objectStorageService;
     }
 
     public async Task<Result<List<ResourceResponse>>> Handle(GetResourcesQuery request,
@@ -50,7 +53,18 @@ public sealed class GetResourcesQueryHandler
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        var response = resources.Select(ResourceMapping.ToResponse).ToList();
+        var response = new List<ResourceResponse>(resources.Count);
+        foreach (var resource in resources)
+        {
+            var presignedResult = _objectStorageService.GetPresignedUrl(resource.Link);
+            if (presignedResult.IsFailure)
+            {
+                return Result.Failure<List<ResourceResponse>>(presignedResult.Error);
+            }
+
+            response.Add(ResourceMapping.ToResponse(resource, presignedResult.Value));
+        }
+
         return Result.Success(response);
     }
 }

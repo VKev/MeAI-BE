@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Application.Configs.Commands;
-using Application.Resources.Commands;
 using Application.SocialMedias.Commands;
 using Application.Subscriptions.Commands;
 using Application.Transactions.Commands;
@@ -44,11 +43,6 @@ public sealed class MappingProfile : Profile
             .ForCtorParam("Id", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<PatchTransactionRequest, PatchTransactionCommand>()
             .ForCtorParam("Id", opt => opt.MapFrom(_ => Guid.Empty));
-        CreateMap<CreateResourceRequest, CreateResourceCommand>()
-            .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty));
-        CreateMap<UpdateResourceRequest, UpdateResourceCommand>()
-            .ForCtorParam("ResourceId", opt => opt.MapFrom(_ => Guid.Empty))
-            .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<CreateWorkspaceRequest, CreateWorkspaceCommand>()
             .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<UpdateWorkspaceRequest, UpdateWorkspaceCommand>()

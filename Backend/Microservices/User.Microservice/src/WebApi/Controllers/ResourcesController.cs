@@ -3,7 +3,6 @@ using Application.Resources.Commands;
 using Application.Resources.Models;
 using Application.Resources.Queries;
 using Application.Users.Models;
-using AutoMapper;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -18,12 +17,9 @@ namespace WebApi.Controllers;
 [Authorize]
 public sealed class ResourcesController : ApiController
 {
-    private readonly IMapper _mapper;
-
-    public ResourcesController(IMediator mediator, IMapper mapper)
+    public ResourcesController(IMediator mediator)
         : base(mediator)
     {
-        _mapper = mapper;
     }
 
     [HttpGet]
@@ -74,11 +70,14 @@ public sealed class ResourcesController : ApiController
     }
 
     [HttpPost]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(Result<ResourceResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Create(
-        [FromBody] CreateResourceRequest request,
+        [FromForm] IFormFile file,
+        [FromForm] string? status,
+        [FromForm] string? resourceType,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -86,7 +85,28 @@ public sealed class ResourcesController : ApiController
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var command = _mapper.Map<CreateResourceCommand>(request) with { UserId = userId };
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid file",
+                Detail = "File is required"
+            });
+        }
+
+        var contentType = string.IsNullOrWhiteSpace(file.ContentType)
+            ? "application/octet-stream"
+            : file.ContentType;
+
+        var command = new UploadResourceFileCommand(
+            userId,
+            file.OpenReadStream(),
+            file.FileName,
+            contentType,
+            file.Length,
+            status,
+            resourceType);
+
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
         {
@@ -97,12 +117,15 @@ public sealed class ResourcesController : ApiController
     }
 
     [HttpPut("{id:guid}")]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(Result<ResourceResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Update(
         Guid id,
-        [FromBody] UpdateResourceRequest request,
+        [FromForm] IFormFile file,
+        [FromForm] string? status,
+        [FromForm] string? resourceType,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -110,11 +133,29 @@ public sealed class ResourcesController : ApiController
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var command = _mapper.Map<UpdateResourceCommand>(request) with
+        if (file == null || file.Length == 0)
         {
-            ResourceId = id,
-            UserId = userId
-        };
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Invalid file",
+                Detail = "File is required"
+            });
+        }
+
+        var contentType = string.IsNullOrWhiteSpace(file.ContentType)
+            ? "application/octet-stream"
+            : file.ContentType;
+
+        var command = new UpdateResourceFileCommand(
+            id,
+            userId,
+            file.OpenReadStream(),
+            file.FileName,
+            contentType,
+            file.Length,
+            status,
+            resourceType);
+
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
         {
@@ -150,15 +191,3 @@ public sealed class ResourcesController : ApiController
         return Guid.TryParse(claimValue, out userId);
     }
 }
-
-public sealed record CreateResourceRequest(
-    string Link,
-    string? Status,
-    string? ResourceType,
-    string? ContentType);
-
-public sealed record UpdateResourceRequest(
-    string Link,
-    string? Status,
-    string? ResourceType,
-    string? ContentType);

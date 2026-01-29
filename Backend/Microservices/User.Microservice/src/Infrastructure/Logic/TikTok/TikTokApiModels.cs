@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Infrastructure.TikTok;
+namespace Infrastructure.Logic.TikTok;
 
 // API Token Response
 internal sealed class TikTokApiTokenResponse
@@ -127,3 +127,4 @@ internal sealed class TikTokApiError
     [JsonPropertyName("log_id")]
     public string? LogId { get; set; }
 }
+

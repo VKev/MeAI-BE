@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using SharedLibrary.Contracts.VideoGenerating;
 using SharedLibrary.Extensions;
 
-namespace Infrastructure.Consumers;
+namespace Infrastructure.Logic.Consumers;
 
 public class SubmitVideoTaskConsumer : IConsumer<VideoGenerationStarted>
 {
@@ -104,3 +104,4 @@ public class SubmitVideoTaskConsumer : IConsumer<VideoGenerationStarted>
         }
     }
 }
+

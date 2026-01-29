@@ -8,7 +8,7 @@ using Microsoft.Extensions.Configuration;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 
-namespace Infrastructure.TikTok;
+namespace Infrastructure.Logic.TikTok;
 
 public sealed class TikTokOAuthService : ITikTokOAuthService
 {
@@ -346,4 +346,5 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
             .Replace("=", "");
     }
 }
+
 

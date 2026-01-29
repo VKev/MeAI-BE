@@ -1,6 +1,6 @@
 using Infrastructure.Context;
 using Infrastructure.EmailTemplates;
-using Infrastructure.Seeding;
+using Infrastructure.Logic.Seeding;
 using Microsoft.EntityFrameworkCore;
 
 namespace WebApi.Setups;

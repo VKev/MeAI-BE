@@ -416,7 +416,9 @@ public sealed class LoginWithMetaCommandHandler : IRequestHandler<LoginWithMetaC
         return JsonDocument.Parse(json);
     }
 
-    private sealed record FacebookAccessTokenResponse(string AccessToken, int ExpiresIn);
+    private sealed record FacebookAccessTokenResponse(
+        [property: JsonPropertyName("access_token")] string? AccessToken,
+        [property: JsonPropertyName("expires_in")] int ExpiresIn);
 
     private sealed record MetaDebugTokenResponse([property: JsonPropertyName("data")] MetaDebugToken? Data);
 

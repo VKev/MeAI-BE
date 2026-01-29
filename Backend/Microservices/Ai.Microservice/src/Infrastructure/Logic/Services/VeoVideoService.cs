@@ -6,7 +6,7 @@ using Infrastructure.Configs;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Services;
+namespace Infrastructure.Logic.Services;
 
 public sealed class VeoVideoService : IVeoVideoService
 {
@@ -420,3 +420,4 @@ public sealed class VeoVideoService : IVeoVideoService
         public string? ResultUrl { get; set; }
     }
 }
+
