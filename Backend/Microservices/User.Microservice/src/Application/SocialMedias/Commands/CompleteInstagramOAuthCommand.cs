@@ -23,8 +23,8 @@ public sealed class CompleteInstagramOAuthCommandHandler
     : IRequestHandler<CompleteInstagramOAuthCommand, Result<SocialMediaResponse>>
 {
     private const string InstagramSocialMediaType = "instagram";
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v20.0";
-    private const string OAuthTokenEndpoint = "https://graph.facebook.com/v20.0/oauth/access_token";
+    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
+    private const string OAuthTokenEndpoint = "https://graph.facebook.com/v21.0/oauth/access_token";
 
     private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IRepository<User> _userRepository;
