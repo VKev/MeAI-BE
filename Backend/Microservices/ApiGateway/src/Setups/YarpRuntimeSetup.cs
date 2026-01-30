@@ -167,7 +167,7 @@ internal static class YarpRuntimeSetup
             addedServices.Add(serviceSegment);
         }
 
-        var configuredBaseUrl = configuration["BASE_URL"] ?? "http://localhost:2406";
+        var configuredBaseUrl = configuration["BASE_URL"] ?? string.Empty;
 
         var yarpConfig = new JsonObject
         {

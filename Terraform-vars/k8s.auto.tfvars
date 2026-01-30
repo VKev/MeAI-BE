@@ -585,17 +585,17 @@ spec:
             - name: ASPNETCORE_URLS
               value: http://+:5001
             - name: Database__Host
-              value: "TERRAFORM_RDS_HOST_AI_DEFAULTDB"
+              value: postgres
             - name: Database__Port
-              value: "TERRAFORM_RDS_PORT_AI_DEFAULTDB"
+              value: "5432"
             - name: Database__Name
-              value: "TERRAFORM_RDS_DB_AI_DEFAULTDB"
+              value: aidb
             - name: Database__Username
-              value: "TERRAFORM_RDS_USERNAME_AI_DEFAULTDB"
+              value: postgres
             - name: Database__Password
-              value: "TERRAFORM_RDS_PASSWORD_AI_DEFAULTDB"
+              value: "<REDACTED>"
             - name: Database__Provider
-              value: "TERRAFORM_RDS_PROVIDER_AI_DEFAULTDB"
+              value: postgres
             - name: RabbitMq__Host
               value: rabbit-mq
             - name: RabbitMq__Port
@@ -618,8 +618,18 @@ spec:
               value: MicroservicesApp
             - name: Jwt__ExpirationMinutes
               value: "60"
+            - name: Cors__AllowedOrigins__0
+              value: http://localhost:2406
+            - name: UserService__GrpcUrl
+              value: http://user-microservice:5004
             - name: AutoApply__Migrations
               value: "true"
+            - name: Veo__ApiKey
+              value: "<REDACTED>"
+            - name: Veo__CallbackUrl
+              value: https://vkev.me/api/Ai/veo/callback
+            - name: Gemini__ApiKey
+              value: "<REDACTED>"
           resources:
             requests:
               cpu: 100m
@@ -674,21 +684,21 @@ spec:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
             - name: ASPNETCORE_URLS
-              value: http://+:5002
+              value: http://+:5002;http://+:5004
             - name: Database__Host
-              value: "TERRAFORM_RDS_HOST_USER_DEFAULTDB"
+              value: postgres
             - name: Database__Port
-              value: "TERRAFORM_RDS_PORT_USER_DEFAULTDB"
+              value: "5432"
             - name: Database__Name
-              value: "TERRAFORM_RDS_DB_USER_DEFAULTDB"
+              value: userdb
             - name: Database__Username
-              value: "TERRAFORM_RDS_USERNAME_USER_DEFAULTDB"
+              value: postgres
             - name: Database__Password
-              value: "TERRAFORM_RDS_PASSWORD_USER_DEFAULTDB"
+              value: "<REDACTED>"
             - name: Database__Provider
-              value: "TERRAFORM_RDS_PROVIDER_USER_DEFAULTDB"
+              value: postgres
             - name: Database__SslMode
-              value: "TERRAFORM_RDS_SSLMODE_USER_DEFAULTDB"
+              value: Disable
             - name: RabbitMq__Host
               value: rabbit-mq
             - name: RabbitMq__Port
@@ -703,6 +713,10 @@ spec:
               value: "<REDACTED>"
             - name: Redis__Port
               value: "6379"
+            - name: AiService__GrpcUrl
+              value: http://ai-microservice:5003
+            - name: UserService__GrpcUrl
+              value: http://user-microservice:5004
             - name: Jwt__SecretKey
               value: "<REDACTED>"
             - name: Jwt__Issuer
@@ -712,13 +726,77 @@ spec:
             - name: Jwt__ExpirationMinutes
               value: "60"
             - name: Cors__AllowedOrigins__0
-              value: http://localhost:5173
-            - name: Cors__AllowedOrigins__1
-              value: https://your-frontend.example.com
-            - name: Cors__AllowedOrigins__2
               value: http://localhost:2406
+            - name: Cors__AllowedOrigins__1
+              value: http://localhost:3000
+            - name: Google__ClientId
+              value: "<REDACTED>"
+            - name: Facebook__AppId
+              value: "<REDACTED>"
+            - name: Facebook__AppSecret
+              value: "<REDACTED>"
+            - name: Facebook__RedirectUri
+              value: https://vkev.me/api/User/facebook/callback
+            - name: Facebook__Scopes
+              value: email,public_profile,pages_show_list,pages_read_engagement,pages_manage_posts
+            - name: Instagram__RedirectUri
+              value: https://vkev.me/api/User/instagram/callback
+            - name: Instagram__Scopes
+              value: instagram_basic,pages_show_list,pages_read_engagement,instagram_content_publish,business_management
+            - name: Email__Host
+              value: smtp.gmail.com
+            - name: Email__Port
+              value: "587"
+            - name: Email__Username
+              value: "<REDACTED>"
+            - name: Email__Password
+              value: "<REDACTED>"
+            - name: Email__UseStartTls
+              value: "true"
+            - name: Email__UseSsl
+              value: "false"
+            - name: Email__DisableCertificateRevocationCheck
+              value: "true"
+            - name: Email__FromEmail
+              value: "<REDACTED>"
+            - name: Email__FromName
+              value: MeAI
+            - name: Admin__Username
+              value: admin
+            - name: Admin__Password
+              value: "<REDACTED>"
+            - name: Admin__Email
+              value: "<REDACTED>"
+            - name: Admin__FullName
+              value: MeAI Admin
             - name: AutoApply__Migrations
               value: "true"
+            - name: TikTok__ClientKey
+              value: "<REDACTED>"
+            - name: TikTok__ClientSecret
+              value: "<REDACTED>"
+            - name: TikTok__RedirectUri
+              value: https://vkev.me/api/User/tiktok/callback
+            - name: Threads__AppId
+              value: "<REDACTED>"
+            - name: Threads__AppSecret
+              value: "<REDACTED>"
+            - name: Threads__RedirectUri
+              value: https://vkev.me/api/User/threads/callback
+            - name: Stripe__PublishableKey
+              value: "<REDACTED>"
+            - name: Stripe__SecretKey
+              value: "<REDACTED>"
+            - name: S3__Bucket
+              value: "<REDACTED>"
+            - name: S3__Region
+              value: us-east-1
+            - name: S3__ServiceUrl
+              value: https://s3.amazonaws.com
+            - name: S3__AccessKey
+              value: "<REDACTED>"
+            - name: S3__SecretKey
+              value: "<REDACTED>"
           resources:
             requests:
               cpu: 100m
@@ -770,12 +848,18 @@ spec:
           ports:
             - containerPort: 8080
           env:
-            - name: ENABLE_SWAGGER_UI
+            - name: ENABLE_DOCS_UI
               value: "true"
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
             - name: ASPNETCORE_URLS
               value: http://+:8080
+            - name: Cors__AllowedOrigins__0
+              value: https://vkev.me
+            - name: Cors__AllowedOrigins__1
+              value: http://localhost:3000
+            - name: Cors__AllowedOrigins__2
+              value: http://localhost:2406
             - name: Services__User__Host
               value: user-microservice
             - name: Services__User__Port

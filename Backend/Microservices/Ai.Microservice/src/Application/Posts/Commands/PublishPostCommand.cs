@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Application.Abstractions.Facebook;
+using Application.Abstractions.Instagram;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
 using Application.Posts.Models;
@@ -20,23 +21,27 @@ public sealed class PublishPostCommandHandler
     : IRequestHandler<PublishPostCommand, Result<PublishPostResponse>>
 {
     private const string FacebookType = "facebook";
+    private const string InstagramType = "instagram";
     private const string PostsType = "posts";
 
     private readonly IPostRepository _postRepository;
     private readonly IUserResourceService _userResourceService;
     private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly IFacebookPublishService _facebookPublishService;
+    private readonly IInstagramPublishService _instagramPublishService;
 
     public PublishPostCommandHandler(
         IPostRepository postRepository,
         IUserResourceService userResourceService,
         IUserSocialMediaService userSocialMediaService,
-        IFacebookPublishService facebookPublishService)
+        IFacebookPublishService facebookPublishService,
+        IInstagramPublishService instagramPublishService)
     {
         _postRepository = postRepository;
         _userResourceService = userResourceService;
         _userSocialMediaService = userSocialMediaService;
         _facebookPublishService = facebookPublishService;
+        _instagramPublishService = instagramPublishService;
     }
 
     public async Task<Result<PublishPostResponse>> Handle(
@@ -103,10 +108,11 @@ public sealed class PublishPostCommandHandler
                 new Error("SocialMedia.NotFound", "Social media account not found."));
         }
 
-        if (!string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(socialMedia.Type, InstagramType, StringComparison.OrdinalIgnoreCase))
         {
             return Result.Failure<PublishPostResponse>(
-                new Error("Post.InvalidSocialMedia", "Only Facebook social media accounts are supported for posts."));
+                new Error("Post.InvalidSocialMedia", "Only Facebook or Instagram social media accounts are supported for posts."));
         }
 
         var caption = post.Content?.Content?.Trim() ?? string.Empty;
@@ -115,39 +121,93 @@ public sealed class PublishPostCommandHandler
             .ToList();
 
         using var metadata = ParseMetadata(socialMedia.MetadataJson);
-        var userAccessToken = GetMetadataValue(metadata, "user_access_token")
-                              ?? GetMetadataValue(metadata, "access_token");
-
-        if (string.IsNullOrWhiteSpace(userAccessToken))
-        {
-            return Result.Failure<PublishPostResponse>(
-                new Error("Facebook.InvalidToken", "Access token not found in social media metadata."));
-        }
-
         var pageId = GetMetadataValue(metadata, "page_id");
         var pageAccessToken = GetMetadataValue(metadata, "page_access_token");
 
-        var publishResult = await _facebookPublishService.PublishAsync(
-            new FacebookPublishRequest(
-                UserAccessToken: userAccessToken,
-                PageId: pageId,
-                PageAccessToken: pageAccessToken,
-                Message: caption,
-                Media: mediaItems),
-            cancellationToken);
-
-        if (publishResult.IsFailure)
+        List<PublishPostDestinationResult> publishResults;
+        if (string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase))
         {
-            return Result.Failure<PublishPostResponse>(publishResult.Error);
-        }
+            var userAccessToken = GetMetadataValue(metadata, "user_access_token")
+                                  ?? GetMetadataValue(metadata, "access_token");
 
-        var publishResults = publishResult.Value
-            .Select(result => new PublishPostDestinationResult(
-                socialMedia.SocialMediaId,
-                socialMedia.Type,
-                result.PageId,
-                result.PostId))
-            .ToList();
+            if (string.IsNullOrWhiteSpace(userAccessToken))
+            {
+                return Result.Failure<PublishPostResponse>(
+                    new Error("Facebook.InvalidToken", "Access token not found in social media metadata."));
+            }
+
+            var publishResult = await _facebookPublishService.PublishAsync(
+                new FacebookPublishRequest(
+                    UserAccessToken: userAccessToken,
+                    PageId: pageId,
+                    PageAccessToken: pageAccessToken,
+                    Message: caption,
+                    Media: mediaItems),
+                cancellationToken);
+
+            if (publishResult.IsFailure)
+            {
+                return Result.Failure<PublishPostResponse>(publishResult.Error);
+            }
+
+            publishResults = publishResult.Value
+                .Select(result => new PublishPostDestinationResult(
+                    socialMedia.SocialMediaId,
+                    socialMedia.Type,
+                    result.PageId,
+                    result.PostId))
+                .ToList();
+        }
+        else
+        {
+            if (mediaItems.Count != 1)
+            {
+                return Result.Failure<PublishPostResponse>(
+                    new Error("Instagram.UnsupportedMedia", "Instagram publishing currently supports only one media item."));
+            }
+
+            var instagramUserId = GetMetadataValue(metadata, "instagram_business_account_id")
+                                  ?? GetMetadataValue(metadata, "user_id");
+
+            if (string.IsNullOrWhiteSpace(instagramUserId))
+            {
+                return Result.Failure<PublishPostResponse>(
+                    new Error("Instagram.InvalidAccount", "Instagram business account id is missing in social media metadata."));
+            }
+
+            var instagramAccessToken = GetMetadataValue(metadata, "access_token")
+                                       ?? GetMetadataValue(metadata, "user_access_token");
+
+            if (string.IsNullOrWhiteSpace(instagramAccessToken))
+            {
+                return Result.Failure<PublishPostResponse>(
+                    new Error("Instagram.InvalidToken", "Access token not found in social media metadata."));
+            }
+
+            var publishResult = await _instagramPublishService.PublishAsync(
+                new InstagramPublishRequest(
+                    AccessToken: instagramAccessToken,
+                    InstagramUserId: instagramUserId,
+                    Caption: caption,
+                    Media: new InstagramPublishMedia(
+                        mediaItems[0].Url,
+                        mediaItems[0].ContentType)),
+                cancellationToken);
+
+            if (publishResult.IsFailure)
+            {
+                return Result.Failure<PublishPostResponse>(publishResult.Error);
+            }
+
+            publishResults = new List<PublishPostDestinationResult>
+            {
+                new(
+                    socialMedia.SocialMediaId,
+                    socialMedia.Type,
+                    publishResult.Value.InstagramUserId,
+                    publishResult.Value.PostId)
+            };
+        }
 
         post.Status = "published";
         post.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
