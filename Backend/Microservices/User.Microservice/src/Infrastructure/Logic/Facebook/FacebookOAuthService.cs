@@ -20,7 +20,6 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
     private readonly string _appId;
     private readonly string _appSecret;
     private readonly string _redirectUri;
-    private readonly string? _configId;
     private readonly string _scopes;
     private readonly HttpClient _httpClient;
 
@@ -37,8 +36,6 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
                      ?? throw new InvalidOperationException("Facebook:AppSecret is not configured");
         _redirectUri = configuration["Facebook:RedirectUri"]
                        ?? throw new InvalidOperationException("Facebook:RedirectUri is not configured");
-        _configId = configuration["Facebook:ConfigId"];
-
         var configuredScopes = configuration["Facebook:Scopes"];
         _scopes = string.IsNullOrWhiteSpace(configuredScopes)
             ? DefaultScopes
@@ -63,12 +60,6 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
             ["state"] = state,
             ["scope"] = resolvedScopes
         };
-
-        if (!string.IsNullOrWhiteSpace(_configId))
-        {
-            queryParams["config_id"] = _configId;
-            queryParams["override_default_response_type"] = "true";
-        }
 
         var queryString = string.Join("&",
             queryParams.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));

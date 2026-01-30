@@ -97,6 +97,44 @@ internal static class OpenApiSetup
         return scheme;
     }
 
+    private static string ResolveRequestHost(HttpContext context)
+    {
+        string? host = null;
+
+        var forwarded = context.Request.Headers["Forwarded"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(forwarded))
+        {
+            var first = forwarded.Split(',', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(first))
+            {
+                foreach (var part in first.Split(';', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var trimmed = part.Trim();
+                    if (trimmed.StartsWith("host=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        host = trimmed["host=".Length..].Trim().Trim('"');
+                        break;
+                    }
+                }
+            }
+        }
+
+        host ??= context.Request.Headers["X-Forwarded-Host"].FirstOrDefault();
+        host ??= context.Request.Headers["CF-Connecting-Host"].FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(host))
+        {
+            host = host.Split(',', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+        }
+
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            host = context.Request.Host.Value;
+        }
+
+        return host ?? string.Empty;
+    }
+
     private static string TryPatchOpenApiServers(
         HttpContext context,
         string openApiJson,
@@ -109,7 +147,8 @@ internal static class OpenApiSetup
         }
 
         var scheme = ResolveRequestScheme(context);
-        var serverUrl = $"{scheme}://{context.Request.Host}";
+        var host = ResolveRequestHost(context);
+        var serverUrl = $"{scheme}://{host}";
         if (Uri.TryCreate(configuredBaseUrl, UriKind.Absolute, out var baseUri))
         {
             var builder = new UriBuilder(baseUri);

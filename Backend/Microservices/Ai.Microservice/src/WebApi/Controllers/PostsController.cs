@@ -137,6 +137,34 @@ public sealed class PostsController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("publish")]
+    [ProducesResponseType(typeof(Result<PublishPostResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Publish(
+        [FromBody] PublishPostRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var command = new PublishPostCommand(
+            userId,
+            request.PostId,
+            request.SocialMediaId);
+
+        var result = await _mediator.Send(command, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -155,3 +183,7 @@ public sealed record UpdatePostRequest(
     string? Title,
     PostContent? Content,
     string? Status);
+
+public sealed record PublishPostRequest(
+    Guid PostId,
+    Guid SocialMediaId);

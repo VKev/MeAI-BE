@@ -1,13 +1,25 @@
 using Application.Abstractions;
+using Application.Abstractions.Facebook;
+using Application.Abstractions.Gemini;
+using Application.Abstractions.Instagram;
+using Application.Abstractions.Resources;
+using Application.Abstractions.SocialMedias;
 using Domain.Repositories;
 using Infrastructure.Logic.Consumers;
+using Infrastructure.Logic.Facebook;
+using Infrastructure.Logic.Gemini;
+using Infrastructure.Logic.Instagram;
+using Infrastructure.Logic.Resources;
+using Infrastructure.Logic.SocialMedias;
 using Infrastructure.Repositories;
 using Infrastructure.Logic.Sagas;
 using Infrastructure.Logic.Services;
 using MassTransit;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SharedLibrary.Authentication;
 using SharedLibrary.Configs;
+using SharedLibrary.Grpc.UserResources;
 using StackExchange.Redis;
 
 namespace Infrastructure
@@ -17,6 +29,32 @@ namespace Infrastructure
         public static IServiceCollection AddInfrastructure(this IServiceCollection services)
         {
             services.AddHttpClient<IVeoVideoService, VeoVideoService>();
+            services.AddHttpClient("Gemini");
+            services.AddHttpClient("Facebook");
+            services.AddHttpClient("Instagram");
+            services.AddScoped<IGeminiCaptionService, GeminiCaptionService>();
+            services.AddScoped<IFacebookPublishService, FacebookPublishService>();
+            services.AddScoped<IInstagramPublishService, InstagramPublishService>();
+
+            services.AddGrpcClient<UserResourceService.UserResourceServiceClient>((sp, options) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var grpcUrl = configuration["UserService:GrpcUrl"]
+                              ?? configuration["UserService__GrpcUrl"]
+                              ?? "http://user-microservice:5004";
+                options.Address = new Uri(grpcUrl);
+            });
+            services.AddScoped<IUserResourceService, UserResourceGrpcService>();
+
+            services.AddGrpcClient<UserSocialMediaService.UserSocialMediaServiceClient>((sp, options) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var grpcUrl = configuration["UserService:GrpcUrl"]
+                              ?? configuration["UserService__GrpcUrl"]
+                              ?? "http://user-microservice:5004";
+                options.Address = new Uri(grpcUrl);
+            });
+            services.AddScoped<IUserSocialMediaService, UserSocialMediaGrpcService>();
 
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
             services.AddScoped<IPostRepository, PostRepository>();

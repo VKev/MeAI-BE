@@ -1,5 +1,4 @@
 ﻿using System.Text.Json;
-using Ocelot.Middleware;
 using SharedLibrary.Middleware;
 
 namespace src.Setups;
@@ -50,11 +49,5 @@ internal static class MiddlewareSetup
         });
     }
 
-    internal static IApplicationBuilder UseOcelotForApi(this IApplicationBuilder app)
-    {
-        return app.UseWhen(ctx =>
-                ctx.Request.Path.StartsWithSegments("/api") &&
-                !ctx.Request.Path.StartsWithSegments("/api/health"),
-            branch => branch.UseOcelot().Wait());
-    }
+    // Reverse proxy routing is handled by endpoint mapping in Program.cs.
 }
