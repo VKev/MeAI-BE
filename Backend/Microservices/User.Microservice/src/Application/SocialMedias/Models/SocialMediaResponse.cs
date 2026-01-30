@@ -1,10 +1,10 @@
-using System.Text.Json;
+using Application.Abstractions.SocialMedia;
 
 namespace Application.SocialMedias.Models;
 
 public sealed record SocialMediaResponse(
     Guid Id,
     string Type,
-    JsonDocument? Metadata,
+    SocialMediaUserProfile? Profile,
     DateTime? CreatedAt,
     DateTime? UpdatedAt);

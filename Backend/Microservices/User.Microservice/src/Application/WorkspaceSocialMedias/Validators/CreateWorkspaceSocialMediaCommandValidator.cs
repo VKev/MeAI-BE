@@ -10,6 +10,6 @@ public sealed class CreateWorkspaceSocialMediaCommandValidator
     {
         RuleFor(x => x.WorkspaceId).NotEmpty();
         RuleFor(x => x.UserId).NotEmpty();
-        RuleFor(x => x.Type).NotEmpty();
+        RuleFor(x => x.SocialMediaId).NotEmpty();
     }
 }

@@ -5,7 +5,6 @@ using Application.Subscriptions.Commands;
 using Application.Transactions.Commands;
 using Application.Users.Commands;
 using Application.Workspaces.Commands;
-using Application.WorkspaceSocialMedias.Commands;
 using AutoMapper;
 using WebApi.Controllers;
 
@@ -52,15 +51,6 @@ public sealed class MappingProfile : Profile
             .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty))
             .ForCtorParam("Metadata", opt => opt.MapFrom(_ => (JsonDocument?)null));
         CreateMap<UpdateSocialMediaRequest, UpdateSocialMediaCommand>()
-            .ForCtorParam("SocialMediaId", opt => opt.MapFrom(_ => Guid.Empty))
-            .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty))
-            .ForCtorParam("Metadata", opt => opt.MapFrom(_ => (JsonDocument?)null));
-        CreateMap<CreateWorkspaceSocialMediaRequest, CreateWorkspaceSocialMediaCommand>()
-            .ForCtorParam("WorkspaceId", opt => opt.MapFrom(_ => Guid.Empty))
-            .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty))
-            .ForCtorParam("Metadata", opt => opt.MapFrom(_ => (JsonDocument?)null));
-        CreateMap<UpdateWorkspaceSocialMediaRequest, UpdateWorkspaceSocialMediaCommand>()
-            .ForCtorParam("WorkspaceId", opt => opt.MapFrom(_ => Guid.Empty))
             .ForCtorParam("SocialMediaId", opt => opt.MapFrom(_ => Guid.Empty))
             .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty))
             .ForCtorParam("Metadata", opt => opt.MapFrom(_ => (JsonDocument?)null));

@@ -12,6 +12,17 @@ public interface IThreadsOAuthService
     Task<Result<ThreadsTokenResponse>> RefreshTokenAsync(string accessToken, CancellationToken cancellationToken);
 
     bool TryValidateState(string state, out Guid userId);
+
+    Task<Result<ThreadsUserProfile>> GetUserProfileAsync(string accessToken, CancellationToken cancellationToken);
+}
+
+public sealed class ThreadsUserProfile
+{
+    public string? Id { get; set; }
+    public string? Username { get; set; }
+    public string? Name { get; set; }
+    public string? ThreadsProfilePictureUrl { get; set; }
+    public string? ThreadsBiography { get; set; }
 }
 
 public sealed class ThreadsTokenResponse

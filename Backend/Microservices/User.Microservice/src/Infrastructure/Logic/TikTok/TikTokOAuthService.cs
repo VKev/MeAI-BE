@@ -119,6 +119,58 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
         return false;
     }
 
+    public async Task<Result<TikTokUserProfile>> GetUserProfileAsync(
+        string accessToken,
+        CancellationToken cancellationToken)
+    {
+        const string userInfoEndpoint = "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,display_name,avatar_url,bio_description,follower_count,following_count";
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, userInfoEndpoint);
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+            var response = await _httpClient.SendAsync(request, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return Result.Failure<TikTokUserProfile>(
+                    new Error("TikTok.ProfileError", $"Failed to fetch profile: {response.StatusCode}"));
+            }
+
+            var apiResponse = JsonSerializer.Deserialize<TikTokUserInfoApiResponse>(responseBody, JsonOptions);
+
+            if (apiResponse?.Error?.Code != null && apiResponse.Error.Code != "ok")
+            {
+                return Result.Failure<TikTokUserProfile>(
+                    new Error("TikTok.ProfileError", apiResponse.Error.Message ?? "Unknown error"));
+            }
+
+            var user = apiResponse?.Data?.User;
+            return Result.Success(new TikTokUserProfile
+            {
+                OpenId = user?.OpenId,
+                UnionId = user?.UnionId,
+                DisplayName = user?.DisplayName,
+                AvatarUrl = user?.AvatarUrl,
+                BioDescription = user?.BioDescription,
+                FollowerCount = user?.FollowerCount,
+                FollowingCount = user?.FollowingCount
+            });
+        }
+        catch (HttpRequestException ex)
+        {
+            return Result.Failure<TikTokUserProfile>(
+                new Error("TikTok.NetworkError", $"Network error: {ex.Message}"));
+        }
+        catch (JsonException ex)
+        {
+            return Result.Failure<TikTokUserProfile>(
+                new Error("TikTok.ParseError", $"JSON parse error: {ex.Message}"));
+        }
+    }
+
     private async Task<Result<TikTokTokenResponse>> SendTokenRequestAsync(
         Dictionary<string, string> formData,
         CancellationToken cancellationToken)

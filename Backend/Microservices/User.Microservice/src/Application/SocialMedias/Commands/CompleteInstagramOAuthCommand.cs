@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Instagram;
+using Application.Abstractions.SocialMedia;
 using Application.SocialMedias.Models;
 using Domain.Entities;
 using MediatR;
@@ -26,14 +27,17 @@ public sealed class CompleteInstagramOAuthCommandHandler
     private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IRepository<User> _userRepository;
     private readonly IInstagramOAuthService _instagramOAuthService;
+    private readonly ISocialMediaProfileService _profileService;
 
     public CompleteInstagramOAuthCommandHandler(
         IUnitOfWork unitOfWork,
-        IInstagramOAuthService instagramOAuthService)
+        IInstagramOAuthService instagramOAuthService,
+        ISocialMediaProfileService profileService)
     {
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _userRepository = unitOfWork.Repository<User>();
         _instagramOAuthService = instagramOAuthService;
+        _profileService = profileService;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(
@@ -154,7 +158,13 @@ public sealed class CompleteInstagramOAuthCommandHandler
             await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
         }
 
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia));
+        var socialProfileResult = await _profileService.GetUserProfileAsync(
+            socialMedia.Type,
+            socialMedia.Metadata,
+            cancellationToken);
+
+        var socialProfile = socialProfileResult.IsSuccess ? socialProfileResult.Value : null;
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile));
     }
 
     private static readonly JsonSerializerOptions MetadataJsonOptions = new()

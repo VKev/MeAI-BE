@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Application.Abstractions.Data;
+using Application.Abstractions.SocialMedia;
 using Application.Abstractions.Threads;
 using Application.SocialMedias.Models;
 using Domain.Entities;
@@ -22,13 +23,16 @@ public sealed class CompleteThreadsOAuthCommandHandler
 {
     private readonly IThreadsOAuthService _threadsOAuthService;
     private readonly IRepository<SocialMedia> _socialMediaRepository;
+    private readonly ISocialMediaProfileService _profileService;
 
     public CompleteThreadsOAuthCommandHandler(
         IThreadsOAuthService threadsOAuthService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ISocialMediaProfileService profileService)
     {
         _threadsOAuthService = threadsOAuthService;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
+        _profileService = profileService;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(
@@ -99,6 +103,12 @@ public sealed class CompleteThreadsOAuthCommandHandler
             await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
         }
 
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia));
+        var profileResult = await _profileService.GetUserProfileAsync(
+            socialMedia.Type,
+            socialMedia.Metadata,
+            cancellationToken);
+
+        var profile = profileResult.IsSuccess ? profileResult.Value : null;
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, profile));
     }
 }

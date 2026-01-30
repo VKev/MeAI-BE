@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Application.Abstractions.Data;
+using Application.Abstractions.SocialMedia;
 using Application.SocialMedias.Models;
 using Domain.Entities;
 using MediatR;
@@ -18,10 +19,12 @@ public sealed class CreateSocialMediaCommandHandler
     : IRequestHandler<CreateSocialMediaCommand, Result<SocialMediaResponse>>
 {
     private readonly IRepository<SocialMedia> _repository;
+    private readonly ISocialMediaProfileService _profileService;
 
-    public CreateSocialMediaCommandHandler(IUnitOfWork unitOfWork)
+    public CreateSocialMediaCommandHandler(IUnitOfWork unitOfWork, ISocialMediaProfileService profileService)
     {
         _repository = unitOfWork.Repository<SocialMedia>();
+        _profileService = profileService;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(CreateSocialMediaCommand request,
@@ -38,6 +41,12 @@ public sealed class CreateSocialMediaCommandHandler
 
         await _repository.AddAsync(socialMedia, cancellationToken);
 
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia));
+        var profileResult = await _profileService.GetUserProfileAsync(
+            socialMedia.Type,
+            socialMedia.Metadata,
+            cancellationToken);
+
+        var profile = profileResult.IsSuccess ? profileResult.Value : null;
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, profile));
     }
 }

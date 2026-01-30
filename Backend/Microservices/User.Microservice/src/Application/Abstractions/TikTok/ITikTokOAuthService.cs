@@ -13,6 +13,8 @@ public interface ITikTokOAuthService
 
     bool TryValidateState(string state, out Guid userId);
 
+    Task<Result<TikTokUserProfile>> GetUserProfileAsync(string accessToken, CancellationToken cancellationToken);
+
     // Content Posting API
     Task<Result<TikTokVideoInitResponse>> InitiateVideoPublishAsync(
         string accessToken,
@@ -31,6 +33,17 @@ public interface ITikTokOAuthService
         string accessToken,
         string publishId,
         CancellationToken cancellationToken);
+}
+
+public sealed class TikTokUserProfile
+{
+    public string? OpenId { get; set; }
+    public string? UnionId { get; set; }
+    public string? DisplayName { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string? BioDescription { get; set; }
+    public int? FollowerCount { get; set; }
+    public int? FollowingCount { get; set; }
 }
 
 public sealed class TikTokTokenResponse

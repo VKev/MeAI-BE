@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Application.Abstractions.Data;
+using Application.Abstractions.SocialMedia;
 using Application.Abstractions.TikTok;
 using Application.SocialMedias.Models;
 using Domain.Entities;
@@ -20,13 +21,16 @@ public sealed class RefreshTikTokTokenCommandHandler
 {
     private readonly ITikTokOAuthService _tikTokOAuthService;
     private readonly IRepository<SocialMedia> _socialMediaRepository;
+    private readonly ISocialMediaProfileService _profileService;
 
     public RefreshTikTokTokenCommandHandler(
         ITikTokOAuthService tikTokOAuthService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ISocialMediaProfileService profileService)
     {
         _tikTokOAuthService = tikTokOAuthService;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
+        _profileService = profileService;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(
@@ -87,6 +91,12 @@ public sealed class RefreshTikTokTokenCommandHandler
         socialMedia.Metadata = newMetadata;
         socialMedia.UpdatedAt = now;
 
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia));
+        var profileResult = await _profileService.GetUserProfileAsync(
+            socialMedia.Type,
+            socialMedia.Metadata,
+            cancellationToken);
+
+        var profile = profileResult.IsSuccess ? profileResult.Value : null;
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, profile));
     }
 }

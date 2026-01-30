@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Data;
+using Application.Abstractions.SocialMedia;
 using Application.SocialMedias.Models;
 using Domain.Entities;
 using MediatR;
@@ -26,14 +27,17 @@ public sealed class CompleteFacebookOAuthCommandHandler
     private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IRepository<User> _userRepository;
     private readonly IFacebookOAuthService _facebookOAuthService;
+    private readonly ISocialMediaProfileService _profileService;
 
     public CompleteFacebookOAuthCommandHandler(
         IUnitOfWork unitOfWork,
-        IFacebookOAuthService facebookOAuthService)
+        IFacebookOAuthService facebookOAuthService,
+        ISocialMediaProfileService profileService)
     {
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _userRepository = unitOfWork.Repository<User>();
         _facebookOAuthService = facebookOAuthService;
+        _profileService = profileService;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(
@@ -188,7 +192,13 @@ public sealed class CompleteFacebookOAuthCommandHandler
             await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
         }
 
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia));
+        var socialProfileResult = await _profileService.GetUserProfileAsync(
+            socialMedia.Type,
+            socialMedia.Metadata,
+            cancellationToken);
+
+        var socialProfile = socialProfileResult.IsSuccess ? socialProfileResult.Value : null;
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile));
     }
 
     private static string NormalizeEmail(string email) =>

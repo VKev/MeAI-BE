@@ -119,6 +119,48 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         return false;
     }
 
+    public async Task<Result<ThreadsUserProfile>> GetUserProfileAsync(
+        string accessToken,
+        CancellationToken cancellationToken)
+    {
+        const string baseUrl = "https://graph.threads.net/me";
+        var url = $"{baseUrl}?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token={Uri.EscapeDataString(accessToken)}";
+
+        try
+        {
+            var response = await _httpClient.GetAsync(url, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = JsonSerializer.Deserialize<ThreadsErrorResponse>(responseBody, JsonOptions);
+                return Result.Failure<ThreadsUserProfile>(
+                    new Error("Threads.ProfileError", error?.ErrorMessage ?? $"Failed to fetch profile: {response.StatusCode}"));
+            }
+
+            var profile = JsonSerializer.Deserialize<ThreadsApiProfileResponse>(responseBody, JsonOptions);
+
+            return Result.Success(new ThreadsUserProfile
+            {
+                Id = profile?.Id,
+                Username = profile?.Username,
+                Name = profile?.Name,
+                ThreadsProfilePictureUrl = profile?.ThreadsProfilePictureUrl,
+                ThreadsBiography = profile?.ThreadsBiography
+            });
+        }
+        catch (HttpRequestException ex)
+        {
+            return Result.Failure<ThreadsUserProfile>(
+                new Error("Threads.NetworkError", $"Network error: {ex.Message}"));
+        }
+        catch (JsonException ex)
+        {
+            return Result.Failure<ThreadsUserProfile>(
+                new Error("Threads.ParseError", $"JSON parse error: {ex.Message}"));
+        }
+    }
+
     private async Task<Result<ThreadsTokenResponse>> SendTokenRequestAsync(
         string endpoint,
         Dictionary<string, string> formData,
@@ -233,6 +275,24 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
 
         [JsonPropertyName("token_type")]
         public string? TokenType { get; set; }
+    }
+
+    private sealed class ThreadsApiProfileResponse
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("username")]
+        public string? Username { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("threads_profile_picture_url")]
+        public string? ThreadsProfilePictureUrl { get; set; }
+
+        [JsonPropertyName("threads_biography")]
+        public string? ThreadsBiography { get; set; }
     }
 }
 
