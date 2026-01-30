@@ -68,25 +68,6 @@ public sealed class InstagramController : ApiController
         return Ok(result);
     }
 
-    [HttpGet("debug")]
-    [AllowAnonymous]
-    [ProducesResponseType(typeof(Result<InstagramOAuthDebugResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Debug(
-        [FromQuery] string? code,
-        CancellationToken cancellationToken)
-    {
-        var result = await _mediator.Send(
-            new DebugInstagramOAuthCommand(Guid.Empty, code ?? string.Empty),
-            cancellationToken);
-
-        if (result.IsFailure)
-        {
-            return HandleFailure(result);
-        }
-
-        return Ok(result);
-    }
 
     private bool TryGetUserId(out Guid userId)
     {

@@ -1,4 +1,6 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Facebook;
+using Application.Abstractions.Instagram;
 using Application.Abstractions.Payments;
 using Application.Abstractions.Security;
 using Application.Abstractions.Storage;
@@ -10,6 +12,8 @@ using Infrastructure.Logic.Security;
 using Infrastructure.Logic.Storage;
 using Infrastructure.Repositories;
 using Infrastructure.Logic.Seeding;
+using Infrastructure.Logic.Facebook;
+using Infrastructure.Logic.Instagram;
 using Infrastructure.Logic.TikTok;
 using Infrastructure.Logic.Threads;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +39,10 @@ namespace Infrastructure
             services.AddScoped<ITikTokOAuthService, TikTokOAuthService>();
             services.AddHttpClient("Threads");
             services.AddScoped<IThreadsOAuthService, ThreadsOAuthService>();
+            services.AddHttpClient("Facebook");
+            services.AddScoped<IFacebookOAuthService, FacebookOAuthService>();
+            services.AddHttpClient("Instagram");
+            services.AddScoped<IInstagramOAuthService, InstagramOAuthService>();
             services.AddSingleton<IObjectStorageService, S3ObjectStorageService>();
             services.AddSingleton<IConnectionMultiplexer>(sp =>
             {
