@@ -12,4 +12,7 @@ public sealed class PostContent
 
     [JsonPropertyName("resource_list")]
     public List<string>? ResourceList { get; set; }
+
+    [JsonPropertyName("post_type")]
+    public string? PostType { get; set; }
 }

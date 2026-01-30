@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+option csharp_namespace = "SharedLibrary.Grpc.UserResources";
+
+package user.resources;
+
+service UserResourceService {
+  rpc GetPresignedResources (GetPresignedResourcesRequest) returns (GetPresignedResourcesResponse);
+}
+
+service UserSocialMediaService {
+  rpc GetSocialMediasByIds (GetSocialMediasByIdsRequest) returns (GetSocialMediasByIdsResponse);
+}
+
+message GetPresignedResourcesRequest {
+  string user_id = 1;
+  repeated string resource_ids = 2;
+}
+
+message PresignedResource {
+  string resource_id = 1;
+  string presigned_url = 2;
+  string content_type = 3;
+  string resource_type = 4;
+}
+
+message GetPresignedResourcesResponse {
+  repeated PresignedResource resources = 1;
+}
+
+message GetSocialMediasByIdsRequest {
+  string user_id = 1;
+  repeated string social_media_ids = 2;
+}
+
+message SocialMediaRecord {
+  string social_media_id = 1;
+  string type = 2;
+  string metadata_json = 3;
+}
+
+message GetSocialMediasByIdsResponse {
+  repeated SocialMediaRecord social_medias = 1;
+}

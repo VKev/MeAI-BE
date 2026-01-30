@@ -1,4 +1,3 @@
-using Ocelot.DependencyInjection;
 using SharedLibrary.Authentication;
 using src.Setups;
 
@@ -10,10 +9,12 @@ var configuration = builder.Configuration;
 builder.Services.ConfigureRequestLimits();
 var corsPolicyName = builder.Services.AddGatewayCors(configuration);
 builder.Services.ConfigureForwardedHeaders();
-var gatewayConfig = builder.ConfigureOcelotRuntime();
+var gatewayConfig = builder.ConfigureYarpRuntime();
 
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-builder.Services.AddOcelot(builder.Configuration);
+builder.Services
+    .AddReverseProxy()
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
 builder.Services.AddHttpClient("OpenApiProxy");
 
 var enableDocsUi = configuration.GetValue<bool>("ENABLE_DOCS_UI");
@@ -36,6 +37,6 @@ if (true)
     app.MapGatewayScalarUi(gatewayConfig.OpenApiDocuments);
 }
 
-app.UseOcelotForApi();
+app.MapReverseProxy();
 app.LogRegisteredRoutes(gatewayConfig.Routes);
 app.Run();

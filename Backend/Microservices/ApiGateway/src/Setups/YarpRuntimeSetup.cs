@@ -1,22 +1,23 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace src.Setups;
 
 internal sealed record OpenApiDocument(string Key, string Title, string Url);
 
+internal sealed record RouteSummary(string RouteId, string Path);
+
 internal sealed record GatewayRuntimeConfig(
-    JsonArray Routes,
+    IReadOnlyList<RouteSummary> Routes,
     IReadOnlyList<OpenApiDocument> OpenApiDocuments,
     string ConfiguredBaseUrl);
 
-internal static class OcelotRuntimeSetup
+internal static class YarpRuntimeSetup
 {
-    internal static GatewayRuntimeConfig ConfigureOcelotRuntime(this WebApplicationBuilder builder)
+    internal static GatewayRuntimeConfig ConfigureYarpRuntime(this WebApplicationBuilder builder)
     {
         var configuration = builder.Configuration;
         var runningInContainer = configuration.GetValue<bool>("DOTNET_RUNNING_IN_CONTAINER");
-        var routes = new JsonArray();
 
         string ResolveHost(string? envHost, string containerDefault)
         {
@@ -44,30 +45,6 @@ internal static class OcelotRuntimeSetup
                    ?? configuration[$"Services__{serviceSegment}__Port"];
         }
 
-        void AddRoute(string serviceSegment, string host, int port)
-        {
-            JsonObject BuildRoute(string upstreamTemplate, string downstreamTemplate)
-            {
-                var route = new JsonObject
-                {
-                    ["UpstreamPathTemplate"] = upstreamTemplate,
-                    ["UpstreamHttpMethod"] = new JsonArray("Get", "Post", "Put", "Patch", "Delete", "Options"),
-                    ["DownstreamScheme"] = "http",
-                    ["DownstreamHostAndPorts"] = new JsonArray(new JsonObject
-                    {
-                        ["Host"] = host,
-                        ["Port"] = port
-                    }),
-                    ["DownstreamPathTemplate"] = downstreamTemplate
-                };
-
-                return route;
-            }
-
-            routes.Add(BuildRoute($"/api/{serviceSegment}", $"/api/{serviceSegment}"));
-            routes.Add(BuildRoute($"/api/{serviceSegment}/{{everything}}", $"/api/{serviceSegment}/{{everything}}"));
-        }
-
         int ResolvePort(string? envPort, int containerDefault, int localDefault)
         {
             if (int.TryParse(envPort, out var parsed))
@@ -76,6 +53,46 @@ internal static class OcelotRuntimeSetup
             }
 
             return runningInContainer ? containerDefault : localDefault;
+        }
+
+        var routesNode = new JsonArray();
+        var clustersNode = new JsonObject();
+        var routeSummaries = new List<RouteSummary>();
+
+        void AddRoute(string serviceSegment, string host, int port)
+        {
+            var clusterId = serviceSegment.ToLowerInvariant();
+            var destinationId = $"{clusterId}-destination";
+            var address = $"http://{host}:{port}/";
+
+            clustersNode[clusterId] = new JsonObject
+            {
+                ["Destinations"] = new JsonObject
+                {
+                    [destinationId] = new JsonObject
+                    {
+                        ["Address"] = address
+                    }
+                }
+            };
+
+            void AddRouteEntry(string suffix, string path)
+            {
+                var routeId = $"{clusterId}-{suffix}";
+                routesNode.Add(new JsonObject
+                {
+                    ["RouteId"] = routeId,
+                    ["ClusterId"] = clusterId,
+                    ["Match"] = new JsonObject
+                    {
+                        ["Path"] = path
+                    }
+                });
+                routeSummaries.Add(new RouteSummary(routeId, path));
+            }
+
+            AddRouteEntry("root", $"/api/{serviceSegment}");
+            AddRouteEntry("catchall", $"/api/{serviceSegment}/{{**catch-all}}");
         }
 
         var defaultServices = new[]
@@ -152,24 +169,24 @@ internal static class OcelotRuntimeSetup
 
         var configuredBaseUrl = configuration["BASE_URL"] ?? "http://localhost:2406";
 
-        var ocelotConfig = new JsonObject
+        var yarpConfig = new JsonObject
         {
-            ["Routes"] = routes,
-            ["GlobalConfiguration"] = new JsonObject
+            ["ReverseProxy"] = new JsonObject
             {
-                ["BaseUrl"] = configuredBaseUrl
+                ["Routes"] = routesNode,
+                ["Clusters"] = clustersNode
             }
         };
 
         var contentRoot = builder.Environment.ContentRootPath;
-        var ocelotFileName = "ocelot.runtime.json";
-        var runtimeConfigPath = Path.Combine(contentRoot, ocelotFileName);
+        var configFileName = "yarp.runtime.json";
+        var runtimeConfigPath = Path.Combine(contentRoot, configFileName);
 
-        File.WriteAllText(runtimeConfigPath, ocelotConfig.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(runtimeConfigPath, yarpConfig.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
 
         builder.Configuration
             .SetBasePath(contentRoot)
-            .AddJsonFile(ocelotFileName, optional: false, reloadOnChange: true)
+            .AddJsonFile(configFileName, optional: false, reloadOnChange: true)
             .AddEnvironmentVariables();
 
         var endpointData = new List<OpenApiDocument>();
@@ -205,7 +222,7 @@ internal static class OcelotRuntimeSetup
             addedOpenApiServices.Add(serviceSegment);
         }
 
-        return new GatewayRuntimeConfig(routes, endpointData, configuredBaseUrl);
+        return new GatewayRuntimeConfig(routeSummaries, endpointData, configuredBaseUrl);
     }
 
     private sealed record ServiceDefinition(

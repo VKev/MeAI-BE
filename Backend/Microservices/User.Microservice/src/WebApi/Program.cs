@@ -6,15 +6,35 @@ using Scalar.AspNetCore;
 using Serilog;
 using SharedLibrary.Configs;
 using WebApi.Middleware;
+using WebApi.Setups.OpenApi;
+using WebApi.Grpc;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using WebApi.Setups;
 
 var builder = WebApplication.CreateBuilder(args);
 var shouldAutoApplyMigrations = builder.ConfigureAutoMigrations();
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(5002, listenOptions =>
+    {
+        listenOptions.Protocols = HttpProtocols.Http1;
+    });
+    options.ListenAnyIP(5004, listenOptions =>
+    {
+        listenOptions.Protocols = HttpProtocols.Http2;
+    });
+});
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddAuthorization();
-builder.Services.AddOpenApi();
+builder.Services.AddGrpc();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddSchemaTransformer<FileUploadSchemaTransformer>();
+    options.AddOperationTransformer<ResourcesMultipartOperationTransformer>();
+});
 builder.Services.AddAutoMapper(_ => { }, typeof(WebApi.AssemblyReference).Assembly);
 
 builder.Services.ConfigureForwardedHeaders();
@@ -72,6 +92,8 @@ app.MapScalarApiReference("docs", opts =>
     opts.WithTitle("User API");
 });
 
+app.MapGrpcService<UserResourceGrpcService>();
+app.MapGrpcService<UserSocialMediaGrpcService>();
 app.MapControllers();
 
 app.Run();
