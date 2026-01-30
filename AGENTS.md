@@ -70,6 +70,7 @@ Backend/Microservices/<Service>.Microservice/
 - Build outputs are redirected to `Build/bin` and `Build/obj` per project.
 - EF Core tooling expects custom `MSBuildProjectExtensionsPath`; targets are copied from `SharedLibrary/Configs/Infrastructure.csproj.EntityFrameworkCore.targets`.
 - Generated folders under `Build/` are not source of truth; do not hand-edit.
+- Facebook/Instagram OAuth + Graph API logic must live in `Infrastructure/Logic/*` services with Application abstractions (mirror the TikTok/Threads flow); commands should only orchestrate via those interfaces.
 
 ## Local dev quick refs
 - Build/test: `dotnet build` / `dotnet test` from repo root.
