@@ -3,6 +3,7 @@ using Application.Abstractions.Facebook;
 using Application.Abstractions.Instagram;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
+using Application.Abstractions.TikTok;
 using Application.Posts.Models;
 using Domain.Entities;
 using Domain.Repositories;
@@ -22,6 +23,7 @@ public sealed class PublishPostCommandHandler
 {
     private const string FacebookType = "facebook";
     private const string InstagramType = "instagram";
+    private const string TikTokType = "tiktok";
     private const string PostsType = "posts";
 
     private readonly IPostRepository _postRepository;
@@ -29,19 +31,22 @@ public sealed class PublishPostCommandHandler
     private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly IFacebookPublishService _facebookPublishService;
     private readonly IInstagramPublishService _instagramPublishService;
+    private readonly ITikTokPublishService _tikTokPublishService;
 
     public PublishPostCommandHandler(
         IPostRepository postRepository,
         IUserResourceService userResourceService,
         IUserSocialMediaService userSocialMediaService,
         IFacebookPublishService facebookPublishService,
-        IInstagramPublishService instagramPublishService)
+        IInstagramPublishService instagramPublishService,
+        ITikTokPublishService tikTokPublishService)
     {
         _postRepository = postRepository;
         _userResourceService = userResourceService;
         _userSocialMediaService = userSocialMediaService;
         _facebookPublishService = facebookPublishService;
         _instagramPublishService = instagramPublishService;
+        _tikTokPublishService = tikTokPublishService;
     }
 
     public async Task<Result<PublishPostResponse>> Handle(
@@ -109,10 +114,11 @@ public sealed class PublishPostCommandHandler
         }
 
         if (!string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(socialMedia.Type, InstagramType, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(socialMedia.Type, InstagramType, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase))
         {
             return Result.Failure<PublishPostResponse>(
-                new Error("Post.InvalidSocialMedia", "Only Facebook or Instagram social media accounts are supported for posts."));
+                new Error("Post.InvalidSocialMedia", "Only Facebook, Instagram, or TikTok social media accounts are supported for posts."));
         }
 
         var caption = post.Content?.Content?.Trim() ?? string.Empty;
@@ -121,12 +127,60 @@ public sealed class PublishPostCommandHandler
             .ToList();
 
         using var metadata = ParseMetadata(socialMedia.MetadataJson);
-        var pageId = GetMetadataValue(metadata, "page_id");
-        var pageAccessToken = GetMetadataValue(metadata, "page_access_token");
 
         List<PublishPostDestinationResult> publishResults;
-        if (string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase))
+
+        if (string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase))
         {
+            if (mediaItems.Count != 1)
+            {
+                return Result.Failure<PublishPostResponse>(
+                    new Error("TikTok.UnsupportedMedia", "TikTok publishing currently supports only one video."));
+            }
+
+            var accessToken = GetMetadataValue(metadata, "access_token");
+            var openId = GetMetadataValue(metadata, "open_id");
+
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                return Result.Failure<PublishPostResponse>(
+                    new Error("TikTok.InvalidToken", "Access token not found in social media metadata."));
+            }
+
+            if (string.IsNullOrWhiteSpace(openId))
+            {
+                return Result.Failure<PublishPostResponse>(
+                    new Error("TikTok.InvalidAccount", "TikTok open_id is missing in social media metadata."));
+            }
+
+            var publishResult = await _tikTokPublishService.PublishAsync(
+                new TikTokPublishRequest(
+                    AccessToken: accessToken,
+                    OpenId: openId,
+                    Caption: caption,
+                    Media: new TikTokPublishMedia(
+                        mediaItems[0].Url,
+                        mediaItems[0].ContentType)),
+                cancellationToken);
+
+            if (publishResult.IsFailure)
+            {
+                return Result.Failure<PublishPostResponse>(publishResult.Error);
+            }
+
+            publishResults = new List<PublishPostDestinationResult>
+            {
+                new(
+                    socialMedia.SocialMediaId,
+                    socialMedia.Type,
+                    publishResult.Value.OpenId,
+                    publishResult.Value.PublishId)
+            };
+        }
+        else if (string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase))
+        {
+            var pageId = GetMetadataValue(metadata, "page_id");
+            var pageAccessToken = GetMetadataValue(metadata, "page_access_token");
             var userAccessToken = GetMetadataValue(metadata, "user_access_token")
                                   ?? GetMetadataValue(metadata, "access_token");
 

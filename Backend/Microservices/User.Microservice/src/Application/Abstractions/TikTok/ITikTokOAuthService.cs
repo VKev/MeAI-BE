@@ -14,25 +14,6 @@ public interface ITikTokOAuthService
     bool TryValidateState(string state, out Guid userId);
 
     Task<Result<TikTokUserProfile>> GetUserProfileAsync(string accessToken, CancellationToken cancellationToken);
-
-    // Content Posting API
-    Task<Result<TikTokVideoInitResponse>> InitiateVideoPublishAsync(
-        string accessToken,
-        TikTokPostInfo postInfo,
-        TikTokVideoSourceInfo sourceInfo,
-        CancellationToken cancellationToken);
-
-    Task<Result<bool>> UploadVideoFileAsync(
-        string uploadUrl,
-        Stream videoStream,
-        long videoSize,
-        string contentType,
-        CancellationToken cancellationToken);
-
-    Task<Result<TikTokPublishStatusResponse>> GetPublishStatusAsync(
-        string accessToken,
-        string publishId,
-        CancellationToken cancellationToken);
 }
 
 public sealed class TikTokUserProfile
@@ -62,36 +43,4 @@ public sealed class TikTokErrorResponse
     public string Error { get; set; } = string.Empty;
     public string ErrorDescription { get; set; } = string.Empty;
     public string LogId { get; set; } = string.Empty;
-}
-
-public sealed class TikTokPostInfo
-{
-    public string Title { get; set; } = string.Empty;
-    public string PrivacyLevel { get; set; } = "SELF_ONLY";
-    public bool DisableDuet { get; set; }
-    public bool DisableComment { get; set; }
-    public bool DisableStitch { get; set; }
-    public int? VideoCoverTimestampMs { get; set; }
-}
-
-public sealed class TikTokVideoSourceInfo
-{
-    public string Source { get; set; } = "PULL_FROM_URL";
-    public string? VideoUrl { get; set; }
-    public long? VideoSize { get; set; }
-    public int? ChunkSize { get; set; }
-    public int? TotalChunkCount { get; set; }
-}
-
-public sealed class TikTokVideoInitResponse
-{
-    public string PublishId { get; set; } = string.Empty;
-    public string? UploadUrl { get; set; }
-}
-
-public sealed class TikTokPublishStatusResponse
-{
-    public string Status { get; set; } = string.Empty;
-    public string? PublishedItemId { get; set; }
-    public string? FailReason { get; set; }
 }

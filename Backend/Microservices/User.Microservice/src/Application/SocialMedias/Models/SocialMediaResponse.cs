@@ -7,4 +7,5 @@ public sealed record SocialMediaResponse(
     string Type,
     SocialMediaUserProfile? Profile,
     DateTime? CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    string? MetadataJson = null);

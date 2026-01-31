@@ -12,5 +12,6 @@ internal static class SocialMediaMapping
             socialMedia.Type,
             profile,
             socialMedia.CreatedAt,
-            socialMedia.UpdatedAt);
+            socialMedia.UpdatedAt,
+            socialMedia.Metadata?.RootElement.GetRawText());
 }

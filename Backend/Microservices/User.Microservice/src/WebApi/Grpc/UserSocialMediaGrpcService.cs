@@ -48,7 +48,7 @@ public sealed class UserSocialMediaGrpcService : UserSocialMediaService.UserSoci
         {
             SocialMediaId = item.Id.ToString(),
             Type = item.Type ?? string.Empty,
-            MetadataJson = item.Metadata?.RootElement.GetRawText() ?? string.Empty
+            MetadataJson = item.MetadataJson ?? string.Empty
         }));
 
         return response;
