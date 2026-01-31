@@ -56,6 +56,7 @@ Backend/Microservices/<Service>.Microservice/
 - Messaging via MassTransit/RabbitMQ; Ai service includes saga state machines.
 - SharedLibrary holds auth, configs, middleware, contracts, and response models.
 - Assembly scanning uses `AssemblyReference.cs` in each layer.
+- Cross-service resource access: use gRPC for sync calls (e.g., presigned URL fetch before caption generation) and RabbitMQ for async workflows.
 
 ## Architecture rules enforced by tests
 - Domain must not depend on Application/Infrastructure/WebApi.
@@ -78,12 +79,12 @@ Backend/Microservices/<Service>.Microservice/
 - Compose (dev): `docker compose -f Backend/Compose/docker-compose.yml up -d --build`.
 - Default ports (dev/compose): API Gateway 8080 (host 2406), User 5002 (+5004 gRPC), Ai 5001, Postgres 5432, Redis 6379, RabbitMQ 5672/15672, Mailpit 1025/8025, n8n 5678 (via nginx).
 
-## API Gateway (Ocelot)
-- Runtime config is generated in `Backend/Microservices/ApiGateway/src/Setups/OcelotRuntimeSetup.cs`.
+## API Gateway (YARP)
+- Runtime config is generated in `Backend/Microservices/ApiGateway/src/Setups/YarpRuntimeSetup.cs`.
 - Default routes for `/api/user` and `/api/ai`.
 - Extra services can be added via `Services__{Service}__Host` and `Services__{Service}__Port` (or `{PREFIX}_MICROSERVICE_HOST/PORT`).
 - OpenAPI aggregation pulls `/openapi/v1.json` from each service.
-- Runtime config is written to `ocelot.runtime.json` in the gateway content root.
+- Runtime config is written to `yarp.runtime.json` in the gateway content root.
 
 ## Docker & Compose
 - `Backend/Compose/docker-compose.yml`: dev stack with placeholders; includes n8n + nginx.

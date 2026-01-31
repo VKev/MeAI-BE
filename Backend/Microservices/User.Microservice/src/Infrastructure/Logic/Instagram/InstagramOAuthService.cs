@@ -22,7 +22,6 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
     private readonly string _appId;
     private readonly string _appSecret;
     private readonly string _redirectUri;
-    private readonly string? _configId;
     private readonly string _scopes;
     private readonly HttpClient _httpClient;
 
@@ -39,8 +38,6 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
                      ?? throw new InvalidOperationException("Instagram:AppSecret is not configured");
         _redirectUri = configuration["Instagram:RedirectUri"] ?? configuration["Facebook:RedirectUri"]
                        ?? throw new InvalidOperationException("Instagram:RedirectUri is not configured");
-        _configId = configuration["Instagram:ConfigId"];
-
         var configuredScopes = configuration["Instagram:Scopes"] ?? configuration["Facebook:Scopes"];
         _scopes = string.IsNullOrWhiteSpace(configuredScopes)
             ? DefaultScopes
@@ -65,12 +62,6 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
             ["scope"] = resolvedScopes,
             ["state"] = state
         };
-
-        if (!string.IsNullOrWhiteSpace(_configId))
-        {
-            queryParams["config_id"] = _configId;
-            queryParams["override_default_response_type"] = "true";
-        }
 
         var queryString = string.Join("&",
             queryParams.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));

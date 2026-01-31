@@ -6,6 +6,8 @@ using Serilog;
 using SharedLibrary.Configs;
 using WebApi.Setups;
 
+AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
 var solutionDirectory = Directory.GetParent(Directory.GetCurrentDirectory())?.FullName ?? "";
 if (!string.IsNullOrWhiteSpace(solutionDirectory))
 {
