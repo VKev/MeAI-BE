@@ -10,15 +10,15 @@ using SharedLibrary.Extensions;
 
 namespace Application.Posts.Commands;
 
-public sealed record CreateFacebookPostCommand(
+public sealed record CreateGeminiPostCommand(
     Guid UserId,
     IReadOnlyList<Guid> ResourceIds,
     string? Caption,
     string? PostType,
     string? Language) : IRequest<Result<FacebookDraftPostResponse>>;
 
-public sealed class CreateFacebookPostCommandHandler
-    : IRequestHandler<CreateFacebookPostCommand, Result<FacebookDraftPostResponse>>
+public sealed class CreateGeminiPostCommandHandler
+    : IRequestHandler<CreateGeminiPostCommand, Result<FacebookDraftPostResponse>>
 {
     private const string DefaultPostType = "posts";
 
@@ -28,7 +28,7 @@ public sealed class CreateFacebookPostCommandHandler
     private static readonly Regex HashtagRegex = new(@"#([\p{L}\p{Mn}\p{Nd}_]+)", RegexOptions.Compiled);
     private static readonly Regex CollapseWhitespaceRegex = new(@"\s{2,}", RegexOptions.Compiled);
 
-    public CreateFacebookPostCommandHandler(
+    public CreateGeminiPostCommandHandler(
         IPostRepository postRepository,
         IUserResourceService userResourceService,
         IGeminiCaptionService geminiCaptionService)
@@ -39,7 +39,7 @@ public sealed class CreateFacebookPostCommandHandler
     }
 
     public async Task<Result<FacebookDraftPostResponse>> Handle(
-        CreateFacebookPostCommand request,
+        CreateGeminiPostCommand request,
         CancellationToken cancellationToken)
     {
         var resolvedPostType = NormalizePostType(request.PostType);

@@ -7,7 +7,7 @@ namespace Application.SocialMedias.Commands;
 
 public sealed record InitiateThreadsOAuthCommand(
     Guid UserId,
-    string Scopes) : IRequest<Result<ThreadsOAuthInitiationResponse>>;
+    string? Scopes) : IRequest<Result<ThreadsOAuthInitiationResponse>>;
 
 public sealed record ThreadsOAuthInitiationResponse(string AuthorizationUrl, string State);
 
@@ -25,11 +25,7 @@ public sealed class InitiateThreadsOAuthCommandHandler
         InitiateThreadsOAuthCommand request,
         CancellationToken cancellationToken)
     {
-        var scopes = string.IsNullOrWhiteSpace(request.Scopes)
-            ? "threads_basic"
-            : request.Scopes;
-
-        var (authorizationUrl, state) = _threadsOAuthService.GenerateAuthorizationUrl(request.UserId, scopes);
+        var (authorizationUrl, state) = _threadsOAuthService.GenerateAuthorizationUrl(request.UserId, request.Scopes);
 
         var response = new ThreadsOAuthInitiationResponse(authorizationUrl, state);
         return Task.FromResult(Result.Success(response));

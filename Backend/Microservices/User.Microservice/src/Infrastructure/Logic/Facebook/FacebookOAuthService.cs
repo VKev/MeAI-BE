@@ -12,9 +12,9 @@ namespace Infrastructure.Logic.Facebook;
 
 public sealed class FacebookOAuthService : IFacebookOAuthService
 {
-    private const string AuthorizationBaseUrl = "https://www.facebook.com/v21.0/dialog/oauth";
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
-    private const string OAuthTokenEndpoint = "https://graph.facebook.com/v21.0/oauth/access_token";
+    private const string AuthorizationBaseUrl = "https://www.facebook.com/v24.0/dialog/oauth";
+    private const string GraphApiBaseUrl = "https://graph.facebook.com/v24.0";
+    private const string OAuthTokenEndpoint = "https://graph.facebook.com/v24.0/oauth/access_token";
     private const string DefaultScopes = "email,public_profile";
 
     private readonly string _appId;

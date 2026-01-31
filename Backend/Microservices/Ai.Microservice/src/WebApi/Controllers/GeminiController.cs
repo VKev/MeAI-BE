@@ -10,11 +10,11 @@ using SharedLibrary.Common.ResponseModel;
 namespace WebApi.Controllers;
 
 [ApiController]
-[Route("api/Ai/facebook")]
+[Route("api/Gemini")]
 [Authorize]
-public sealed class FacebookController : ApiController
+public sealed class GeminiController : ApiController
 {
-    public FacebookController(IMediator mediator) : base(mediator)
+    public GeminiController(IMediator mediator) : base(mediator)
     {
     }
 
@@ -23,7 +23,7 @@ public sealed class FacebookController : ApiController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreatePost(
-        [FromBody] CreateFacebookPostRequest request,
+        [FromBody] GeminiPostRequest request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -32,7 +32,7 @@ public sealed class FacebookController : ApiController
         }
 
         var result = await _mediator.Send(
-            new CreateFacebookPostCommand(
+            new CreateGeminiPostCommand(
                 userId,
                 request.ResourceIds ?? new List<Guid>(),
                 request.Caption,
@@ -55,7 +55,7 @@ public sealed class FacebookController : ApiController
     }
 }
 
-public sealed record CreateFacebookPostRequest(
+public sealed record GeminiPostRequest(
     List<Guid>? ResourceIds,
     string? Caption,
     string? PostType,

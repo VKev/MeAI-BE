@@ -12,7 +12,7 @@ namespace Infrastructure.Logic.Threads;
 
 public sealed class ThreadsOAuthService : IThreadsOAuthService
 {
-    private const string AuthorizationBaseUrl = "https://threads.net/oauth/authorize";
+    private const string DefaultAuthorizationBaseUrl = "https://threads.net/oauth/authorize";
     private const string TokenEndpoint = "https://graph.threads.net/oauth/access_token";
     private const string LongLivedTokenEndpoint = "https://graph.threads.net/access_token";
     private const string RefreshTokenEndpoint = "https://graph.threads.net/refresh_access_token";
@@ -20,12 +20,15 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
     private readonly string _clientId;
     private readonly string _clientSecret;
     private readonly string _redirectUri;
+    private readonly string _scopes;
+    private readonly string _authorizationBaseUrl;
     private readonly HttpClient _httpClient;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
     public ThreadsOAuthService(IConfiguration configuration, IHttpClientFactory httpClientFactory)
@@ -36,18 +39,24 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
                         ?? throw new InvalidOperationException("Threads:AppSecret is not configured");
         _redirectUri = configuration["Threads:RedirectUri"]
                        ?? throw new InvalidOperationException("Threads:RedirectUri is not configured");
+        _scopes = configuration["Threads:Scopes"] ?? "threads_basic,threads_content_publish";
+        _authorizationBaseUrl = configuration["Threads:AuthorizationBaseUrl"] ?? DefaultAuthorizationBaseUrl;
         _httpClient = httpClientFactory.CreateClient("Threads");
     }
 
-    public (string AuthorizationUrl, string State) GenerateAuthorizationUrl(Guid userId, string scopes)
+    public (string AuthorizationUrl, string State) GenerateAuthorizationUrl(Guid userId, string? scopes)
     {
         var stateData = $"{userId}|{GenerateRandomString(16)}";
         var state = Convert.ToBase64String(Encoding.UTF8.GetBytes(stateData));
 
+        var resolvedScopes = string.IsNullOrWhiteSpace(scopes)
+            ? _scopes
+            : scopes;
+
         var queryParams = new Dictionary<string, string>
         {
             ["client_id"] = _clientId,
-            ["scope"] = scopes,
+            ["scope"] = resolvedScopes,
             ["response_type"] = "code",
             ["redirect_uri"] = _redirectUri,
             ["state"] = state
@@ -56,7 +65,7 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         var queryString = string.Join("&",
             queryParams.Select(kvp => $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
 
-        return ($"{AuthorizationBaseUrl}?{queryString}", state);
+        return ($"{_authorizationBaseUrl}?{queryString}", state);
     }
 
     public async Task<Result<ThreadsTokenResponse>> ExchangeCodeForTokenAsync(string code,
@@ -148,7 +157,7 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
 
             return Result.Success(new ThreadsTokenResponse
             {
-                UserId = tokenResponse.UserId ?? string.Empty,
+                UserId = tokenResponse.UserId?.ToString() ?? string.Empty,
                 AccessToken = tokenResponse.AccessToken ?? string.Empty,
                 ExpiresIn = tokenResponse.ExpiresIn,
                 TokenType = tokenResponse.TokenType ?? "bearer"
@@ -194,7 +203,7 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
 
             return Result.Success(new ThreadsTokenResponse
             {
-                UserId = userId ?? tokenResponse.UserId ?? string.Empty,
+                UserId = userId ?? tokenResponse.UserId?.ToString() ?? string.Empty,
                 AccessToken = tokenResponse.AccessToken ?? string.Empty,
                 ExpiresIn = tokenResponse.ExpiresIn,
                 TokenType = tokenResponse.TokenType ?? "bearer"
@@ -223,7 +232,7 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
     private sealed class ThreadsApiTokenResponse
     {
         [JsonPropertyName("user_id")]
-        public string? UserId { get; set; }
+        public long? UserId { get; set; }
 
         [JsonPropertyName("access_token")]
         public string? AccessToken { get; set; }
