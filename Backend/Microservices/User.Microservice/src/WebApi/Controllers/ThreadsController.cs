@@ -33,7 +33,7 @@ public sealed class ThreadsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new InitiateThreadsOAuthCommand(userId, scopes ?? "threads_basic"),
+            new InitiateThreadsOAuthCommand(userId, scopes),
             cancellationToken);
 
         if (result.IsFailure)

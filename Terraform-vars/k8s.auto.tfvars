@@ -783,6 +783,8 @@ spec:
               value: "<REDACTED>"
             - name: Threads__RedirectUri
               value: https://vkev.me/api/User/threads/callback
+            - name: Threads__Scopes
+              value: threads_basic,threads_content_publish
             - name: Stripe__PublishableKey
               value: "<REDACTED>"
             - name: Stripe__SecretKey

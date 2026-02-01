@@ -59,6 +59,20 @@ internal static class YarpRuntimeSetup
         var clustersNode = new JsonObject();
         var routeSummaries = new List<RouteSummary>();
 
+        void AddRouteEntry(string routeId, string path, string clusterId)
+        {
+            routesNode.Add(new JsonObject
+            {
+                ["RouteId"] = routeId,
+                ["ClusterId"] = clusterId,
+                ["Match"] = new JsonObject
+                {
+                    ["Path"] = path
+                }
+            });
+            routeSummaries.Add(new RouteSummary(routeId, path));
+        }
+
         void AddRoute(string serviceSegment, string host, int port)
         {
             var clusterId = serviceSegment.ToLowerInvariant();
@@ -76,23 +90,8 @@ internal static class YarpRuntimeSetup
                 }
             };
 
-            void AddRouteEntry(string suffix, string path)
-            {
-                var routeId = $"{clusterId}-{suffix}";
-                routesNode.Add(new JsonObject
-                {
-                    ["RouteId"] = routeId,
-                    ["ClusterId"] = clusterId,
-                    ["Match"] = new JsonObject
-                    {
-                        ["Path"] = path
-                    }
-                });
-                routeSummaries.Add(new RouteSummary(routeId, path));
-            }
-
-            AddRouteEntry("root", $"/api/{serviceSegment}");
-            AddRouteEntry("catchall", $"/api/{serviceSegment}/{{**catch-all}}");
+            AddRouteEntry($"{clusterId}-root", $"/api/{serviceSegment}", clusterId);
+            AddRouteEntry($"{clusterId}-catchall", $"/api/{serviceSegment}/{{**catch-all}}", clusterId);
         }
 
         var defaultServices = new[]
@@ -120,6 +119,12 @@ internal static class YarpRuntimeSetup
 
             AddRoute(s.Service, host, port);
             addedServices.Add(s.Service);
+        }
+
+        if (addedServices.Contains("Ai"))
+        {
+            AddRouteEntry("ai-gemini-root", "/api/Gemini", "ai");
+            AddRouteEntry("ai-gemini-catchall", "/api/Gemini/{**catch-all}", "ai");
         }
 
         var envVars = configuration.AsEnumerable().Where(kv => !string.IsNullOrWhiteSpace(kv.Value));

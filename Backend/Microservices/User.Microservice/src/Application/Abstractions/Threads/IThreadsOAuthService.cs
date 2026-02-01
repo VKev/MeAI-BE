@@ -5,7 +5,7 @@ namespace Application.Abstractions.Threads;
 
 public interface IThreadsOAuthService
 {
-    (string AuthorizationUrl, string State) GenerateAuthorizationUrl(Guid userId, string scopes);
+    (string AuthorizationUrl, string State) GenerateAuthorizationUrl(Guid userId, string? scopes);
 
     Task<Result<ThreadsTokenResponse>> ExchangeCodeForTokenAsync(string code, CancellationToken cancellationToken);
 

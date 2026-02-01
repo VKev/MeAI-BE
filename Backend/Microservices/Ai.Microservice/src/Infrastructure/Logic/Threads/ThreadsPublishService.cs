@@ -1,110 +1,116 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Application.Abstractions.Instagram;
+using Application.Abstractions.Threads;
 using SharedLibrary.Common.ResponseModel;
 
-namespace Infrastructure.Logic.Instagram;
+namespace Infrastructure.Logic.Threads;
 
-public sealed class InstagramPublishService : IInstagramPublishService
+public sealed class ThreadsPublishService : IThreadsPublishService
 {
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v24.0";
+    private const string GraphApiBaseUrl = "https://graph.threads.net/v1.0";
     private readonly HttpClient _httpClient;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
-    public InstagramPublishService(IHttpClientFactory httpClientFactory)
+    public ThreadsPublishService(IHttpClientFactory httpClientFactory)
     {
-        _httpClient = httpClientFactory.CreateClient("Instagram");
+        _httpClient = httpClientFactory.CreateClient("Threads");
     }
 
-    public async Task<Result<InstagramPublishResult>> PublishAsync(
-        InstagramPublishRequest request,
+    public async Task<Result<ThreadsPublishResult>> PublishAsync(
+        ThreadsPublishRequest request,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.AccessToken))
         {
-            return Result.Failure<InstagramPublishResult>(
-                new Error("Instagram.InvalidToken", "Instagram access token is missing."));
+            return Result.Failure<ThreadsPublishResult>(
+                new Error("Threads.InvalidToken", "Threads access token is missing."));
         }
 
-        if (string.IsNullOrWhiteSpace(request.InstagramUserId))
+        if (string.IsNullOrWhiteSpace(request.ThreadsUserId))
         {
-            return Result.Failure<InstagramPublishResult>(
-                new Error("Instagram.InvalidAccount", "Instagram business account id is missing."));
+            return Result.Failure<ThreadsPublishResult>(
+                new Error("Threads.InvalidAccount", "Threads user id is missing."));
         }
 
-        if (string.IsNullOrWhiteSpace(request.Media.Url))
+        if (string.IsNullOrWhiteSpace(request.Text) && request.Media is null)
         {
-            return Result.Failure<InstagramPublishResult>(
-                new Error("Instagram.MissingMedia", "Instagram media URL is required."));
+            return Result.Failure<ThreadsPublishResult>(
+                new Error("Threads.MissingContent", "Threads post content is empty."));
         }
 
         var mediaType = ResolveMediaType(request.Media);
-        if (mediaType == MediaType.Unknown)
+        if (request.Media is not null && mediaType == MediaType.Unknown)
         {
-            return Result.Failure<InstagramPublishResult>(
-                new Error("Instagram.UnsupportedMedia", "Unsupported Instagram media type."));
+            return Result.Failure<ThreadsPublishResult>(
+                new Error("Threads.UnsupportedMedia", "Unsupported Threads media type."));
         }
 
-        var creationResult = await CreateMediaContainerAsync(
-            request.InstagramUserId,
+        var creationResult = await CreateThreadContainerAsync(
+            request.ThreadsUserId,
             request.AccessToken,
-            request.Caption,
-            request.Media.Url,
+            request.Text,
+            request.Media,
             mediaType,
             cancellationToken);
 
         if (creationResult.IsFailure)
         {
-            return Result.Failure<InstagramPublishResult>(creationResult.Error);
+            return Result.Failure<ThreadsPublishResult>(creationResult.Error);
         }
 
-        var publishResult = await PublishMediaAsync(
-            request.InstagramUserId,
+        var publishResult = await PublishThreadAsync(
+            request.ThreadsUserId,
             request.AccessToken,
             creationResult.Value,
             cancellationToken);
 
         if (publishResult.IsFailure)
         {
-            return Result.Failure<InstagramPublishResult>(publishResult.Error);
+            return Result.Failure<ThreadsPublishResult>(publishResult.Error);
         }
 
-        return Result.Success(new InstagramPublishResult(
-            request.InstagramUserId,
+        return Result.Success(new ThreadsPublishResult(
+            request.ThreadsUserId,
             publishResult.Value));
     }
 
-    private async Task<Result<string>> CreateMediaContainerAsync(
-        string instagramUserId,
+    private async Task<Result<string>> CreateThreadContainerAsync(
+        string threadsUserId,
         string accessToken,
-        string caption,
-        string mediaUrl,
+        string text,
+        ThreadsPublishMedia? media,
         MediaType mediaType,
         CancellationToken cancellationToken)
     {
         var payload = new Dictionary<string, string>
         {
             ["access_token"] = accessToken,
-            ["caption"] = caption
+            ["text"] = text
         };
 
-        if (mediaType == MediaType.Image)
+        if (media is null)
         {
-            payload["image_url"] = mediaUrl;
+            payload["media_type"] = "TEXT";
         }
-        else
+        else if (mediaType == MediaType.Image)
         {
-            payload["video_url"] = mediaUrl;
+            payload["media_type"] = "IMAGE";
+            payload["image_url"] = media.Url;
+        }
+        else if (mediaType == MediaType.Video)
+        {
             payload["media_type"] = "VIDEO";
+            payload["video_url"] = media.Url;
         }
 
         var response = await _httpClient.PostAsync(
-            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(instagramUserId)}/media",
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(threadsUserId)}/threads",
             new FormUrlEncodedContent(payload),
             cancellationToken);
 
@@ -112,21 +118,21 @@ public sealed class InstagramPublishService : IInstagramPublishService
         if (!response.IsSuccessStatusCode)
         {
             return Result.Failure<string>(
-                new Error("Instagram.MediaCreateFailed", ReadGraphApiError(body) ?? "Failed to create Instagram media."));
+                new Error("Threads.CreateFailed", ReadGraphApiError(body) ?? "Failed to create Threads container."));
         }
 
         var parsed = JsonSerializer.Deserialize<GraphApiIdResponse>(body, JsonOptions);
         if (string.IsNullOrWhiteSpace(parsed?.Id))
         {
             return Result.Failure<string>(
-                new Error("Instagram.MediaCreateFailed", "Instagram response did not include a creation id."));
+                new Error("Threads.CreateFailed", "Threads response did not include a creation id."));
         }
 
         return Result.Success(parsed.Id);
     }
 
-    private async Task<Result<string>> PublishMediaAsync(
-        string instagramUserId,
+    private async Task<Result<string>> PublishThreadAsync(
+        string threadsUserId,
         string accessToken,
         string creationId,
         CancellationToken cancellationToken)
@@ -138,7 +144,7 @@ public sealed class InstagramPublishService : IInstagramPublishService
         };
 
         var response = await _httpClient.PostAsync(
-            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(instagramUserId)}/media_publish",
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(threadsUserId)}/threads_publish",
             new FormUrlEncodedContent(payload),
             cancellationToken);
 
@@ -146,21 +152,26 @@ public sealed class InstagramPublishService : IInstagramPublishService
         if (!response.IsSuccessStatusCode)
         {
             return Result.Failure<string>(
-                new Error("Instagram.PublishFailed", ReadGraphApiError(body) ?? "Failed to publish Instagram media."));
+                new Error("Threads.PublishFailed", ReadGraphApiError(body) ?? "Failed to publish Threads post."));
         }
 
         var parsed = JsonSerializer.Deserialize<GraphApiIdResponse>(body, JsonOptions);
         if (string.IsNullOrWhiteSpace(parsed?.Id))
         {
             return Result.Failure<string>(
-                new Error("Instagram.PublishFailed", "Instagram response did not include a post id."));
+                new Error("Threads.PublishFailed", "Threads response did not include a post id."));
         }
 
         return Result.Success(parsed.Id);
     }
 
-    private static MediaType ResolveMediaType(InstagramPublishMedia media)
+    private static MediaType ResolveMediaType(ThreadsPublishMedia? media)
     {
+        if (media is null)
+        {
+            return MediaType.None;
+        }
+
         if (!string.IsNullOrWhiteSpace(media.ContentType))
         {
             if (media.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ||
@@ -240,8 +251,9 @@ public sealed class InstagramPublishService : IInstagramPublishService
 
     private enum MediaType
     {
-        Unknown,
+        None,
         Image,
-        Video
+        Video,
+        Unknown
     }
 }

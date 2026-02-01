@@ -7,7 +7,7 @@ namespace Infrastructure.Logic.Facebook;
 
 public sealed class FacebookPublishService : IFacebookPublishService
 {
-    private const string GraphApiBaseUrl = "https://graph.facebook.com/v21.0";
+    private const string GraphApiBaseUrl = "https://graph.facebook.com/v24.0";
     private readonly HttpClient _httpClient;
 
     private static readonly JsonSerializerOptions JsonOptions = new()

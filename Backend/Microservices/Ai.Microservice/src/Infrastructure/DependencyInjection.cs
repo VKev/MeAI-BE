@@ -5,11 +5,13 @@ using Application.Abstractions.Instagram;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
 using Application.Abstractions.TikTok;
+using Application.Abstractions.Threads;
 using Domain.Repositories;
 using Infrastructure.Logic.Consumers;
 using Infrastructure.Logic.Facebook;
 using Infrastructure.Logic.Gemini;
 using Infrastructure.Logic.Instagram;
+using Infrastructure.Logic.Threads;
 using Infrastructure.Logic.Resources;
 using Infrastructure.Logic.SocialMedias;
 using Infrastructure.Logic.TikTok;
@@ -39,6 +41,11 @@ namespace Infrastructure
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
             services.AddScoped<IInstagramPublishService, InstagramPublishService>();
             services.AddScoped<ITikTokPublishService, TikTokPublishService>();
+            services.AddHttpClient("Threads");
+            services.AddScoped<IGeminiCaptionService, GeminiCaptionService>();
+            services.AddScoped<IFacebookPublishService, FacebookPublishService>();
+            services.AddScoped<IInstagramPublishService, InstagramPublishService>();
+            services.AddScoped<IThreadsPublishService, ThreadsPublishService>();
 
             services.AddGrpcClient<UserResourceService.UserResourceServiceClient>((sp, options) =>
             {
