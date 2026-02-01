@@ -81,6 +81,10 @@ public sealed class CompleteTikTokOAuthCommandHandler
         var tokenResponse = tokenResult.Value;
         var now = DateTimeExtensions.PostgreSqlUtcNow;
 
+        // Fetch user profile to include in metadata
+        var profileResult = await _tikTokOAuthService.GetUserProfileAsync(tokenResponse.AccessToken, cancellationToken);
+        var profile = profileResult.IsSuccess ? profileResult.Value : null;
+
         var metadata = JsonDocument.Parse(JsonSerializer.Serialize(new
         {
             open_id = tokenResponse.OpenId,
@@ -89,7 +93,13 @@ public sealed class CompleteTikTokOAuthCommandHandler
             expires_at = now.AddSeconds(tokenResponse.ExpiresIn),
             refresh_expires_at = now.AddSeconds(tokenResponse.RefreshExpiresIn),
             scope = tokenResponse.Scope,
-            token_type = tokenResponse.TokenType
+            token_type = tokenResponse.TokenType,
+            display_name = profile?.DisplayName,
+            avatar_url = profile?.AvatarUrl,
+            bio_description = profile?.BioDescription,
+            username = profile?.UnionId,
+            follower_count = profile?.FollowerCount,
+            following_count = profile?.FollowingCount
         }));
 
         var existingSocialMedia = await _socialMediaRepository.GetAll()
@@ -121,12 +131,17 @@ public sealed class CompleteTikTokOAuthCommandHandler
             await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
         }
 
-        var profileResult = await _profileService.GetUserProfileAsync(
-            socialMedia.Type,
-            socialMedia.Metadata,
-            cancellationToken);
+        var socialProfile = profile != null
+            ? new SocialMediaUserProfile(
+                UserId: profile.OpenId,
+                Username: profile.UnionId,
+                DisplayName: profile.DisplayName,
+                ProfilePictureUrl: profile.AvatarUrl,
+                Bio: profile.BioDescription,
+                FollowerCount: profile.FollowerCount,
+                FollowingCount: profile.FollowingCount)
+            : null;
 
-        var profile = profileResult.IsSuccess ? profileResult.Value : null;
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, profile));
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile));
     }
 }
