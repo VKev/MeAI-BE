@@ -33,7 +33,7 @@ public sealed class TikTokController : ApiController
         }
 
         var result = await _mediator.Send(
-            new InitiateTikTokOAuthCommand(userId, scopes ?? "user.info.basic"),
+            new InitiateTikTokOAuthCommand(userId, scopes),
             cancellationToken);
 
         if (result.IsFailure)
