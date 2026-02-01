@@ -42,7 +42,7 @@ public sealed class PublishPostCommandHandler
         IUserSocialMediaService userSocialMediaService,
         IFacebookPublishService facebookPublishService,
         IInstagramPublishService instagramPublishService,
-        ITikTokPublishService tikTokPublishService)
+        ITikTokPublishService tikTokPublishService,
         IThreadsPublishService threadsPublishService)
     {
         _postRepository = postRepository;
@@ -104,10 +104,11 @@ public sealed class PublishPostCommandHandler
 
         if (!string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(socialMedia.Type, InstagramType, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(socialMedia.Type, ThreadsType, StringComparison.OrdinalIgnoreCase))
         {
             return Result.Failure<PublishPostResponse>(
-                new Error("Post.InvalidSocialMedia", "Only Tiktok, Facebook, Instagram, or Threads social media accounts are supported for posts."));
+                new Error("Post.InvalidSocialMedia", "Only TikTok, Facebook, Instagram, or Threads social media accounts are supported for posts."));
         }
 
         var caption = post.Content?.Content?.Trim() ?? string.Empty;
@@ -141,7 +142,13 @@ public sealed class PublishPostCommandHandler
 
         if (string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase))
         {
-            if (mediaItems.Count != 1)
+            if (presignedResources.Length == 0)
+            {
+                return Result.Failure<PublishPostResponse>(
+                    new Error("TikTok.MissingMedia", "TikTok publishing requires at least one video."));
+            }
+
+            if (presignedResources.Length > 1)
             {
                 return Result.Failure<PublishPostResponse>(
                     new Error("TikTok.UnsupportedMedia", "TikTok publishing currently supports only one video."));
@@ -168,8 +175,8 @@ public sealed class PublishPostCommandHandler
                     OpenId: openId,
                     Caption: caption,
                     Media: new TikTokPublishMedia(
-                        mediaItems[0].Url,
-                        mediaItems[0].ContentType)),
+                        presignedResources[0].PresignedUrl,
+                        presignedResources[0].ContentType ?? presignedResources[0].ResourceType)),
                 cancellationToken);
 
             if (publishResult.IsFailure)
