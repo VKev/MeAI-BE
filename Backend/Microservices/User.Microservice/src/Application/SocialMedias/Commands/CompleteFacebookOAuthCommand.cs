@@ -198,7 +198,7 @@ public sealed class CompleteFacebookOAuthCommandHandler
             cancellationToken);
 
         var socialProfile = socialProfileResult.IsSuccess ? socialProfileResult.Value : null;
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile));
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile, includeMetadata: false));
     }
 
     private static string NormalizeEmail(string email) =>

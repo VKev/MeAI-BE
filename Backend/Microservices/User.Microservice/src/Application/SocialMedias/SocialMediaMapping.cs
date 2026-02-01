@@ -6,12 +6,12 @@ namespace Application.SocialMedias;
 
 internal static class SocialMediaMapping
 {
-    internal static SocialMediaResponse ToResponse(SocialMedia socialMedia, SocialMediaUserProfile? profile = null) =>
+    internal static SocialMediaResponse ToResponse(SocialMedia socialMedia, SocialMediaUserProfile? profile = null, bool includeMetadata = false) =>
         new(
             socialMedia.Id,
             socialMedia.Type,
             profile,
             socialMedia.CreatedAt,
             socialMedia.UpdatedAt,
-            socialMedia.Metadata?.RootElement.GetRawText());
+            includeMetadata ? socialMedia.Metadata?.RootElement.GetRawText() : null);
 }

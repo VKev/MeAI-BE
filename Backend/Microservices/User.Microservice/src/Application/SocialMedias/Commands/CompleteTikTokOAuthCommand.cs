@@ -142,6 +142,6 @@ public sealed class CompleteTikTokOAuthCommandHandler
                 FollowingCount: profile.FollowingCount)
             : null;
 
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile));
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile, includeMetadata: false));
     }
 }

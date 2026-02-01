@@ -122,6 +122,6 @@ public sealed class CompleteThreadsOAuthCommandHandler
                 FollowingCount: null)
             : null;
 
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile));
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile, includeMetadata: false));
     }
 }
