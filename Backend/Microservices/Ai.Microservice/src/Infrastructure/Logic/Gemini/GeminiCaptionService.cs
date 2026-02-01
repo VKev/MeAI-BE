@@ -41,7 +41,7 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
                 new Error("Gemini.MissingResources", "At least one resource is required for caption generation."));
         }
 
-        var prompt = BuildPrompt(request.PostType, request.LanguageHint);
+        var prompt = BuildPrompt(request.PostType, request.LanguageHint, request.Instruction);
         var parts = new List<GeminiPart>
         {
             new() { Text = prompt }
@@ -187,16 +187,20 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
         }
     }
 
-    private static string BuildPrompt(string postType, string? languageHint)
+    private static string BuildPrompt(string postType, string? languageHint, string? instruction)
     {
         var normalizedPostType = string.IsNullOrWhiteSpace(postType) ? "posts" : postType.Trim();
         var languageLine = string.IsNullOrWhiteSpace(languageHint)
             ? "Write the caption in Vietnamese or English."
             : $"Write the caption in {languageHint}.";
+        var instructionLine = string.IsNullOrWhiteSpace(instruction)
+            ? string.Empty
+            : $"Additional instructions: {instruction.Trim()} ";
 
         return $"Create a single Facebook {normalizedPostType} caption based on the attached media. " +
                "Return exactly one caption only (no options, no headings, no prefacing). " +
                $"{languageLine} " +
+               instructionLine +
                "Use a friendly tone, include relevant hashtags and a couple of emojis. " +
                "Keep it concise and engaging. Avoid markdown formatting.";
     }

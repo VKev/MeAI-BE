@@ -16,7 +16,8 @@ public interface IGeminiCaptionService
 public sealed record GeminiCaptionRequest(
     IReadOnlyList<GeminiCaptionResource> Resources,
     string PostType,
-    string? LanguageHint);
+    string? LanguageHint,
+    string? Instruction);
 
 public sealed record GeminiCaptionResource(
     string FileUri,

@@ -3,14 +3,14 @@ namespace Application.Veo.Models;
 public sealed record VeoCallbackPayload(
     int Code,
     string? Msg,
-    VeoCallbackData? Data,
-    bool? FallbackFlag);
+    VeoCallbackData? Data);
 
 public sealed record VeoCallbackData(
     string? TaskId,
-    VeoCallbackInfo? Info);
+    VeoCallbackInfo? Info,
+    bool? FallbackFlag);
 
 public sealed record VeoCallbackInfo(
-    string? ResultUrls,
-    string? OriginUrls,
+    List<string>? ResultUrls,
+    List<string>? OriginUrls,
     string? Resolution);

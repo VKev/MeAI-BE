@@ -19,6 +19,15 @@ resource "aws_s3_bucket" "tf_state" {
   force_destroy = local.bucket_force_destroy
 }
 
+resource "aws_s3_bucket_public_access_block" "tf_state_public_access" {
+  bucket = aws_s3_bucket.tf_state.id
+
+  block_public_acls       = false
+  ignore_public_acls      = false
+  block_public_policy     = false
+  restrict_public_buckets = false
+}
+
 # Enable ACLs for CloudFront logging
 resource "aws_s3_bucket_ownership_controls" "tf_state_ownership" {
   bucket = aws_s3_bucket.tf_state.id
