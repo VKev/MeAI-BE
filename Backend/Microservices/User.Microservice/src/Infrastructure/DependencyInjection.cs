@@ -43,6 +43,8 @@ namespace Infrastructure
             services.AddScoped<IFacebookOAuthService, FacebookOAuthService>();
             services.AddHttpClient("Instagram");
             services.AddScoped<IInstagramOAuthService, InstagramOAuthService>();
+            services.AddHttpClient("ResourceFetch");
+            services.AddScoped<IRemoteFileService, RemoteFileService>();
             services.AddSingleton<IObjectStorageService, S3ObjectStorageService>();
             services.AddSingleton<IConnectionMultiplexer>(sp =>
             {

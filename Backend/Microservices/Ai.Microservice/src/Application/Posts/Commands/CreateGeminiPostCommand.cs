@@ -15,7 +15,8 @@ public sealed record CreateGeminiPostCommand(
     IReadOnlyList<Guid> ResourceIds,
     string? Caption,
     string? PostType,
-    string? Language) : IRequest<Result<FacebookDraftPostResponse>>;
+    string? Language,
+    string? Instruction) : IRequest<Result<FacebookDraftPostResponse>>;
 
 public sealed class CreateGeminiPostCommandHandler
     : IRequestHandler<CreateGeminiPostCommand, Result<FacebookDraftPostResponse>>
@@ -100,7 +101,7 @@ public sealed class CreateGeminiPostCommandHandler
                 .ToList();
 
             var geminiResult = await _geminiCaptionService.GenerateCaptionAsync(
-                new GeminiCaptionRequest(geminiResources, resolvedPostType, languageHint),
+                new GeminiCaptionRequest(geminiResources, resolvedPostType, languageHint, request.Instruction),
                 cancellationToken);
 
             if (geminiResult.IsFailure)
