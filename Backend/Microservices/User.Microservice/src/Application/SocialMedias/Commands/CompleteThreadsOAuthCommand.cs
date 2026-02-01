@@ -76,7 +76,6 @@ public sealed class CompleteThreadsOAuthCommandHandler
             access_token = tokenResponse.AccessToken,
             expires_at = now.AddSeconds(tokenResponse.ExpiresIn),
             token_type = tokenResponse.TokenType,
-            // Profile info
             username = profile?.Username,
             name = profile?.Name,
             threads_profile_picture_url = profile?.ThreadsProfilePictureUrl,
