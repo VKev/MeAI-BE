@@ -102,12 +102,22 @@ public sealed class CompleteTikTokOAuthCommandHandler
             following_count = profile?.FollowingCount
         }));
 
-        var existingSocialMedia = await _socialMediaRepository.GetAll()
-            .FirstOrDefaultAsync(sm =>
-                    sm.UserId == userId &&
-                    sm.Type == "tiktok" &&
-                    !sm.IsDeleted,
-                cancellationToken);
+        var userTikTokAccounts = await _socialMediaRepository.GetAll()
+            .Where(sm =>
+                sm.UserId == userId &&
+                sm.Type == "tiktok" &&
+                sm.Metadata != null &&
+                !sm.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        var existingSocialMedia = userTikTokAccounts.FirstOrDefault(sm =>
+        {
+            if (sm.Metadata?.RootElement.TryGetProperty("open_id", out var openIdElement) == true)
+            {
+                return openIdElement.GetString() == tokenResponse.OpenId;
+            }
+            return false;
+        });
 
         SocialMedia socialMedia;
 

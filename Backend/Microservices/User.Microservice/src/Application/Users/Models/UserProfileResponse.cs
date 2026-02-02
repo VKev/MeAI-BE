@@ -9,9 +9,11 @@ public sealed record UserProfileResponse(
     string? PhoneNumber,
     string? Provider,
     Guid? AvatarResourceId,
+    string? AvatarPresignedUrl,
     string? Address,
     DateTime? Birthday,
     decimal? MeAiCoin,
     DateTime? CreatedAt,
     DateTime? UpdatedAt,
     IReadOnlyList<string> Roles);
+

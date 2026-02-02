@@ -27,6 +27,8 @@ public sealed class ProfileController : ApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateAvatar(
         [FromForm] IFormFile file,
+        [FromForm] string? status,
+        [FromForm] string? resourceType,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -40,14 +42,42 @@ public sealed class ProfileController : ApiController
                 new Error("Avatar.FileRequired", "File is required")));
         }
 
-        await using var stream = file.OpenReadStream();
+        var contentType = string.IsNullOrWhiteSpace(file.ContentType)
+            ? "application/octet-stream"
+            : file.ContentType;
+
         var command = new UpdateAvatarCommand(
             userId,
-            stream,
+            file.OpenReadStream(),
             file.FileName,
-            file.ContentType,
-            file.Length);
+            contentType,
+            file.Length,
+            status,
+            resourceType);
 
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPut("avatar/resource/{resourceId:guid}")]
+    [ProducesResponseType(typeof(Result<UserProfileResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetAvatarFromResource(
+        Guid resourceId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var command = new SetAvatarFromResourceCommand(userId, resourceId);
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
         {

@@ -1,6 +1,5 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Storage;
-using Application.Resources;
 using Application.Users.Models;
 using Domain.Entities;
 using MediatR;
@@ -11,17 +10,12 @@ using SharedLibrary.Extensions;
 
 namespace Application.Users.Commands;
 
-public sealed record UpdateAvatarCommand(
+public sealed record SetAvatarFromResourceCommand(
     Guid UserId,
-    Stream FileStream,
-    string FileName,
-    string ContentType,
-    long ContentLength,
-    string? Status,
-    string? ResourceType) : IRequest<Result<UserProfileResponse>>;
+    Guid ResourceId) : IRequest<Result<UserProfileResponse>>;
 
-public sealed class UpdateAvatarCommandHandler
-    : IRequestHandler<UpdateAvatarCommand, Result<UserProfileResponse>>
+public sealed class SetAvatarFromResourceCommandHandler
+    : IRequestHandler<SetAvatarFromResourceCommand, Result<UserProfileResponse>>
 {
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<Role> _roleRepository;
@@ -29,7 +23,7 @@ public sealed class UpdateAvatarCommandHandler
     private readonly IRepository<Resource> _resourceRepository;
     private readonly IObjectStorageService _objectStorageService;
 
-    public UpdateAvatarCommandHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
+    public SetAvatarFromResourceCommandHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
     {
         _userRepository = unitOfWork.Repository<User>();
         _roleRepository = unitOfWork.Repository<Role>();
@@ -38,7 +32,7 @@ public sealed class UpdateAvatarCommandHandler
         _objectStorageService = objectStorageService;
     }
 
-    public async Task<Result<UserProfileResponse>> Handle(UpdateAvatarCommand request,
+    public async Task<Result<UserProfileResponse>> Handle(SetAvatarFromResourceCommand request,
         CancellationToken cancellationToken)
     {
         var user = await _userRepository.GetAll()
@@ -49,38 +43,33 @@ public sealed class UpdateAvatarCommandHandler
             return Result.Failure<UserProfileResponse>(new Error("User.NotFound", "User not found"));
         }
 
-        var resourceId = Guid.CreateVersion7();
-        var storageKey = ResourceStorageKey.Build(request.UserId, resourceId);
+        // Verify the resource exists and belongs to the user
+        var resource = await _resourceRepository.GetAll()
+            .FirstOrDefaultAsync(r => r.Id == request.ResourceId && !r.IsDeleted, cancellationToken);
 
-        await using var fileStream = request.FileStream;
-        var uploadResult = await _objectStorageService.UploadAsync(
-            new StorageUploadRequest(
-                storageKey,
-                fileStream,
-                request.ContentType,
-                request.ContentLength),
-            cancellationToken);
-
-        if (uploadResult.IsFailure)
+        if (resource == null)
         {
-            return Result.Failure<UserProfileResponse>(uploadResult.Error);
+            return Result.Failure<UserProfileResponse>(new Error("Resource.NotFound", "Resource not found"));
         }
 
-        // Create new resource for avatar
-        var resource = new Resource
+        if (resource.UserId != request.UserId)
         {
-            Id = resourceId,
-            UserId = request.UserId,
-            Link = uploadResult.Value.Key,
-            Status = request.Status?.Trim() ?? "active",
-            ResourceType = request.ResourceType?.Trim() ?? "avatar",
-            ContentType = request.ContentType.Trim(),
-            CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
-        };
+            return Result.Failure<UserProfileResponse>(new Error("Resource.NotOwned", "Resource does not belong to user"));
+        }
 
-        await _resourceRepository.AddAsync(resource, cancellationToken);
+        // Verify the resource is an image type
+        if (string.IsNullOrEmpty(resource.ContentType) || !resource.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure<UserProfileResponse>(new Error("Resource.InvalidType", "Resource must be an image type"));
+        }
 
-        user.AvatarResourceId = resourceId;
+        // Update resource type to avatar
+        resource.ResourceType = "avatar";
+        resource.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        _resourceRepository.Update(resource);
+
+        // Update user avatar
+        user.AvatarResourceId = request.ResourceId;
         user.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         _userRepository.Update(user);
 
@@ -116,3 +105,4 @@ public sealed class UpdateAvatarCommandHandler
         return roleNames.Count == 0 ? [UserRoleConstants.User] : roleNames;
     }
 }
+

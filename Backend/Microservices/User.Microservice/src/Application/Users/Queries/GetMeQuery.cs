@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Storage;
 using Application.Users.Models;
 using Domain.Entities;
 using MediatR;
@@ -16,12 +17,16 @@ public sealed class GetMeQueryHandler
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
+    private readonly IRepository<Resource> _resourceRepository;
+    private readonly IObjectStorageService _objectStorageService;
 
-    public GetMeQueryHandler(IUnitOfWork unitOfWork)
+    public GetMeQueryHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
     {
         _userRepository = unitOfWork.Repository<User>();
         _roleRepository = unitOfWork.Repository<Role>();
         _userRoleRepository = unitOfWork.Repository<UserRole>();
+        _resourceRepository = unitOfWork.Repository<Resource>();
+        _objectStorageService = objectStorageService;
     }
 
     public async Task<Result<UserProfileResponse>> Handle(GetMeQuery request,
@@ -36,7 +41,24 @@ public sealed class GetMeQueryHandler
         }
 
         var roles = await ResolveRolesAsync(user.Id, cancellationToken);
-        return Result.Success(UserProfileMapping.ToResponse(user, roles));
+        var avatarPresignedUrl = await GetAvatarPresignedUrlAsync(user.AvatarResourceId, cancellationToken);
+        return Result.Success(UserProfileMapping.ToResponse(user, roles, avatarPresignedUrl));
+    }
+
+    private async Task<string?> GetAvatarPresignedUrlAsync(Guid? avatarResourceId, CancellationToken cancellationToken)
+    {
+        if (!avatarResourceId.HasValue)
+            return null;
+
+        var resource = await _resourceRepository.GetAll()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == avatarResourceId.Value && !r.IsDeleted, cancellationToken);
+
+        if (resource == null)
+            return null;
+
+        var presignedResult = _objectStorageService.GetPresignedUrl(resource.Link);
+        return presignedResult.IsSuccess ? presignedResult.Value : null;
     }
 
     private async Task<List<string>> ResolveRolesAsync(Guid userId, CancellationToken cancellationToken)
@@ -65,3 +87,4 @@ public sealed class GetMeQueryHandler
         return roleNames.Count == 0 ? new List<string> { UserRoleConstants.User } : roleNames;
     }
 }
+

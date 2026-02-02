@@ -5,7 +5,7 @@ namespace Application.Users;
 
 internal static class AdminUserMapping
 {
-    internal static AdminUserResponse ToResponse(User user, IReadOnlyList<string> roles) =>
+    internal static AdminUserResponse ToResponse(User user, IReadOnlyList<string> roles, string? avatarPresignedUrl = null) =>
         new(
             user.Id,
             user.Username,
@@ -15,6 +15,7 @@ internal static class AdminUserMapping
             user.PhoneNumber,
             user.Provider,
             user.AvatarResourceId,
+            avatarPresignedUrl,
             user.Address,
             user.Birthday,
             user.MeAiCoin,
@@ -24,3 +25,4 @@ internal static class AdminUserMapping
             user.DeletedAt,
             roles);
 }
+

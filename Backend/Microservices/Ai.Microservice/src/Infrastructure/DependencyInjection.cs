@@ -1,4 +1,5 @@
 using Application.Abstractions;
+using Application.Abstractions.Kie;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Instagram;
@@ -33,6 +34,7 @@ namespace Infrastructure
         public static IServiceCollection AddInfrastructure(this IServiceCollection services)
         {
             services.AddHttpClient<IVeoVideoService, VeoVideoService>();
+            services.AddHttpClient<IKieImageService, KieImageService>();
             services.AddHttpClient("Gemini");
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");
@@ -68,6 +70,7 @@ namespace Infrastructure
             services.AddScoped<IUserSocialMediaService, UserSocialMediaGrpcService>();
 
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
+            services.AddScoped<IImageTaskRepository, ImageTaskRepository>();
             services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
@@ -97,10 +100,22 @@ namespace Infrastructure
                 x.AddConsumer<VideoCompletedConsumer>();
                 x.AddConsumer<VideoFailedConsumer>();
 
+                // Image generation consumers
+                x.AddConsumer<SubmitImageTaskConsumer>();
+                x.AddConsumer<ImageCompletedConsumer>();
+                x.AddConsumer<ImageFailedConsumer>();
+
                 x.AddSagaStateMachine<VideoTaskStateMachine, VideoTaskState>()
                     .RedisRepository(r =>
                     {
                         r.KeyPrefix = "video-saga:";
+                        r.ConnectionFactory(provider => provider.GetRequiredService<IConnectionMultiplexer>());
+                    });
+
+                x.AddSagaStateMachine<ImageTaskStateMachine, ImageTaskState>()
+                    .RedisRepository(r =>
+                    {
+                        r.KeyPrefix = "image-saga:";
                         r.ConnectionFactory(provider => provider.GetRequiredService<IConnectionMultiplexer>());
                     });
 
