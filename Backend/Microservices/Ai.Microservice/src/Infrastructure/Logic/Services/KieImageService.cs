@@ -172,11 +172,9 @@ public sealed class KieImageService : IKieImageService
         if (correlationId.HasValue)
         {
             var baseUrl = _options.CallbackUrl.TrimEnd('/');
-            // Use a different callback path for images
             var imageCallbackUrl = baseUrl.Replace("/veo/", "/image/");
             if (imageCallbackUrl == baseUrl)
             {
-                // If no /veo/ in the URL, append /image/
                 imageCallbackUrl = $"{baseUrl.TrimEnd('/')}-image";
             }
             return $"{imageCallbackUrl}/{correlationId.Value}";
