@@ -6,6 +6,7 @@ using Application.Abstractions.Security;
 using Application.Abstractions.Storage;
 using Application.Abstractions.TikTok;
 using Application.Abstractions.Threads;
+using Application.Abstractions.SocialMedia;
 using Domain.Repositories;
 using Infrastructure.Logic.Payments;
 using Infrastructure.Logic.Security;
@@ -43,6 +44,7 @@ namespace Infrastructure
             services.AddScoped<IFacebookOAuthService, FacebookOAuthService>();
             services.AddHttpClient("Instagram");
             services.AddScoped<IInstagramOAuthService, InstagramOAuthService>();
+            services.AddScoped<ISocialMediaProfileService, Logic.SocialMedia.SocialMediaProfileService>();
             services.AddHttpClient("ResourceFetch");
             services.AddScoped<IRemoteFileService, RemoteFileService>();
             services.AddSingleton<IObjectStorageService, S3ObjectStorageService>();

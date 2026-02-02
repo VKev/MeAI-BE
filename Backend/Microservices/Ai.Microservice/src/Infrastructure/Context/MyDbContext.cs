@@ -28,6 +28,8 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<VideoTask> VideoTasks { get; set; }
 
+    public virtual DbSet<ImageTask> ImageTasks { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MyDbContext).Assembly);

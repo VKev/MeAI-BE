@@ -14,7 +14,10 @@ public sealed class ResourcesMultipartOperationTransformer : IOpenApiOperationTr
         var relativePath = context.Description.RelativePath ?? string.Empty;
         var method = context.Description.HttpMethod ?? string.Empty;
 
-        if (!relativePath.StartsWith("api/User/resources", StringComparison.OrdinalIgnoreCase))
+        var isResourcesEndpoint = relativePath.StartsWith("api/User/resources", StringComparison.OrdinalIgnoreCase);
+        var isAvatarEndpoint = relativePath.Equals("api/User/profile/avatar", StringComparison.OrdinalIgnoreCase);
+
+        if (!isResourcesEndpoint && !isAvatarEndpoint)
         {
             return Task.CompletedTask;
         }

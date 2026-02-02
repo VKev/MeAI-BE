@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Storage;
 using Application.Users.Models;
 using Domain.Entities;
 using MediatR;
@@ -15,12 +16,16 @@ public sealed class GetUsersQueryHandler : IRequestHandler<GetUsersQuery, Result
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
+    private readonly IRepository<Resource> _resourceRepository;
+    private readonly IObjectStorageService _objectStorageService;
 
-    public GetUsersQueryHandler(IUnitOfWork unitOfWork)
+    public GetUsersQueryHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
     {
         _userRepository = unitOfWork.Repository<User>();
         _roleRepository = unitOfWork.Repository<Role>();
         _userRoleRepository = unitOfWork.Repository<UserRole>();
+        _resourceRepository = unitOfWork.Repository<Resource>();
+        _objectStorageService = objectStorageService;
     }
 
     public async Task<Result<List<AdminUserResponse>>> Handle(GetUsersQuery request,
@@ -68,10 +73,33 @@ public sealed class GetUsersQueryHandler : IRequestHandler<GetUsersQuery, Result
             .GroupBy(ur => ur.UserId)
             .ToDictionary(group => group.Key, group => group.ToList());
 
+        // Fetch all avatar resources
+        var avatarResourceIds = users
+            .Where(u => u.AvatarResourceId.HasValue)
+            .Select(u => u.AvatarResourceId!.Value)
+            .Distinct()
+            .ToList();
+
+        var avatarResources = avatarResourceIds.Count == 0
+            ? new List<Resource>()
+            : await _resourceRepository.GetAll()
+                .AsNoTracking()
+                .Where(r => avatarResourceIds.Contains(r.Id) && !r.IsDeleted)
+                .ToListAsync(cancellationToken);
+
+        var avatarPresignedUrls = avatarResources.ToDictionary(
+            r => r.Id,
+            r => _objectStorageService.GetPresignedUrl(r.Link) is { IsSuccess: true } result ? result.Value : null);
+
         var responses = users.Select(user =>
         {
             var roleNames = ResolveUserRoles(user.Id, rolesByUser, roleLookup);
-            return AdminUserMapping.ToResponse(user, roleNames);
+            string? avatarUrl = null;
+            if (user.AvatarResourceId.HasValue)
+            {
+                avatarPresignedUrls.TryGetValue(user.AvatarResourceId.Value, out avatarUrl);
+            }
+            return AdminUserMapping.ToResponse(user, roleNames, avatarUrl);
         }).ToList();
 
         return Result.Success(responses);
@@ -96,3 +124,4 @@ public sealed class GetUsersQueryHandler : IRequestHandler<GetUsersQuery, Result
         return roleNames.Count == 0 ? new List<string> { UserRoleConstants.User } : roleNames;
     }
 }
+

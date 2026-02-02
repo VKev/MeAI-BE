@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.SocialMedia;
 using Application.SocialMedias.Models;
 using Domain.Entities;
 using MediatR;
@@ -20,10 +21,12 @@ public sealed class GetSocialMediasQueryHandler
     private const int DefaultPageSize = 50;
     private const int MaxPageSize = 100;
     private readonly IRepository<SocialMedia> _repository;
+    private readonly ISocialMediaProfileService _profileService;
 
-    public GetSocialMediasQueryHandler(IUnitOfWork unitOfWork)
+    public GetSocialMediasQueryHandler(IUnitOfWork unitOfWork, ISocialMediaProfileService profileService)
     {
         _repository = unitOfWork.Repository<SocialMedia>();
+        _profileService = profileService;
     }
 
     public async Task<Result<List<SocialMediaResponse>>> Handle(GetSocialMediasQuery request,
@@ -50,7 +53,18 @@ public sealed class GetSocialMediasQueryHandler
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        var response = socialMedias.Select(SocialMediaMapping.ToResponse).ToList();
-        return Result.Success(response);
+        var responses = new List<SocialMediaResponse>();
+        foreach (var socialMedia in socialMedias)
+        {
+            var profileResult = await _profileService.GetUserProfileAsync(
+                socialMedia.Type,
+                socialMedia.Metadata,
+                cancellationToken);
+
+            var profile = profileResult.IsSuccess ? profileResult.Value : null;
+            responses.Add(SocialMediaMapping.ToResponse(socialMedia, profile));
+        }
+
+        return Result.Success(responses);
     }
 }

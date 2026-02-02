@@ -356,6 +356,5 @@ public sealed record EditProfileRequest(
     string? FullName,
     string? PhoneNumber,
     string? Address,
-    DateTime? Birthday,
-    Guid? AvatarResourceId);
+    DateTime? Birthday);
 

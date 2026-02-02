@@ -1,9 +1,11 @@
 using Application.Abstractions;
+using Application.Abstractions.Kie;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Instagram;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
+using Application.Abstractions.TikTok;
 using Application.Abstractions.Threads;
 using Domain.Repositories;
 using Infrastructure.Logic.Consumers;
@@ -13,6 +15,7 @@ using Infrastructure.Logic.Instagram;
 using Infrastructure.Logic.Threads;
 using Infrastructure.Logic.Resources;
 using Infrastructure.Logic.SocialMedias;
+using Infrastructure.Logic.TikTok;
 using Infrastructure.Repositories;
 using Infrastructure.Logic.Sagas;
 using Infrastructure.Logic.Services;
@@ -31,9 +34,15 @@ namespace Infrastructure
         public static IServiceCollection AddInfrastructure(this IServiceCollection services)
         {
             services.AddHttpClient<IVeoVideoService, VeoVideoService>();
+            services.AddHttpClient<IKieImageService, KieImageService>();
             services.AddHttpClient("Gemini");
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");
+            services.AddHttpClient("TikTok");
+            services.AddScoped<IGeminiCaptionService, GeminiCaptionService>();
+            services.AddScoped<IFacebookPublishService, FacebookPublishService>();
+            services.AddScoped<IInstagramPublishService, InstagramPublishService>();
+            services.AddScoped<ITikTokPublishService, TikTokPublishService>();
             services.AddHttpClient("Threads");
             services.AddScoped<IGeminiCaptionService, GeminiCaptionService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
@@ -61,6 +70,7 @@ namespace Infrastructure
             services.AddScoped<IUserSocialMediaService, UserSocialMediaGrpcService>();
 
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
+            services.AddScoped<IImageTaskRepository, ImageTaskRepository>();
             services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
@@ -90,10 +100,22 @@ namespace Infrastructure
                 x.AddConsumer<VideoCompletedConsumer>();
                 x.AddConsumer<VideoFailedConsumer>();
 
+                // Image generation consumers
+                x.AddConsumer<SubmitImageTaskConsumer>();
+                x.AddConsumer<ImageCompletedConsumer>();
+                x.AddConsumer<ImageFailedConsumer>();
+
                 x.AddSagaStateMachine<VideoTaskStateMachine, VideoTaskState>()
                     .RedisRepository(r =>
                     {
                         r.KeyPrefix = "video-saga:";
+                        r.ConnectionFactory(provider => provider.GetRequiredService<IConnectionMultiplexer>());
+                    });
+
+                x.AddSagaStateMachine<ImageTaskStateMachine, ImageTaskState>()
+                    .RedisRepository(r =>
+                    {
+                        r.KeyPrefix = "image-saga:";
                         r.ConnectionFactory(provider => provider.GetRequiredService<IConnectionMultiplexer>());
                     });
 

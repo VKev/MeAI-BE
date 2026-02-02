@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Application.Abstractions.Data;
+using Application.Abstractions.SocialMedia;
 using Application.Abstractions.TikTok;
 using Application.SocialMedias.Models;
 using Domain.Entities;
@@ -24,15 +25,18 @@ public sealed class CompleteTikTokOAuthCommandHandler
     private readonly ITikTokOAuthService _tikTokOAuthService;
     private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IMemoryCache _memoryCache;
+    private readonly ISocialMediaProfileService _profileService;
 
     public CompleteTikTokOAuthCommandHandler(
         ITikTokOAuthService tikTokOAuthService,
         IUnitOfWork unitOfWork,
-        IMemoryCache memoryCache)
+        IMemoryCache memoryCache,
+        ISocialMediaProfileService profileService)
     {
         _tikTokOAuthService = tikTokOAuthService;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _memoryCache = memoryCache;
+        _profileService = profileService;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(
@@ -77,6 +81,10 @@ public sealed class CompleteTikTokOAuthCommandHandler
         var tokenResponse = tokenResult.Value;
         var now = DateTimeExtensions.PostgreSqlUtcNow;
 
+        // Fetch user profile to include in metadata
+        var profileResult = await _tikTokOAuthService.GetUserProfileAsync(tokenResponse.AccessToken, cancellationToken);
+        var profile = profileResult.IsSuccess ? profileResult.Value : null;
+
         var metadata = JsonDocument.Parse(JsonSerializer.Serialize(new
         {
             open_id = tokenResponse.OpenId,
@@ -85,15 +93,31 @@ public sealed class CompleteTikTokOAuthCommandHandler
             expires_at = now.AddSeconds(tokenResponse.ExpiresIn),
             refresh_expires_at = now.AddSeconds(tokenResponse.RefreshExpiresIn),
             scope = tokenResponse.Scope,
-            token_type = tokenResponse.TokenType
+            token_type = tokenResponse.TokenType,
+            display_name = profile?.DisplayName,
+            avatar_url = profile?.AvatarUrl,
+            bio_description = profile?.BioDescription,
+            username = profile?.UnionId,
+            follower_count = profile?.FollowerCount,
+            following_count = profile?.FollowingCount
         }));
 
-        var existingSocialMedia = await _socialMediaRepository.GetAll()
-            .FirstOrDefaultAsync(sm =>
-                    sm.UserId == userId &&
-                    sm.Type == "tiktok" &&
-                    !sm.IsDeleted,
-                cancellationToken);
+        var userTikTokAccounts = await _socialMediaRepository.GetAll()
+            .Where(sm =>
+                sm.UserId == userId &&
+                sm.Type == "tiktok" &&
+                sm.Metadata != null &&
+                !sm.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        var existingSocialMedia = userTikTokAccounts.FirstOrDefault(sm =>
+        {
+            if (sm.Metadata?.RootElement.TryGetProperty("open_id", out var openIdElement) == true)
+            {
+                return openIdElement.GetString() == tokenResponse.OpenId;
+            }
+            return false;
+        });
 
         SocialMedia socialMedia;
 
@@ -117,6 +141,17 @@ public sealed class CompleteTikTokOAuthCommandHandler
             await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
         }
 
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia));
+        var socialProfile = profile != null
+            ? new SocialMediaUserProfile(
+                UserId: profile.OpenId,
+                Username: profile.UnionId,
+                DisplayName: profile.DisplayName,
+                ProfilePictureUrl: profile.AvatarUrl,
+                Bio: profile.BioDescription,
+                FollowerCount: profile.FollowerCount,
+                FollowingCount: profile.FollowingCount)
+            : null;
+
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile, includeMetadata: false));
     }
 }

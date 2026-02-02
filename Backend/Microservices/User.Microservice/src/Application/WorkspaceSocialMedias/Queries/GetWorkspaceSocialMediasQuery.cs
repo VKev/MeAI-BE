@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.SocialMedia;
 using Application.SocialMedias;
 using Application.SocialMedias.Models;
 using Domain.Entities;
@@ -24,12 +25,14 @@ public sealed class GetWorkspaceSocialMediasQueryHandler
     private readonly IRepository<Workspace> _workspaceRepository;
     private readonly IRepository<WorkspaceSocialMedia> _linkRepository;
     private readonly IRepository<SocialMedia> _socialMediaRepository;
+    private readonly ISocialMediaProfileService _profileService;
 
-    public GetWorkspaceSocialMediasQueryHandler(IUnitOfWork unitOfWork)
+    public GetWorkspaceSocialMediasQueryHandler(IUnitOfWork unitOfWork, ISocialMediaProfileService profileService)
     {
         _workspaceRepository = unitOfWork.Repository<Workspace>();
         _linkRepository = unitOfWork.Repository<WorkspaceSocialMedia>();
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
+        _profileService = profileService;
     }
 
     public async Task<Result<List<SocialMediaResponse>>> Handle(GetWorkspaceSocialMediasQuery request,
@@ -82,7 +85,18 @@ public sealed class GetWorkspaceSocialMediasQueryHandler
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        var response = results.Select(SocialMediaMapping.ToResponse).ToList();
-        return Result.Success(response);
+        var responses = new List<SocialMediaResponse>();
+        foreach (var socialMedia in results)
+        {
+            var profileResult = await _profileService.GetUserProfileAsync(
+                socialMedia.Type,
+                socialMedia.Metadata,
+                cancellationToken);
+
+            var profile = profileResult.IsSuccess ? profileResult.Value : null;
+            responses.Add(SocialMediaMapping.ToResponse(socialMedia, profile));
+        }
+
+        return Result.Success(responses);
     }
 }

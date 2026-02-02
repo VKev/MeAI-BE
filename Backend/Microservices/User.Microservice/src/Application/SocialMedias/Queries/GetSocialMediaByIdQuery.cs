@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.SocialMedia;
 using Application.SocialMedias.Models;
 using Domain.Entities;
 using MediatR;
@@ -15,10 +16,12 @@ public sealed class GetSocialMediaByIdQueryHandler
     : IRequestHandler<GetSocialMediaByIdQuery, Result<SocialMediaResponse>>
 {
     private readonly IRepository<SocialMedia> _repository;
+    private readonly ISocialMediaProfileService _profileService;
 
-    public GetSocialMediaByIdQueryHandler(IUnitOfWork unitOfWork)
+    public GetSocialMediaByIdQueryHandler(IUnitOfWork unitOfWork, ISocialMediaProfileService profileService)
     {
         _repository = unitOfWork.Repository<SocialMedia>();
+        _profileService = profileService;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(GetSocialMediaByIdQuery request,
@@ -38,6 +41,12 @@ public sealed class GetSocialMediaByIdQueryHandler
                 new Error("SocialMedia.NotFound", "Social media not found"));
         }
 
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia));
+        var profileResult = await _profileService.GetUserProfileAsync(
+            socialMedia.Type,
+            socialMedia.Metadata,
+            cancellationToken);
+
+        var profile = profileResult.IsSuccess ? profileResult.Value : null;
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, profile));
     }
 }

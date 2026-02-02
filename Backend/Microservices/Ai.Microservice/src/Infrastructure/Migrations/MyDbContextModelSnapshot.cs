@@ -102,6 +102,82 @@ namespace Infrastructure.Migrations
                     b.ToTable("chat_sessions", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.ImageTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AspectRatio")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("aspect_ratio");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int?>("ErrorCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("KieTaskId")
+                        .HasColumnType("text")
+                        .HasColumnName("kie_task_id");
+
+                    b.Property<string>("OutputFormat")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("output_format");
+
+                    b.Property<string>("Prompt")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("prompt");
+
+                    b.Property<string>("Resolution")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("resolution");
+
+                    b.Property<string>("ResultUrls")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result_urls");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("image_tasks_pkey");
+
+                    b.HasIndex("CorrelationId")
+                        .HasDatabaseName("ix_image_tasks_correlation_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_image_tasks_user_id");
+
+                    b.ToTable("image_tasks", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.Post", b =>
                 {
                     b.Property<Guid>("Id")

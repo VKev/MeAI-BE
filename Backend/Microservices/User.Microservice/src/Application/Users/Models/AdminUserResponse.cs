@@ -9,6 +9,7 @@ public sealed record AdminUserResponse(
     string? PhoneNumber,
     string? Provider,
     Guid? AvatarResourceId,
+    string? AvatarPresignedUrl,
     string? Address,
     DateTime? Birthday,
     decimal? MeAiCoin,
@@ -17,3 +18,4 @@ public sealed record AdminUserResponse(
     DateTime? UpdatedAt,
     DateTime? DeletedAt,
     IReadOnlyList<string> Roles);
+

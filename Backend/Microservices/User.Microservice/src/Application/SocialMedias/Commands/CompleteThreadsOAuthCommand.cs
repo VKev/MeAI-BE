@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Application.Abstractions.Data;
+using Application.Abstractions.SocialMedia;
 using Application.Abstractions.Threads;
 using Application.SocialMedias.Models;
 using Domain.Entities;
@@ -22,13 +23,16 @@ public sealed class CompleteThreadsOAuthCommandHandler
 {
     private readonly IThreadsOAuthService _threadsOAuthService;
     private readonly IRepository<SocialMedia> _socialMediaRepository;
+    private readonly ISocialMediaProfileService _profileService;
 
     public CompleteThreadsOAuthCommandHandler(
         IThreadsOAuthService threadsOAuthService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ISocialMediaProfileService profileService)
     {
         _threadsOAuthService = threadsOAuthService;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
+        _profileService = profileService;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(
@@ -62,12 +66,20 @@ public sealed class CompleteThreadsOAuthCommandHandler
         var tokenResponse = tokenResult.Value;
         var now = DateTimeExtensions.PostgreSqlUtcNow;
 
+        // Fetch user profile to include in metadata
+        var profileResult = await _threadsOAuthService.GetUserProfileAsync(tokenResponse.AccessToken, cancellationToken);
+        var profile = profileResult.IsSuccess ? profileResult.Value : null;
+
         var metadata = JsonDocument.Parse(JsonSerializer.Serialize(new
         {
             user_id = tokenResponse.UserId,
             access_token = tokenResponse.AccessToken,
             expires_at = now.AddSeconds(tokenResponse.ExpiresIn),
-            token_type = tokenResponse.TokenType
+            token_type = tokenResponse.TokenType,
+            username = profile?.Username,
+            name = profile?.Name,
+            threads_profile_picture_url = profile?.ThreadsProfilePictureUrl,
+            threads_biography = profile?.ThreadsBiography
         }));
 
         var existingSocialMedia = await _socialMediaRepository.GetAll()
@@ -99,6 +111,17 @@ public sealed class CompleteThreadsOAuthCommandHandler
             await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
         }
 
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia));
+        var socialProfile = profile != null
+            ? new SocialMediaUserProfile(
+                UserId: profile.Id,
+                Username: profile.Username,
+                DisplayName: profile.Name,
+                ProfilePictureUrl: profile.ThreadsProfilePictureUrl,
+                Bio: profile.ThreadsBiography,
+                FollowerCount: null,
+                FollowingCount: null)
+            : null;
+
+        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile, includeMetadata: false));
     }
 }

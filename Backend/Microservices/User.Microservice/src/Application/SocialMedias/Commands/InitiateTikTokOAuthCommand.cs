@@ -8,7 +8,7 @@ namespace Application.SocialMedias.Commands;
 
 public sealed record InitiateTikTokOAuthCommand(
     Guid UserId,
-    string Scopes) : IRequest<Result<TikTokOAuthInitiationResponse>>;
+    string? Scopes) : IRequest<Result<TikTokOAuthInitiationResponse>>;
 
 public sealed record TikTokOAuthInitiationResponse(string AuthorizationUrl, string State);
 
@@ -31,7 +31,7 @@ public sealed class InitiateTikTokOAuthCommandHandler
         CancellationToken cancellationToken)
     {
         var scopes = string.IsNullOrWhiteSpace(request.Scopes)
-            ? "user.info.basic"
+            ? "user.info.basic,video.publish,video.upload,user.info.profile,user.info.stats"
             : request.Scopes;
 
         var (authorizationUrl, state, codeVerifier) = _tikTokOAuthService.GenerateAuthorizationUrl(request.UserId, scopes);
