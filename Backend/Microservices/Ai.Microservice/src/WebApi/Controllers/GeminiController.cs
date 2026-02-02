@@ -37,7 +37,8 @@ public sealed class GeminiController : ApiController
                 request.ResourceIds ?? new List<Guid>(),
                 request.Caption,
                 request.PostType,
-                request.Language),
+                request.Language,
+                request.Instruction),
             cancellationToken);
 
         if (result.IsFailure)
@@ -59,4 +60,5 @@ public sealed record GeminiPostRequest(
     List<Guid>? ResourceIds,
     string? Caption,
     string? PostType,
-    string? Language);
+    string? Language,
+    string? Instruction);

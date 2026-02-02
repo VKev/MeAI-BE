@@ -6,6 +6,7 @@ package user.resources;
 
 service UserResourceService {
   rpc GetPresignedResources (GetPresignedResourcesRequest) returns (GetPresignedResourcesResponse);
+  rpc CreateResourcesFromUrls (CreateResourcesFromUrlsRequest) returns (CreateResourcesFromUrlsResponse);
 }
 
 service UserSocialMediaService {
@@ -26,6 +27,24 @@ message PresignedResource {
 
 message GetPresignedResourcesResponse {
   repeated PresignedResource resources = 1;
+}
+
+message CreateResourcesFromUrlsRequest {
+  string user_id = 1;
+  repeated string urls = 2;
+  string status = 3;
+  string resource_type = 4;
+}
+
+message CreatedResource {
+  string resource_id = 1;
+  string presigned_url = 2;
+  string content_type = 3;
+  string resource_type = 4;
+}
+
+message CreateResourcesFromUrlsResponse {
+  repeated CreatedResource resources = 1;
 }
 
 message GetSocialMediasByIdsRequest {

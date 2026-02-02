@@ -68,6 +68,8 @@ namespace Infrastructure
             services.AddScoped<IUserSocialMediaService, UserSocialMediaGrpcService>();
 
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
+            services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
+            services.AddScoped<IChatRepository, ChatRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
 
@@ -99,6 +101,7 @@ namespace Infrastructure
                     .RedisRepository(r =>
                     {
                         r.KeyPrefix = "video-saga:";
+                        r.ConnectionFactory(provider => provider.GetRequiredService<IConnectionMultiplexer>());
                     });
 
                 x.UsingRabbitMq((context, cfg) =>

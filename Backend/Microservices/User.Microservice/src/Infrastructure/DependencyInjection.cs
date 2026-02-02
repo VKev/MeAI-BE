@@ -45,6 +45,8 @@ namespace Infrastructure
             services.AddHttpClient("Instagram");
             services.AddScoped<IInstagramOAuthService, InstagramOAuthService>();
             services.AddScoped<ISocialMediaProfileService, Logic.SocialMedia.SocialMediaProfileService>();
+            services.AddHttpClient("ResourceFetch");
+            services.AddScoped<IRemoteFileService, RemoteFileService>();
             services.AddSingleton<IObjectStorageService, S3ObjectStorageService>();
             services.AddSingleton<IConnectionMultiplexer>(sp =>
             {

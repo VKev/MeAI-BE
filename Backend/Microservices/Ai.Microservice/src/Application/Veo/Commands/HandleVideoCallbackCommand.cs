@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Contracts.VideoGenerating;
 using SharedLibrary.Extensions;
+using System.Text.Json;
 
 namespace Application.Veo.Commands;
 
@@ -70,12 +71,15 @@ public sealed class HandleVideoCallbackCommandHandler
                 veoTaskId,
                 correlationId);
 
+            var resultUrls = payload.Data?.Info?.ResultUrls ?? new List<string>();
+            var originUrls = payload.Data?.Info?.OriginUrls ?? new List<string>();
+
             await _bus.Publish(new VideoGenerationCompleted
             {
                 CorrelationId = correlationId,
                 VeoTaskId = veoTaskId ?? videoTask.VeoTaskId ?? string.Empty,
-                ResultUrls = payload.Data?.Info?.ResultUrls ?? "[]",
-                OriginUrls = payload.Data?.Info?.OriginUrls,
+                ResultUrls = JsonSerializer.Serialize(resultUrls),
+                OriginUrls = originUrls.Count == 0 ? null : JsonSerializer.Serialize(originUrls),
                 Resolution = payload.Data?.Info?.Resolution,
                 CompletedAt = DateTimeExtensions.PostgreSqlUtcNow
             }, cancellationToken);
