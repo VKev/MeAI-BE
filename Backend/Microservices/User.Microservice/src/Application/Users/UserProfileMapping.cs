@@ -5,7 +5,7 @@ namespace Application.Users;
 
 internal static class UserProfileMapping
 {
-    internal static UserProfileResponse ToResponse(User user, IReadOnlyList<string> roles) =>
+    internal static UserProfileResponse ToResponse(User user, IReadOnlyList<string> roles, string? avatarPresignedUrl = null) =>
         new(
             user.Id,
             user.Username ?? string.Empty,
@@ -15,6 +15,7 @@ internal static class UserProfileMapping
             user.PhoneNumber,
             user.Provider,
             user.AvatarResourceId,
+            avatarPresignedUrl,
             user.Address,
             user.Birthday,
             user.MeAiCoin,
@@ -22,3 +23,4 @@ internal static class UserProfileMapping
             user.UpdatedAt,
             roles);
 }
+

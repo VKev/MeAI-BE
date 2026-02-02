@@ -56,7 +56,7 @@ public sealed class GetSocialMediasByIdsQueryHandler
                 new Error("SocialMedia.NotFound", "One or more social media accounts were not found."));
         }
 
-        var response = socialMedias.Select(SocialMediaMapping.ToResponse).ToList();
+        var response = socialMedias.Select(sm => SocialMediaMapping.ToResponse(sm, includeMetadata: true)).ToList();
         return Result.Success<IReadOnlyList<SocialMediaResponse>>(response);
     }
 }

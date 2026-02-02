@@ -67,32 +67,6 @@ public sealed class ThreadsController : ApiController
         return Ok(result);
     }
 
-    [HttpPost("{socialMediaId:guid}/refresh")]
-    [Authorize]
-    [ProducesResponseType(typeof(Result<SocialMediaResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> RefreshToken(
-        Guid socialMediaId,
-        CancellationToken cancellationToken)
-    {
-        if (!TryGetUserId(out var userId))
-        {
-            return Unauthorized(new MessageResponse("Unauthorized"));
-        }
-
-        var result = await _mediator.Send(
-            new RefreshThreadsTokenCommand(socialMediaId, userId),
-            cancellationToken);
-
-        if (result.IsFailure)
-        {
-            return HandleFailure(result);
-        }
-
-        return Ok(result);
-    }
-
     private bool TryGetUserId(out Guid userId)
     {
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);

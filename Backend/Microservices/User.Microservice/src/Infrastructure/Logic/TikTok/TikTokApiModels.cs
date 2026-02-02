@@ -128,3 +128,42 @@ internal sealed class TikTokApiError
     public string? LogId { get; set; }
 }
 
+// User Info API response models
+internal sealed class TikTokUserInfoApiResponse
+{
+    [JsonPropertyName("data")]
+    public TikTokUserInfoData? Data { get; set; }
+
+    [JsonPropertyName("error")]
+    public TikTokApiError? Error { get; set; }
+}
+
+internal sealed class TikTokUserInfoData
+{
+    [JsonPropertyName("user")]
+    public TikTokUserInfoUser? User { get; set; }
+}
+
+internal sealed class TikTokUserInfoUser
+{
+    [JsonPropertyName("open_id")]
+    public string? OpenId { get; set; }
+
+    [JsonPropertyName("union_id")]
+    public string? UnionId { get; set; }
+
+    [JsonPropertyName("display_name")]
+    public string? DisplayName { get; set; }
+
+    [JsonPropertyName("avatar_url")]
+    public string? AvatarUrl { get; set; }
+
+    [JsonPropertyName("bio_description")]
+    public string? BioDescription { get; set; }
+
+    [JsonPropertyName("follower_count")]
+    public int? FollowerCount { get; set; }
+
+    [JsonPropertyName("following_count")]
+    public int? FollowingCount { get; set; }
+}

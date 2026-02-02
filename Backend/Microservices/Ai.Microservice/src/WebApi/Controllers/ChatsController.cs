@@ -178,6 +178,38 @@ public sealed class ChatsController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("image")]
+    [ProducesResponseType(typeof(Result<ChatImageResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CreateChatImage(
+        [FromBody] CreateChatImageRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var command = new CreateChatImageCommand(
+            UserId: userId,
+            ChatSessionId: request.ChatSessionId,
+            Prompt: request.Prompt,
+            ResourceIds: request.ResourceIds ?? new List<Guid>(),
+            AspectRatio: request.AspectRatio,
+            Resolution: request.Resolution,
+            OutputFormat: request.OutputFormat);
+
+        var result = await _mediator.Send(command, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -194,6 +226,14 @@ public sealed record CreateChatVideoRequest(
     int? Seeds,
     bool? EnableTranslation,
     string? Watermark);
+
+public sealed record CreateChatImageRequest(
+    Guid ChatSessionId,
+    string Prompt,
+    List<Guid>? ResourceIds,
+    string? AspectRatio,
+    string? Resolution,
+    string? OutputFormat);
 
 public sealed record CreateChatRequest(
     Guid ChatSessionId,

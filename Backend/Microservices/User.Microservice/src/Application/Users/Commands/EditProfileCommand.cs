@@ -14,8 +14,7 @@ public sealed record EditProfileCommand(
     string? FullName,
     string? PhoneNumber,
     string? Address,
-    DateTime? Birthday,
-    Guid? AvatarResourceId) : IRequest<Result<UserProfileResponse>>;
+    DateTime? Birthday) : IRequest<Result<UserProfileResponse>>;
 
 public sealed class EditProfileCommandHandler
     : IRequestHandler<EditProfileCommand, Result<UserProfileResponse>>
@@ -60,11 +59,6 @@ public sealed class EditProfileCommandHandler
         if (request.Birthday.HasValue)
         {
             user.Birthday = request.Birthday;
-        }
-
-        if (request.AvatarResourceId.HasValue)
-        {
-            user.AvatarResourceId = request.AvatarResourceId;
         }
 
         user.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
