@@ -143,6 +143,7 @@ public sealed class TikTokPublishService : ITikTokPublishService
             request.Caption,
             request.Media.Url,
             creatorInfo,
+            request.IsPrivate,
             cancellationToken);
 
         if (publishResult.IsFailure)
@@ -161,16 +162,28 @@ public sealed class TikTokPublishService : ITikTokPublishService
         string caption,
         string videoUrl,
         TikTokCreatorInfo creatorInfo,
+        bool? isPrivate,
         CancellationToken cancellationToken)
     {
         try
         {
-            var privacyLevel = creatorInfo.PrivacyLevelOptions.Contains("SELF_ONLY")
-                ? "SELF_ONLY"
-                : creatorInfo.PrivacyLevelOptions.FirstOrDefault() ?? "SELF_ONLY";
+            string privacyLevel;
+            if (isPrivate == false)
+            {
+                var publicOptions = new[] { "PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR" };
+                privacyLevel = publicOptions.FirstOrDefault(opt => creatorInfo.PrivacyLevelOptions.Contains(opt))
+                    ?? creatorInfo.PrivacyLevelOptions.FirstOrDefault()
+                    ?? "SELF_ONLY";
+            }
+            else
+            {
+                privacyLevel = creatorInfo.PrivacyLevelOptions.Contains("SELF_ONLY")
+                    ? "SELF_ONLY"
+                    : creatorInfo.PrivacyLevelOptions.FirstOrDefault() ?? "SELF_ONLY";
+            }
 
-            _logger.LogInformation("[TikTok] Publishing video with privacy_level={PrivacyLevel}, available_options=[{Options}]",
-                privacyLevel, string.Join(", ", creatorInfo.PrivacyLevelOptions));
+            _logger.LogInformation("[TikTok] Publishing video with privacy_level={PrivacyLevel}, isPrivate={IsPrivate}, available_options=[{Options}]",
+                privacyLevel, isPrivate, string.Join(", ", creatorInfo.PrivacyLevelOptions));
 
             var requestBody = new TikTokVideoPublishRequest
             {

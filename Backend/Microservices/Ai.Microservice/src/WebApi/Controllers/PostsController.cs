@@ -153,7 +153,8 @@ public sealed class PostsController : ApiController
         var command = new PublishPostCommand(
             userId,
             request.PostId,
-            request.SocialMediaId);
+            request.SocialMediaId,
+            request.IsPrivate);
 
         var result = await _mediator.Send(command, cancellationToken);
 
@@ -186,4 +187,5 @@ public sealed record UpdatePostRequest(
 
 public sealed record PublishPostRequest(
     Guid PostId,
-    Guid SocialMediaId);
+    Guid SocialMediaId,
+    bool? IsPrivate = null);
