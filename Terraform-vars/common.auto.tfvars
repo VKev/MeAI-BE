@@ -77,6 +77,8 @@ certificate_arn = null
 
 enable_https_redirect = true
 
+alb_idle_timeout = 180
+
 use_cloudflare = true
 
 cloudflare_api_token = "<REDACTED>"

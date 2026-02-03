@@ -11,6 +11,7 @@ module "alb" {
   resource_name_prefix  = local.alb_name_prefix
   vpc_id                = module.vpc.vpc_id
   public_subnet_ids     = module.vpc.public_subnet_ids
+  idle_timeout          = var.alb_idle_timeout
   # NodePorts exposed by the EKS services (only used when var.use_eks = true)
   # API Gateway NodePort: 32080
   # n8n proxy NodePort:   30578

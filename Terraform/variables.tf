@@ -139,6 +139,12 @@ variable "enable_https_redirect" {
   default     = true
 }
 
+variable "alb_idle_timeout" {
+  description = "Idle timeout in seconds for the Application Load Balancer."
+  type        = number
+  default     = 60
+}
+
 # CloudFront Configuration
 variable "use_cloudfront_https" {
   description = "Whether to use CloudFront to provide free HTTPS for ALB. When true, CloudFront will be created in front of ALB."

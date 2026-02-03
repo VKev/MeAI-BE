@@ -623,6 +623,8 @@ spec:
               value: "60"
             - name: Cors__AllowedOrigins__0
               value: http://localhost:2406
+            - name: Cors__AllowedOrigins__1
+              value: https://vkev.me
             - name: UserService__GrpcUrl
               value: http://user-microservice:5004
             - name: AutoApply__Migrations
