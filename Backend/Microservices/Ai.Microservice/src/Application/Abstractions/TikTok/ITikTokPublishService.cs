@@ -28,6 +28,7 @@ public sealed record TikTokPublishRequest(
     string OpenId,
     string Caption,
     TikTokPublishMedia Media,
+    bool? IsPrivate = null,
     TikTokCreatorInfo? CreatorInfo = null);
 
 public sealed record TikTokPublishMedia(

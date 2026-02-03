@@ -17,7 +17,8 @@ namespace Application.Posts.Commands;
 public sealed record PublishPostCommand(
     Guid UserId,
     Guid PostId,
-    Guid SocialMediaId) : IRequest<Result<PublishPostResponse>>;
+    Guid SocialMediaId,
+    bool? IsPrivate = null) : IRequest<Result<PublishPostResponse>>;
 
 public sealed class PublishPostCommandHandler
     : IRequestHandler<PublishPostCommand, Result<PublishPostResponse>>
@@ -176,7 +177,8 @@ public sealed class PublishPostCommandHandler
                     Caption: caption,
                     Media: new TikTokPublishMedia(
                         presignedResources[0].PresignedUrl,
-                        presignedResources[0].ContentType ?? presignedResources[0].ResourceType)),
+                        presignedResources[0].ContentType ?? presignedResources[0].ResourceType),
+                    IsPrivate: request.IsPrivate),
                 cancellationToken);
 
             if (publishResult.IsFailure)
