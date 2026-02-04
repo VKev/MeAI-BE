@@ -70,6 +70,25 @@ public sealed class CompleteThreadsOAuthCommandHandler
         var profileResult = await _threadsOAuthService.GetUserProfileAsync(tokenResponse.AccessToken, cancellationToken);
         var profile = profileResult.IsSuccess ? profileResult.Value : null;
 
+        var userThreadsAccounts = await _socialMediaRepository.GetAll()
+            .Where(sm =>
+                sm.UserId == userId &&
+                sm.Type == "threads" &&
+                sm.Metadata != null &&
+                !sm.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        var threadsAccountId = !string.IsNullOrWhiteSpace(tokenResponse.UserId)
+            ? tokenResponse.UserId
+            : profile?.Id;
+
+        SocialMedia? matchedSocialMedia = null;
+        if (!string.IsNullOrWhiteSpace(threadsAccountId))
+        {
+            matchedSocialMedia = userThreadsAccounts.FirstOrDefault(sm =>
+                MatchesThreadsAccount(sm.Metadata, threadsAccountId));
+        }
+
         var metadata = JsonDocument.Parse(JsonSerializer.Serialize(new
         {
             user_id = tokenResponse.UserId,
@@ -82,21 +101,14 @@ public sealed class CompleteThreadsOAuthCommandHandler
             threads_biography = profile?.ThreadsBiography
         }));
 
-        var existingSocialMedia = await _socialMediaRepository.GetAll()
-            .FirstOrDefaultAsync(sm =>
-                    sm.UserId == userId &&
-                    sm.Type == "threads" &&
-                    !sm.IsDeleted,
-                cancellationToken);
-
         SocialMedia socialMedia;
 
-        if (existingSocialMedia != null)
+        if (matchedSocialMedia != null)
         {
-            existingSocialMedia.Metadata?.Dispose();
-            existingSocialMedia.Metadata = metadata;
-            existingSocialMedia.UpdatedAt = now;
-            socialMedia = existingSocialMedia;
+            matchedSocialMedia.Metadata?.Dispose();
+            matchedSocialMedia.Metadata = metadata;
+            matchedSocialMedia.UpdatedAt = now;
+            socialMedia = matchedSocialMedia;
         }
         else
         {
@@ -123,5 +135,46 @@ public sealed class CompleteThreadsOAuthCommandHandler
             : null;
 
         return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile, includeMetadata: false));
+    }
+
+    private static bool MatchesThreadsAccount(JsonDocument? metadata, string accountId)
+    {
+        if (string.IsNullOrWhiteSpace(accountId))
+        {
+            return false;
+        }
+
+        if (TryGetMetadataValue(metadata, "user_id", out var userId) &&
+            string.Equals(userId, accountId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (TryGetMetadataValue(metadata, "id", out var id) &&
+            string.Equals(id, accountId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetMetadataValue(JsonDocument? metadata, string propertyName, out string value)
+    {
+        value = string.Empty;
+
+        if (metadata == null)
+        {
+            return false;
+        }
+
+        if (metadata.RootElement.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.String)
+        {
+            value = property.GetString() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        return false;
     }
 }
