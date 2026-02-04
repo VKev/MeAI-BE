@@ -49,6 +49,7 @@ resource "aws_lb" "this" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = var.public_subnet_ids
+  idle_timeout       = var.idle_timeout
 
   enable_deletion_protection = false # Consider setting to true for production
 

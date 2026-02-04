@@ -579,23 +579,26 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5001
+            - containerPort: 5003
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
             - name: ASPNETCORE_URLS
               value: http://+:5001
             - name: Database__Host
-              value: postgres
+              value: "TERRAFORM_RDS_HOST_AI_AIDB"
             - name: Database__Port
-              value: "5432"
+              value: "TERRAFORM_RDS_PORT_AI_AIDB"
             - name: Database__Name
-              value: aidb
+              value: "TERRAFORM_RDS_DB_AI_AIDB"
             - name: Database__Username
-              value: postgres
+              value: "TERRAFORM_RDS_USERNAME_AI_AIDB"
             - name: Database__Password
-              value: "<REDACTED>"
+              value: "TERRAFORM_RDS_PASSWORD_AI_AIDB"
             - name: Database__Provider
-              value: postgres
+              value: "TERRAFORM_RDS_PROVIDER_AI_AIDB"
+            - name: Database__SslMode
+              value: "TERRAFORM_RDS_SSLMODE_AI_AIDB"
             - name: RabbitMq__Host
               value: rabbit-mq
             - name: RabbitMq__Port
@@ -620,6 +623,8 @@ spec:
               value: "60"
             - name: Cors__AllowedOrigins__0
               value: http://localhost:2406
+            - name: Cors__AllowedOrigins__1
+              value: https://vkev.me
             - name: UserService__GrpcUrl
               value: http://user-microservice:5004
             - name: AutoApply__Migrations
@@ -649,6 +654,8 @@ spec:
   ports:
     - port: 5001
       targetPort: 5001
+    - port: 5003
+      targetPort: 5003
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -680,25 +687,26 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5002
+            - containerPort: 5004
           env:
             - name: ASPNETCORE_ENVIRONMENT
               value: Production
             - name: ASPNETCORE_URLS
               value: http://+:5002;http://+:5004
             - name: Database__Host
-              value: postgres
+              value: "TERRAFORM_RDS_HOST_USER_USERDB"
             - name: Database__Port
-              value: "5432"
+              value: "TERRAFORM_RDS_PORT_USER_USERDB"
             - name: Database__Name
-              value: userdb
+              value: "TERRAFORM_RDS_DB_USER_USERDB"
             - name: Database__Username
-              value: postgres
+              value: "TERRAFORM_RDS_USERNAME_USER_USERDB"
             - name: Database__Password
-              value: "<REDACTED>"
+              value: "TERRAFORM_RDS_PASSWORD_USER_USERDB"
             - name: Database__Provider
-              value: postgres
+              value: "TERRAFORM_RDS_PROVIDER_USER_USERDB"
             - name: Database__SslMode
-              value: Disable
+              value: "TERRAFORM_RDS_SSLMODE_USER_USERDB"
             - name: RabbitMq__Host
               value: rabbit-mq
             - name: RabbitMq__Port
@@ -818,6 +826,8 @@ spec:
   ports:
     - port: 5002
       targetPort: 5002
+    - port: 5004
+      targetPort: 5004
 ---
 apiVersion: apps/v1
 kind: Deployment

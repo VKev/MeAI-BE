@@ -356,9 +356,13 @@ jobs:
           set -euo pipefail
 
           # Bring repo-provided defaults into working dir if present
-          if ls ../terraform-vars/*.auto.tfvars >/dev/null 2>&1; then
-            echo "Copying repo tfvars from terraform-vars/"
-            cp ../terraform-vars/*.auto.tfvars . || true
+          if ls ../terraform-var/*.auto.tfvars >/dev/null 2>&1; then
+            echo "Copying repo tfvars from terraform-var/"
+            cp ../terraform-var/*.auto.tfvars . || true
+          fi
+          if ls ../Terraform-vars/*.auto.tfvars >/dev/null 2>&1; then
+            echo "Copying repo tfvars from Terraform-vars/"
+            cp ../Terraform-vars/*.auto.tfvars . || true
           fi
 
           # Ensure jq is available in this job
@@ -454,6 +458,17 @@ jobs:
             jq -r 'keys' 00-all.auto.tfvars.json || true
             echo "Services keys:"
             jq -r '.services | keys' 00-all.auto.tfvars.json || echo "(no services key)"
+            echo "RDS keys:"
+            jq -r '.rds | keys' 00-all.auto.tfvars.json || echo "(no rds key)"
+
+            NEEDS_RDS=$(jq -r '.k8s_microservices_manifest // "" | test("TERRAFORM_RDS_")' 00-all.auto.tfvars.json || echo "false")
+            if [ "$NEEDS_RDS" = "true" ]; then
+              if ! jq -e '.rds | type=="object" and length>0' 00-all.auto.tfvars.json >/dev/null; then
+                echo "ERROR: k8s_microservices_manifest contains TERRAFORM_RDS_* placeholders but no rds map was provided from secrets."
+                echo "Fix: add an environment secret named like TERRAFORM_VARS_COMMON_AUTO_TFVARS (HCL) or TERRAFORM_VARS_COMMON_AUTO_TFVARS_JSON (JSON) that includes the rds block."
+                exit 1
+              fi
+            fi
           fi
 
       - name: Refresh project/region from merged tfvars

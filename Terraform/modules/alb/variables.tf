@@ -18,6 +18,12 @@ variable "public_subnet_ids" {
   type        = list(string)
 }
 
+variable "idle_timeout" {
+  description = "Idle timeout in seconds for the ALB."
+  type        = number
+  default     = 60
+}
+
 variable "target_groups_definition" {
   description = "List of target group configurations that should be created for the ALB."
   type = list(object({
