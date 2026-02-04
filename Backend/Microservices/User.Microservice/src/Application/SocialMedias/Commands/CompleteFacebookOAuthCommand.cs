@@ -101,6 +101,26 @@ public sealed class CompleteFacebookOAuthCommandHandler
                 new Error("User.NotFound", "User not found"));
         }
 
+        var userFacebookAccounts = await _socialMediaRepository.GetAll()
+            .Where(sm =>
+                sm.UserId == userId &&
+                sm.Type == FacebookSocialMediaType &&
+                sm.Metadata != null &&
+                !sm.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        var facebookAccountId = profile.Id;
+        SocialMedia? matchedSocialMedia = null;
+
+        if (!string.IsNullOrWhiteSpace(facebookAccountId))
+        {
+            matchedSocialMedia = userFacebookAccounts.FirstOrDefault(sm =>
+                TryGetMetadataValue(sm.Metadata, "id", out var existingId) &&
+                string.Equals(existingId, facebookAccountId, StringComparison.Ordinal));
+        }
+
+        var shouldUpdateUser = matchedSocialMedia != null || userFacebookAccounts.Count == 0;
+
         var resolvedEmail = user.Email;
         var resolvedName = user.FullName ?? user.Username;
         var userUpdated = false;
@@ -108,7 +128,7 @@ public sealed class CompleteFacebookOAuthCommandHandler
         if (!string.IsNullOrWhiteSpace(profile.Name))
         {
             var normalizedName = profile.Name.Trim();
-            if (!string.Equals(user.FullName, normalizedName, StringComparison.Ordinal))
+            if (shouldUpdateUser && !string.Equals(user.FullName, normalizedName, StringComparison.Ordinal))
             {
                 user.FullName = normalizedName;
                 userUpdated = true;
@@ -120,7 +140,7 @@ public sealed class CompleteFacebookOAuthCommandHandler
         if (!string.IsNullOrWhiteSpace(profile.Email))
         {
             var normalizedEmail = NormalizeEmail(profile.Email);
-            if (!string.Equals(user.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+            if (shouldUpdateUser && !string.Equals(user.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
             {
                 var emailExists = await _userRepository.GetAll()
                     .AsNoTracking()
@@ -141,7 +161,7 @@ public sealed class CompleteFacebookOAuthCommandHandler
             resolvedEmail = normalizedEmail;
         }
 
-        if (userUpdated)
+        if (shouldUpdateUser && userUpdated)
         {
             user.UpdatedAt = now;
             _userRepository.Update(user);
@@ -163,21 +183,14 @@ public sealed class CompleteFacebookOAuthCommandHandler
 
         var metadata = JsonDocument.Parse(JsonSerializer.Serialize(payload, MetadataJsonOptions));
 
-        var existingSocialMedia = await _socialMediaRepository.GetAll()
-            .FirstOrDefaultAsync(sm =>
-                    sm.UserId == userId &&
-                    sm.Type == FacebookSocialMediaType &&
-                    !sm.IsDeleted,
-                cancellationToken);
-
         SocialMedia socialMedia;
 
-        if (existingSocialMedia != null)
+        if (matchedSocialMedia != null)
         {
-            existingSocialMedia.Metadata?.Dispose();
-            existingSocialMedia.Metadata = metadata;
-            existingSocialMedia.UpdatedAt = now;
-            socialMedia = existingSocialMedia;
+            matchedSocialMedia.Metadata?.Dispose();
+            matchedSocialMedia.Metadata = metadata;
+            matchedSocialMedia.UpdatedAt = now;
+            socialMedia = matchedSocialMedia;
         }
         else
         {
@@ -208,5 +221,24 @@ public sealed class CompleteFacebookOAuthCommandHandler
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    private static bool TryGetMetadataValue(JsonDocument? metadata, string propertyName, out string value)
+    {
+        value = string.Empty;
+
+        if (metadata == null)
+        {
+            return false;
+        }
+
+        if (metadata.RootElement.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.String)
+        {
+            value = property.GetString() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        return false;
+    }
 
 }

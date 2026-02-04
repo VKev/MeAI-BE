@@ -106,6 +106,25 @@ public sealed class CompleteInstagramOAuthCommandHandler
 
         var resolvedEmail = user?.Email;
 
+        var userInstagramAccounts = await _socialMediaRepository.GetAll()
+            .Where(sm =>
+                sm.UserId == userId &&
+                sm.Type == InstagramSocialMediaType &&
+                sm.Metadata != null &&
+                !sm.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        var instagramAccountId = !string.IsNullOrWhiteSpace(profileResult.Value.InstagramAccountId)
+            ? profileResult.Value.InstagramAccountId
+            : profile.Id;
+
+        SocialMedia? matchedSocialMedia = null;
+        if (!string.IsNullOrWhiteSpace(instagramAccountId))
+        {
+            matchedSocialMedia = userInstagramAccounts.FirstOrDefault(sm =>
+                MatchesInstagramAccount(sm.Metadata, instagramAccountId));
+        }
+
         var payload = new Dictionary<string, object?>
         {
             ["provider"] = InstagramSocialMediaType,
@@ -129,21 +148,14 @@ public sealed class CompleteInstagramOAuthCommandHandler
 
         var metadata = JsonDocument.Parse(JsonSerializer.Serialize(payload, MetadataJsonOptions));
 
-        var existingSocialMedia = await _socialMediaRepository.GetAll()
-            .FirstOrDefaultAsync(sm =>
-                    sm.UserId == userId &&
-                    sm.Type == InstagramSocialMediaType &&
-                    !sm.IsDeleted,
-                cancellationToken);
-
         SocialMedia socialMedia;
 
-        if (existingSocialMedia != null)
+        if (matchedSocialMedia != null)
         {
-            existingSocialMedia.Metadata?.Dispose();
-            existingSocialMedia.Metadata = metadata;
-            existingSocialMedia.UpdatedAt = now;
-            socialMedia = existingSocialMedia;
+            matchedSocialMedia.Metadata?.Dispose();
+            matchedSocialMedia.Metadata = metadata;
+            matchedSocialMedia.UpdatedAt = now;
+            socialMedia = matchedSocialMedia;
         }
         else
         {
@@ -171,4 +183,51 @@ public sealed class CompleteInstagramOAuthCommandHandler
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    private static bool MatchesInstagramAccount(JsonDocument? metadata, string accountId)
+    {
+        if (string.IsNullOrWhiteSpace(accountId))
+        {
+            return false;
+        }
+
+        if (TryGetMetadataValue(metadata, "instagram_business_account_id", out var businessAccountId) &&
+            string.Equals(businessAccountId, accountId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (TryGetMetadataValue(metadata, "id", out var id) &&
+            string.Equals(id, accountId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (TryGetMetadataValue(metadata, "user_id", out var userId) &&
+            string.Equals(userId, accountId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetMetadataValue(JsonDocument? metadata, string propertyName, out string value)
+    {
+        value = string.Empty;
+
+        if (metadata == null)
+        {
+            return false;
+        }
+
+        if (metadata.RootElement.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.String)
+        {
+            value = property.GetString() ?? string.Empty;
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        return false;
+    }
 }
