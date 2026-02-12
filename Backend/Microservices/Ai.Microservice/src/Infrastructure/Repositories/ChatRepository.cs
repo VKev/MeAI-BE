@@ -47,4 +47,18 @@ public sealed class ChatRepository : IChatRepository
             .Where(chat => chat.SessionId == sessionId)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IEnumerable<Chat>> GetBySessionIdsAsync(
+        IReadOnlyList<Guid> sessionIds,
+        CancellationToken cancellationToken)
+    {
+        if (sessionIds.Count == 0)
+        {
+            return Array.Empty<Chat>();
+        }
+
+        return await _dbSet.AsNoTracking()
+            .Where(chat => sessionIds.Contains(chat.SessionId))
+            .ToListAsync(cancellationToken);
+    }
 }

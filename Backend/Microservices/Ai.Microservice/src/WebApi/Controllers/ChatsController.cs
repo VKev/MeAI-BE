@@ -41,6 +41,57 @@ public sealed class ChatsController : ApiController
         return Ok(result);
     }
 
+    [HttpGet("workspace/{workspaceId:guid}/resources")]
+    [ProducesResponseType(typeof(Result<IEnumerable<WorkspaceAiResourceResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetWorkspaceResources(
+        Guid workspaceId,
+        [FromQuery] string[]? resourceTypes,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new GetWorkspaceAiResourcesQuery(workspaceId, userId, resourceTypes),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("resources")]
+    [ProducesResponseType(typeof(Result<IEnumerable<WorkspaceAiResourceResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetAllResources(
+        [FromQuery] string[]? resourceTypes,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new GetAllAiResourcesQuery(userId, resourceTypes),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("{chatId:guid}")]
     [ProducesResponseType(typeof(Result<ChatResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -79,6 +130,7 @@ public sealed class ChatsController : ApiController
         var command = new CreateChatCommand(
             userId,
             request.ChatSessionId,
+            request.WorkspaceId,
             request.Prompt,
             request.Config,
             request.ReferenceResourceIds);
@@ -236,7 +288,8 @@ public sealed record CreateChatImageRequest(
     string? OutputFormat);
 
 public sealed record CreateChatRequest(
-    Guid ChatSessionId,
+    Guid? ChatSessionId,
+    Guid? WorkspaceId,
     string? Prompt,
     string? Config,
     List<Guid>? ReferenceResourceIds);
