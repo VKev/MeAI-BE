@@ -10,4 +10,5 @@ public interface IChatRepository
     Task<Chat?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<Chat?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken);
     Task<IEnumerable<Chat>> GetBySessionIdAsync(Guid sessionId, CancellationToken cancellationToken);
+    Task<IEnumerable<Chat>> GetBySessionIdsAsync(IReadOnlyList<Guid> sessionIds, CancellationToken cancellationToken);
 }

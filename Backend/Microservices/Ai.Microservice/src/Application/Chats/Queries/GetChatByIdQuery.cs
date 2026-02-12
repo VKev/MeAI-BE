@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Application.Abstractions.Resources;
 using Application.Chats.Models;
 using Application.ChatSessions;
@@ -48,8 +47,8 @@ public sealed class GetChatByIdQueryHandler
             return Result.Failure<ChatResponse>(ChatErrors.Unauthorized);
         }
 
-        var referenceIds = ParseResourceIds(chat.ReferenceResourceIds);
-        var resultIds = ParseResourceIds(chat.ResultResourceIds);
+        var referenceIds = ChatResourceIdParser.Parse(chat.ReferenceResourceIds);
+        var resultIds = ChatResourceIdParser.Parse(chat.ResultResourceIds);
 
         if (referenceIds.Count == 0 && resultIds.Count == 0)
         {
@@ -72,39 +71,6 @@ public sealed class GetChatByIdQueryHandler
         var resultUrls = MapUrls(resultIds, urlById);
 
         return Result.Success(ChatMapping.ToResponse(chat, referenceUrls, resultUrls));
-    }
-
-    private static List<Guid> ParseResourceIds(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return new List<Guid>();
-        }
-
-        try
-        {
-            var ids = JsonSerializer.Deserialize<List<string>>(json);
-            if (ids is null || ids.Count == 0)
-            {
-                return new List<Guid>();
-            }
-
-            return ids.Select(id => Guid.TryParse(id, out var parsed) ? parsed : Guid.Empty)
-                .Where(id => id != Guid.Empty)
-                .ToList();
-        }
-        catch (JsonException)
-        {
-            try
-            {
-                var ids = JsonSerializer.Deserialize<List<Guid>>(json);
-                return ids?.Where(id => id != Guid.Empty).ToList() ?? new List<Guid>();
-            }
-            catch (JsonException)
-            {
-                return new List<Guid>();
-            }
-        }
     }
 
     private static IReadOnlyList<string>? MapUrls(
