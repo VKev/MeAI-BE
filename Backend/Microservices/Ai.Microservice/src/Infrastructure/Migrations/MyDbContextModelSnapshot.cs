@@ -231,6 +231,70 @@ namespace Infrastructure.Migrations
                     b.ToTable("posts", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.PostAnalyticsSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AnalysisPayloadJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("analysis_payload_json");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("platform");
+
+                    b.Property<string>("PlatformPostId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("platform_post_id");
+
+                    b.Property<Guid?>("PostId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("post_id");
+
+                    b.Property<string>("PostPayloadJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("post_payload_json");
+
+                    b.Property<DateTime>("RetrievedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retrieved_at");
+
+                    b.Property<Guid>("SocialMediaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("social_media_id");
+
+                    b.Property<string>("StatsPayloadJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("stats_payload_json");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("post_analytics_snapshots_pkey");
+
+                    b.HasIndex(new[] { "UserId", "SocialMediaId", "PlatformPostId" }, "ux_post_analytics_snapshots_user_social_post")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "UserId", "SocialMediaId", "RetrievedAt" }, "ix_post_analytics_snapshots_user_social_retrieved_at");
+
+                    b.ToTable("post_analytics_snapshots", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.PostResource", b =>
                 {
                     b.Property<Guid>("Id")
