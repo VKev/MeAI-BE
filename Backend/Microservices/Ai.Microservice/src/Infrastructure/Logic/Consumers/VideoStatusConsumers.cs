@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Application.Abstractions.Resources;
 using Infrastructure.Context;
+using Infrastructure.Logic.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -138,11 +139,16 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
 
 public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
 {
+    private readonly IAiFallbackTemplateService _fallbackTemplateService;
     private readonly MyDbContext _dbContext;
     private readonly ILogger<VideoFailedConsumer> _logger;
 
-    public VideoFailedConsumer(MyDbContext dbContext, ILogger<VideoFailedConsumer> logger)
+    public VideoFailedConsumer(
+        IAiFallbackTemplateService fallbackTemplateService,
+        MyDbContext dbContext,
+        ILogger<VideoFailedConsumer> logger)
     {
+        _fallbackTemplateService = fallbackTemplateService;
         _dbContext = dbContext;
         _logger = logger;
     }
@@ -156,6 +162,32 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
             message.CorrelationId,
             message.ErrorCode,
             message.ErrorMessage);
+
+        if (_fallbackTemplateService.TryGetVideoFallback(out var fallbackAsset))
+        {
+            var completedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            var fallbackTaskId = string.IsNullOrWhiteSpace(message.VeoTaskId)
+                ? $"fallback-{message.CorrelationId:N}"
+                : message.VeoTaskId;
+            var fallbackUrls = new List<string> { fallbackAsset.ResultUrl };
+
+            _logger.LogWarning(
+                "Video generation failed; fallback template is used. CorrelationId: {CorrelationId}, FallbackUrl: {FallbackUrl}",
+                message.CorrelationId,
+                fallbackAsset.ResultUrl);
+
+            await context.Publish(new VideoGenerationCompleted
+            {
+                CorrelationId = message.CorrelationId,
+                VeoTaskId = fallbackTaskId,
+                ResultUrls = JsonSerializer.Serialize(fallbackUrls),
+                OriginUrls = null,
+                Resolution = "fallback",
+                CompletedAt = completedAt
+            });
+
+            return;
+        }
 
         var videoTask = await _dbContext.VideoTasks
             .FirstOrDefaultAsync(t => t.CorrelationId == message.CorrelationId, context.CancellationToken);

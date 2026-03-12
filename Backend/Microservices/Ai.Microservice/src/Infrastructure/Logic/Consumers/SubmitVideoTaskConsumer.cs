@@ -1,25 +1,30 @@
 using Application.Abstractions;
 using Domain.Entities;
 using Infrastructure.Context;
+using Infrastructure.Logic.Services;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Contracts.VideoGenerating;
 using SharedLibrary.Extensions;
+using System.Text.Json;
 
 namespace Infrastructure.Logic.Consumers;
 
 public class SubmitVideoTaskConsumer : IConsumer<VideoGenerationStarted>
 {
     private readonly IVeoVideoService _veoVideoService;
+    private readonly IAiFallbackTemplateService _fallbackTemplateService;
     private readonly MyDbContext _dbContext;
     private readonly ILogger<SubmitVideoTaskConsumer> _logger;
 
     public SubmitVideoTaskConsumer(
         IVeoVideoService veoVideoService,
+        IAiFallbackTemplateService fallbackTemplateService,
         MyDbContext dbContext,
         ILogger<SubmitVideoTaskConsumer> logger)
     {
         _veoVideoService = veoVideoService;
+        _fallbackTemplateService = fallbackTemplateService;
         _dbContext = dbContext;
         _logger = logger;
     }
@@ -81,10 +86,46 @@ public class SubmitVideoTaskConsumer : IConsumer<VideoGenerationStarted>
         }
         else
         {
+            var completedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            if (_fallbackTemplateService.TryGetVideoFallback(out var fallbackAsset))
+            {
+                var fallbackTaskId = $"fallback-{message.CorrelationId:N}";
+                var fallbackUrls = new List<string> { fallbackAsset.ResultUrl };
+                var fallbackUrlsJson = JsonSerializer.Serialize(fallbackUrls);
+
+                videoTask.VeoTaskId = fallbackTaskId;
+                videoTask.Status = "Completed";
+                videoTask.ResultUrls = fallbackUrlsJson;
+                videoTask.Resolution = "fallback";
+                videoTask.ErrorCode = null;
+                videoTask.ErrorMessage = null;
+                videoTask.CompletedAt = completedAt;
+                await _dbContext.SaveChangesAsync(context.CancellationToken);
+
+                _logger.LogWarning(
+                    "Video generation submit failed; fallback template is used. CorrelationId: {CorrelationId}, Code: {Code}, Message: {Message}, FallbackUrl: {FallbackUrl}",
+                    message.CorrelationId,
+                    result.Code,
+                    result.Message,
+                    fallbackAsset.ResultUrl);
+
+                await context.Publish(new VideoGenerationCompleted
+                {
+                    CorrelationId = message.CorrelationId,
+                    VeoTaskId = fallbackTaskId,
+                    ResultUrls = fallbackUrlsJson,
+                    OriginUrls = null,
+                    Resolution = "fallback",
+                    CompletedAt = completedAt
+                });
+
+                return;
+            }
+
             videoTask.Status = "Failed";
             videoTask.ErrorCode = result.Code;
             videoTask.ErrorMessage = result.Message;
-            videoTask.CompletedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            videoTask.CompletedAt = completedAt;
             await _dbContext.SaveChangesAsync(context.CancellationToken);
 
             _logger.LogWarning(

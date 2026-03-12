@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Application.Abstractions.Resources;
 using Infrastructure.Context;
+using Infrastructure.Logic.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -127,11 +128,16 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
 
 public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
 {
+    private readonly IKieFallbackCallbackService _kieFallbackCallbackService;
     private readonly MyDbContext _dbContext;
     private readonly ILogger<ImageFailedConsumer> _logger;
 
-    public ImageFailedConsumer(MyDbContext dbContext, ILogger<ImageFailedConsumer> logger)
+    public ImageFailedConsumer(
+        IKieFallbackCallbackService kieFallbackCallbackService,
+        MyDbContext dbContext,
+        ILogger<ImageFailedConsumer> logger)
     {
+        _kieFallbackCallbackService = kieFallbackCallbackService;
         _dbContext = dbContext;
         _logger = logger;
     }
@@ -145,6 +151,27 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
             message.CorrelationId,
             message.ErrorCode,
             message.ErrorMessage);
+
+        var fallbackTaskId = string.IsNullOrWhiteSpace(message.KieTaskId)
+            ? $"fallback-{message.CorrelationId:N}"
+            : message.KieTaskId;
+
+        var isAlreadyFallbackTask = fallbackTaskId.StartsWith("fallback-", StringComparison.OrdinalIgnoreCase);
+        if (!isAlreadyFallbackTask)
+        {
+            var callbackSent = await _kieFallbackCallbackService.SendImageSuccessCallbackAsync(
+                message.CorrelationId,
+                fallbackTaskId,
+                context.CancellationToken);
+
+            if (callbackSent)
+            {
+                _logger.LogWarning(
+                    "Image generation failed from provider; fallback callback simulation was triggered. CorrelationId: {CorrelationId}",
+                    message.CorrelationId);
+                return;
+            }
+        }
 
         var imageTask = await _dbContext.ImageTasks
             .FirstOrDefaultAsync(t => t.CorrelationId == message.CorrelationId, context.CancellationToken);
