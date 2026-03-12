@@ -10,6 +10,7 @@ internal static class ChatSessionMapping
         return new ChatSessionResponse(
             Id: session.Id,
             UserId: session.UserId,
+            WorkspaceId: session.WorkspaceId,
             SessionName: session.SessionName,
             CreatedAt: session.CreatedAt,
             UpdatedAt: session.UpdatedAt);

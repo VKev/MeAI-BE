@@ -69,7 +69,7 @@ public sealed class ChatSessionsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new CreateChatSessionCommand(userId, request.SessionName),
+            new CreateChatSessionCommand(userId, request.WorkspaceId, request.SessionName),
             cancellationToken);
 
         if (result.IsFailure)
@@ -134,6 +134,6 @@ public sealed class ChatSessionsController : ApiController
     }
 }
 
-public sealed record CreateChatSessionRequest(string? SessionName);
+public sealed record CreateChatSessionRequest(Guid WorkspaceId, string? SessionName);
 
 public sealed record UpdateChatSessionRequest(string? SessionName);

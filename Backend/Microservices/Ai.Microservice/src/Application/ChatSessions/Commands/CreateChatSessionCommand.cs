@@ -9,26 +9,42 @@ namespace Application.ChatSessions.Commands;
 
 public sealed record CreateChatSessionCommand(
     Guid UserId,
+    Guid WorkspaceId,
     string? SessionName) : IRequest<Result<ChatSessionResponse>>;
 
 public sealed class CreateChatSessionCommandHandler
     : IRequestHandler<CreateChatSessionCommand, Result<ChatSessionResponse>>
 {
     private readonly IChatSessionRepository _chatSessionRepository;
+    private readonly IWorkspaceRepository _workspaceRepository;
 
-    public CreateChatSessionCommandHandler(IChatSessionRepository chatSessionRepository)
+    public CreateChatSessionCommandHandler(
+        IChatSessionRepository chatSessionRepository,
+        IWorkspaceRepository workspaceRepository)
     {
         _chatSessionRepository = chatSessionRepository;
+        _workspaceRepository = workspaceRepository;
     }
 
     public async Task<Result<ChatSessionResponse>> Handle(
         CreateChatSessionCommand request,
         CancellationToken cancellationToken)
     {
+        var workspaceExists = await _workspaceRepository.ExistsForUserAsync(
+            request.WorkspaceId,
+            request.UserId,
+            cancellationToken);
+
+        if (!workspaceExists)
+        {
+            return Result.Failure<ChatSessionResponse>(ChatSessionErrors.WorkspaceNotFound);
+        }
+
         var session = new ChatSession
         {
             Id = Guid.CreateVersion7(),
             UserId = request.UserId,
+            WorkspaceId = request.WorkspaceId,
             SessionName = NormalizeString(request.SessionName),
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };

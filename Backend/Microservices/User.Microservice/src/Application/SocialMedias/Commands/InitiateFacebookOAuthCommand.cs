@@ -1,5 +1,8 @@
+using Application.Abstractions.Data;
 using Application.Abstractions.Facebook;
+using Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 
@@ -14,20 +17,34 @@ public sealed class InitiateFacebookOAuthCommandHandler
     : IRequestHandler<InitiateFacebookOAuthCommand, Result<FacebookOAuthInitiationResponse>>
 {
     private readonly IFacebookOAuthService _facebookOAuthService;
+    private readonly IRepository<User> _userRepository;
 
-    public InitiateFacebookOAuthCommandHandler(IFacebookOAuthService facebookOAuthService)
+    public InitiateFacebookOAuthCommandHandler(
+        IFacebookOAuthService facebookOAuthService,
+        IUnitOfWork unitOfWork)
     {
         _facebookOAuthService = facebookOAuthService;
+        _userRepository = unitOfWork.Repository<User>();
     }
 
-    public Task<Result<FacebookOAuthInitiationResponse>> Handle(
+    public async Task<Result<FacebookOAuthInitiationResponse>> Handle(
         InitiateFacebookOAuthCommand request,
         CancellationToken cancellationToken)
     {
+        var userExists = await _userRepository.GetAll()
+            .AsNoTracking()
+            .AnyAsync(user => user.Id == request.UserId && !user.IsDeleted, cancellationToken);
+
+        if (!userExists)
+        {
+            return Result.Failure<FacebookOAuthInitiationResponse>(
+                new Error("User.NotFound", "User not found"));
+        }
+
         var (authorizationUrl, state) =
             _facebookOAuthService.GenerateAuthorizationUrl(request.UserId, request.Scopes);
 
         var response = new FacebookOAuthInitiationResponse(authorizationUrl, state);
-        return Task.FromResult(Result.Success(response));
+        return Result.Success(response);
     }
 }

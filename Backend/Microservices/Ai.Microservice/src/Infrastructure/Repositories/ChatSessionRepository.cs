@@ -47,4 +47,14 @@ public sealed class ChatSessionRepository : IChatSessionRepository
             .Where(s => s.UserId == userId)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IEnumerable<ChatSession>> GetByWorkspaceIdAsync(
+        Guid userId,
+        Guid workspaceId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbSet.AsNoTracking()
+            .Where(s => s.UserId == userId && s.WorkspaceId == workspaceId)
+            .ToListAsync(cancellationToken);
+    }
 }

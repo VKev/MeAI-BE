@@ -10,6 +10,8 @@ public sealed class ChatSession
 
     public Guid UserId { get; set; }
 
+    public Guid WorkspaceId { get; set; }
+
     public string? SessionName { get; set; }
 
     [Column(TypeName = "timestamp with time zone")]

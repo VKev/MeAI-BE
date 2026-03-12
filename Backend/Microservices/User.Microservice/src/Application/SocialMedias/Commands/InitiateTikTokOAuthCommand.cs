@@ -1,5 +1,8 @@
+using Application.Abstractions.Data;
 using Application.Abstractions.TikTok;
+using Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
@@ -17,19 +20,32 @@ public sealed class InitiateTikTokOAuthCommandHandler
 {
     private readonly ITikTokOAuthService _tikTokOAuthService;
     private readonly IMemoryCache _memoryCache;
+    private readonly IRepository<User> _userRepository;
 
     public InitiateTikTokOAuthCommandHandler(
         ITikTokOAuthService tikTokOAuthService,
-        IMemoryCache memoryCache)
+        IMemoryCache memoryCache,
+        IUnitOfWork unitOfWork)
     {
         _tikTokOAuthService = tikTokOAuthService;
         _memoryCache = memoryCache;
+        _userRepository = unitOfWork.Repository<User>();
     }
 
-    public Task<Result<TikTokOAuthInitiationResponse>> Handle(
+    public async Task<Result<TikTokOAuthInitiationResponse>> Handle(
         InitiateTikTokOAuthCommand request,
         CancellationToken cancellationToken)
     {
+        var userExists = await _userRepository.GetAll()
+            .AsNoTracking()
+            .AnyAsync(user => user.Id == request.UserId && !user.IsDeleted, cancellationToken);
+
+        if (!userExists)
+        {
+            return Result.Failure<TikTokOAuthInitiationResponse>(
+                new Error("User.NotFound", "User not found"));
+        }
+
         var scopes = string.IsNullOrWhiteSpace(request.Scopes)
             ? "user.info.basic,video.publish,video.upload,user.info.profile,user.info.stats"
             : request.Scopes;
@@ -40,6 +56,6 @@ public sealed class InitiateTikTokOAuthCommandHandler
         _memoryCache.Set($"tiktok_code_verifier_{state}", codeVerifier, TimeSpan.FromMinutes(10));
 
         var response = new TikTokOAuthInitiationResponse(authorizationUrl, state);
-        return Task.FromResult(Result.Success(response));
+        return Result.Success(response);
     }
 }
