@@ -4,6 +4,7 @@ using System.Text.Json;
 using Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(MyDbContext))]
-    partial class MyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260309142640_AddPostAnalyticsSchema")]
+    partial class AddPostAnalyticsSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -97,16 +100,8 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
-                    b.Property<Guid>("WorkspaceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("workspace_id");
-
                     b.HasKey("Id")
                         .HasName("chat_sessions_pkey");
-
-                    b.HasIndex("WorkspaceId");
-
-                    b.HasIndex(new[] { "UserId", "WorkspaceId", "CreatedAt", "Id" }, "chat_sessions_user_id_workspace_id_created_at_id_idx");
 
                     b.ToTable("chat_sessions", (string)null);
                 });
@@ -631,16 +626,6 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("chats_session_id_fkey");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ChatSession", b =>
-                {
-                    b.HasOne("Domain.Entities.Workspace", null)
-                        .WithMany()
-                        .HasForeignKey("WorkspaceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("chat_sessions_workspace_id_fkey");
                 });
 
             modelBuilder.Entity("Domain.Entities.Post", b =>

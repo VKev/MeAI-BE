@@ -48,6 +48,17 @@ public sealed class ChatRepository : IChatRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IEnumerable<Chat>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return await (
+            from chat in _dbSet.AsNoTracking()
+            join session in _dbContext.ChatSessions.AsNoTracking()
+                on chat.SessionId equals session.Id
+            where session.UserId == userId && !session.DeletedAt.HasValue
+            select chat)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IEnumerable<Chat>> GetBySessionIdsAsync(
         IReadOnlyList<Guid> sessionIds,
         CancellationToken cancellationToken)

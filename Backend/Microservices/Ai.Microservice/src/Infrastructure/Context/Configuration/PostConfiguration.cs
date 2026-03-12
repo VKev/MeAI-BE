@@ -14,8 +14,14 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
 
         entity.ToTable("posts");
 
+        entity.HasIndex(e => new { e.UserId, e.WorkspaceId, e.CreatedAt }, "ix_posts_user_workspace_created_at")
+            .IsDescending(false, false, true);
+
+        entity.HasIndex(e => e.WorkspaceId, "ix_posts_workspace_id");
+
         entity.Property(e => e.Id).HasColumnName("id");
         entity.Property(e => e.UserId).HasColumnName("user_id");
+        entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
         entity.Property(e => e.SocialMediaId).HasColumnName("social_media_id");
         entity.Property(e => e.Title).HasColumnName("title");
 
@@ -39,6 +45,12 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
+
+        entity.HasOne<Workspace>()
+            .WithMany()
+            .HasForeignKey(d => d.WorkspaceId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("posts_workspace_id_fkey");
     }
 
     private static bool PostContentEquals(PostContent? left, PostContent? right)
@@ -59,6 +71,11 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         }
 
         if (!string.Equals(left.Hashtag, right.Hashtag, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!string.Equals(left.PostType, right.PostType, StringComparison.Ordinal))
         {
             return false;
         }
@@ -86,6 +103,7 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         var hash = new HashCode();
         hash.Add(value.Content);
         hash.Add(value.Hashtag);
+        hash.Add(value.PostType);
 
         if (value.ResourceList is not null)
         {
@@ -109,6 +127,7 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         {
             Content = value.Content,
             Hashtag = value.Hashtag,
+            PostType = value.PostType,
             ResourceList = value.ResourceList is null ? null : new List<string>(value.ResourceList)
         };
     }
