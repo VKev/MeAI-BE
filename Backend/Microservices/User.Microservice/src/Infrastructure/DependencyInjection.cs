@@ -32,6 +32,7 @@ namespace Infrastructure
             services.AddScoped<IJwtTokenService, RevocationAwareJwtTokenService>();
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddScoped<AdminUserSeeder>();
+            services.AddScoped<DefaultUserSeeder>();
             services.AddScoped<SubscriptionSeeder>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<IEmailRepository, EmailRepository>();

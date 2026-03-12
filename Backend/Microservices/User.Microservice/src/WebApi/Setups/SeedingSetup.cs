@@ -22,6 +22,16 @@ public static class SeedingSetup
 
         try
         {
+            var defaultUserSeeder = scope.ServiceProvider.GetRequiredService<DefaultUserSeeder>();
+            await defaultUserSeeder.SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Failed to seed default user at startup.");
+        }
+
+        try
+        {
             var subscriptionSeeder = scope.ServiceProvider.GetRequiredService<SubscriptionSeeder>();
             await subscriptionSeeder.SeedAsync();
         }
