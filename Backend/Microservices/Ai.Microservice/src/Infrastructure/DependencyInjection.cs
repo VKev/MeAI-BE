@@ -43,11 +43,13 @@ namespace Infrastructure
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
             services.AddScoped<IInstagramPublishService, InstagramPublishService>();
             services.AddScoped<ITikTokPublishService, TikTokPublishService>();
+            services.AddScoped<ITikTokContentService, TikTokContentService>();
             services.AddHttpClient("Threads");
             services.AddScoped<IGeminiCaptionService, GeminiCaptionService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
             services.AddScoped<IInstagramPublishService, InstagramPublishService>();
             services.AddScoped<IThreadsPublishService, ThreadsPublishService>();
+            services.AddScoped<IThreadsContentService, ThreadsContentService>();
 
             services.AddGrpcClient<UserResourceService.UserResourceServiceClient>((sp, options) =>
             {
@@ -75,6 +77,7 @@ namespace Infrastructure
             services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
+            services.AddScoped<IPostAnalyticsSnapshotRepository, PostAnalyticsSnapshotRepository>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
 
             services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Application.AssemblyReference).Assembly));

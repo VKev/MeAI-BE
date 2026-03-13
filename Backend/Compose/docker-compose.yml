@@ -2,7 +2,7 @@ services:
   ai-microservice:
     build:
       context: ../Microservices
-      dockerfile: ./Ai.Microservice/Dockerfile
+      dockerfile: ./Ai.Microservice/dockerfile
       args:
         SERVICE_NAME: Ai.Microservice
     image: ai-microservice
@@ -43,7 +43,7 @@ services:
   user-microservice:
     build:
       context: ../Microservices
-      dockerfile: ./User.Microservice/Dockerfile
+      dockerfile: ./User.Microservice/dockerfile
       args:
         SERVICE_NAME: User.Microservice
     image: user-microservice
@@ -102,7 +102,7 @@ services:
   api-gateway:
     build:
       context: ../Microservices
-      dockerfile: ./ApiGateway/Dockerfile
+      dockerfile: ./ApiGateway/dockerfile
     image: api-gateway
     container_name: api-gateway
     ports:

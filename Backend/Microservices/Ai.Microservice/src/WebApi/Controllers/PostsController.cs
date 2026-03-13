@@ -56,6 +56,60 @@ public sealed class PostsController : ApiController
         return Ok(result);
     }
 
+    [HttpGet("social/{socialMediaId:guid}/platform-posts")]
+    [ProducesResponseType(typeof(Result<SocialPlatformPostsResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetPlatformPosts(
+        Guid socialMediaId,
+        [FromQuery] string? cursor,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new GetSocialMediaPlatformPostsQuery(userId, socialMediaId, cursor, limit),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("social/{socialMediaId:guid}/platform-posts/{platformPostId}/analytics")]
+    [ProducesResponseType(typeof(Result<SocialPlatformPostAnalyticsResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetPlatformPostAnalytics(
+        Guid socialMediaId,
+        string platformPostId,
+        [FromQuery] bool refresh,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new GetSocialMediaPlatformPostAnalyticsQuery(userId, socialMediaId, platformPostId, refresh),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpPost]
     [ProducesResponseType(typeof(Result<PostResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

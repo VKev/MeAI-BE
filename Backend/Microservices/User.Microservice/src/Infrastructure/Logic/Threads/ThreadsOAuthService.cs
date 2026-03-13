@@ -39,7 +39,7 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
                         ?? throw new InvalidOperationException("Threads:AppSecret is not configured");
         _redirectUri = configuration["Threads:RedirectUri"]
                        ?? throw new InvalidOperationException("Threads:RedirectUri is not configured");
-        _scopes = configuration["Threads:Scopes"] ?? "threads_basic,threads_content_publish";
+        _scopes = configuration["Threads:Scopes"] ?? "threads_basic,threads_content_publish,threads_manage_insights";
         _authorizationBaseUrl = configuration["Threads:AuthorizationBaseUrl"] ?? DefaultAuthorizationBaseUrl;
         _httpClient = httpClientFactory.CreateClient("Threads");
     }
