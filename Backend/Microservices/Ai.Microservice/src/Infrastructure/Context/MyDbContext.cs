@@ -24,6 +24,10 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<PostResource> PostResources { get; set; }
 
+    public virtual DbSet<PostPublication> PostPublications { get; set; }
+
+    public virtual DbSet<PostMetricSnapshot> PostMetricSnapshots { get; set; }
+
     public virtual DbSet<SocialMedia> SocialMedias { get; set; }
 
     public virtual DbSet<Workspace> Workspaces { get; set; }

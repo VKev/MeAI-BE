@@ -4,6 +4,7 @@ using System.Text.Json;
 using Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(MyDbContext))]
-    partial class MyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260309142640_AddPostAnalyticsSchema")]
+    partial class AddPostAnalyticsSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -97,16 +100,8 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
-                    b.Property<Guid>("WorkspaceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("workspace_id");
-
                     b.HasKey("Id")
                         .HasName("chat_sessions_pkey");
-
-                    b.HasIndex("WorkspaceId");
-
-                    b.HasIndex(new[] { "UserId", "WorkspaceId", "CreatedAt", "Id" }, "chat_sessions_user_id_workspace_id_created_at_id_idx");
 
                     b.ToTable("chat_sessions", (string)null);
                 });
@@ -239,70 +234,6 @@ namespace Infrastructure.Migrations
                     b.HasIndex(new[] { "WorkspaceId" }, "ix_posts_workspace_id");
 
                     b.ToTable("posts", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.PostAnalyticsSnapshot", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AnalysisPayloadJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("analysis_payload_json");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Platform")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("platform");
-
-                    b.Property<string>("PlatformPostId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("platform_post_id");
-
-                    b.Property<Guid?>("PostId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("post_id");
-
-                    b.Property<string>("PostPayloadJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("post_payload_json");
-
-                    b.Property<DateTime>("RetrievedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("retrieved_at");
-
-                    b.Property<Guid>("SocialMediaId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("social_media_id");
-
-                    b.Property<string>("StatsPayloadJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("stats_payload_json");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id")
-                        .HasName("post_analytics_snapshots_pkey");
-
-                    b.HasIndex(new[] { "UserId", "SocialMediaId", "PlatformPostId" }, "ux_post_analytics_snapshots_user_social_post")
-                        .IsUnique();
-
-                    b.HasIndex(new[] { "UserId", "SocialMediaId", "RetrievedAt" }, "ix_post_analytics_snapshots_user_social_retrieved_at");
-
-                    b.ToTable("post_analytics_snapshots", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.PostMetricSnapshot", b =>
@@ -695,16 +626,6 @@ namespace Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("chats_session_id_fkey");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ChatSession", b =>
-                {
-                    b.HasOne("Domain.Entities.Workspace", null)
-                        .WithMany()
-                        .HasForeignKey("WorkspaceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("chat_sessions_workspace_id_fkey");
                 });
 
             modelBuilder.Entity("Domain.Entities.Post", b =>

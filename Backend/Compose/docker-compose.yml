@@ -69,6 +69,15 @@ services:
       Jwt__Issuer: UserMicroservice
       Jwt__Audience: MicroservicesApp
       Jwt__ExpirationMinutes: 60
+      Admin__Username: admin
+      Admin__Password: 12345678
+      Admin__Email: admin@gmail.com
+      Admin__FullName: MeAI Admin
+      DefaultUser__Username: user
+      DefaultUser__Password: 12345678
+      DefaultUser__Email: user@gmail.com
+      DefaultUser__FullName: MeAI User
+      DefaultUser__RoleName: USER
       Cors__AllowedOrigins__0: http://localhost:5173
       Cors__AllowedOrigins__1: https://your-frontend.example.com
       Cors__AllowedOrigins__2: http://localhost:2406

@@ -19,6 +19,26 @@ public sealed class ChatsController : ApiController
     {
     }
 
+    [HttpGet]
+    [ProducesResponseType(typeof(Result<IEnumerable<ChatResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(new GetUserChatsQuery(userId), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("session/{chatSessionId:guid}")]
     [ProducesResponseType(typeof(Result<IEnumerable<ChatResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
