@@ -23,18 +23,18 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
     private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly ITikTokContentService _tikTokContentService;
     private readonly IThreadsContentService _threadsContentService;
-    private readonly IPostAnalyticsSnapshotRepository _postAnalyticsSnapshotRepository;
+    private readonly IPostMetricSnapshotRepository _postMetricSnapshotRepository;
 
     public GetSocialMediaPlatformPostAnalyticsQueryHandler(
         IUserSocialMediaService userSocialMediaService,
         ITikTokContentService tikTokContentService,
         IThreadsContentService threadsContentService,
-        IPostAnalyticsSnapshotRepository postAnalyticsSnapshotRepository)
+        IPostMetricSnapshotRepository postMetricSnapshotRepository)
     {
         _userSocialMediaService = userSocialMediaService;
         _tikTokContentService = tikTokContentService;
         _threadsContentService = threadsContentService;
-        _postAnalyticsSnapshotRepository = postAnalyticsSnapshotRepository;
+        _postMetricSnapshotRepository = postMetricSnapshotRepository;
     }
 
     public async Task<Result<SocialPlatformPostAnalyticsResponse>> Handle(
@@ -60,13 +60,13 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
 
         if (!request.Refresh)
         {
-            var cachedSnapshot = await _postAnalyticsSnapshotRepository.GetLatestAsync(
+            var cachedMetric = await _postMetricSnapshotRepository.GetLatestAsync(
                 request.UserId,
                 request.SocialMediaId,
                 request.PlatformPostId,
                 cancellationToken);
 
-            var cachedResponse = SocialPlatformAnalyticsSnapshotMapper.ToResponse(cachedSnapshot);
+            var cachedResponse = SocialPlatformPostMetricSnapshotMapper.ToAnalyticsResponse(cachedMetric);
             if (cachedResponse != null)
             {
                 return Result.Success(cachedResponse);
@@ -136,7 +136,7 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
                 Analysis: SocialPlatformPostAnalysisFactory.Create(stats),
                 RetrievedAt: DateTimeOffset.UtcNow);
 
-            await UpsertSnapshotAsync(request, response, cancellationToken);
+            await UpsertMetricAsync(request, response, cancellationToken);
 
             return Result.Success(response);
         }
@@ -208,7 +208,7 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
                 Analysis: SocialPlatformPostAnalysisFactory.Create(stats),
                 RetrievedAt: DateTimeOffset.UtcNow);
 
-            await UpsertSnapshotAsync(request, response, cancellationToken);
+            await UpsertMetricAsync(request, response, cancellationToken);
 
             return Result.Success(response);
         }
@@ -239,34 +239,34 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
             : null;
     }
 
-    private async Task UpsertSnapshotAsync(
+    private async Task UpsertMetricAsync(
         GetSocialMediaPlatformPostAnalyticsQuery request,
         SocialPlatformPostAnalyticsResponse response,
         CancellationToken cancellationToken)
     {
-        var snapshot = await _postAnalyticsSnapshotRepository.GetLatestForUpdateAsync(
+        var metric = await _postMetricSnapshotRepository.GetLatestForUpdateAsync(
             request.UserId,
             request.SocialMediaId,
             request.PlatformPostId,
             cancellationToken);
 
-        if (snapshot == null)
+        if (metric == null)
         {
-            snapshot = SocialPlatformAnalyticsSnapshotMapper.Create(
+            metric = SocialPlatformPostMetricSnapshotMapper.Create(
                 request.UserId,
                 request.SocialMediaId,
                 response.Platform,
                 request.PlatformPostId,
                 response);
 
-            await _postAnalyticsSnapshotRepository.AddAsync(snapshot, cancellationToken);
+            await _postMetricSnapshotRepository.AddAsync(metric, cancellationToken);
         }
         else
         {
-            SocialPlatformAnalyticsSnapshotMapper.Apply(snapshot, response);
-            _postAnalyticsSnapshotRepository.Update(snapshot);
+            SocialPlatformPostMetricSnapshotMapper.Apply(metric, response);
+            _postMetricSnapshotRepository.Update(metric);
         }
 
-        await _postAnalyticsSnapshotRepository.SaveChangesAsync(cancellationToken);
+        await _postMetricSnapshotRepository.SaveChangesAsync(cancellationToken);
     }
 }

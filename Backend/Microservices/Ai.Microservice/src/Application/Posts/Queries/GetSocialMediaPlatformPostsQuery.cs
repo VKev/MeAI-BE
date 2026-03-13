@@ -23,18 +23,18 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
     private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly ITikTokContentService _tikTokContentService;
     private readonly IThreadsContentService _threadsContentService;
-    private readonly IPostAnalyticsSnapshotRepository _postAnalyticsSnapshotRepository;
+    private readonly IPostMetricSnapshotRepository _postMetricSnapshotRepository;
 
     public GetSocialMediaPlatformPostsQueryHandler(
         IUserSocialMediaService userSocialMediaService,
         ITikTokContentService tikTokContentService,
         IThreadsContentService threadsContentService,
-        IPostAnalyticsSnapshotRepository postAnalyticsSnapshotRepository)
+        IPostMetricSnapshotRepository postMetricSnapshotRepository)
     {
         _userSocialMediaService = userSocialMediaService;
         _tikTokContentService = tikTokContentService;
         _threadsContentService = threadsContentService;
-        _postAnalyticsSnapshotRepository = postAnalyticsSnapshotRepository;
+        _postMetricSnapshotRepository = postMetricSnapshotRepository;
     }
 
     public async Task<Result<SocialPlatformPostsResponse>> Handle(
@@ -124,13 +124,13 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
                         TotalInteractions: (video.LikeCount ?? 0) + (video.CommentCount ?? 0) + (video.ShareCount ?? 0))))
                 .ToList();
 
-            var snapshots = await _postAnalyticsSnapshotRepository.GetLatestByPlatformPostIdsAsync(
+            var metrics = await _postMetricSnapshotRepository.GetLatestByPlatformPostIdsAsync(
                 request.UserId,
                 request.SocialMediaId,
                 items.Select(item => item.PlatformPostId).ToArray(),
                 cancellationToken);
 
-            var statsLookup = SocialPlatformAnalyticsSnapshotMapper.ToStatsLookup(snapshots);
+            var statsLookup = SocialPlatformPostMetricSnapshotMapper.ToStatsLookup(metrics);
             var enrichedItems = items
                 .Select(item => item with
                 {
@@ -186,13 +186,13 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
                     Stats: null))
                 .ToList();
 
-            var snapshots = await _postAnalyticsSnapshotRepository.GetLatestByPlatformPostIdsAsync(
+            var metrics = await _postMetricSnapshotRepository.GetLatestByPlatformPostIdsAsync(
                 request.UserId,
                 request.SocialMediaId,
                 items.Select(item => item.PlatformPostId).ToArray(),
                 cancellationToken);
 
-            var statsLookup = SocialPlatformAnalyticsSnapshotMapper.ToStatsLookup(snapshots);
+            var statsLookup = SocialPlatformPostMetricSnapshotMapper.ToStatsLookup(metrics);
             var enrichedItems = items
                 .Select(item => item with
                 {

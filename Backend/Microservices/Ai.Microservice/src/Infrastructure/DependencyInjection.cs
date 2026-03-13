@@ -77,7 +77,7 @@ namespace Infrastructure
             services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
-            services.AddScoped<IPostAnalyticsSnapshotRepository, PostAnalyticsSnapshotRepository>();
+            services.AddScoped<IPostMetricSnapshotRepository, PostMetricSnapshotRepository>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
 
             services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Application.AssemblyReference).Assembly));

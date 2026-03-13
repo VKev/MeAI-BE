@@ -2,29 +2,29 @@ using Domain.Entities;
 
 namespace Domain.Repositories;
 
-public interface IPostAnalyticsSnapshotRepository
+public interface IPostMetricSnapshotRepository
 {
-    Task<PostAnalyticsSnapshot?> GetLatestAsync(
+    Task<PostMetricSnapshot?> GetLatestAsync(
         Guid userId,
         Guid socialMediaId,
         string platformPostId,
         CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<PostAnalyticsSnapshot>> GetLatestByPlatformPostIdsAsync(
+    Task<IReadOnlyList<PostMetricSnapshot>> GetLatestByPlatformPostIdsAsync(
         Guid userId,
         Guid socialMediaId,
         IReadOnlyList<string> platformPostIds,
         CancellationToken cancellationToken);
 
-    Task<PostAnalyticsSnapshot?> GetLatestForUpdateAsync(
+    Task<PostMetricSnapshot?> GetLatestForUpdateAsync(
         Guid userId,
         Guid socialMediaId,
         string platformPostId,
         CancellationToken cancellationToken);
 
-    Task AddAsync(PostAnalyticsSnapshot entity, CancellationToken cancellationToken);
+    Task AddAsync(PostMetricSnapshot entity, CancellationToken cancellationToken);
 
-    void Update(PostAnalyticsSnapshot entity);
+    void Update(PostMetricSnapshot entity);
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

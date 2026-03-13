@@ -5,18 +5,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Repositories;
 
-public sealed class PostAnalyticsSnapshotRepository : IPostAnalyticsSnapshotRepository
+public sealed class PostMetricSnapshotRepository : IPostMetricSnapshotRepository
 {
     private readonly MyDbContext _dbContext;
-    private readonly DbSet<PostAnalyticsSnapshot> _dbSet;
+    private readonly DbSet<PostMetricSnapshot> _dbSet;
 
-    public PostAnalyticsSnapshotRepository(MyDbContext dbContext)
+    public PostMetricSnapshotRepository(MyDbContext dbContext)
     {
         _dbContext = dbContext;
-        _dbSet = dbContext.Set<PostAnalyticsSnapshot>();
+        _dbSet = dbContext.Set<PostMetricSnapshot>();
     }
 
-    public async Task<PostAnalyticsSnapshot?> GetLatestAsync(
+    public async Task<PostMetricSnapshot?> GetLatestAsync(
         Guid userId,
         Guid socialMediaId,
         string platformPostId,
@@ -31,7 +31,7 @@ public sealed class PostAnalyticsSnapshotRepository : IPostAnalyticsSnapshotRepo
                 cancellationToken);
     }
 
-    public async Task<IReadOnlyList<PostAnalyticsSnapshot>> GetLatestByPlatformPostIdsAsync(
+    public async Task<IReadOnlyList<PostMetricSnapshot>> GetLatestByPlatformPostIdsAsync(
         Guid userId,
         Guid socialMediaId,
         IReadOnlyList<string> platformPostIds,
@@ -39,7 +39,7 @@ public sealed class PostAnalyticsSnapshotRepository : IPostAnalyticsSnapshotRepo
     {
         if (platformPostIds.Count == 0)
         {
-            return Array.Empty<PostAnalyticsSnapshot>();
+            return Array.Empty<PostMetricSnapshot>();
         }
 
         var ids = platformPostIds
@@ -49,7 +49,7 @@ public sealed class PostAnalyticsSnapshotRepository : IPostAnalyticsSnapshotRepo
 
         if (ids.Length == 0)
         {
-            return Array.Empty<PostAnalyticsSnapshot>();
+            return Array.Empty<PostMetricSnapshot>();
         }
 
         return await _dbSet
@@ -60,7 +60,7 @@ public sealed class PostAnalyticsSnapshotRepository : IPostAnalyticsSnapshotRepo
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<PostAnalyticsSnapshot?> GetLatestForUpdateAsync(
+    public async Task<PostMetricSnapshot?> GetLatestForUpdateAsync(
         Guid userId,
         Guid socialMediaId,
         string platformPostId,
@@ -73,12 +73,12 @@ public sealed class PostAnalyticsSnapshotRepository : IPostAnalyticsSnapshotRepo
             cancellationToken);
     }
 
-    public Task AddAsync(PostAnalyticsSnapshot entity, CancellationToken cancellationToken)
+    public Task AddAsync(PostMetricSnapshot entity, CancellationToken cancellationToken)
     {
         return _dbSet.AddAsync(entity, cancellationToken).AsTask();
     }
 
-    public void Update(PostAnalyticsSnapshot entity)
+    public void Update(PostMetricSnapshot entity)
     {
         _dbSet.Update(entity);
     }

@@ -20,8 +20,6 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<Post> Posts { get; set; }
 
-    public virtual DbSet<PostAnalyticsSnapshot> PostAnalyticsSnapshots { get; set; }
-
     public virtual DbSet<PostResource> PostResources { get; set; }
 
     public virtual DbSet<PostPublication> PostPublications { get; set; }
