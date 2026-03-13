@@ -47,7 +47,7 @@ public sealed class InitiateTikTokOAuthCommandHandler
         }
 
         var scopes = string.IsNullOrWhiteSpace(request.Scopes)
-            ? "user.info.basic,video.publish,video.upload,user.info.profile,user.info.stats"
+            ? "user.info.basic,user.info.profile,user.info.stats,video.list,video.publish,video.upload"
             : request.Scopes;
 
         var (authorizationUrl, state, codeVerifier) = _tikTokOAuthService.GenerateAuthorizationUrl(request.UserId, scopes);
