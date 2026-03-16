@@ -79,6 +79,20 @@ Backend/Microservices/<Service>.Microservice/
 - Compose (dev): `docker compose -f Backend/Compose/docker-compose.yml up -d --build`.
 - Default ports (dev/compose): API Gateway 8080 (host 2406), User 5002 (+5004 gRPC), Ai 5001, Postgres 5432, Redis 6379, RabbitMQ 5672/15672, Mailpit 1025/8025, n8n 5678 (via nginx).
 
+## API testing & temp files
+- Use `curl` for manual API endpoint testing (use `curl.exe` in Windows shells when needed).
+- Test through the API Gateway host/port unless you intentionally need direct service access.
+- For auth flows, use cookie jar flags (`-c` and `-b`) or bearer tokens explicitly.
+- If temporary files are needed for requests (for example JSON payloads), create them only under `<repo-root>/.temp/`.
+- Remove temporary test artifacts from `.temp/` after use and do not commit sensitive test data.
+- For APIs that require third-party callbacks/webhooks, use `ngrok` to expose the gateway (typically `http://localhost:2406`).
+- If `ngrok` is already running, reuse the existing tunnel and fetch its current URL before starting a new tunnel.
+- When the `ngrok` URL changes, update callback/redirect env values in `Backend/Compose/docker-compose-production.yml`, then restart production compose to apply it.
+- Restart flow for URL updates: `docker compose -f Backend/Compose/docker-compose-production.yml down` then `docker compose -f Backend/Compose/docker-compose-production.yml up -d --build`.
+- If production compose is not running yet, start it with `docker compose -f Backend/Compose/docker-compose-production.yml up -d --build`, then run `ngrok` and test.
+- After `ngrok` is ready, test endpoints using `curl` against the expected public callback flow and/or local gateway route.
+- If this test run started `ngrok`, shut it down after testing; if `ngrok` was already running before the test, keep it running for future tests.
+
 ## API Gateway (YARP)
 - Runtime config is generated in `Backend/Microservices/ApiGateway/src/Setups/YarpRuntimeSetup.cs`.
 - Default routes for `/api/user` and `/api/ai`.
