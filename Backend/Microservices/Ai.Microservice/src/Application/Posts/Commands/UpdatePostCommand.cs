@@ -9,6 +9,7 @@ namespace Application.Posts.Commands;
 public sealed record UpdatePostCommand(
     Guid PostId,
     Guid UserId,
+    Guid? WorkspaceId,
     Guid? SocialMediaId,
     string? Title,
     Domain.Entities.PostContent? Content,
@@ -18,10 +19,17 @@ public sealed class UpdatePostCommandHandler
     : IRequestHandler<UpdatePostCommand, Result<PostResponse>>
 {
     private readonly IPostRepository _postRepository;
+    private readonly IWorkspaceRepository _workspaceRepository;
+    private readonly PostResponseBuilder _postResponseBuilder;
 
-    public UpdatePostCommandHandler(IPostRepository postRepository)
+    public UpdatePostCommandHandler(
+        IPostRepository postRepository,
+        IWorkspaceRepository workspaceRepository,
+        PostResponseBuilder postResponseBuilder)
     {
         _postRepository = postRepository;
+        _workspaceRepository = workspaceRepository;
+        _postResponseBuilder = postResponseBuilder;
     }
 
     public async Task<Result<PostResponse>> Handle(UpdatePostCommand request, CancellationToken cancellationToken)
@@ -38,6 +46,21 @@ public sealed class UpdatePostCommandHandler
             return Result.Failure<PostResponse>(PostErrors.Unauthorized);
         }
 
+        var workspaceId = NormalizeGuid(request.WorkspaceId);
+        if (workspaceId.HasValue)
+        {
+            var workspaceExists = await _workspaceRepository.ExistsForUserAsync(
+                workspaceId.Value,
+                request.UserId,
+                cancellationToken);
+
+            if (!workspaceExists)
+            {
+                return Result.Failure<PostResponse>(PostErrors.WorkspaceNotFound);
+            }
+        }
+
+        post.WorkspaceId = workspaceId;
         post.SocialMediaId = NormalizeGuid(request.SocialMediaId);
         post.Title = NormalizeString(request.Title);
         post.Content = request.Content;
@@ -47,7 +70,8 @@ public sealed class UpdatePostCommandHandler
         _postRepository.Update(post);
         await _postRepository.SaveChangesAsync(cancellationToken);
 
-        return Result.Success(PostMapping.ToResponse(post));
+        var response = await _postResponseBuilder.BuildAsync(request.UserId, post, cancellationToken);
+        return Result.Success(response);
     }
 
     private static string? NormalizeString(string? value)
