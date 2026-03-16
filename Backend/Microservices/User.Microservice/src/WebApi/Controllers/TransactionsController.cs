@@ -1,7 +1,7 @@
 using System.Security.Claims;
+using Application.Transactions.Models;
 using Application.Transactions.Queries;
 using Application.Users.Models;
-using Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using SharedLibrary.Attributes;
@@ -21,7 +21,7 @@ public sealed class TransactionsController : ApiController
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(Result<List<Transaction>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<List<TransactionResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetMyTransactions(
