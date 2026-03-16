@@ -34,6 +34,7 @@ public sealed class GeminiController : ApiController
         var result = await _mediator.Send(
             new CreateGeminiPostCommand(
                 userId,
+                request.WorkspaceId,
                 request.ResourceIds ?? new List<Guid>(),
                 request.Caption,
                 request.PostType,
@@ -57,6 +58,7 @@ public sealed class GeminiController : ApiController
 }
 
 public sealed record GeminiPostRequest(
+    Guid? WorkspaceId,
     List<Guid>? ResourceIds,
     string? Caption,
     string? PostType,

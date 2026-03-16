@@ -10,4 +10,5 @@ public interface IPostRepository
     Task<Post?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<Post?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken);
     Task<IEnumerable<Post>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken);
+    Task<IEnumerable<Post>> GetByUserIdAndWorkspaceIdAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken);
 }

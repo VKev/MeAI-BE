@@ -12,6 +12,7 @@ namespace Application.Posts.Commands;
 
 public sealed record CreateGeminiPostCommand(
     Guid UserId,
+    Guid? WorkspaceId,
     IReadOnlyList<Guid> ResourceIds,
     string? Caption,
     string? PostType,
@@ -24,6 +25,7 @@ public sealed class CreateGeminiPostCommandHandler
     private const string DefaultPostType = "posts";
 
     private readonly IPostRepository _postRepository;
+    private readonly IWorkspaceRepository _workspaceRepository;
     private readonly IUserResourceService _userResourceService;
     private readonly IGeminiCaptionService _geminiCaptionService;
     private static readonly Regex HashtagRegex = new(@"#([\p{L}\p{Mn}\p{Nd}_]+)", RegexOptions.Compiled);
@@ -31,10 +33,12 @@ public sealed class CreateGeminiPostCommandHandler
 
     public CreateGeminiPostCommandHandler(
         IPostRepository postRepository,
+        IWorkspaceRepository workspaceRepository,
         IUserResourceService userResourceService,
         IGeminiCaptionService geminiCaptionService)
     {
         _postRepository = postRepository;
+        _workspaceRepository = workspaceRepository;
         _userResourceService = userResourceService;
         _geminiCaptionService = geminiCaptionService;
     }
@@ -43,6 +47,20 @@ public sealed class CreateGeminiPostCommandHandler
         CreateGeminiPostCommand request,
         CancellationToken cancellationToken)
     {
+        var workspaceId = request.WorkspaceId == Guid.Empty ? null : request.WorkspaceId;
+        if (workspaceId.HasValue)
+        {
+            var workspaceExists = await _workspaceRepository.ExistsForUserAsync(
+                workspaceId.Value,
+                request.UserId,
+                cancellationToken);
+
+            if (!workspaceExists)
+            {
+                return Result.Failure<FacebookDraftPostResponse>(PostErrors.WorkspaceNotFound);
+            }
+        }
+
         var resolvedPostType = NormalizePostType(request.PostType);
         if (!IsSupportedPostType(resolvedPostType))
         {
@@ -140,6 +158,7 @@ public sealed class CreateGeminiPostCommandHandler
         {
             Id = Guid.CreateVersion7(),
             UserId = request.UserId,
+            WorkspaceId = workspaceId,
             Title = string.IsNullOrWhiteSpace(title) ? null : title,
             Content = postContent,
             Status = "draft",

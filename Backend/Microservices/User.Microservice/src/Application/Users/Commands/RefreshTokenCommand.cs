@@ -50,7 +50,7 @@ public sealed class RefreshTokenCommandHandler
         var tokenEntity = await _refreshTokenRepository.GetAll()
             .FirstOrDefaultAsync(token => token.TokenHash == tokenHash, cancellationToken);
 
-        if (tokenEntity == null || tokenEntity.RevokedAt != null ||
+        if (tokenEntity is not { RevokedAt: null } ||
             tokenEntity.ExpiresAt <= DateTimeExtensions.PostgreSqlUtcNow)
         {
             return Result.Failure<LoginResponse>(

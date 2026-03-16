@@ -7,6 +7,7 @@ using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
 using Application.Abstractions.TikTok;
 using Application.Abstractions.Threads;
+using Application.Posts;
 using Domain.Repositories;
 using Infrastructure.Logic.Consumers;
 using Infrastructure.Logic.Facebook;
@@ -77,7 +78,9 @@ namespace Infrastructure
             services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
+            services.AddScoped<IPostPublicationRepository, PostPublicationRepository>();
             services.AddScoped<IPostMetricSnapshotRepository, PostMetricSnapshotRepository>();
+            services.AddScoped<PostResponseBuilder>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
 
             services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Application.AssemblyReference).Assembly));

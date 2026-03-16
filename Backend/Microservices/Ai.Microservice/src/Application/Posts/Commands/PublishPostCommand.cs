@@ -30,6 +30,7 @@ public sealed class PublishPostCommandHandler
     private const string PostsType = "posts";
 
     private readonly IPostRepository _postRepository;
+    private readonly IPostPublicationRepository _postPublicationRepository;
     private readonly IUserResourceService _userResourceService;
     private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly IFacebookPublishService _facebookPublishService;
@@ -39,6 +40,7 @@ public sealed class PublishPostCommandHandler
 
     public PublishPostCommandHandler(
         IPostRepository postRepository,
+        IPostPublicationRepository postPublicationRepository,
         IUserResourceService userResourceService,
         IUserSocialMediaService userSocialMediaService,
         IFacebookPublishService facebookPublishService,
@@ -47,6 +49,7 @@ public sealed class PublishPostCommandHandler
         IThreadsPublishService threadsPublishService)
     {
         _postRepository = postRepository;
+        _postPublicationRepository = postPublicationRepository;
         _userResourceService = userResourceService;
         _userSocialMediaService = userSocialMediaService;
         _facebookPublishService = facebookPublishService;
@@ -76,6 +79,11 @@ public sealed class PublishPostCommandHandler
         {
             return Result.Failure<PublishPostResponse>(
                 new Error("Post.Unauthorized", "You are not authorized to publish this post."));
+        }
+
+        if (!post.WorkspaceId.HasValue)
+        {
+            return Result.Failure<PublishPostResponse>(PostErrors.WorkspaceIdRequired);
         }
 
         var postType = post.Content?.PostType ?? PostsType;
@@ -348,6 +356,26 @@ public sealed class PublishPostCommandHandler
         post.Status = "published";
         post.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
 
+        var now = DateTimeExtensions.PostgreSqlUtcNow;
+        var publications = publishResults.Select(result => new PostPublication
+        {
+            Id = Guid.CreateVersion7(),
+            PostId = post.Id,
+            WorkspaceId = post.WorkspaceId.Value,
+            SocialMediaId = result.SocialMediaId,
+            SocialMediaType = result.SocialMediaType,
+            DestinationOwnerId = result.PageId,
+            ExternalContentId = result.ExternalPostId,
+            ExternalContentIdType = string.Equals(result.SocialMediaType, TikTokType, StringComparison.OrdinalIgnoreCase)
+                ? "publish_id"
+                : "post_id",
+            ContentType = post.Content?.PostType ?? PostsType,
+            PublishStatus = "published",
+            PublishedAt = now,
+            CreatedAt = now
+        }).ToList();
+
+        await _postPublicationRepository.AddRangeAsync(publications, cancellationToken);
         _postRepository.Update(post);
         await _postRepository.SaveChangesAsync(cancellationToken);
 
