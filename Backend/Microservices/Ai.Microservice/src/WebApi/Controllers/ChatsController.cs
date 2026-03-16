@@ -139,7 +139,7 @@ public sealed class ChatsController : ApiController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateChat(
-        [FromBody] CreateChatRequest request,
+        [FromBody] CreateChatRequest? request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -147,13 +147,30 @@ public sealed class ChatsController : ApiController
             return Unauthorized(new { Message = "Unauthorized" });
         }
 
+        if (request is null)
+        {
+            return HandleFailure(Result.Failure<ChatResponse>(
+                new Error("Chat.InvalidRequest", "Request body is required.")));
+        }
+
+        if (!Guid.TryParse(request.ChatSessionId, out var chatSessionId) || chatSessionId == Guid.Empty)
+        {
+            return HandleFailure(Result.Failure<ChatResponse>(
+                new Error("ChatSession.InvalidId", "ChatSessionId must be a valid GUID.")));
+        }
+
+        var referenceResourceIdsResult = ParseReferenceResourceIds(request.ReferenceResourceIds);
+        if (referenceResourceIdsResult.IsFailure)
+        {
+            return HandleFailure(Result.Failure<ChatResponse>(referenceResourceIdsResult.Error));
+        }
+
         var command = new CreateChatCommand(
             userId,
-            request.ChatSessionId,
-            request.WorkspaceId,
+            chatSessionId,
             request.Prompt,
             request.Config,
-            request.ReferenceResourceIds);
+            referenceResourceIdsResult.Value.Count == 0 ? null : referenceResourceIdsResult.Value);
 
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
@@ -221,7 +238,7 @@ public sealed class ChatsController : ApiController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateChatVideo(
-        [FromBody] CreateChatVideoRequest request,
+        [FromBody] CreateChatVideoRequest? request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -229,11 +246,29 @@ public sealed class ChatsController : ApiController
             return Unauthorized(new { Message = "Unauthorized" });
         }
 
+        if (request is null)
+        {
+            return HandleFailure(Result.Failure<ChatVideoResponse>(
+                new Error("Chat.InvalidRequest", "Request body is required.")));
+        }
+
+        if (!Guid.TryParse(request.ChatSessionId, out var chatSessionId) || chatSessionId == Guid.Empty)
+        {
+            return HandleFailure(Result.Failure<ChatVideoResponse>(
+                new Error("ChatSession.InvalidId", "ChatSessionId must be a valid GUID.")));
+        }
+
+        var resourceIdsResult = ParseResourceIds(request.ResourceIds);
+        if (resourceIdsResult.IsFailure)
+        {
+            return HandleFailure(Result.Failure<ChatVideoResponse>(resourceIdsResult.Error));
+        }
+
         var command = new CreateChatVideoCommand(
             UserId: userId,
-            ChatSessionId: request.ChatSessionId,
-            Prompt: request.Prompt,
-            ResourceIds: request.ResourceIds ?? new List<Guid>(),
+            ChatSessionId: chatSessionId,
+            Prompt: request.Prompt ?? string.Empty,
+            ResourceIds: resourceIdsResult.Value,
             Model: request.Model,
             AspectRatio: request.AspectRatio,
             Seeds: request.Seeds,
@@ -255,7 +290,7 @@ public sealed class ChatsController : ApiController
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateChatImage(
-        [FromBody] CreateChatImageRequest request,
+        [FromBody] CreateChatImageRequest? request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -263,11 +298,29 @@ public sealed class ChatsController : ApiController
             return Unauthorized(new { Message = "Unauthorized" });
         }
 
+        if (request is null)
+        {
+            return HandleFailure(Result.Failure<ChatImageResponse>(
+                new Error("Chat.InvalidRequest", "Request body is required.")));
+        }
+
+        if (!Guid.TryParse(request.ChatSessionId, out var chatSessionId) || chatSessionId == Guid.Empty)
+        {
+            return HandleFailure(Result.Failure<ChatImageResponse>(
+                new Error("ChatSession.InvalidId", "ChatSessionId must be a valid GUID.")));
+        }
+
+        var resourceIdsResult = ParseResourceIds(request.ResourceIds);
+        if (resourceIdsResult.IsFailure)
+        {
+            return HandleFailure(Result.Failure<ChatImageResponse>(resourceIdsResult.Error));
+        }
+
         var command = new CreateChatImageCommand(
             UserId: userId,
-            ChatSessionId: request.ChatSessionId,
-            Prompt: request.Prompt,
-            ResourceIds: request.ResourceIds ?? new List<Guid>(),
+            ChatSessionId: chatSessionId,
+            Prompt: request.Prompt ?? string.Empty,
+            ResourceIds: resourceIdsResult.Value,
             AspectRatio: request.AspectRatio,
             Resolution: request.Resolution,
             OutputFormat: request.OutputFormat);
@@ -287,12 +340,72 @@ public sealed class ChatsController : ApiController
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(claimValue, out userId);
     }
+
+    private static Result<List<Guid>> ParseReferenceResourceIds(List<string>? rawIds)
+    {
+        if (rawIds is null || rawIds.Count == 0)
+        {
+            return Result.Success(new List<Guid>());
+        }
+
+        var parsedIds = new List<Guid>();
+        foreach (var rawId in rawIds)
+        {
+            if (string.IsNullOrWhiteSpace(rawId))
+            {
+                continue;
+            }
+
+            if (!Guid.TryParse(rawId, out var parsedId) || parsedId == Guid.Empty)
+            {
+                return Result.Failure<List<Guid>>(
+                    new Error("Chat.InvalidReferenceResourceIds", "referenceResourceIds must contain valid GUID values."));
+            }
+
+            if (!parsedIds.Contains(parsedId))
+            {
+                parsedIds.Add(parsedId);
+            }
+        }
+
+        return Result.Success(parsedIds);
+    }
+
+    private static Result<List<Guid>> ParseResourceIds(List<string>? rawIds)
+    {
+        if (rawIds is null || rawIds.Count == 0)
+        {
+            return Result.Success(new List<Guid>());
+        }
+
+        var parsedIds = new List<Guid>();
+        foreach (var rawId in rawIds)
+        {
+            if (string.IsNullOrWhiteSpace(rawId))
+            {
+                continue;
+            }
+
+            if (!Guid.TryParse(rawId, out var parsedId) || parsedId == Guid.Empty)
+            {
+                return Result.Failure<List<Guid>>(
+                    new Error("Chat.InvalidResourceIds", "resourceIds must contain valid GUID values."));
+            }
+
+            if (!parsedIds.Contains(parsedId))
+            {
+                parsedIds.Add(parsedId);
+            }
+        }
+
+        return Result.Success(parsedIds);
+    }
 }
 
 public sealed record CreateChatVideoRequest(
-    Guid ChatSessionId,
-    string Prompt,
-    List<Guid>? ResourceIds,
+    string? ChatSessionId,
+    string? Prompt,
+    List<string>? ResourceIds,
     string? Model,
     string? AspectRatio,
     int? Seeds,
@@ -300,19 +413,18 @@ public sealed record CreateChatVideoRequest(
     string? Watermark);
 
 public sealed record CreateChatImageRequest(
-    Guid ChatSessionId,
-    string Prompt,
-    List<Guid>? ResourceIds,
+    string? ChatSessionId,
+    string? Prompt,
+    List<string>? ResourceIds,
     string? AspectRatio,
     string? Resolution,
     string? OutputFormat);
 
 public sealed record CreateChatRequest(
-    Guid? ChatSessionId,
-    Guid? WorkspaceId,
+    string? ChatSessionId,
     string? Prompt,
     string? Config,
-    List<Guid>? ReferenceResourceIds);
+    List<string>? ReferenceResourceIds);
 
 public sealed record UpdateChatRequest(
     string? Prompt,

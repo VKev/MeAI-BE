@@ -287,13 +287,36 @@ public sealed class VeoVideoService : IVeoVideoService
             return null;
         }
 
+        var callbackBaseUrl = NormalizeCallbackBaseUrl(_options.CallbackUrl);
+
         if (correlationId.HasValue)
         {
-            var baseUrl = _options.CallbackUrl.TrimEnd('/');
-            return $"{baseUrl}/{correlationId.Value}";
+            return $"{callbackBaseUrl}/{correlationId.Value:D}?provider=video";
         }
 
-        return _options.CallbackUrl;
+        return $"{callbackBaseUrl}?provider=video";
+    }
+
+    private static string NormalizeCallbackBaseUrl(string callbackUrl)
+    {
+        var normalized = callbackUrl.TrimEnd('/');
+
+        normalized = normalized.Replace(
+            "/api/Ai/veo/callback",
+            "/api/Ai/kie/callback",
+            StringComparison.OrdinalIgnoreCase);
+
+        normalized = normalized.Replace(
+            "/api/Ai/image/callback",
+            "/api/Ai/kie/callback",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (!normalized.Contains("/api/Ai/kie/callback", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = $"{normalized}/api/Ai/kie/callback";
+        }
+
+        return normalized;
     }
 
     private sealed class VeoApiRequest

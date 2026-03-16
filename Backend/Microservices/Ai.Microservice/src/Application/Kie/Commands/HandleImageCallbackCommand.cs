@@ -53,6 +53,15 @@ public sealed class HandleImageCallbackCommandHandler
             return Result.Success(true);
         }
 
+        if (string.Equals(imageTask.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "Skipping duplicate Kie callback because task is already completed. CorrelationId: {CorrelationId}, TaskId: {TaskId}",
+                correlationId,
+                imageTask.KieTaskId);
+            return Result.Success(true);
+        }
+
         // Verify KieTaskId matches for security
         if (!string.IsNullOrEmpty(kieTaskId) && !string.IsNullOrEmpty(imageTask.KieTaskId) && imageTask.KieTaskId != kieTaskId)
         {

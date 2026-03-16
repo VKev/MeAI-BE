@@ -35,6 +35,8 @@ namespace Infrastructure
         {
             services.AddHttpClient<IVeoVideoService, VeoVideoService>();
             services.AddHttpClient<IKieImageService, KieImageService>();
+            services.AddHttpClient<IKieFallbackCallbackService, KieFallbackCallbackService>();
+            services.AddSingleton<IAiFallbackTemplateService, AiFallbackTemplateService>();
             services.AddHttpClient("Gemini");
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");

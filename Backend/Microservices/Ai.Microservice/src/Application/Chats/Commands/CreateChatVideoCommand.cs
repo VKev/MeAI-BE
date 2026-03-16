@@ -71,27 +71,25 @@ public sealed class CreateChatVideoCommandHandler
             .Distinct()
             .ToList() ?? new List<Guid>();
 
-        if (resourceIds.Count == 0)
+        var imageUrls = new List<string>();
+        if (resourceIds.Count > 0)
         {
-            return Result.Failure<ChatVideoResponse>(
-                new Error("Resource.Missing", "At least one resource is required."));
+            var presignResult = await _userResourceService.GetPresignedResourcesAsync(
+                request.UserId,
+                resourceIds,
+                cancellationToken);
+
+            if (presignResult.IsFailure)
+            {
+                return Result.Failure<ChatVideoResponse>(presignResult.Error);
+            }
+
+            var presignedById = presignResult.Value.ToDictionary(r => r.ResourceId, r => r.PresignedUrl);
+            imageUrls = resourceIds
+                .Where(id => presignedById.TryGetValue(id, out _))
+                .Select(id => presignedById[id])
+                .ToList();
         }
-
-        var presignResult = await _userResourceService.GetPresignedResourcesAsync(
-            request.UserId,
-            resourceIds,
-            cancellationToken);
-
-        if (presignResult.IsFailure)
-        {
-            return Result.Failure<ChatVideoResponse>(presignResult.Error);
-        }
-
-        var presignedById = presignResult.Value.ToDictionary(r => r.ResourceId, r => r.PresignedUrl);
-        var imageUrls = resourceIds
-            .Where(id => presignedById.TryGetValue(id, out _))
-            .Select(id => presignedById[id])
-            .ToList();
 
         var model = string.IsNullOrWhiteSpace(request.Model) ? "veo3_fast" : request.Model.Trim();
         var aspectRatio = string.IsNullOrWhiteSpace(request.AspectRatio) ? "16:9" : request.AspectRatio.Trim();
@@ -113,7 +111,7 @@ public sealed class CreateChatVideoCommandHandler
             SessionId = request.ChatSessionId,
             Prompt = request.Prompt.Trim(),
             Config = JsonSerializer.Serialize(config),
-            ReferenceResourceIds = JsonSerializer.Serialize(resourceIds.Select(id => id.ToString())),
+            ReferenceResourceIds = resourceIds.Count == 0 ? null : JsonSerializer.Serialize(resourceIds.Select(id => id.ToString())),
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 

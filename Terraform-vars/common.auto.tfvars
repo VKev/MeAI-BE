@@ -1,7 +1,7 @@
 # This file is automatically sanitized.
 # Run scripts/sanitize_tfvars.py after editing real tfvars.
 
-project_name = "vkev2406-infrastructure-khanghv2406"
+project_name = "vkev2406-infrastructure-khanghv2406v2"
 
 aws_region = "us-east-1"
 
@@ -67,7 +67,7 @@ cloudfront_enable_caching = false
 
 cloudfront_enable_logging = false
 
-cloudfront_logging_bucket = "vkev2406-infrastructure-khanghv2406-us-east-1-terraform-state"
+cloudfront_logging_bucket = "vkev2406-infrastructure-khanghv2406v2-us-east-1-terraform-state"
 
 cloudfront_logging_prefix = "cloudfront-logs/"
 
@@ -95,4 +95,4 @@ cloudflare_user_email = "<REDACTED>"
 
 cloudflare_global_api_key = "<REDACTED>"
 
-static_assets_bucket_domain_name = "vkev2406-infrastructure-khanghv2406-us-east-1-terraform-state.s3.us-east-1.amazonaws.com"
+static_assets_bucket_domain_name = "vkev2406-infrastructure-khanghv2406v2-us-east-1-terraform-state.s3.us-east-1.amazonaws.com"

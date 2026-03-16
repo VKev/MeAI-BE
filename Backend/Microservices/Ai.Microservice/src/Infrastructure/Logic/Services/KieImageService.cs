@@ -169,18 +169,36 @@ public sealed class KieImageService : IKieImageService
             return null;
         }
 
+        var callbackBaseUrl = NormalizeCallbackBaseUrl(_options.CallbackUrl);
+
         if (correlationId.HasValue)
         {
-            var baseUrl = _options.CallbackUrl.TrimEnd('/');
-            var imageCallbackUrl = baseUrl.Replace("/veo/", "/image/");
-            if (imageCallbackUrl == baseUrl)
-            {
-                imageCallbackUrl = $"{baseUrl.TrimEnd('/')}-image";
-            }
-            return $"{imageCallbackUrl}/{correlationId.Value}";
+            return $"{callbackBaseUrl}/{correlationId.Value:D}?provider=image";
         }
 
-        return _options.CallbackUrl;
+        return $"{callbackBaseUrl}?provider=image";
+    }
+
+    private static string NormalizeCallbackBaseUrl(string callbackUrl)
+    {
+        var normalized = callbackUrl.TrimEnd('/');
+
+        normalized = normalized.Replace(
+            "/api/Ai/veo/callback",
+            "/api/Ai/kie/callback",
+            StringComparison.OrdinalIgnoreCase);
+
+        normalized = normalized.Replace(
+            "/api/Ai/image/callback",
+            "/api/Ai/kie/callback",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (!normalized.Contains("/api/Ai/kie/callback", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = $"{normalized}/api/Ai/kie/callback";
+        }
+
+        return normalized;
     }
 
     #region Private API Models
