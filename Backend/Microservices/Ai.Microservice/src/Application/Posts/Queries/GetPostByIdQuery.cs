@@ -11,10 +11,12 @@ public sealed class GetPostByIdQueryHandler
     : IRequestHandler<GetPostByIdQuery, Result<PostResponse>>
 {
     private readonly IPostRepository _postRepository;
+    private readonly PostResponseBuilder _postResponseBuilder;
 
-    public GetPostByIdQueryHandler(IPostRepository postRepository)
+    public GetPostByIdQueryHandler(IPostRepository postRepository, PostResponseBuilder postResponseBuilder)
     {
         _postRepository = postRepository;
+        _postResponseBuilder = postResponseBuilder;
     }
 
     public async Task<Result<PostResponse>> Handle(GetPostByIdQuery request, CancellationToken cancellationToken)
@@ -31,6 +33,7 @@ public sealed class GetPostByIdQueryHandler
             return Result.Failure<PostResponse>(PostErrors.Unauthorized);
         }
 
-        return Result.Success(PostMapping.ToResponse(post));
+        var response = await _postResponseBuilder.BuildAsync(request.UserId, post, cancellationToken);
+        return Result.Success(response);
     }
 }

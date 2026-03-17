@@ -47,4 +47,14 @@ public sealed class PostRepository : IPostRepository
             .Where(p => p.UserId == userId)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IEnumerable<Post>> GetByUserIdAndWorkspaceIdAsync(
+        Guid userId,
+        Guid workspaceId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbSet.AsNoTracking()
+            .Where(p => p.UserId == userId && p.WorkspaceId == workspaceId)
+            .ToListAsync(cancellationToken);
+    }
 }
