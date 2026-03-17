@@ -14,7 +14,8 @@ public sealed record TransactionResponse(
     DateTime? UpdatedAt,
     DateTime? DeletedAt,
     bool IsDeleted,
-    TransactionRelationInfo? Relation);
+    TransactionRelationInfo? Relation,
+    TransactionUserSummaryResponse? User);
 
 public sealed record TransactionRelationInfo(
     string Type,
@@ -27,3 +28,10 @@ public sealed record TransactionSubscriptionRelationResponse(
     float? Cost,
     int DurationMonths,
     decimal? MeAiCoin);
+
+public sealed record TransactionUserSummaryResponse(
+    Guid Id,
+    string Username,
+    string Email,
+    string? FullName,
+    bool IsDeleted);

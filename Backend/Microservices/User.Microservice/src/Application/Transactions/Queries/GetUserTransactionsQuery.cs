@@ -116,7 +116,8 @@ public sealed class GetUserTransactionsQueryHandler
             transaction.UpdatedAt,
             transaction.DeletedAt,
             transaction.IsDeleted,
-            relation);
+            relation,
+            null);
     }
 
     private static string? Normalize(string? value)

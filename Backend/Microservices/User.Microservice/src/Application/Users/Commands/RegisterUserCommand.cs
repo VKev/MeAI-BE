@@ -66,7 +66,9 @@ public sealed class RegisterUserCommandHandler
 
         var existingUsers = await _userRepository.GetAll()
             .AsNoTracking()
-            .Where(user => user.Email.ToLower() == normalizedEmail || user.Username.ToLower() == normalizedUsername)
+            .Where(user =>
+                !user.IsDeleted &&
+                (user.Email.ToLower() == normalizedEmail || user.Username.ToLower() == normalizedUsername))
             .ToListAsync(cancellationToken);
 
         if (existingUsers.Any(user => user.Email.Equals(normalizedEmail, StringComparison.OrdinalIgnoreCase)))

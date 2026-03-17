@@ -114,6 +114,20 @@ public sealed class AdminUsersController : ApiController
 
         return Ok(result);
     }
+
+    [HttpPut("{id:guid}/activate")]
+    [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Activate(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new ActivateUserCommand(id), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
 }
 
 public sealed record CreateAdminUserRequest(
