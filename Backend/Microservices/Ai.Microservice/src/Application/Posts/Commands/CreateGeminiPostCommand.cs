@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Application.Abstractions.Configs;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Resources;
 using Application.Posts.Models;
@@ -26,6 +27,7 @@ public sealed class CreateGeminiPostCommandHandler
 
     private readonly IPostRepository _postRepository;
     private readonly IWorkspaceRepository _workspaceRepository;
+    private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
     private readonly IGeminiCaptionService _geminiCaptionService;
     private static readonly Regex HashtagRegex = new(@"#([\p{L}\p{Mn}\p{Nd}_]+)", RegexOptions.Compiled);
@@ -34,11 +36,13 @@ public sealed class CreateGeminiPostCommandHandler
     public CreateGeminiPostCommandHandler(
         IPostRepository postRepository,
         IWorkspaceRepository workspaceRepository,
+        IUserConfigService userConfigService,
         IUserResourceService userResourceService,
         IGeminiCaptionService geminiCaptionService)
     {
         _postRepository = postRepository;
         _workspaceRepository = workspaceRepository;
+        _userConfigService = userConfigService;
         _userResourceService = userResourceService;
         _geminiCaptionService = geminiCaptionService;
     }
@@ -110,6 +114,10 @@ public sealed class CreateGeminiPostCommandHandler
         var captionGenerated = false;
 
         var languageHint = ResolveLanguageHint(request.Language);
+        var activeConfig = await TryGetActiveConfigAsync(cancellationToken);
+        var preferredModel = string.IsNullOrWhiteSpace(activeConfig?.ChatModel)
+            ? null
+            : activeConfig.ChatModel.Trim();
 
         if (string.IsNullOrWhiteSpace(caption))
         {
@@ -119,7 +127,7 @@ public sealed class CreateGeminiPostCommandHandler
                 .ToList();
 
             var geminiResult = await _geminiCaptionService.GenerateCaptionAsync(
-                new GeminiCaptionRequest(geminiResources, resolvedPostType, languageHint, request.Instruction),
+                new GeminiCaptionRequest(geminiResources, resolvedPostType, languageHint, request.Instruction, preferredModel),
                 cancellationToken);
 
             if (geminiResult.IsFailure)
@@ -134,7 +142,7 @@ public sealed class CreateGeminiPostCommandHandler
         caption ??= string.Empty;
         var titleSource = NormalizeTitleContent(caption);
         var titleResult = await _geminiCaptionService.GenerateTitleAsync(
-            new GeminiTitleRequest(titleSource, languageHint),
+            new GeminiTitleRequest(titleSource, languageHint, preferredModel),
             cancellationToken);
 
         if (titleResult.IsFailure)
@@ -285,5 +293,11 @@ public sealed class CreateGeminiPostCommandHandler
         var withoutHashtags = HashtagRegex.Replace(caption, string.Empty);
         var collapsed = CollapseWhitespaceRegex.Replace(withoutHashtags, " ");
         return string.IsNullOrWhiteSpace(collapsed) ? caption : collapsed.Trim();
+    }
+
+    private async Task<UserAiConfig?> TryGetActiveConfigAsync(CancellationToken cancellationToken)
+    {
+        var result = await _userConfigService.GetActiveConfigAsync(cancellationToken);
+        return result.IsSuccess ? result.Value : null;
     }
 }

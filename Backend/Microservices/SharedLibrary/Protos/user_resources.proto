@@ -7,6 +7,7 @@ package user.resources;
 service UserResourceService {
   rpc GetPresignedResources (GetPresignedResourcesRequest) returns (GetPresignedResourcesResponse);
   rpc CreateResourcesFromUrls (CreateResourcesFromUrlsRequest) returns (CreateResourcesFromUrlsResponse);
+  rpc GetActiveConfig (GetActiveConfigRequest) returns (GetActiveConfigResponse);
 }
 
 service UserSocialMediaService {
@@ -45,6 +46,17 @@ message CreatedResource {
 
 message CreateResourcesFromUrlsResponse {
   repeated CreatedResource resources = 1;
+}
+
+message GetActiveConfigRequest {
+}
+
+message GetActiveConfigResponse {
+  bool has_active_config = 1;
+  string config_id = 2;
+  string chat_model = 3;
+  string media_aspect_ratio = 4;
+  int32 number_of_variances = 5;
 }
 
 message GetSocialMediasByIdsRequest {

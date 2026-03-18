@@ -14,7 +14,7 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
 
     private readonly string _apiKey;
     private readonly string _baseUrl;
-    private readonly string _model;
+    private readonly string _defaultModel;
     private readonly HttpClient _httpClient;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -27,7 +27,7 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
         _apiKey = configuration["Gemini:ApiKey"]
                   ?? throw new InvalidOperationException("Gemini:ApiKey is not configured");
         _baseUrl = configuration["Gemini:BaseUrl"] ?? DefaultBaseUrl;
-        _model = configuration["Gemini:Model"] ?? DefaultModel;
+        _defaultModel = configuration["Gemini:Model"] ?? DefaultModel;
         _httpClient = httpClientFactory.CreateClient("Gemini");
     }
 
@@ -71,7 +71,7 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
             }
         };
 
-        var endpoint = $"{_baseUrl.TrimEnd('/')}/models/{_model}:generateContent?key={Uri.EscapeDataString(_apiKey)}";
+        var endpoint = BuildGenerateContentEndpoint(request.PreferredModel);
         var json = JsonSerializer.Serialize(payload, JsonOptions);
 
         try
@@ -142,7 +142,7 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
             }
         };
 
-        var endpoint = $"{_baseUrl.TrimEnd('/')}/models/{_model}:generateContent?key={Uri.EscapeDataString(_apiKey)}";
+        var endpoint = BuildGenerateContentEndpoint(request.PreferredModel);
         var json = JsonSerializer.Serialize(payload, JsonOptions);
 
         try
@@ -232,6 +232,15 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
         {
             return null;
         }
+    }
+
+    private string BuildGenerateContentEndpoint(string? preferredModel)
+    {
+        var model = string.IsNullOrWhiteSpace(preferredModel)
+            ? _defaultModel
+            : preferredModel.Trim();
+
+        return $"{_baseUrl.TrimEnd('/')}/models/{model}:generateContent?key={Uri.EscapeDataString(_apiKey)}";
     }
 
     private sealed class GeminiGenerateContentRequest
