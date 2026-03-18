@@ -1,4 +1,5 @@
 using Application.Transactions.Commands;
+using Application.Transactions.Models;
 using Application.Transactions.Queries;
 using AutoMapper;
 using Domain.Entities;
@@ -25,7 +26,7 @@ public sealed class AdminTransactionsController : ApiController
     }
 
     [HttpGet]
-    [ProducesResponseType(typeof(Result<List<Transaction>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<List<TransactionResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetAll([FromQuery] bool includeDeleted, CancellationToken cancellationToken)
     {
@@ -39,7 +40,7 @@ public sealed class AdminTransactionsController : ApiController
     }
 
     [HttpGet("{id:guid}")]
-    [ProducesResponseType(typeof(Result<Transaction>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<TransactionResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetById(Guid id, [FromQuery] bool includeDeleted,
         CancellationToken cancellationToken)

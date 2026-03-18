@@ -12,8 +12,12 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         entity.ToTable("users");
 
-        entity.HasIndex(e => e.Username, "users_username_key").IsUnique();
-        entity.HasIndex(e => e.Email, "users_email_key").IsUnique();
+        entity.HasIndex(e => e.Username, "users_username_key")
+            .IsUnique()
+            .HasFilter("\"is_deleted\" = false");
+        entity.HasIndex(e => e.Email, "users_email_key")
+            .IsUnique()
+            .HasFilter("\"is_deleted\" = false");
 
         entity.Property(e => e.Id).HasColumnName("id");
         entity.Property(e => e.Username).HasColumnName("username").IsRequired();
