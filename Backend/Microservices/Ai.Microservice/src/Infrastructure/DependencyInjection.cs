@@ -1,4 +1,5 @@
 using Application.Abstractions;
+using Application.Abstractions.Configs;
 using Application.Abstractions.Kie;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Gemini;
@@ -10,6 +11,7 @@ using Application.Abstractions.Threads;
 using Application.Posts;
 using Domain.Repositories;
 using Infrastructure.Logic.Consumers;
+using Infrastructure.Logic.Configs;
 using Infrastructure.Logic.Facebook;
 using Infrastructure.Logic.Gemini;
 using Infrastructure.Logic.Instagram;
@@ -63,6 +65,7 @@ namespace Infrastructure
                 options.Address = new Uri(grpcUrl);
             });
             services.AddScoped<IUserResourceService, UserResourceGrpcService>();
+            services.AddScoped<IUserConfigService, UserConfigGrpcService>();
 
             services.AddGrpcClient<UserSocialMediaService.UserSocialMediaServiceClient>((sp, options) =>
             {

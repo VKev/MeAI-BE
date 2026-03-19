@@ -17,7 +17,8 @@ public sealed record GeminiCaptionRequest(
     IReadOnlyList<GeminiCaptionResource> Resources,
     string PostType,
     string? LanguageHint,
-    string? Instruction);
+    string? Instruction,
+    string? PreferredModel = null);
 
 public sealed record GeminiCaptionResource(
     string FileUri,
@@ -25,4 +26,5 @@ public sealed record GeminiCaptionResource(
 
 public sealed record GeminiTitleRequest(
     string Content,
-    string? LanguageHint);
+    string? LanguageHint,
+    string? PreferredModel = null);

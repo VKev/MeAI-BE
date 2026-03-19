@@ -1,5 +1,6 @@
 using Application.Resources.Commands;
 using Application.Resources.Queries;
+using Application.Configs.Queries;
 using Grpc.Core;
 using MediatR;
 using SharedLibrary.Grpc.UserResources;
@@ -96,5 +97,29 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
         }
 
         return response;
+    }
+
+    public override async Task<GetActiveConfigResponse> GetActiveConfig(
+        GetActiveConfigRequest request,
+        ServerCallContext context)
+    {
+        var result = await _mediator.Send(new GetConfigQuery(), context.CancellationToken);
+
+        if (result.IsFailure)
+        {
+            return new GetActiveConfigResponse
+            {
+                HasActiveConfig = false
+            };
+        }
+
+        return new GetActiveConfigResponse
+        {
+            HasActiveConfig = true,
+            ConfigId = result.Value.Id.ToString(),
+            ChatModel = result.Value.ChatModel ?? string.Empty,
+            MediaAspectRatio = result.Value.MediaAspectRatio ?? string.Empty,
+            NumberOfVariances = result.Value.NumberOfVariances ?? 0
+        };
     }
 }

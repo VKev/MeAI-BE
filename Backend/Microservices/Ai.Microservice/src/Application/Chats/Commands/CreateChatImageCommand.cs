@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Application.Abstractions.Configs;
 using Application.Abstractions.Resources;
 using Application.ChatSessions;
 using Domain.Entities;
@@ -29,17 +30,20 @@ public sealed class CreateChatImageCommandHandler
 {
     private readonly IChatRepository _chatRepository;
     private readonly IChatSessionRepository _chatSessionRepository;
+    private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
     private readonly IBus _bus;
 
     public CreateChatImageCommandHandler(
         IChatRepository chatRepository,
         IChatSessionRepository chatSessionRepository,
+        IUserConfigService userConfigService,
         IUserResourceService userResourceService,
         IBus bus)
     {
         _chatRepository = chatRepository;
         _chatSessionRepository = chatSessionRepository;
+        _userConfigService = userConfigService;
         _userResourceService = userResourceService;
         _bus = bus;
     }
@@ -89,7 +93,8 @@ public sealed class CreateChatImageCommandHandler
                 .ToList();
         }
 
-        var aspectRatio = string.IsNullOrWhiteSpace(request.AspectRatio) ? "1:1" : request.AspectRatio.Trim();
+        var activeConfig = await TryGetActiveConfigAsync(cancellationToken);
+        var aspectRatio = ResolveAspectRatio(request.AspectRatio, activeConfig?.MediaAspectRatio, "1:1");
         var resolution = string.IsNullOrWhiteSpace(request.Resolution) ? "1K" : request.Resolution.Trim();
         var outputFormat = string.IsNullOrWhiteSpace(request.OutputFormat) ? "png" : request.OutputFormat.Trim();
 
@@ -136,4 +141,25 @@ public sealed class CreateChatImageCommandHandler
         string AspectRatio,
         string Resolution,
         string OutputFormat);
+
+    private async Task<UserAiConfig?> TryGetActiveConfigAsync(CancellationToken cancellationToken)
+    {
+        var result = await _userConfigService.GetActiveConfigAsync(cancellationToken);
+        return result.IsSuccess ? result.Value : null;
+    }
+
+    private static string ResolveAspectRatio(string? requestedValue, string? configuredValue, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedValue))
+        {
+            return requestedValue.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(configuredValue))
+        {
+            return configuredValue.Trim();
+        }
+
+        return fallback;
+    }
 }
