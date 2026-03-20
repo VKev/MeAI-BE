@@ -81,7 +81,10 @@ public sealed class LoginWithGoogleCommandHandler
 
         var normalizedEmail = NormalizeEmail(payload.Email);
         var user = await _userRepository.GetAll()
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail, cancellationToken);
+            .AsNoTracking()
+            .Where(u => u.Email.ToLower() == normalizedEmail)
+            .OrderBy(u => u.IsDeleted)
+            .FirstOrDefaultAsync(cancellationToken);
 
         List<string> roles;
 
@@ -117,6 +120,11 @@ public sealed class LoginWithGoogleCommandHandler
         }
         else
         {
+            if (user.IsDeleted)
+            {
+                return Result.Failure<LoginResponse>(UserAuthenticationRules.AccountDeactivated());
+            }
+
             if (!string.Equals(user.Provider, "google", StringComparison.OrdinalIgnoreCase))
             {
                 return Result.Failure<LoginResponse>(
@@ -124,6 +132,10 @@ public sealed class LoginWithGoogleCommandHandler
             }
 
             roles = await ResolveRolesAsync(user.Id, _roleRepository, _userRoleRepository, cancellationToken);
+            if (UserAuthenticationRules.HasBannedRole(roles))
+            {
+                return Result.Failure<LoginResponse>(UserAuthenticationRules.AccountBanned());
+            }
         }
 
         var accessToken = _jwtTokenService.GenerateToken(user.Id, user.Email, roles);
@@ -215,7 +227,7 @@ public sealed class LoginWithGoogleCommandHandler
     {
         var roleIds = await userRoleRepository.GetAll()
             .AsNoTracking()
-            .Where(ur => ur.UserId == userId)
+            .Where(ur => ur.UserId == userId && !ur.IsDeleted)
             .Select(ur => ur.RoleId)
             .ToListAsync(cancellationToken);
 
@@ -226,7 +238,7 @@ public sealed class LoginWithGoogleCommandHandler
 
         var roleNames = await roleRepository.GetAll()
             .AsNoTracking()
-            .Where(role => roleIds.Contains(role.Id))
+            .Where(role => !role.IsDeleted && roleIds.Contains(role.Id))
             .Select(role => role.Name)
             .ToListAsync(cancellationToken);
 
