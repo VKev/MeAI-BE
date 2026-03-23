@@ -6,6 +6,7 @@ using Application.Abstractions.Gemini;
 using Application.Abstractions.Instagram;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
+using Application.Abstractions.Workspaces;
 using Application.Abstractions.TikTok;
 using Application.Abstractions.Threads;
 using Application.Posts;
@@ -19,6 +20,7 @@ using Infrastructure.Logic.Threads;
 using Infrastructure.Logic.Resources;
 using Infrastructure.Logic.SocialMedias;
 using Infrastructure.Logic.TikTok;
+using Infrastructure.Logic.Workspaces;
 using Infrastructure.Repositories;
 using Infrastructure.Logic.Sagas;
 using Infrastructure.Logic.Services;
@@ -45,6 +47,7 @@ namespace Infrastructure
             services.AddHttpClient("Instagram");
             services.AddHttpClient("TikTok");
             services.AddScoped<IGeminiCaptionService, GeminiCaptionService>();
+            services.AddScoped<IGeminiContentModerationService, GeminiContentModerationService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
             services.AddScoped<IInstagramPublishService, InstagramPublishService>();
             services.AddScoped<ITikTokPublishService, TikTokPublishService>();
@@ -76,6 +79,16 @@ namespace Infrastructure
                 options.Address = new Uri(grpcUrl);
             });
             services.AddScoped<IUserSocialMediaService, UserSocialMediaGrpcService>();
+
+            services.AddGrpcClient<UserWorkspaceService.UserWorkspaceServiceClient>((sp, options) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var grpcUrl = configuration["UserService:GrpcUrl"]
+                              ?? configuration["UserService__GrpcUrl"]
+                              ?? "http://user-microservice:5004";
+                options.Address = new Uri(grpcUrl);
+            });
+            services.AddScoped<IUserWorkspaceService, UserWorkspaceGrpcService>();
 
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
             services.AddScoped<IImageTaskRepository, ImageTaskRepository>();

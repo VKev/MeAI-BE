@@ -26,10 +26,6 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<PostMetricSnapshot> PostMetricSnapshots { get; set; }
 
-    public virtual DbSet<SocialMedia> SocialMedias { get; set; }
-
-    public virtual DbSet<Workspace> Workspaces { get; set; }
-
     public virtual DbSet<VideoTask> VideoTasks { get; set; }
 
     public virtual DbSet<ImageTask> ImageTasks { get; set; }

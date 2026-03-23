@@ -30,10 +30,15 @@ public sealed class CreateChatSessionCommandHandler
         CreateChatSessionCommand request,
         CancellationToken cancellationToken)
     {
-        await _workspaceRepository.EnsureExistsForUserAsync(
+        var workspaceExists = await _workspaceRepository.ExistsForUserAsync(
             request.WorkspaceId,
             request.UserId,
             cancellationToken);
+
+        if (!workspaceExists)
+        {
+            return Result.Failure<ChatSessionResponse>(ChatSessionErrors.WorkspaceNotFound);
+        }
 
         var session = new ChatSession
         {

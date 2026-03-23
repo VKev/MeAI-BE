@@ -14,6 +14,10 @@ service UserSocialMediaService {
   rpc GetSocialMediasByIds (GetSocialMediasByIdsRequest) returns (GetSocialMediasByIdsResponse);
 }
 
+service UserWorkspaceService {
+  rpc GetWorkspaceById (GetWorkspaceByIdRequest) returns (GetWorkspaceByIdResponse);
+}
+
 message GetPresignedResourcesRequest {
   string user_id = 1;
   repeated string resource_ids = 2;
@@ -72,4 +76,18 @@ message SocialMediaRecord {
 
 message GetSocialMediasByIdsResponse {
   repeated SocialMediaRecord social_medias = 1;
+}
+
+message GetWorkspaceByIdRequest {
+  string user_id = 1;
+  string workspace_id = 2;
+}
+
+message GetWorkspaceByIdResponse {
+  string workspace_id = 1;
+  string name = 2;
+  string type = 3;
+  string description = 4;
+  string created_at = 5;
+  string updated_at = 6;
 }

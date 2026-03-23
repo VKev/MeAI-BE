@@ -20,12 +20,6 @@ public sealed class ChatSessionConfiguration : IEntityTypeConfiguration<ChatSess
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
 
-        entity.HasOne<Workspace>()
-            .WithMany()
-            .HasForeignKey(e => e.WorkspaceId)
-            .OnDelete(DeleteBehavior.Restrict)
-            .HasConstraintName("chat_sessions_workspace_id_fkey");
-
         entity.HasIndex(e => new { e.UserId, e.WorkspaceId, e.CreatedAt, e.Id }, "chat_sessions_user_id_workspace_id_created_at_id_idx");
     }
 }

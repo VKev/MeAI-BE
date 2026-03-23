@@ -46,11 +46,6 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
 
-        entity.HasOne<Workspace>()
-            .WithMany()
-            .HasForeignKey(d => d.WorkspaceId)
-            .OnDelete(DeleteBehavior.Restrict)
-            .HasConstraintName("posts_workspace_id_fkey");
     }
 
     private static bool PostContentEquals(PostContent? left, PostContent? right)
