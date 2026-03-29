@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Application.Abstractions.Configs;
 using Application.Abstractions.Resources;
 using Application.ChatSessions;
 using Domain.Entities;
@@ -31,17 +32,20 @@ public sealed class CreateChatVideoCommandHandler
 {
     private readonly IChatRepository _chatRepository;
     private readonly IChatSessionRepository _chatSessionRepository;
+    private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
     private readonly IBus _bus;
 
     public CreateChatVideoCommandHandler(
         IChatRepository chatRepository,
         IChatSessionRepository chatSessionRepository,
+        IUserConfigService userConfigService,
         IUserResourceService userResourceService,
         IBus bus)
     {
         _chatRepository = chatRepository;
         _chatSessionRepository = chatSessionRepository;
+        _userConfigService = userConfigService;
         _userResourceService = userResourceService;
         _bus = bus;
     }
@@ -91,8 +95,9 @@ public sealed class CreateChatVideoCommandHandler
                 .ToList();
         }
 
-        var model = string.IsNullOrWhiteSpace(request.Model) ? "veo3_fast" : request.Model.Trim();
-        var aspectRatio = string.IsNullOrWhiteSpace(request.AspectRatio) ? "16:9" : request.AspectRatio.Trim();
+        var activeConfig = await TryGetActiveConfigAsync(cancellationToken);
+        var model = ResolveValue(request.Model, activeConfig?.ChatModel, "veo3_fast");
+        var aspectRatio = ResolveValue(request.AspectRatio, activeConfig?.MediaAspectRatio, "16:9");
         var enableTranslation = request.EnableTranslation ?? true;
 
         var correlationId = Guid.CreateVersion7();
@@ -144,4 +149,25 @@ public sealed class CreateChatVideoCommandHandler
         int? Seeds,
         bool EnableTranslation,
         string? Watermark);
+
+    private async Task<UserAiConfig?> TryGetActiveConfigAsync(CancellationToken cancellationToken)
+    {
+        var result = await _userConfigService.GetActiveConfigAsync(cancellationToken);
+        return result.IsSuccess ? result.Value : null;
+    }
+
+    private static string ResolveValue(string? requestedValue, string? configuredValue, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedValue))
+        {
+            return requestedValue.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(configuredValue))
+        {
+            return configuredValue.Trim();
+        }
+
+        return fallback;
+    }
 }

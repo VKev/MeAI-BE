@@ -1,15 +1,18 @@
 using Application.Abstractions;
+using Application.Abstractions.Configs;
 using Application.Abstractions.Kie;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Instagram;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
+using Application.Abstractions.Workspaces;
 using Application.Abstractions.TikTok;
 using Application.Abstractions.Threads;
 using Application.Posts;
 using Domain.Repositories;
 using Infrastructure.Logic.Consumers;
+using Infrastructure.Logic.Configs;
 using Infrastructure.Logic.Facebook;
 using Infrastructure.Logic.Gemini;
 using Infrastructure.Logic.Instagram;
@@ -17,6 +20,7 @@ using Infrastructure.Logic.Threads;
 using Infrastructure.Logic.Resources;
 using Infrastructure.Logic.SocialMedias;
 using Infrastructure.Logic.TikTok;
+using Infrastructure.Logic.Workspaces;
 using Infrastructure.Repositories;
 using Infrastructure.Logic.Sagas;
 using Infrastructure.Logic.Services;
@@ -44,6 +48,7 @@ namespace Infrastructure
             services.AddHttpClient("TikTok");
             services.AddScoped<IGeminiCaptionService, GeminiCaptionService>();
             services.AddScoped<IFacebookContentService, FacebookContentService>();
+            services.AddScoped<IGeminiContentModerationService, GeminiContentModerationService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
             services.AddScoped<IInstagramPublishService, InstagramPublishService>();
             services.AddScoped<ITikTokPublishService, TikTokPublishService>();
@@ -61,6 +66,7 @@ namespace Infrastructure
                 options.Address = new Uri(grpcUrl);
             });
             services.AddScoped<IUserResourceService, UserResourceGrpcService>();
+            services.AddScoped<IUserConfigService, UserConfigGrpcService>();
 
             services.AddGrpcClient<UserSocialMediaService.UserSocialMediaServiceClient>((sp, options) =>
             {
@@ -71,6 +77,16 @@ namespace Infrastructure
                 options.Address = new Uri(grpcUrl);
             });
             services.AddScoped<IUserSocialMediaService, UserSocialMediaGrpcService>();
+
+            services.AddGrpcClient<UserWorkspaceService.UserWorkspaceServiceClient>((sp, options) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var grpcUrl = configuration["UserService:GrpcUrl"]
+                              ?? configuration["UserService__GrpcUrl"]
+                              ?? "http://user-microservice:5004";
+                options.Address = new Uri(grpcUrl);
+            });
+            services.AddScoped<IUserWorkspaceService, UserWorkspaceGrpcService>();
 
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
             services.AddScoped<IImageTaskRepository, ImageTaskRepository>();

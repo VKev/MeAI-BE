@@ -63,7 +63,17 @@ public sealed class LoginWithPasswordCommandHandler
                 new Error("Auth.InvalidCredentials", "Invalid email/username or password"));
         }
 
+        if (user.IsDeleted)
+        {
+            return Result.Failure<LoginResponse>(UserAuthenticationRules.AccountDeactivated());
+        }
+
         var roles = await ResolveRolesAsync(user.Id, _roleRepository, _userRoleRepository, cancellationToken);
+        if (UserAuthenticationRules.HasBannedRole(roles))
+        {
+            return Result.Failure<LoginResponse>(UserAuthenticationRules.AccountBanned());
+        }
+
         var accessToken = _jwtTokenService.GenerateToken(user.Id, user.Email, roles);
         var refreshToken = await GenerateUniqueRefreshTokenAsync(
             _jwtTokenService,
@@ -150,7 +160,7 @@ public sealed class LoginWithPasswordCommandHandler
     {
         var roleIds = await userRoleRepository.GetAll()
             .AsNoTracking()
-            .Where(ur => ur.UserId == userId)
+            .Where(ur => ur.UserId == userId && !ur.IsDeleted)
             .Select(ur => ur.RoleId)
             .ToListAsync(cancellationToken);
 
@@ -161,7 +171,7 @@ public sealed class LoginWithPasswordCommandHandler
 
         var roleNames = await roleRepository.GetAll()
             .AsNoTracking()
-            .Where(role => roleIds.Contains(role.Id))
+            .Where(role => !role.IsDeleted && roleIds.Contains(role.Id))
             .Select(role => role.Name)
             .ToListAsync(cancellationToken);
 

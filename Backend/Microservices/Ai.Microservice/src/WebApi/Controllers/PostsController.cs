@@ -23,14 +23,20 @@ public sealed class PostsController : ApiController
     [HttpGet]
     [ProducesResponseType(typeof(Result<IEnumerable<PostResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new { Message = "Unauthorized" });
         }
 
-        var result = await _mediator.Send(new GetUserPostsQuery(userId), cancellationToken);
+        var result = await _mediator.Send(
+            new GetUserPostsQuery(userId, cursorCreatedAt, cursorId, limit),
+            cancellationToken);
 
         return Ok(result);
     }
@@ -39,14 +45,21 @@ public sealed class PostsController : ApiController
     [ProducesResponseType(typeof(Result<IEnumerable<PostResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetByWorkspace(Guid workspaceId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetByWorkspace(
+        Guid workspaceId,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new { Message = "Unauthorized" });
         }
 
-        var result = await _mediator.Send(new GetWorkspacePostsQuery(workspaceId, userId), cancellationToken);
+        var result = await _mediator.Send(
+            new GetWorkspacePostsQuery(workspaceId, userId, cursorCreatedAt, cursorId, limit),
+            cancellationToken);
 
         if (result.IsFailure)
         {
@@ -234,6 +247,29 @@ public sealed class PostsController : ApiController
             request.IsPrivate);
 
         var result = await _mediator.Send(command, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPost("{postId:guid}/check-sensitive")]
+    [ProducesResponseType(typeof(Result<CheckSensitiveContentResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CheckSensitiveContent(Guid postId, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new CheckPostSensitiveContentCommand(postId, userId),
+            cancellationToken);
 
         if (result.IsFailure)
         {

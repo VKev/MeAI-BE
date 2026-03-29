@@ -9,6 +9,17 @@ public interface IPostRepository
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
     Task<Post?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<Post?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken);
-    Task<IEnumerable<Post>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken);
-    Task<IEnumerable<Post>> GetByUserIdAndWorkspaceIdAsync(Guid userId, Guid workspaceId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Post>> GetByUserIdAsync(
+        Guid userId,
+        DateTime? cursorCreatedAt,
+        Guid? cursorId,
+        int limit,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyList<Post>> GetByUserIdAndWorkspaceIdAsync(
+        Guid userId,
+        Guid workspaceId,
+        DateTime? cursorCreatedAt,
+        Guid? cursorId,
+        int limit,
+        CancellationToken cancellationToken);
 }

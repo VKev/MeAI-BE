@@ -62,11 +62,24 @@ public sealed class RefreshTokenCommandHandler
 
         if (user == null)
         {
+            RevokeToken(tokenEntity);
             return Result.Failure<LoginResponse>(
                 new Error("Auth.InvalidRefreshToken", "Invalid refresh token user"));
         }
 
+        if (user.IsDeleted)
+        {
+            RevokeToken(tokenEntity);
+            return Result.Failure<LoginResponse>(UserAuthenticationRules.AccountDeactivated());
+        }
+
         var roles = await ResolveRolesAsync(user.Id, _roleRepository, _userRoleRepository, cancellationToken);
+        if (UserAuthenticationRules.HasBannedRole(roles))
+        {
+            RevokeToken(tokenEntity);
+            return Result.Failure<LoginResponse>(UserAuthenticationRules.AccountBanned());
+        }
+
         var accessToken = _jwtTokenService.GenerateToken(user.Id, user.Email, roles);
         var newRefreshToken = await GenerateUniqueRefreshTokenAsync(
             _jwtTokenService,
@@ -154,7 +167,7 @@ public sealed class RefreshTokenCommandHandler
     {
         var roleIds = await userRoleRepository.GetAll()
             .AsNoTracking()
-            .Where(ur => ur.UserId == userId)
+            .Where(ur => ur.UserId == userId && !ur.IsDeleted)
             .Select(ur => ur.RoleId)
             .ToListAsync(cancellationToken);
 
@@ -165,7 +178,7 @@ public sealed class RefreshTokenCommandHandler
 
         var roleNames = await roleRepository.GetAll()
             .AsNoTracking()
-            .Where(role => roleIds.Contains(role.Id))
+            .Where(role => !role.IsDeleted && roleIds.Contains(role.Id))
             .Select(role => role.Name)
             .ToListAsync(cancellationToken);
 
@@ -176,5 +189,13 @@ public sealed class RefreshTokenCommandHandler
             .ToList();
 
         return roles.Count == 0 ? new List<string> { "USER" } : roles;
+    }
+
+    private void RevokeToken(RefreshToken tokenEntity)
+    {
+        var revokedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        tokenEntity.RevokedAt ??= revokedAt;
+        tokenEntity.AccessTokenRevokedAt ??= revokedAt;
+        _refreshTokenRepository.Update(tokenEntity);
     }
 }

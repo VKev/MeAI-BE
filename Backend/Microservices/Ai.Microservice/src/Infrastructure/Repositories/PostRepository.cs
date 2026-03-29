@@ -41,20 +41,58 @@ public sealed class PostRepository : IPostRepository
         return await _dbSet.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
-    public async Task<IEnumerable<Post>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Post>> GetByUserIdAsync(
+        Guid userId,
+        DateTime? cursorCreatedAt,
+        Guid? cursorId,
+        int limit,
+        CancellationToken cancellationToken)
     {
-        return await _dbSet.AsNoTracking()
-            .Where(p => p.UserId == userId)
+        var query = _dbSet.AsNoTracking()
+            .Where(p => p.UserId == userId && p.DeletedAt == null);
+
+        if (cursorCreatedAt.HasValue && cursorId.HasValue)
+        {
+            var createdAt = cursorCreatedAt.Value;
+            var lastId = cursorId.Value;
+            query = query.Where(post =>
+                (post.CreatedAt < createdAt) ||
+                (post.CreatedAt == createdAt && post.Id.CompareTo(lastId) < 0));
+        }
+
+        return await query
+            .OrderByDescending(p => p.CreatedAt)
+            .ThenByDescending(p => p.Id)
+            .Take(limit)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IEnumerable<Post>> GetByUserIdAndWorkspaceIdAsync(
+    public async Task<IReadOnlyList<Post>> GetByUserIdAndWorkspaceIdAsync(
         Guid userId,
         Guid workspaceId,
+        DateTime? cursorCreatedAt,
+        Guid? cursorId,
+        int limit,
         CancellationToken cancellationToken)
     {
-        return await _dbSet.AsNoTracking()
-            .Where(p => p.UserId == userId && p.WorkspaceId == workspaceId)
+        var query = _dbSet.AsNoTracking()
+            .Where(p => p.UserId == userId &&
+                        p.WorkspaceId == workspaceId &&
+                        p.DeletedAt == null);
+
+        if (cursorCreatedAt.HasValue && cursorId.HasValue)
+        {
+            var createdAt = cursorCreatedAt.Value;
+            var lastId = cursorId.Value;
+            query = query.Where(post =>
+                (post.CreatedAt < createdAt) ||
+                (post.CreatedAt == createdAt && post.Id.CompareTo(lastId) < 0));
+        }
+
+        return await query
+            .OrderByDescending(p => p.CreatedAt)
+            .ThenByDescending(p => p.Id)
+            .Take(limit)
             .ToListAsync(cancellationToken);
     }
 }

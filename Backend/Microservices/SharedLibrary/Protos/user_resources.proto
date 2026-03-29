@@ -7,10 +7,15 @@ package user.resources;
 service UserResourceService {
   rpc GetPresignedResources (GetPresignedResourcesRequest) returns (GetPresignedResourcesResponse);
   rpc CreateResourcesFromUrls (CreateResourcesFromUrlsRequest) returns (CreateResourcesFromUrlsResponse);
+  rpc GetActiveConfig (GetActiveConfigRequest) returns (GetActiveConfigResponse);
 }
 
 service UserSocialMediaService {
   rpc GetSocialMediasByIds (GetSocialMediasByIdsRequest) returns (GetSocialMediasByIdsResponse);
+}
+
+service UserWorkspaceService {
+  rpc GetWorkspaceById (GetWorkspaceByIdRequest) returns (GetWorkspaceByIdResponse);
 }
 
 message GetPresignedResourcesRequest {
@@ -47,6 +52,17 @@ message CreateResourcesFromUrlsResponse {
   repeated CreatedResource resources = 1;
 }
 
+message GetActiveConfigRequest {
+}
+
+message GetActiveConfigResponse {
+  bool has_active_config = 1;
+  string config_id = 2;
+  string chat_model = 3;
+  string media_aspect_ratio = 4;
+  int32 number_of_variances = 5;
+}
+
 message GetSocialMediasByIdsRequest {
   string user_id = 1;
   repeated string social_media_ids = 2;
@@ -60,4 +76,18 @@ message SocialMediaRecord {
 
 message GetSocialMediasByIdsResponse {
   repeated SocialMediaRecord social_medias = 1;
+}
+
+message GetWorkspaceByIdRequest {
+  string user_id = 1;
+  string workspace_id = 2;
+}
+
+message GetWorkspaceByIdResponse {
+  string workspace_id = 1;
+  string name = 2;
+  string type = 3;
+  string description = 4;
+  string created_at = 5;
+  string updated_at = 6;
 }

@@ -96,6 +96,7 @@ app.MapScalarApiReference("docs", opts =>
 
 app.MapGrpcService<UserResourceGrpcService>();
 app.MapGrpcService<UserSocialMediaGrpcService>();
+app.MapGrpcService<UserWorkspaceGrpcService>();
 app.MapControllers();
 
 app.Run();

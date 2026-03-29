@@ -57,10 +57,5 @@ public sealed class PostPublicationConfiguration : IEntityTypeConfiguration<Post
             .OnDelete(DeleteBehavior.Cascade)
             .HasConstraintName("post_publications_post_id_fkey");
 
-        entity.HasOne<Workspace>()
-            .WithMany()
-            .HasForeignKey(d => d.WorkspaceId)
-            .OnDelete(DeleteBehavior.Restrict)
-            .HasConstraintName("post_publications_workspace_id_fkey");
     }
 }
