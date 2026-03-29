@@ -16,6 +16,7 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
     private const string GraphApiBaseUrl = "https://graph.facebook.com/v24.0";
     private const string OAuthTokenEndpoint = "https://graph.facebook.com/v24.0/oauth/access_token";
     private const string DefaultScopes = "email,public_profile";
+    private const string ProfileFields = "id,name,email,picture.type(large)";
 
     private readonly string _appId;
     private readonly string _appSecret;
@@ -162,7 +163,7 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
         try
         {
             var url =
-                $"{GraphApiBaseUrl}/me?fields=id,name,email&access_token={Uri.EscapeDataString(accessToken)}";
+                $"{GraphApiBaseUrl}/me?fields={Uri.EscapeDataString(ProfileFields)}&access_token={Uri.EscapeDataString(accessToken)}";
 
             using var response = await _httpClient.GetAsync(url, cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);

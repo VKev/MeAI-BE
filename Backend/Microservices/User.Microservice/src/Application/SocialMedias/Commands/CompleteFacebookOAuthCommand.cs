@@ -173,6 +173,7 @@ public sealed class CompleteFacebookOAuthCommandHandler
             ["id"] = profile.Id,
             ["name"] = resolvedName,
             ["email"] = resolvedEmail,
+            ["profile_picture_url"] = profile.ProfilePictureUrl,
             ["access_token"] = tokenResult.Value.AccessToken
         };
 

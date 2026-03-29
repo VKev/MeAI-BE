@@ -44,6 +44,15 @@ public sealed class InstagramProfile
 
     [JsonPropertyName("username")]
     public string? Username { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("profile_picture_url")]
+    public string? ProfilePictureUrl { get; set; }
+
+    [JsonPropertyName("biography")]
+    public string? Biography { get; set; }
 }
 
 public sealed class InstagramGraphProfileResult

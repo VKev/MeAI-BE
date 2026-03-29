@@ -43,4 +43,25 @@ public sealed class FacebookProfileResponse
 
     [JsonPropertyName("email")]
     public string? Email { get; set; }
+
+    [JsonPropertyName("picture")]
+    public FacebookProfilePictureResponse? Picture { get; set; }
+
+    [JsonIgnore]
+    public string? ProfilePictureUrl => Picture?.Data?.Url;
+}
+
+public sealed class FacebookProfilePictureResponse
+{
+    [JsonPropertyName("data")]
+    public FacebookProfilePictureDataResponse? Data { get; set; }
+}
+
+public sealed class FacebookProfilePictureDataResponse
+{
+    [JsonPropertyName("url")]
+    public string? Url { get; set; }
+
+    [JsonPropertyName("is_silhouette")]
+    public bool? IsSilhouette { get; set; }
 }
