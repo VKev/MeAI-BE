@@ -7,21 +7,19 @@ namespace SharedLibrary.Middleware;
 public class JwtMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly IJwtTokenService _jwtTokenService;
 
-    public JwtMiddleware(RequestDelegate next, IJwtTokenService jwtTokenService)
+    public JwtMiddleware(RequestDelegate next)
     {
         _next = next;
-        _jwtTokenService = jwtTokenService;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, IJwtTokenService jwtTokenService)
     {
         var token = ExtractToken(context);
 
         if (!string.IsNullOrEmpty(token))
         {
-            var principal = _jwtTokenService.ValidateToken(token);
+            var principal = jwtTokenService.ValidateToken(token);
             if (principal != null)
             {
                 context.User = principal;

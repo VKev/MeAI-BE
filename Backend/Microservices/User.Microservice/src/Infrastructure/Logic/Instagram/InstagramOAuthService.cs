@@ -16,6 +16,7 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
     private const string GraphApiBaseUrl = "https://graph.facebook.com/v24.0";
     private const string OAuthTokenEndpoint = "https://graph.facebook.com/v24.0/oauth/access_token";
     private const string DefaultScopes = "instagram_basic,pages_show_list";
+    private const string InstagramProfileFields = "id,username,name,profile_picture_url,biography";
 
     private static readonly string[] RequiredScopes = { "pages_show_list", "instagram_basic" };
 
@@ -439,7 +440,7 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
         CancellationToken cancellationToken)
     {
         var url =
-            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(instagramAccountId)}?fields=id,username&access_token={Uri.EscapeDataString(pageAccessToken)}";
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(instagramAccountId)}?fields={Uri.EscapeDataString(InstagramProfileFields)}&access_token={Uri.EscapeDataString(pageAccessToken)}";
 
         using var response = await _httpClient.GetAsync(url, cancellationToken);
         var payload = await response.Content.ReadAsStringAsync(cancellationToken);

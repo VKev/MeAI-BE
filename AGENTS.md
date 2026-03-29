@@ -63,8 +63,8 @@ Backend/Microservices/<Service>.Microservice/
 - Application must not depend on Infrastructure/WebApi.
 - Infrastructure must not depend on WebApi.
 - Handlers are expected to depend on Domain.
-- Controllers are expected to depend on MediatR.
 - Tests live at `Backend/Microservices/*/test/ArchitectureTest.cs`.
+- There is an intended controller-to-MediatR dependency assertion in the architecture tests; verify the current test assembly target before relying on it as strictly enforced coverage.
 
 ## Coding/build conventions
 - Target framework: net10.0; `Nullable` and `ImplicitUsings` enabled.
@@ -77,7 +77,16 @@ Backend/Microservices/<Service>.Microservice/
 - Build/test: `dotnet build` / `dotnet test` from repo root.
 - Run a service: `dotnet run --project Backend/Microservices/User.Microservice/src/WebApi/WebApi.csproj`.
 - Compose (dev): `docker compose -f Backend/Compose/docker-compose.yml up -d --build`.
-- Default ports (dev/compose): API Gateway 8080 (host 2406), User 5002 (+5004 gRPC), Ai 5001, Postgres 5432, Redis 6379, RabbitMQ 5672/15672, Mailpit 1025/8025, n8n 5678 (via nginx).
+- Default ports (dev compose): API Gateway 8080 (host 2406), User 5002, Ai 5001, Postgres 5432, Redis 6379, RabbitMQ 5672/15672, n8n 5678 (via nginx).
+- User WebApi also binds gRPC on 5004 in code; compose does not publish 5004 to the host by default.
+- Mailpit 1025/8025 is exposed by `Backend/Compose/docker-compose-production.yml`, not by the dev compose file.
+
+## Frontend/API response contract
+- Preserve the existing FE-facing response shape and status code for any endpoint you touch. Do not rename, remove, reorder semantics, or wrap top-level JSON fields on existing routes unless the frontend contract is being updated in the same change.
+- Success responses typically return `Ok(result)` where `result` is `SharedLibrary.Common.ResponseModel.Result`/`Result<T>`; keep that envelope for existing success flows unless the endpoint already uses a different established contract.
+- Business and validation failures should continue to flow through `HandleFailure(result)` so the response stays as `ProblemDetails` with the current `status`, `type`, `detail`, and optional `errors` extension shape.
+- Unauthorized responses must keep the current single-message contract already used by that endpoint/service (`MessageResponse` or the existing anonymous `{ message: "Unauthorized" }` shape after JSON serialization). Do not introduce ad hoc wrappers such as `{ success, data }` or `{ error: ... }` on existing endpoints.
+- When changing controllers, commands, queries, DTOs, or OpenAPI annotations, inspect the current controller response types and keep the frontend contract backward-compatible by default.
 
 ## API testing & temp files
 - Use `curl` for manual API endpoint testing (use `curl.exe` in Windows shells when needed).
@@ -95,10 +104,12 @@ Backend/Microservices/<Service>.Microservice/
 
 ## API Gateway (YARP)
 - Runtime config is generated in `Backend/Microservices/ApiGateway/src/Setups/YarpRuntimeSetup.cs`.
-- Default routes for `/api/user` and `/api/ai`.
+- Default routes are generated for `/api/User` and `/api/Ai`.
+- When Ai is enabled, the gateway also adds `/api/Gemini` as an alias route to the Ai service.
 - Extra services can be added via `Services__{Service}__Host` and `Services__{Service}__Port` (or `{PREFIX}_MICROSERVICE_HOST/PORT`).
 - OpenAPI aggregation pulls `/openapi/v1.json` from each service.
 - Runtime config is written to `yarp.runtime.json` in the gateway content root.
+- Gateway docs UI is toggled in code by `ENABLE_DOCS_UI`; keep compose/env naming aligned with `Backend/Microservices/ApiGateway/src/Program.cs` when editing that behavior.
 
 ## Docker & Compose
 - `Backend/Compose/docker-compose.yml`: dev stack with placeholders; includes n8n + nginx.
@@ -134,6 +145,7 @@ Backend/Microservices/<Service>.Microservice/
 - Do not commit real secrets or keys.
 - `terraform-var/` is private and gitignored; keep `Terraform-vars/` sanitized.
 - `Backend/Compose/docker-compose-production.yml` contains sensitive values; treat as local-only and rotate if used.
+- If you inspect `Backend/Compose/docker-compose-production.yml`, never echo literal secrets back into chat responses, logs, commits, screenshots, or new tracked files.
 - `.env` files are ignored; use env vars or tfvars for configuration.
 
 ## Adding or changing a service

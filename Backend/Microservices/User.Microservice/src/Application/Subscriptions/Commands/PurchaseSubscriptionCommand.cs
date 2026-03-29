@@ -67,13 +67,32 @@ public sealed class PurchaseSubscriptionCommandHandler
                 new Error("Subscription.InvalidDuration", "Subscription duration is not valid."));
         }
 
+        var now = DateTimeExtensions.PostgreSqlUtcNow;
+        var hasActiveSubscription = await _userSubscriptionRepository.GetAll()
+            .AsNoTracking()
+            .AnyAsync(
+                item =>
+                    item.UserId == request.UserId &&
+                    item.SubscriptionId == request.SubscriptionId &&
+                    !item.IsDeleted &&
+                    (!item.EndDate.HasValue || item.EndDate.Value >= now),
+                cancellationToken);
+
+        if (hasActiveSubscription)
+        {
+            return Result.Failure<PurchaseSubscriptionResponse>(
+                new Error("Subscription.AlreadyActive", "This plan is already active."));
+        }
+
         var cost = Convert.ToDecimal(subscription.Cost.Value);
         StripePaymentIntentResult? paymentIntent = null;
         StripeSubscriptionResult? stripeSubscription = null;
+        var transactionId = Guid.CreateVersion7();
         var metadata = new Dictionary<string, string>
         {
             ["subscription_id"] = subscription.Id.ToString(),
             ["user_id"] = request.UserId.ToString(),
+            ["transaction_id"] = transactionId.ToString(),
             ["renew"] = request.Renew.ToString().ToLowerInvariant(),
             ["duration_months"] = subscription.DurationMonths.ToString()
         };
@@ -132,10 +151,9 @@ public sealed class PurchaseSubscriptionCommandHandler
             ? stripeSubscription!.Amount
             : paymentIntent!.Amount;
 
-        var now = DateTimeExtensions.PostgreSqlUtcNow;
         var transaction = new Transaction
         {
-            Id = Guid.CreateVersion7(),
+            Id = transactionId,
             UserId = request.UserId,
             RelationId = subscription.Id,
             RelationType = "Subscription",

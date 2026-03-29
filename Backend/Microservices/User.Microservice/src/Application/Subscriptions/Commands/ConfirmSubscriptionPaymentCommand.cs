@@ -11,6 +11,7 @@ namespace Application.Subscriptions.Commands;
 public sealed record ConfirmSubscriptionPaymentCommand(
     Guid UserId,
     Guid SubscriptionId,
+    Guid? TransactionId,
     bool Renew,
     string Status) : IRequest<Result<bool>>;
 
@@ -45,19 +46,32 @@ public sealed class ConfirmSubscriptionPaymentCommandHandler
         }
 
         var now = DateTimeExtensions.PostgreSqlUtcNow;
-        var normalizedStatus = NormalizeValue(request.Status) ?? "succeeded";
+        var normalizedStatus = NormalizeStatus(request.Status);
         var transactionType = request.Renew ? "SubscriptionRecurring" : "SubscriptionPurchase";
         var durationMonths = subscription.DurationMonths > 0 ? subscription.DurationMonths : 1;
+        var isSuccessful = IsSuccessfulStatus(normalizedStatus);
 
-        var transaction = await _transactionRepository.GetAll()
+        var transactions = _transactionRepository.GetAll()
             .Where(item =>
                 item.UserId == request.UserId &&
                 item.RelationId == subscription.Id &&
                 item.TransactionType == transactionType &&
                 item.PaymentMethod == "Stripe" &&
-                !item.IsDeleted)
+                !item.IsDeleted);
+
+        Transaction? transaction = null;
+
+        if (request.TransactionId.HasValue)
+        {
+            transaction = await transactions
+                .FirstOrDefaultAsync(item => item.Id == request.TransactionId.Value, cancellationToken);
+        }
+
+        transaction ??= await transactions
             .OrderByDescending(item => item.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+
+        var alreadySucceeded = transaction != null && IsSuccessfulStatus(transaction.Status);
 
         if (transaction == null)
         {
@@ -80,9 +94,19 @@ public sealed class ConfirmSubscriptionPaymentCommandHandler
         }
         else
         {
+            if (alreadySucceeded)
+            {
+                return Result.Success(true);
+            }
+
             transaction.Status = normalizedStatus;
             transaction.UpdatedAt = now;
             _transactionRepository.Update(transaction);
+        }
+
+        if (!isSuccessful)
+        {
+            return Result.Success(true);
         }
 
         var userSubscription = await _userSubscriptionRepository.GetAll()
@@ -133,13 +157,37 @@ public sealed class ConfirmSubscriptionPaymentCommandHandler
         return Result.Success(true);
     }
 
-    private static string? NormalizeValue(string? value)
+    private static string NormalizeStatus(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return null;
+            return "succeeded";
         }
 
-        return value.Trim();
+        var normalized = value.Trim();
+
+        if (string.Equals(normalized, "paid", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "active", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "trialing", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "complete", StringComparison.OrdinalIgnoreCase))
+        {
+            return "succeeded";
+        }
+
+        if (string.Equals(normalized, "processing", StringComparison.OrdinalIgnoreCase))
+        {
+            return "pending";
+        }
+
+        if (string.Equals(normalized, "canceled", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normalized, "cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            return "failed";
+        }
+
+        return normalized;
     }
+
+    private static bool IsSuccessfulStatus(string? value) =>
+        string.Equals(value?.Trim(), "succeeded", StringComparison.OrdinalIgnoreCase);
 }

@@ -160,5 +160,95 @@ public sealed class StripePaymentService : IStripePaymentService
             currency,
             amountMinor);
     }
+
+    public async Task<StripeCheckoutStatusResult> GetCheckoutStatusAsync(
+        string? paymentIntentId,
+        string? stripeSubscriptionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrWhiteSpace(stripeSubscriptionId))
+        {
+            var subscription = await _subscriptionService.GetAsync(
+                stripeSubscriptionId,
+                new SubscriptionGetOptions
+                {
+                    Expand = new List<string> { "latest_invoice.payment_intent" }
+                },
+                cancellationToken: cancellationToken);
+
+            var invoice = subscription.LatestInvoice;
+            var intent = invoice?.PaymentIntent;
+            var status = NormalizeCheckoutStatus(subscription.Status, invoice?.Status, intent?.Status);
+
+            return new StripeCheckoutStatusResult(
+                status,
+                IsSuccessStatus(status),
+                IsTerminalStatus(status),
+                intent?.Id,
+                subscription.Id);
+        }
+
+        if (!string.IsNullOrWhiteSpace(paymentIntentId))
+        {
+            var paymentIntent = await _paymentIntentService.GetAsync(
+                paymentIntentId,
+                cancellationToken: cancellationToken);
+
+            var status = NormalizeCheckoutStatus(null, null, paymentIntent.Status);
+
+            return new StripeCheckoutStatusResult(
+                status,
+                IsSuccessStatus(status),
+                IsTerminalStatus(status),
+                paymentIntent.Id,
+                null);
+        }
+
+        throw new InvalidOperationException("Stripe payment identifiers are missing.");
+    }
+
+    private static string NormalizeCheckoutStatus(
+        string? subscriptionStatus,
+        string? invoiceStatus,
+        string? paymentIntentStatus)
+    {
+        if (MatchesStatus(subscriptionStatus, "active", "trialing") ||
+            MatchesStatus(invoiceStatus, "paid") ||
+            MatchesStatus(paymentIntentStatus, "succeeded"))
+        {
+            return "succeeded";
+        }
+
+        if (MatchesStatus(subscriptionStatus, "canceled", "cancelled", "unpaid", "incomplete_expired") ||
+            MatchesStatus(invoiceStatus, "void", "uncollectible") ||
+            MatchesStatus(paymentIntentStatus, "canceled", "cancelled"))
+        {
+            return "failed";
+        }
+
+        if (MatchesStatus(paymentIntentStatus, "processing"))
+        {
+            return "pending";
+        }
+
+        return "incomplete";
+    }
+
+    private static bool MatchesStatus(string? value, params string[] candidates)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return candidates.Any(candidate => string.Equals(value, candidate, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsSuccessStatus(string status) =>
+        string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTerminalStatus(string status) =>
+        string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase);
 }
 

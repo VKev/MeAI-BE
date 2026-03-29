@@ -1,3 +1,4 @@
+using Application.Abstractions.Facebook;
 using Application.Abstractions.SocialMedias;
 using Application.Abstractions.Threads;
 using Application.Abstractions.TikTok;
@@ -17,20 +18,24 @@ public sealed record GetSocialMediaPlatformPostAnalyticsQuery(
 public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
     : IRequestHandler<GetSocialMediaPlatformPostAnalyticsQuery, Result<SocialPlatformPostAnalyticsResponse>>
 {
+    private const string FacebookType = "facebook";
     private const string TikTokType = "tiktok";
     private const string ThreadsType = "threads";
 
+    private readonly IFacebookContentService _facebookContentService;
     private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly ITikTokContentService _tikTokContentService;
     private readonly IThreadsContentService _threadsContentService;
     private readonly IPostMetricSnapshotRepository _postMetricSnapshotRepository;
 
     public GetSocialMediaPlatformPostAnalyticsQueryHandler(
+        IFacebookContentService facebookContentService,
         IUserSocialMediaService userSocialMediaService,
         ITikTokContentService tikTokContentService,
         IThreadsContentService threadsContentService,
         IPostMetricSnapshotRepository postMetricSnapshotRepository)
     {
+        _facebookContentService = facebookContentService;
         _userSocialMediaService = userSocialMediaService;
         _tikTokContentService = tikTokContentService;
         _threadsContentService = threadsContentService;
@@ -74,6 +79,71 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
         }
 
         using var metadata = SocialMediaMetadataHelper.Parse(socialMedia.MetadataJson);
+
+        if (string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase))
+        {
+            var userAccessToken = SocialMediaMetadataHelper.GetString(metadata, "user_access_token")
+                                  ?? SocialMediaMetadataHelper.GetString(metadata, "access_token");
+            if (string.IsNullOrWhiteSpace(userAccessToken))
+            {
+                return Result.Failure<SocialPlatformPostAnalyticsResponse>(
+                    new Error("Facebook.InvalidToken", "Access token not found in social media metadata."));
+            }
+
+            var postResult = await _facebookContentService.GetPostAsync(
+                new FacebookPostDetailsRequest(
+                    UserAccessToken: userAccessToken,
+                    PostId: request.PlatformPostId,
+                    PreferredPageId: SocialMediaMetadataHelper.GetString(metadata, "page_id"),
+                    PreferredPageAccessToken: SocialMediaMetadataHelper.GetString(metadata, "page_access_token")),
+                cancellationToken);
+
+            if (postResult.IsFailure)
+            {
+                return Result.Failure<SocialPlatformPostAnalyticsResponse>(postResult.Error);
+            }
+
+            var postDetails = postResult.Value;
+            var stats = new SocialPlatformPostStatsResponse(
+                Views: null,
+                Likes: postDetails.ReactionCount,
+                Comments: postDetails.CommentCount,
+                Replies: null,
+                Shares: postDetails.ShareCount,
+                Reposts: null,
+                Quotes: null,
+                TotalInteractions: (postDetails.ReactionCount ?? 0) +
+                                   (postDetails.CommentCount ?? 0) +
+                                   (postDetails.ShareCount ?? 0));
+
+            var post = new SocialPlatformPostSummaryResponse(
+                PlatformPostId: postDetails.Id,
+                Title: postDetails.AttachmentTitle,
+                Text: postDetails.Message ?? postDetails.Story,
+                Description: postDetails.AttachmentDescription,
+                MediaType: postDetails.MediaType,
+                MediaUrl: postDetails.MediaUrl ?? postDetails.FullPictureUrl,
+                ThumbnailUrl: postDetails.ThumbnailUrl ?? postDetails.FullPictureUrl,
+                Permalink: postDetails.PermalinkUrl,
+                ShareUrl: postDetails.PermalinkUrl,
+                EmbedUrl: null,
+                DurationSeconds: null,
+                PublishedAt: ToDateTimeOffset(postDetails.CreatedTime),
+                Stats: stats);
+
+            var response = new SocialPlatformPostAnalyticsResponse(
+                SocialMediaId: request.SocialMediaId,
+                Platform: FacebookType,
+                PlatformPostId: request.PlatformPostId,
+                Post: post,
+                Stats: stats,
+                Analysis: SocialPlatformPostAnalysisFactory.Create(stats),
+                RetrievedAt: DateTimeOffset.UtcNow);
+
+            await UpsertMetricAsync(request, response, cancellationToken);
+
+            return Result.Success(response);
+        }
 
         if (string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase))
         {
@@ -214,7 +284,7 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
         }
 
         return Result.Failure<SocialPlatformPostAnalyticsResponse>(
-            new Error("SocialMedia.UnsupportedPlatform", "Only TikTok and Threads social media accounts are supported."));
+            new Error("SocialMedia.UnsupportedPlatform", "Only Facebook, TikTok, and Threads social media accounts are supported."));
     }
 
     private static DateTimeOffset? ToUnixTime(long? unixSeconds)

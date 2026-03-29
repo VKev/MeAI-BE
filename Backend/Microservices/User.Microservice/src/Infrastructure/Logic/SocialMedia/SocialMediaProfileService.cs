@@ -116,7 +116,7 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             UserId: profile.Id,
             Username: null,
             DisplayName: profile.Name,
-            ProfilePictureUrl: null,
+            ProfilePictureUrl: profile.ProfilePictureUrl,
             Bio: null,
             FollowerCount: null,
             FollowingCount: null));
@@ -155,9 +155,9 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         return Result.Success(new SocialMediaUserProfile(
             UserId: profile.Profile.Id,
             Username: profile.Profile.Username,
-            DisplayName: profile.PageName,
-            ProfilePictureUrl: null,
-            Bio: null,
+            DisplayName: profile.Profile.Name ?? profile.PageName,
+            ProfilePictureUrl: profile.Profile.ProfilePictureUrl,
+            Bio: profile.Profile.Biography,
             FollowerCount: null,
             FollowingCount: null));
     }
@@ -168,14 +168,21 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
 
         var userId = root.TryGetProperty("id", out var idElement) ? idElement.GetString() : null;
         var username = root.TryGetProperty("username", out var usernameElement) ? usernameElement.GetString() : null;
+        var name = root.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
         var pageName = root.TryGetProperty("page_name", out var pageNameElement) ? pageNameElement.GetString() : null;
+        var profilePictureUrl = root.TryGetProperty("profile_picture_url", out var profilePictureElement)
+            ? profilePictureElement.GetString()
+            : null;
+        var biography = root.TryGetProperty("biography", out var biographyElement)
+            ? biographyElement.GetString()
+            : null;
 
         return Result.Success(new SocialMediaUserProfile(
             UserId: userId,
             Username: username,
-            DisplayName: pageName,
-            ProfilePictureUrl: null,
-            Bio: null,
+            DisplayName: name ?? pageName,
+            ProfilePictureUrl: profilePictureUrl,
+            Bio: biography,
             FollowerCount: null,
             FollowingCount: null));
     }

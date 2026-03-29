@@ -86,6 +86,7 @@ public sealed class StripeWebhooksController : ApiController
                 break;
             }
             case Events.InvoicePaymentSucceeded:
+            case "invoice.paid":
             {
                 if (stripeEvent.Data.Object is Invoice invoice)
                 {
@@ -130,14 +131,14 @@ public sealed class StripeWebhooksController : ApiController
         string? status,
         CancellationToken cancellationToken)
     {
-        if (!TryParseMetadata(metadata, out var userId, out var subscriptionId, out var renew))
+        if (!TryParseMetadata(metadata, out var userId, out var subscriptionId, out var transactionId, out var renew))
         {
             return Result.Failure<bool>(
                 new Error("Stripe.WebhookMetadataMissing", "Webhook metadata is missing user_id or subscription_id."));
         }
 
         var normalizedStatus = string.IsNullOrWhiteSpace(status) ? "succeeded" : status.Trim();
-        var command = new ConfirmSubscriptionPaymentCommand(userId, subscriptionId, renew, normalizedStatus);
+        var command = new ConfirmSubscriptionPaymentCommand(userId, subscriptionId, transactionId, renew, normalizedStatus);
         return await _mediator.Send(command, cancellationToken);
     }
 
@@ -150,11 +151,13 @@ public sealed class StripeWebhooksController : ApiController
         IDictionary<string, string> metadata,
         out Guid userId,
         out Guid subscriptionId,
+        out Guid? transactionId,
         out bool renew)
     {
         renew = false;
         userId = Guid.Empty;
         subscriptionId = Guid.Empty;
+        transactionId = null;
 
         if (!metadata.TryGetValue("user_id", out var userIdValue) ||
             !Guid.TryParse(userIdValue, out userId))
@@ -166,6 +169,12 @@ public sealed class StripeWebhooksController : ApiController
             !Guid.TryParse(subscriptionIdValue, out subscriptionId))
         {
             return false;
+        }
+
+        if (metadata.TryGetValue("transaction_id", out var transactionIdValue) &&
+            Guid.TryParse(transactionIdValue, out var parsedTransactionId))
+        {
+            transactionId = parsedTransactionId;
         }
 
         if (metadata.TryGetValue("renew", out var renewValue))

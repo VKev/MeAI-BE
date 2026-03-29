@@ -130,6 +130,7 @@ public sealed class CompleteInstagramOAuthCommandHandler
             ["provider"] = InstagramSocialMediaType,
             ["id"] = profile.Id,
             ["username"] = resolvedUsername,
+            ["name"] = profile.Name,
             ["email"] = resolvedEmail,
             ["access_token"] = profileResult.Value.PageAccessToken,
             ["user_access_token"] = accessToken,
@@ -137,6 +138,8 @@ public sealed class CompleteInstagramOAuthCommandHandler
             ["user_id"] = profile.Id,
             ["page_id"] = profileResult.Value.PageId,
             ["page_name"] = profileResult.Value.PageName,
+            ["profile_picture_url"] = profile.ProfilePictureUrl,
+            ["biography"] = profile.Biography,
             ["instagram_business_account_id"] = profileResult.Value.InstagramAccountId,
             ["instagram_account_type"] = profileResult.Value.InstagramAccountType
         };

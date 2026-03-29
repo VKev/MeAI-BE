@@ -47,15 +47,13 @@ namespace Infrastructure
             services.AddHttpClient("Instagram");
             services.AddHttpClient("TikTok");
             services.AddScoped<IGeminiCaptionService, GeminiCaptionService>();
+            services.AddScoped<IFacebookContentService, FacebookContentService>();
             services.AddScoped<IGeminiContentModerationService, GeminiContentModerationService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
             services.AddScoped<IInstagramPublishService, InstagramPublishService>();
             services.AddScoped<ITikTokPublishService, TikTokPublishService>();
             services.AddScoped<ITikTokContentService, TikTokContentService>();
             services.AddHttpClient("Threads");
-            services.AddScoped<IGeminiCaptionService, GeminiCaptionService>();
-            services.AddScoped<IFacebookPublishService, FacebookPublishService>();
-            services.AddScoped<IInstagramPublishService, InstagramPublishService>();
             services.AddScoped<IThreadsPublishService, ThreadsPublishService>();
             services.AddScoped<IThreadsContentService, ThreadsContentService>();
 

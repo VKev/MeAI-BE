@@ -17,6 +17,11 @@ public interface IStripePaymentService
         string? subscriptionName,
         IDictionary<string, string> metadata,
         CancellationToken cancellationToken = default);
+
+    Task<StripeCheckoutStatusResult> GetCheckoutStatusAsync(
+        string? paymentIntentId,
+        string? stripeSubscriptionId,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record StripePaymentIntentResult(
@@ -33,3 +38,10 @@ public sealed record StripeSubscriptionResult(
     string? ClientSecret,
     string Currency,
     long Amount);
+
+public sealed record StripeCheckoutStatusResult(
+    string Status,
+    bool IsSuccessful,
+    bool IsTerminal,
+    string? PaymentIntentId,
+    string? StripeSubscriptionId);
