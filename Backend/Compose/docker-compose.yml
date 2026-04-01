@@ -99,6 +99,49 @@ services:
     networks:
       - app-network
 
+  notification-microservice:
+    build:
+      context: ../Microservices
+      dockerfile: ./Notification.Microservice/dockerfile
+      args:
+        SERVICE_NAME: Notification.Microservice
+    image: notification-microservice
+    container_name: notification-microservice
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5006
+      Database__Host: postgres
+      Database__Port: 5432
+      Database__Name: notificationdb
+      Database__Username: postgres
+      Database__Password: changeme
+      Database__Provider: postgres
+      Database__SslMode: Disable
+      RabbitMq__Host: rabbit-mq
+      RabbitMq__Port: 5672
+      RabbitMq__Username: rabbitmq
+      RabbitMq__Password: changeme
+      Redis__Host: redis
+      Redis__Password: changeme
+      Redis__Port: 6379
+      Jwt__SecretKey: changeme-at-least-32-chars----------------
+      Jwt__Issuer: UserMicroservice
+      Jwt__Audience: MicroservicesApp
+      Jwt__ExpirationMinutes: 60
+      Cors__AllowedOrigins__0: http://localhost:5173
+      Cors__AllowedOrigins__1: https://your-frontend.example.com
+      Cors__AllowedOrigins__2: http://localhost:2406
+      AutoApply__Migrations: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbit-mq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
   api-gateway:
     build:
       context: ../Microservices
@@ -108,13 +151,15 @@ services:
     ports:
       - "2406:8080"
     environment:
-      ENABLE_SWAGGER_UI: true
+      ENABLE_DOCS_UI: true
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       Services__User__Host: user-microservice
       Services__User__Port: 5002
       Services__Ai__Host: ai-microservice
       Services__Ai__Port: 5001
+      Services__Notification__Host: notification-microservice
+      Services__Notification__Port: 5006
       Jwt__SecretKey: changeme-at-least-32-chars----------------
       Jwt__Issuer: UserMicroservice
       Jwt__Audience: MicroservicesApp

@@ -59,9 +59,9 @@ internal static class YarpRuntimeSetup
         var clustersNode = new JsonObject();
         var routeSummaries = new List<RouteSummary>();
 
-        void AddRouteEntry(string routeId, string path, string clusterId)
+        void AddRouteEntry(string routeId, string path, string clusterId, JsonArray? transforms = null)
         {
-            routesNode.Add(new JsonObject
+            var routeNode = new JsonObject
             {
                 ["RouteId"] = routeId,
                 ["ClusterId"] = clusterId,
@@ -69,7 +69,14 @@ internal static class YarpRuntimeSetup
                 {
                     ["Path"] = path
                 }
-            });
+            };
+
+            if (transforms is not null && transforms.Count > 0)
+            {
+                routeNode["Transforms"] = transforms;
+            }
+
+            routesNode.Add(routeNode);
             routeSummaries.Add(new RouteSummary(routeId, path));
         }
 
@@ -92,6 +99,34 @@ internal static class YarpRuntimeSetup
 
             AddRouteEntry($"{clusterId}-root", $"/api/{serviceSegment}", clusterId);
             AddRouteEntry($"{clusterId}-catchall", $"/api/{serviceSegment}/{{**catch-all}}", clusterId);
+
+            if (serviceSegment.Equals("Notification", StringComparison.OrdinalIgnoreCase))
+            {
+                AddRouteEntry("notification-hub-root", "/hubs/notifications", clusterId);
+                AddRouteEntry("notification-hub-catchall", "/hubs/notifications/{**catch-all}", clusterId);
+                AddRouteEntry(
+                    "notification-hub-api-root",
+                    "/api/Notification/hubs/notifications",
+                    clusterId,
+                    new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["PathRemovePrefix"] = "/api/Notification"
+                        }
+                    });
+                AddRouteEntry(
+                    "notification-hub-api-catchall",
+                    "/api/Notification/hubs/notifications/{**catch-all}",
+                    clusterId,
+                    new JsonArray
+                    {
+                        new JsonObject
+                        {
+                            ["PathRemovePrefix"] = "/api/Notification"
+                        }
+                    });
+            }
         }
 
         var defaultServices = new[]
@@ -107,7 +142,13 @@ internal static class YarpRuntimeSetup
                 Service: "Ai",
                 ContainerHost: "ai-microservice",
                 ContainerPort: 5001,
-                LocalPort: 5001)
+                LocalPort: 5001),
+            new ServiceDefinition(
+                Prefix: "NOTIFICATION",
+                Service: "Notification",
+                ContainerHost: "notification-microservice",
+                ContainerPort: 5006,
+                LocalPort: 5006)
         };
 
         var addedServices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
