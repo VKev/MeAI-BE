@@ -1,5 +1,6 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Instagram;
+using Application.Subscriptions.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -17,13 +18,16 @@ public sealed class InitiateInstagramOAuthCommandHandler
     : IRequestHandler<InitiateInstagramOAuthCommand, Result<InstagramOAuthInitiationResponse>>
 {
     private readonly IInstagramOAuthService _instagramOAuthService;
+    private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly IRepository<User> _userRepository;
 
     public InitiateInstagramOAuthCommandHandler(
         IInstagramOAuthService instagramOAuthService,
+        IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
         IUnitOfWork unitOfWork)
     {
         _instagramOAuthService = instagramOAuthService;
+        _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _userRepository = unitOfWork.Repository<User>();
     }
 
@@ -39,6 +43,15 @@ public sealed class InitiateInstagramOAuthCommandHandler
         {
             return Result.Failure<InstagramOAuthInitiationResponse>(
                 new Error("User.NotFound", "User not found"));
+        }
+
+        var entitlementResult = await _userSubscriptionEntitlementService.EnsureSocialAccountLinkAllowedAsync(
+            request.UserId,
+            cancellationToken);
+
+        if (entitlementResult.IsFailure)
+        {
+            return Result.Failure<InstagramOAuthInitiationResponse>(entitlementResult.Error);
         }
 
         var (authorizationUrl, state) =

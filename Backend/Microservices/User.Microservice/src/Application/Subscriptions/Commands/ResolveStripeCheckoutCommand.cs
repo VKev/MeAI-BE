@@ -16,7 +16,11 @@ public sealed record ResolveStripeCheckoutCommand(
 public sealed record ResolveStripeCheckoutResponse(
     string Status,
     bool IsFinal,
-    bool SubscriptionActivated);
+    bool SubscriptionActivated,
+    bool ScheduledChangeCreated,
+    Guid? UserSubscriptionId,
+    DateTime? EffectiveDate,
+    string ChangeType);
 
 public sealed class ResolveStripeCheckoutCommandHandler
     : IRequestHandler<ResolveStripeCheckoutCommand, Result<ResolveStripeCheckoutResponse>>
@@ -63,6 +67,8 @@ public sealed class ResolveStripeCheckoutCommandHandler
                 request.UserId,
                 request.SubscriptionId,
                 request.TransactionId,
+                stripeStatus.ProviderReferenceId,
+                request.StripeSubscriptionId ?? stripeStatus.StripeSubscriptionId,
                 request.Renew,
                 stripeStatus.Status),
             cancellationToken);
@@ -75,6 +81,10 @@ public sealed class ResolveStripeCheckoutCommandHandler
         return Result.Success(new ResolveStripeCheckoutResponse(
             stripeStatus.Status,
             stripeStatus.IsTerminal,
-            stripeStatus.IsSuccessful));
+            confirmResult.Value.SubscriptionActivated,
+            confirmResult.Value.ScheduledChangeCreated,
+            confirmResult.Value.UserSubscriptionId,
+            confirmResult.Value.EffectiveDate,
+            confirmResult.Value.ChangeType));
     }
 }

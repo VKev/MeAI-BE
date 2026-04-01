@@ -1,4 +1,5 @@
 using Application.Abstractions.Facebook;
+using Application.Abstractions.Instagram;
 using Application.Abstractions.SocialMedias;
 using Application.Abstractions.Threads;
 using Application.Abstractions.TikTok;
@@ -19,10 +20,12 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
     : IRequestHandler<GetSocialMediaPlatformPostsQuery, Result<SocialPlatformPostsResponse>>
 {
     private const string FacebookType = "facebook";
+    private const string InstagramType = "instagram";
     private const string TikTokType = "tiktok";
     private const string ThreadsType = "threads";
 
     private readonly IFacebookContentService _facebookContentService;
+    private readonly IInstagramContentService _instagramContentService;
     private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly ITikTokContentService _tikTokContentService;
     private readonly IThreadsContentService _threadsContentService;
@@ -30,12 +33,14 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
 
     public GetSocialMediaPlatformPostsQueryHandler(
         IFacebookContentService facebookContentService,
+        IInstagramContentService instagramContentService,
         IUserSocialMediaService userSocialMediaService,
         ITikTokContentService tikTokContentService,
         IThreadsContentService threadsContentService,
         IPostMetricSnapshotRepository postMetricSnapshotRepository)
     {
         _facebookContentService = facebookContentService;
+        _instagramContentService = instagramContentService;
         _userSocialMediaService = userSocialMediaService;
         _tikTokContentService = tikTokContentService;
         _threadsContentService = threadsContentService;
@@ -104,14 +109,15 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
                     DurationSeconds: null,
                     PublishedAt: ToDateTimeOffset(post.CreatedTime),
                     Stats: new SocialPlatformPostStatsResponse(
-                        Views: null,
+                        Views: post.ViewCount,
                         Likes: post.ReactionCount,
                         Comments: post.CommentCount,
                         Replies: null,
                         Shares: post.ShareCount,
                         Reposts: null,
                         Quotes: null,
-                        TotalInteractions: (post.ReactionCount ?? 0) + (post.CommentCount ?? 0) + (post.ShareCount ?? 0))))
+                        TotalInteractions: (post.ReactionCount ?? 0) + (post.CommentCount ?? 0) + (post.ShareCount ?? 0),
+                        ReactionBreakdown: post.ReactionBreakdown)))
                 .ToList();
 
             var metrics = await _postMetricSnapshotRepository.GetLatestByPlatformPostIdsAsync(
@@ -124,9 +130,11 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
             var enrichedItems = items
                 .Select(item => item with
                 {
-                    Stats = item.Stats ?? (statsLookup.TryGetValue(item.PlatformPostId, out var cachedStats)
-                        ? cachedStats
-                        : null)
+                    Stats = MergeStats(
+                        item.Stats,
+                        statsLookup.TryGetValue(item.PlatformPostId, out var cachedStats)
+                            ? cachedStats
+                            : null)
                 })
                 .ToList();
 
@@ -178,28 +186,29 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
             }
 
             var items = videosResult.Value.Videos
-                .Select(video => new SocialPlatformPostSummaryResponse(
-                    PlatformPostId: video.Id,
-                    Title: video.Title,
-                    Text: null,
-                    Description: video.VideoDescription,
-                    MediaType: "video",
-                    MediaUrl: null,
-                    ThumbnailUrl: video.CoverImageUrl,
-                    Permalink: video.ShareUrl,
-                    ShareUrl: video.ShareUrl,
-                    EmbedUrl: video.EmbedLink,
-                    DurationSeconds: video.Duration,
-                    PublishedAt: ToUnixTime(video.CreateTime),
-                    Stats: new SocialPlatformPostStatsResponse(
-                        Views: video.ViewCount,
-                        Likes: video.LikeCount,
-                        Comments: video.CommentCount,
-                        Replies: null,
-                        Shares: video.ShareCount,
-                        Reposts: null,
-                        Quotes: null,
-                        TotalInteractions: (video.LikeCount ?? 0) + (video.CommentCount ?? 0) + (video.ShareCount ?? 0))))
+                .Select(video =>
+                    new SocialPlatformPostSummaryResponse(
+                        PlatformPostId: video.Id,
+                        Title: video.Title,
+                        Text: null,
+                        Description: video.VideoDescription,
+                        MediaType: "video",
+                        MediaUrl: null,
+                        ThumbnailUrl: video.CoverImageUrl,
+                        Permalink: video.ShareUrl,
+                        ShareUrl: video.ShareUrl,
+                        EmbedUrl: video.EmbedLink,
+                        DurationSeconds: video.Duration,
+                        PublishedAt: ToUnixTime(video.CreateTime),
+                        Stats: new SocialPlatformPostStatsResponse(
+                            Views: video.ViewCount,
+                            Likes: video.LikeCount,
+                            Comments: video.CommentCount,
+                            Replies: null,
+                            Shares: video.ShareCount,
+                            Reposts: null,
+                            Quotes: null,
+                            TotalInteractions: (video.LikeCount ?? 0) + (video.CommentCount ?? 0) + (video.ShareCount ?? 0))))
                 .ToList();
 
             var metrics = await _postMetricSnapshotRepository.GetLatestByPlatformPostIdsAsync(
@@ -212,9 +221,11 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
             var enrichedItems = items
                 .Select(item => item with
                 {
-                    Stats = item.Stats ?? (statsLookup.TryGetValue(item.PlatformPostId, out var cachedStats)
-                        ? cachedStats
-                        : null)
+                    Stats = MergeStats(
+                        item.Stats,
+                        statsLookup.TryGetValue(item.PlatformPostId, out var cachedStats)
+                            ? cachedStats
+                            : null)
                 })
                 .ToList();
 
@@ -223,6 +234,89 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
                 Platform: TikTokType,
                 NextCursor: videosResult.Value.HasMore ? videosResult.Value.Cursor?.ToString() : null,
                 HasMore: videosResult.Value.HasMore,
+                Items: enrichedItems));
+        }
+
+        if (string.Equals(socialMedia.Type, InstagramType, StringComparison.OrdinalIgnoreCase))
+        {
+            var accessToken = SocialMediaMetadataHelper.GetString(metadata, "access_token")
+                              ?? SocialMediaMetadataHelper.GetString(metadata, "user_access_token");
+            if (string.IsNullOrWhiteSpace(accessToken))
+            {
+                return Result.Failure<SocialPlatformPostsResponse>(
+                    new Error("Instagram.InvalidToken", "Access token not found in social media metadata."));
+            }
+
+            var instagramUserId = SocialMediaMetadataHelper.GetString(metadata, "instagram_business_account_id")
+                                  ?? SocialMediaMetadataHelper.GetString(metadata, "user_id")
+                                  ?? SocialMediaMetadataHelper.GetString(metadata, "id");
+            if (string.IsNullOrWhiteSpace(instagramUserId))
+            {
+                return Result.Failure<SocialPlatformPostsResponse>(
+                    new Error("Instagram.InvalidAccount", "Instagram business account id is missing in social media metadata."));
+            }
+
+            var postsResult = await _instagramContentService.GetPostsAsync(
+                new InstagramPostListRequest(
+                    AccessToken: accessToken,
+                    InstagramUserId: instagramUserId,
+                    Limit: request.Limit,
+                    Cursor: request.Cursor),
+                cancellationToken);
+
+            if (postsResult.IsFailure)
+            {
+                return Result.Failure<SocialPlatformPostsResponse>(postsResult.Error);
+            }
+
+            var items = postsResult.Value.Posts
+                .Select(post => new SocialPlatformPostSummaryResponse(
+                    PlatformPostId: post.Id,
+                    Title: null,
+                    Text: post.Caption,
+                    Description: null,
+                    MediaType: post.MediaType,
+                    MediaUrl: post.MediaUrl,
+                    ThumbnailUrl: post.ThumbnailUrl,
+                    Permalink: post.Permalink,
+                    ShareUrl: post.Permalink,
+                    EmbedUrl: null,
+                    DurationSeconds: null,
+                    PublishedAt: ToDateTimeOffset(post.Timestamp),
+                    Stats: new SocialPlatformPostStatsResponse(
+                        Views: null,
+                        Likes: post.LikeCount,
+                        Comments: post.CommentCount,
+                        Replies: null,
+                        Shares: null,
+                        Reposts: null,
+                        Quotes: null,
+                        TotalInteractions: (post.LikeCount ?? 0) + (post.CommentCount ?? 0))))
+                .ToList();
+
+            var metrics = await _postMetricSnapshotRepository.GetLatestByPlatformPostIdsAsync(
+                request.UserId,
+                request.SocialMediaId,
+                items.Select(item => item.PlatformPostId).ToArray(),
+                cancellationToken);
+
+            var statsLookup = SocialPlatformPostMetricSnapshotMapper.ToStatsLookup(metrics);
+            var enrichedItems = items
+                .Select(item => item with
+                {
+                    Stats = MergeStats(
+                        item.Stats,
+                        statsLookup.TryGetValue(item.PlatformPostId, out var cachedStats)
+                            ? cachedStats
+                            : null)
+                })
+                .ToList();
+
+            return Result.Success(new SocialPlatformPostsResponse(
+                SocialMediaId: request.SocialMediaId,
+                Platform: InstagramType,
+                NextCursor: postsResult.Value.NextCursor,
+                HasMore: postsResult.Value.HasMore,
                 Items: enrichedItems));
         }
 
@@ -247,21 +341,58 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
                 return Result.Failure<SocialPlatformPostsResponse>(postsResult.Error);
             }
 
+            var insightsByPostId = new Dictionary<string, ThreadsPostInsights?>(StringComparer.Ordinal);
+            foreach (var post in postsResult.Value.Posts)
+            {
+                if (string.IsNullOrWhiteSpace(post.Id))
+                {
+                    continue;
+                }
+
+                var insightsResult = await _threadsContentService.GetPostInsightsAsync(
+                    new ThreadsPostInsightsRequest(accessToken, post.Id),
+                    cancellationToken);
+
+                insightsByPostId[post.Id] = insightsResult.IsSuccess ? insightsResult.Value : null;
+            }
+
             var items = postsResult.Value.Posts
-                .Select(post => new SocialPlatformPostSummaryResponse(
-                    PlatformPostId: post.Id,
-                    Title: null,
-                    Text: post.Text,
-                    Description: null,
-                    MediaType: post.MediaType,
-                    MediaUrl: post.MediaUrl ?? post.GifUrl,
-                    ThumbnailUrl: post.ThumbnailUrl ?? post.ProfilePictureUrl,
-                    Permalink: post.Permalink,
-                    ShareUrl: post.Permalink,
-                    EmbedUrl: null,
-                    DurationSeconds: null,
-                    PublishedAt: ToDateTimeOffset(post.Timestamp),
-                    Stats: null))
+                .Select(post =>
+                {
+                    insightsByPostId.TryGetValue(post.Id, out var insights);
+
+                    var comments = insights?.Replies;
+                    var stats = insights == null
+                        ? null
+                        : new SocialPlatformPostStatsResponse(
+                            Views: insights.Views,
+                            Likes: insights.Likes,
+                            Comments: comments,
+                            Replies: null,
+                            Shares: insights.Shares,
+                            Reposts: insights.Reposts,
+                            Quotes: insights.Quotes,
+                            TotalInteractions: (insights.Likes ?? 0) +
+                                               (comments ?? 0) +
+                                               (insights.Shares ?? 0) +
+                                               (insights.Reposts ?? 0) +
+                                               (insights.Quotes ?? 0));
+
+                    return new SocialPlatformPostSummaryResponse(
+                        PlatformPostId: post.Id,
+                        Title: null,
+                        Text: post.Text,
+                        Description: null,
+                        MediaType: post.MediaType,
+                        MediaUrl: post.MediaUrl ?? post.GifUrl,
+                        ThumbnailUrl: post.ThumbnailUrl ?? post.ProfilePictureUrl,
+                        Permalink: post.Permalink,
+                        ShareUrl: post.Permalink,
+                        EmbedUrl: null,
+                        DurationSeconds: null,
+                        PublishedAt: ToDateTimeOffset(post.Timestamp),
+                        Stats: stats);
+                })
                 .ToList();
 
             var metrics = await _postMetricSnapshotRepository.GetLatestByPlatformPostIdsAsync(
@@ -274,9 +405,11 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
             var enrichedItems = items
                 .Select(item => item with
                 {
-                    Stats = item.Stats ?? (statsLookup.TryGetValue(item.PlatformPostId, out var cachedStats)
-                        ? cachedStats
-                        : null)
+                    Stats = MergeStats(
+                        item.Stats,
+                        statsLookup.TryGetValue(item.PlatformPostId, out var cachedStats)
+                            ? cachedStats
+                            : null)
                 })
                 .ToList();
 
@@ -289,7 +422,7 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
         }
 
         return Result.Failure<SocialPlatformPostsResponse>(
-            new Error("SocialMedia.UnsupportedPlatform", "Only Facebook, TikTok, and Threads social media accounts are supported."));
+            new Error("SocialMedia.UnsupportedPlatform", "Only Facebook, Instagram, TikTok, and Threads social media accounts are supported."));
     }
 
     private static DateTimeOffset? ToUnixTime(long? unixSeconds)
@@ -312,5 +445,47 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
         return DateTimeOffset.TryParse(value, out var parsed)
             ? parsed
             : null;
+    }
+
+    private static SocialPlatformPostStatsResponse? MergeStats(
+        SocialPlatformPostStatsResponse? primary,
+        SocialPlatformPostStatsResponse? fallback)
+    {
+        if (primary == null)
+        {
+            return fallback;
+        }
+
+        if (fallback == null)
+        {
+            return primary;
+        }
+
+        var likes = primary.Likes ?? fallback.Likes;
+        var comments = primary.Comments ?? fallback.Comments;
+        var replies = primary.Replies ?? fallback.Replies;
+        var shares = primary.Shares ?? fallback.Shares;
+        var reposts = primary.Reposts ?? fallback.Reposts;
+        var quotes = primary.Quotes ?? fallback.Quotes;
+        var reactionBreakdown = primary.ReactionBreakdown ?? fallback.ReactionBreakdown;
+
+        return primary with
+        {
+            Views = primary.Views ?? fallback.Views,
+            Likes = likes,
+            Comments = comments,
+            Replies = replies,
+            Shares = shares,
+            Reposts = reposts,
+            Quotes = quotes,
+            ReactionBreakdown = reactionBreakdown,
+            TotalInteractions =
+                (likes ?? 0) +
+                (comments ?? 0) +
+                (replies ?? 0) +
+                (shares ?? 0) +
+                (reposts ?? 0) +
+                (quotes ?? 0)
+        };
     }
 }

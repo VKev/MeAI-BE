@@ -22,6 +22,8 @@ public sealed class SubscriptionConfiguration : IEntityTypeConfiguration<Subscri
             .HasColumnType("integer")
             .HasDefaultValue(1);
         entity.Property(e => e.MeAiCoin).HasColumnName("me_ai_coin").HasColumnType("numeric(18,2)");
+        entity.Property(e => e.StripeProductId).HasColumnName("stripe_product_id");
+        entity.Property(e => e.StripePriceId).HasColumnName("stripe_price_id");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");

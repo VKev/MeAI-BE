@@ -7,4 +7,6 @@ public sealed record CurrentUserSubscriptionResponse(
     DateTime? ActiveDate,
     DateTime? EndDate,
     string? Status,
-    bool IsActive);
+    bool IsCurrent,
+    bool IsActive,
+    bool IsScheduled);

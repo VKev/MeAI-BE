@@ -17,6 +17,7 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
     private const string OAuthTokenEndpoint = "https://graph.facebook.com/v24.0/oauth/access_token";
     private const string DefaultScopes = "email,public_profile";
     private const string ProfileFields = "id,name,email,picture.type(large)";
+    private const string PageFields = "id,name,access_token,fan_count,followers_count,posts.limit(0).summary(true)";
 
     private readonly string _appId;
     private readonly string _appSecret;
@@ -183,6 +184,17 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
                     new Error("Facebook.ProfileMissing", "Facebook profile is missing"));
             }
 
+            var page = await FetchPrimaryPageAsync(accessToken, cancellationToken);
+            if (page != null)
+            {
+                profile.PageId = page.Id;
+                profile.PageName = page.Name;
+                profile.PageAccessToken = page.AccessToken;
+                profile.PageLikeCount = page.FanCount;
+                profile.PageFollowerCount = page.FollowersCount;
+                profile.PagePostCount = page.Posts?.Summary?.TotalCount;
+            }
+
             return Result.Success(profile);
         }
         catch (HttpRequestException ex)
@@ -260,6 +272,22 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
         }
     }
 
+    private async Task<FacebookPageDataResponse?> FetchPrimaryPageAsync(string accessToken, CancellationToken cancellationToken)
+    {
+        var url =
+            $"{GraphApiBaseUrl}/me/accounts?fields={Uri.EscapeDataString(PageFields)}&access_token={Uri.EscapeDataString(accessToken)}";
+
+        using var response = await _httpClient.GetAsync(url, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+        var pages = JsonSerializer.Deserialize<FacebookPagesResponse>(payload, JsonOptions);
+        return pages?.Data?.FirstOrDefault(page => !string.IsNullOrWhiteSpace(page.Id));
+    }
+
     private static string FormatGraphApiErrorMessage(GraphApiError error)
     {
         var mainMessage = !string.IsNullOrWhiteSpace(error.ErrorUserMessage)
@@ -317,4 +345,21 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
         [property: JsonPropertyName("error_user_title")] string? ErrorUserTitle,
         [property: JsonPropertyName("error_user_msg")] string? ErrorUserMessage,
         [property: JsonPropertyName("fbtrace_id")] string? FbTraceId);
+
+    private sealed record FacebookPagesResponse(
+        [property: JsonPropertyName("data")] List<FacebookPageDataResponse>? Data);
+
+    private sealed record FacebookPageDataResponse(
+        [property: JsonPropertyName("id")] string? Id,
+        [property: JsonPropertyName("name")] string? Name,
+        [property: JsonPropertyName("access_token")] string? AccessToken,
+        [property: JsonPropertyName("fan_count")] int? FanCount,
+        [property: JsonPropertyName("followers_count")] int? FollowersCount,
+        [property: JsonPropertyName("posts")] FacebookPagePostsResponse? Posts);
+
+    private sealed record FacebookPagePostsResponse(
+        [property: JsonPropertyName("summary")] FacebookPagePostsSummaryResponse? Summary);
+
+    private sealed record FacebookPagePostsSummaryResponse(
+        [property: JsonPropertyName("total_count")] int? TotalCount);
 }

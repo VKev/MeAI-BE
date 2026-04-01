@@ -49,6 +49,24 @@ public sealed class FacebookProfileResponse
 
     [JsonIgnore]
     public string? ProfilePictureUrl => Picture?.Data?.Url;
+
+    [JsonIgnore]
+    public string? PageId { get; set; }
+
+    [JsonIgnore]
+    public string? PageName { get; set; }
+
+    [JsonIgnore]
+    public string? PageAccessToken { get; set; }
+
+    [JsonIgnore]
+    public int? PageLikeCount { get; set; }
+
+    [JsonIgnore]
+    public int? PageFollowerCount { get; set; }
+
+    [JsonIgnore]
+    public int? PagePostCount { get; set; }
 }
 
 public sealed class FacebookProfilePictureResponse

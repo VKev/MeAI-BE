@@ -48,8 +48,8 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         return type.ToLowerInvariant() switch
         {
             "tiktok" => await GetTikTokProfileAsync(accessToken, cancellationToken),
-            "threads" => await GetThreadsProfileAsync(accessToken, cancellationToken),
-            "facebook" => await GetFacebookProfileAsync(accessToken, cancellationToken),
+            "threads" => await GetThreadsProfileAsync(metadata, accessToken, cancellationToken),
+            "facebook" => await GetFacebookProfileAsync(metadata, accessToken, cancellationToken),
             "instagram" => await GetInstagramProfileAsync(metadata, accessToken, cancellationToken),
             _ => Result.Failure<SocialMediaUserProfile>(
                 new Error("SocialMedia.UnsupportedType", $"Profile fetching not supported for type: {type}"))
@@ -75,10 +75,13 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             ProfilePictureUrl: profile.AvatarUrl,
             Bio: profile.BioDescription,
             FollowerCount: profile.FollowerCount,
-            FollowingCount: profile.FollowingCount));
+            FollowingCount: profile.FollowingCount,
+            PostCount: null,
+            PageLikeCount: null));
     }
 
     private async Task<Result<SocialMediaUserProfile>> GetThreadsProfileAsync(
+        JsonDocument metadata,
         string accessToken,
         CancellationToken cancellationToken)
     {
@@ -86,7 +89,7 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
 
         if (result.IsFailure)
         {
-            return Result.Failure<SocialMediaUserProfile>(result.Error);
+            return GetThreadsProfileFromMetadata(metadata);
         }
 
         var profile = result.Value;
@@ -96,11 +99,14 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             DisplayName: profile.Name,
             ProfilePictureUrl: profile.ThreadsProfilePictureUrl,
             Bio: profile.ThreadsBiography,
-            FollowerCount: null,
-            FollowingCount: null));
+            FollowerCount: profile.FollowersCount,
+            FollowingCount: profile.FollowsCount,
+            PostCount: profile.MediaCount,
+            PageLikeCount: null));
     }
 
     private async Task<Result<SocialMediaUserProfile>> GetFacebookProfileAsync(
+        JsonDocument metadata,
         string accessToken,
         CancellationToken cancellationToken)
     {
@@ -108,18 +114,20 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
 
         if (result.IsFailure)
         {
-            return Result.Failure<SocialMediaUserProfile>(result.Error);
+            return GetFacebookProfileFromMetadata(metadata);
         }
 
         var profile = result.Value;
         return Result.Success(new SocialMediaUserProfile(
-            UserId: profile.Id,
+            UserId: profile.PageId ?? profile.Id,
             Username: null,
-            DisplayName: profile.Name,
+            DisplayName: profile.PageName ?? profile.Name,
             ProfilePictureUrl: profile.ProfilePictureUrl,
             Bio: null,
-            FollowerCount: null,
-            FollowingCount: null));
+            FollowerCount: profile.PageFollowerCount,
+            FollowingCount: null,
+            PostCount: profile.PagePostCount,
+            PageLikeCount: profile.PageLikeCount));
     }
 
     private async Task<Result<SocialMediaUserProfile>> GetInstagramProfileAsync(
@@ -158,8 +166,10 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             DisplayName: profile.Profile.Name ?? profile.PageName,
             ProfilePictureUrl: profile.Profile.ProfilePictureUrl,
             Bio: profile.Profile.Biography,
-            FollowerCount: null,
-            FollowingCount: null));
+            FollowerCount: profile.Profile.FollowersCount,
+            FollowingCount: profile.Profile.FollowsCount,
+            PostCount: profile.Profile.MediaCount,
+            PageLikeCount: null));
     }
 
     private static Result<SocialMediaUserProfile> GetInstagramProfileFromMetadata(JsonDocument metadata)
@@ -176,6 +186,9 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         var biography = root.TryGetProperty("biography", out var biographyElement)
             ? biographyElement.GetString()
             : null;
+        var followerCount = TryGetIntValue(root, "followers_count");
+        var followingCount = TryGetIntValue(root, "follows_count");
+        var postCount = TryGetIntValue(root, "media_count");
 
         return Result.Success(new SocialMediaUserProfile(
             UserId: userId,
@@ -183,8 +196,69 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             DisplayName: name ?? pageName,
             ProfilePictureUrl: profilePictureUrl,
             Bio: biography,
-            FollowerCount: null,
-            FollowingCount: null));
+            FollowerCount: followerCount,
+            FollowingCount: followingCount,
+            PostCount: postCount,
+            PageLikeCount: null));
+    }
+
+    private static Result<SocialMediaUserProfile> GetFacebookProfileFromMetadata(JsonDocument metadata)
+    {
+        var root = metadata.RootElement;
+
+        var userId = root.TryGetProperty("page_id", out var pageIdElement)
+            ? pageIdElement.GetString()
+            : root.TryGetProperty("id", out var idElement) ? idElement.GetString() : null;
+        var displayName = root.TryGetProperty("page_name", out var pageNameElement)
+            ? pageNameElement.GetString()
+            : root.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
+        var profilePictureUrl = root.TryGetProperty("profile_picture_url", out var pictureElement)
+            ? pictureElement.GetString()
+            : null;
+
+        return Result.Success(new SocialMediaUserProfile(
+            UserId: userId,
+            Username: null,
+            DisplayName: displayName,
+            ProfilePictureUrl: profilePictureUrl,
+            Bio: null,
+            FollowerCount: TryGetIntValue(root, "page_followers_count"),
+            FollowingCount: null,
+            PostCount: TryGetIntValue(root, "page_post_count"),
+            PageLikeCount: TryGetIntValue(root, "page_fan_count")));
+    }
+
+    private static Result<SocialMediaUserProfile> GetThreadsProfileFromMetadata(JsonDocument metadata)
+    {
+        var root = metadata.RootElement;
+
+        return Result.Success(new SocialMediaUserProfile(
+            UserId: root.TryGetProperty("user_id", out var userIdElement) ? userIdElement.GetString() : null,
+            Username: root.TryGetProperty("username", out var usernameElement) ? usernameElement.GetString() : null,
+            DisplayName: root.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null,
+            ProfilePictureUrl: root.TryGetProperty("threads_profile_picture_url", out var pictureElement)
+                ? pictureElement.GetString()
+                : null,
+            Bio: root.TryGetProperty("threads_biography", out var bioElement) ? bioElement.GetString() : null,
+            FollowerCount: TryGetIntValue(root, "followers_count"),
+            FollowingCount: TryGetIntValue(root, "follows_count"),
+            PostCount: TryGetIntValue(root, "media_count"),
+            PageLikeCount: null));
+    }
+
+    private static int? TryGetIntValue(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var element))
+        {
+            return null;
+        }
+
+        return element.ValueKind switch
+        {
+            JsonValueKind.Number when element.TryGetInt32(out var intValue) => intValue,
+            JsonValueKind.String when int.TryParse(element.GetString(), out var parsedValue) => parsedValue,
+            _ => null
+        };
     }
 
     private static bool TryGetAccessToken(JsonDocument metadata, string propertyName, out string accessToken)

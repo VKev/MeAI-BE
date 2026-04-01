@@ -1,6 +1,7 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Payments;
 using Application.Subscriptions.Models;
+using Application.Subscriptions.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -20,20 +21,26 @@ public sealed class PurchaseSubscriptionCommandHandler
     : IRequestHandler<PurchaseSubscriptionCommand, Result<PurchaseSubscriptionResponse>>
 {
     private readonly IRepository<Subscription> _subscriptionRepository;
-    private readonly IRepository<User> _userRepository;
     private readonly IRepository<Transaction> _transactionRepository;
+    private readonly IRepository<User> _userRepository;
     private readonly IRepository<UserSubscription> _userSubscriptionRepository;
     private readonly IStripePaymentService _stripePaymentService;
+    private readonly IUserSubscriptionStateService _userSubscriptionStateService;
+    private readonly ISender _sender;
 
     public PurchaseSubscriptionCommandHandler(
         IUnitOfWork unitOfWork,
-        IStripePaymentService stripePaymentService)
+        IStripePaymentService stripePaymentService,
+        IUserSubscriptionStateService userSubscriptionStateService,
+        ISender sender)
     {
         _subscriptionRepository = unitOfWork.Repository<Subscription>();
-        _userRepository = unitOfWork.Repository<User>();
         _transactionRepository = unitOfWork.Repository<Transaction>();
+        _userRepository = unitOfWork.Repository<User>();
         _userSubscriptionRepository = unitOfWork.Repository<UserSubscription>();
         _stripePaymentService = stripePaymentService;
+        _userSubscriptionStateService = userSubscriptionStateService;
+        _sender = sender;
     }
 
     public async Task<Result<PurchaseSubscriptionResponse>> Handle(
@@ -41,7 +48,6 @@ public sealed class PurchaseSubscriptionCommandHandler
         CancellationToken cancellationToken)
     {
         var subscription = await _subscriptionRepository.GetAll()
-            .AsNoTracking()
             .FirstOrDefaultAsync(
                 item => item.Id == request.SubscriptionId && !item.IsDeleted,
                 cancellationToken);
@@ -58,9 +64,6 @@ public sealed class PurchaseSubscriptionCommandHandler
                 new Error("Subscription.InvalidCost", "Subscription cost is not valid."));
         }
 
-        var paymentMethodId = string.IsNullOrWhiteSpace(request.PaymentMethodId)
-            ? null
-            : request.PaymentMethodId.Trim();
         if (subscription.DurationMonths <= 0)
         {
             return Result.Failure<PurchaseSubscriptionResponse>(
@@ -68,63 +71,89 @@ public sealed class PurchaseSubscriptionCommandHandler
         }
 
         var now = DateTimeExtensions.PostgreSqlUtcNow;
-        var hasActiveSubscription = await _userSubscriptionRepository.GetAll()
-            .AsNoTracking()
-            .AnyAsync(
-                item =>
-                    item.UserId == request.UserId &&
-                    item.SubscriptionId == request.SubscriptionId &&
-                    !item.IsDeleted &&
-                    (!item.EndDate.HasValue || item.EndDate.Value >= now),
-                cancellationToken);
+        var state = await _userSubscriptionStateService.GetStateAsync(request.UserId, cancellationToken);
 
-        if (hasActiveSubscription)
+        if (state.Current?.SubscriptionId == request.SubscriptionId)
         {
             return Result.Failure<PurchaseSubscriptionResponse>(
                 new Error("Subscription.AlreadyActive", "This plan is already active."));
         }
 
-        var cost = Convert.ToDecimal(subscription.Cost.Value);
-        StripePaymentIntentResult? paymentIntent = null;
-        StripeSubscriptionResult? stripeSubscription = null;
-        var transactionId = Guid.CreateVersion7();
-        var metadata = new Dictionary<string, string>
+        if (state.Scheduled?.SubscriptionId == request.SubscriptionId)
         {
-            ["subscription_id"] = subscription.Id.ToString(),
-            ["user_id"] = request.UserId.ToString(),
-            ["transaction_id"] = transactionId.ToString(),
-            ["renew"] = request.Renew.ToString().ToLowerInvariant(),
-            ["duration_months"] = subscription.DurationMonths.ToString()
-        };
+            return Result.Failure<PurchaseSubscriptionResponse>(
+                new Error("Subscription.AlreadyScheduled", "This plan is already scheduled as your next plan."));
+        }
+
+        if (state.Scheduled != null)
+        {
+            return Result.Failure<PurchaseSubscriptionResponse>(
+                new Error("Subscription.ChangeAlreadyScheduled", "A future plan change is already scheduled."));
+        }
+
+        var currentPlan = state.Current == null
+            ? null
+            : await _subscriptionRepository.GetAll()
+                .FirstOrDefaultAsync(
+                    item => item.Id == state.Current.SubscriptionId && !item.IsDeleted,
+                    cancellationToken);
+
+        var changeType = ResolveChangeType(state.Current, currentPlan, Convert.ToDecimal(subscription.Cost.Value));
+        var targetCatalog = await EnsurePlanCatalogAsync(subscription, cancellationToken);
+
+        if (string.Equals(changeType, SubscriptionChangeTypes.ScheduledChange, StringComparison.OrdinalIgnoreCase))
+        {
+            return await ScheduleRecurringChangeAsync(
+                request,
+                subscription,
+                currentPlan,
+                state,
+                targetCatalog,
+                now,
+                cancellationToken);
+        }
+
+        var user = await _userRepository.GetAll()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == request.UserId && !item.IsDeleted, cancellationToken);
+
+        if (user == null)
+        {
+            return Result.Failure<PurchaseSubscriptionResponse>(
+                new Error("User.NotFound", "User not found."));
+        }
+
+        var transactionId = Guid.CreateVersion7();
+        var metadata = BuildStripeMetadata(
+            request.UserId,
+            subscription.Id,
+            transactionId,
+            renew: true);
+        var transactionType = SubscriptionChangeTypes.ToTransactionType(changeType);
+
+        StripeRecurringSubscriptionResult stripeResult;
         try
         {
-            if (request.Renew)
+            if (string.Equals(changeType, SubscriptionChangeTypes.Upgrade, StringComparison.OrdinalIgnoreCase))
             {
-                var user = await _userRepository.GetAll()
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(u => u.Id == request.UserId && !u.IsDeleted, cancellationToken);
-
-                if (user == null)
+                if (state.Current == null || string.IsNullOrWhiteSpace(state.Current.StripeSubscriptionId))
                 {
                     return Result.Failure<PurchaseSubscriptionResponse>(
-                        new Error("User.NotFound", "User not found."));
+                        new Error("Subscription.MissingStripeState", "Current subscription is missing Stripe recurring state."));
                 }
 
-                stripeSubscription = await _stripePaymentService.CreateSubscriptionAsync(
-                    cost,
-                    subscription.DurationMonths,
-                    paymentMethodId,
-                    user.Email,
-                    user.FullName ?? user.Username,
-                    subscription.Name,
+                stripeResult = await _stripePaymentService.UpgradeSubscriptionAsync(
+                    state.Current.StripeSubscriptionId,
+                    targetCatalog.StripePriceId,
                     metadata,
                     cancellationToken);
             }
             else
             {
-                paymentIntent = await _stripePaymentService.CreatePaymentIntentAsync(
-                    cost,
-                    paymentMethodId,
+                stripeResult = await _stripePaymentService.CreateSubscriptionAsync(
+                    targetCatalog.StripePriceId,
+                    user.Email,
+                    user.FullName ?? user.Username,
                     metadata,
                     cancellationToken);
             }
@@ -135,76 +164,232 @@ public sealed class PurchaseSubscriptionCommandHandler
                 new Error("Stripe.PaymentFailed", ex.Message));
         }
 
-        var status = request.Renew
-            ? stripeSubscription!.Status
-            : paymentIntent!.Status;
-        var paymentIntentId = request.Renew
-            ? stripeSubscription!.PaymentIntentId
-            : paymentIntent!.PaymentIntentId;
-        var clientSecret = request.Renew
-            ? stripeSubscription!.ClientSecret
-            : paymentIntent!.ClientSecret;
-        var currency = request.Renew
-            ? stripeSubscription!.Currency
-            : paymentIntent!.Currency;
-        var amount = request.Renew
-            ? stripeSubscription!.Amount
-            : paymentIntent!.Amount;
-
         var transaction = new Transaction
         {
             Id = transactionId,
             UserId = request.UserId,
             RelationId = subscription.Id,
             RelationType = "Subscription",
-            Cost = cost,
-            TransactionType = request.Renew ? "SubscriptionRecurring" : "SubscriptionPurchase",
+            Cost = stripeResult.AmountDue,
+            TransactionType = transactionType,
             PaymentMethod = "Stripe",
-            Status = status,
+            Status = stripeResult.Status,
+            ProviderReferenceId = stripeResult.PaymentIntentId,
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
+            IsDeleted = false
         };
 
         await _transactionRepository.AddAsync(transaction, cancellationToken);
 
         Guid? userSubscriptionId = null;
         var subscriptionActivated = false;
-        var isPaymentSucceeded = string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase);
-        var isSubscriptionActive = string.Equals(status, "active", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(status, "trialing", StringComparison.OrdinalIgnoreCase);
-        if ((!request.Renew && isPaymentSucceeded) || (request.Renew && isSubscriptionActive))
-        {
-            var userSubscription = new UserSubscription
-            {
-                Id = Guid.CreateVersion7(),
-                UserId = request.UserId,
-                SubscriptionId = subscription.Id,
-                ActiveDate = now,
-                EndDate = now.AddMonths(subscription.DurationMonths),
-                Status = "Active",
-                CreatedAt = now,
-                UpdatedAt = now
-            };
+        var effectiveDate = stripeResult.CurrentPeriodStart;
+        var requiresPayment = !string.IsNullOrWhiteSpace(stripeResult.ClientSecret) && !IsSuccessStatus(stripeResult.Status);
 
-            await _userSubscriptionRepository.AddAsync(userSubscription, cancellationToken);
-            userSubscriptionId = userSubscription.Id;
-            subscriptionActivated = true;
+        if (IsSuccessStatus(stripeResult.Status))
+        {
+            var confirmResult = await _sender.Send(
+                new ConfirmSubscriptionPaymentCommand(
+                    request.UserId,
+                    request.SubscriptionId,
+                    transactionId,
+                    stripeResult.PaymentIntentId,
+                    stripeResult.StripeSubscriptionId,
+                    true,
+                    stripeResult.Status),
+                cancellationToken);
+
+            if (confirmResult.IsFailure)
+            {
+                return Result.Failure<PurchaseSubscriptionResponse>(confirmResult.Error);
+            }
+
+            userSubscriptionId = confirmResult.Value.UserSubscriptionId;
+            subscriptionActivated = confirmResult.Value.SubscriptionActivated;
+            effectiveDate = confirmResult.Value.EffectiveDate ?? effectiveDate;
         }
 
-        var response = new PurchaseSubscriptionResponse(
+        return Result.Success(new PurchaseSubscriptionResponse(
             subscription.Id,
             subscription.Cost.Value,
-            currency,
-            amount,
-            paymentIntentId,
-            clientSecret,
-            status,
-            stripeSubscription?.SubscriptionId,
-            request.Renew,
+            stripeResult.Currency,
+            stripeResult.AmountDue,
+            0m,
+            stripeResult.PaymentIntentId,
+            stripeResult.ClientSecret,
+            stripeResult.Status,
+            stripeResult.StripeSubscriptionId,
+            true,
             transaction.Id,
             subscriptionActivated,
-            userSubscriptionId);
-
-        return Result.Success(response);
+            false,
+            userSubscriptionId,
+            changeType,
+            effectiveDate,
+            requiresPayment));
     }
+
+    private async Task<Result<PurchaseSubscriptionResponse>> ScheduleRecurringChangeAsync(
+        PurchaseSubscriptionCommand request,
+        Subscription targetPlan,
+        Subscription? currentPlan,
+        UserSubscriptionState state,
+        StripeCatalogPriceResult targetCatalog,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        if (state.Current == null || string.IsNullOrWhiteSpace(state.Current.StripeSubscriptionId) || currentPlan == null)
+        {
+            return Result.Failure<PurchaseSubscriptionResponse>(
+                new Error("Subscription.MissingStripeState", "Current subscription is missing Stripe recurring state."));
+        }
+
+        var currentCatalog = await EnsurePlanCatalogAsync(currentPlan, cancellationToken);
+        var currentMetadata = BuildStripeMetadata(
+            request.UserId,
+            currentPlan.Id,
+            null,
+            renew: true);
+        var nextMetadata = BuildStripeMetadata(
+            request.UserId,
+            targetPlan.Id,
+            null,
+            renew: true);
+
+        StripeScheduledChangeResult scheduleResult;
+        try
+        {
+            scheduleResult = await _stripePaymentService.ScheduleSubscriptionChangeAsync(
+                state.Current.StripeSubscriptionId,
+                currentCatalog.StripePriceId,
+                targetCatalog.StripePriceId,
+                currentMetadata,
+                nextMetadata,
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<PurchaseSubscriptionResponse>(
+                new Error("Stripe.ScheduleFailed", ex.Message));
+        }
+
+        var transaction = new Transaction
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = request.UserId,
+            RelationId = targetPlan.Id,
+            RelationType = "Subscription",
+            Cost = 0m,
+            TransactionType = SubscriptionChangeTypes.ToTransactionType(SubscriptionChangeTypes.ScheduledChange),
+            PaymentMethod = "Stripe",
+            Status = "scheduled",
+            ProviderReferenceId = scheduleResult.StripeScheduleId,
+            CreatedAt = now,
+            UpdatedAt = now,
+            IsDeleted = false
+        };
+
+        await _transactionRepository.AddAsync(transaction, cancellationToken);
+
+        var scheduledStart = scheduleResult.CurrentPeriodEnd ?? state.Current.EndDate ?? now;
+        var scheduledSubscription = new UserSubscription
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = request.UserId,
+            SubscriptionId = targetPlan.Id,
+            ActiveDate = scheduledStart,
+            EndDate = scheduledStart.AddMonths(targetPlan.DurationMonths),
+            Status = "Scheduled",
+            StripeSubscriptionId = state.Current.StripeSubscriptionId,
+            StripeScheduleId = scheduleResult.StripeScheduleId,
+            CreatedAt = now,
+            UpdatedAt = now,
+            IsDeleted = false
+        };
+
+        await _userSubscriptionRepository.AddAsync(scheduledSubscription, cancellationToken);
+
+        return Result.Success(new PurchaseSubscriptionResponse(
+            targetPlan.Id,
+            targetPlan.Cost!.Value,
+            "vnd",
+            0m,
+            0m,
+            null,
+            null,
+            "scheduled",
+            scheduleResult.StripeSubscriptionId,
+            true,
+            transaction.Id,
+            false,
+            true,
+            scheduledSubscription.Id,
+            SubscriptionChangeTypes.ScheduledChange,
+            scheduledSubscription.ActiveDate,
+            false));
+    }
+
+    private async Task<StripeCatalogPriceResult> EnsurePlanCatalogAsync(
+        Subscription subscription,
+        CancellationToken cancellationToken)
+    {
+        var result = await _stripePaymentService.EnsureRecurringPriceAsync(
+            subscription.StripeProductId,
+            subscription.StripePriceId,
+            Convert.ToDecimal(subscription.Cost!.Value),
+            subscription.DurationMonths,
+            subscription.Name,
+            cancellationToken);
+
+        if (!string.Equals(subscription.StripeProductId, result.StripeProductId, StringComparison.Ordinal) ||
+            !string.Equals(subscription.StripePriceId, result.StripePriceId, StringComparison.Ordinal))
+        {
+            subscription.StripeProductId = result.StripeProductId;
+            subscription.StripePriceId = result.StripePriceId;
+            subscription.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            _subscriptionRepository.Update(subscription);
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, string> BuildStripeMetadata(
+        Guid userId,
+        Guid subscriptionId,
+        Guid? transactionId,
+        bool renew)
+    {
+        var metadata = new Dictionary<string, string>
+        {
+            ["subscription_id"] = subscriptionId.ToString(),
+            ["user_id"] = userId.ToString(),
+            ["renew"] = renew ? "true" : "false"
+        };
+
+        if (transactionId.HasValue)
+        {
+            metadata["transaction_id"] = transactionId.Value.ToString();
+        }
+
+        return metadata;
+    }
+
+    private static string ResolveChangeType(
+        UserSubscription? currentSubscription,
+        Subscription? currentPlan,
+        decimal targetCost)
+    {
+        if (currentSubscription == null || currentPlan?.Cost == null)
+        {
+            return SubscriptionChangeTypes.NewPurchase;
+        }
+
+        return targetCost > Convert.ToDecimal(currentPlan.Cost.Value)
+            ? SubscriptionChangeTypes.Upgrade
+            : SubscriptionChangeTypes.ScheduledChange;
+    }
+
+    private static bool IsSuccessStatus(string? value) =>
+        string.Equals(value?.Trim(), "succeeded", StringComparison.OrdinalIgnoreCase);
 }

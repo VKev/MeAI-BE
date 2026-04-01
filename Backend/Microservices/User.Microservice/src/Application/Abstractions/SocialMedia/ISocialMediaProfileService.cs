@@ -19,4 +19,6 @@ public sealed record SocialMediaUserProfile(
     string? ProfilePictureUrl,
     string? Bio,
     int? FollowerCount,
-    int? FollowingCount);
+    int? FollowingCount,
+    int? PostCount,
+    int? PageLikeCount);

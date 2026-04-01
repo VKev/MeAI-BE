@@ -44,6 +44,8 @@ public sealed record FacebookPostDetails(
     string? ThumbnailUrl,
     string? AttachmentTitle,
     string? AttachmentDescription,
+    long? ViewCount,
     long? ReactionCount,
     long? CommentCount,
-    long? ShareCount);
+    long? ShareCount,
+    IReadOnlyDictionary<string, long>? ReactionBreakdown = null);

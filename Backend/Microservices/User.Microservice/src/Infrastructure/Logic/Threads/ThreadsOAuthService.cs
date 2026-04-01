@@ -133,7 +133,7 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         CancellationToken cancellationToken)
     {
         const string baseUrl = "https://graph.threads.net/me";
-        var url = $"{baseUrl}?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token={Uri.EscapeDataString(accessToken)}";
+        var url = $"{baseUrl}?fields=id,username,name,threads_profile_picture_url,threads_biography,followers_count,follows_count,media_count&access_token={Uri.EscapeDataString(accessToken)}";
 
         try
         {
@@ -155,7 +155,10 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
                 Username = profile?.Username,
                 Name = profile?.Name,
                 ThreadsProfilePictureUrl = profile?.ThreadsProfilePictureUrl,
-                ThreadsBiography = profile?.ThreadsBiography
+                ThreadsBiography = profile?.ThreadsBiography,
+                FollowersCount = profile?.FollowersCount,
+                FollowsCount = profile?.FollowsCount,
+                MediaCount = profile?.MediaCount
             });
         }
         catch (HttpRequestException ex)
@@ -302,6 +305,15 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
 
         [JsonPropertyName("threads_biography")]
         public string? ThreadsBiography { get; set; }
+
+        [JsonPropertyName("followers_count")]
+        public int? FollowersCount { get; set; }
+
+        [JsonPropertyName("follows_count")]
+        public int? FollowsCount { get; set; }
+
+        [JsonPropertyName("media_count")]
+        public int? MediaCount { get; set; }
     }
 }
 

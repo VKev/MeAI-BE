@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Subscriptions.Services;
 using Application.Workspaces.Models;
 using Domain.Entities;
 using MediatR;
@@ -18,15 +19,28 @@ public sealed class CreateWorkspaceCommandHandler
     : IRequestHandler<CreateWorkspaceCommand, Result<WorkspaceResponse>>
 {
     private readonly IRepository<Workspace> _repository;
+    private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
 
-    public CreateWorkspaceCommandHandler(IUnitOfWork unitOfWork)
+    public CreateWorkspaceCommandHandler(
+        IUnitOfWork unitOfWork,
+        IUserSubscriptionEntitlementService userSubscriptionEntitlementService)
     {
         _repository = unitOfWork.Repository<Workspace>();
+        _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
     }
 
     public async Task<Result<WorkspaceResponse>> Handle(CreateWorkspaceCommand request,
         CancellationToken cancellationToken)
     {
+        var entitlementResult = await _userSubscriptionEntitlementService.EnsureWorkspaceCreationAllowedAsync(
+            request.UserId,
+            cancellationToken);
+
+        if (entitlementResult.IsFailure)
+        {
+            return Result.Failure<WorkspaceResponse>(entitlementResult.Error);
+        }
+
         var workspace = new Workspace
         {
             Id = Guid.CreateVersion7(),

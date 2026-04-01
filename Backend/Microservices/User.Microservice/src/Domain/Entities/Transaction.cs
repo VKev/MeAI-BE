@@ -25,6 +25,8 @@ public sealed class Transaction
 
     public string? Status { get; set; }
 
+    public string? ProviderReferenceId { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 

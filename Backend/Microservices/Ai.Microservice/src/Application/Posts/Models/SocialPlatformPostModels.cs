@@ -39,7 +39,8 @@ public sealed record SocialPlatformPostStatsResponse(
     long? Shares,
     long? Reposts,
     long? Quotes,
-    long TotalInteractions);
+    long TotalInteractions,
+    IReadOnlyDictionary<string, long>? ReactionBreakdown = null);
 
 public sealed record SocialPlatformPostAnalysisResponse(
     decimal? EngagementRateByViews,
