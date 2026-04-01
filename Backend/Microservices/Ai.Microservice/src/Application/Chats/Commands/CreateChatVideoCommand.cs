@@ -8,6 +8,7 @@ using MassTransit;
 using MediatR;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Contracts.VideoGenerating;
+using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Extensions;
 
 namespace Application.Chats.Commands;
@@ -138,6 +139,27 @@ public sealed class CreateChatVideoCommandHandler
         };
 
         await _bus.Publish(message, cancellationToken);
+
+        await _bus.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                request.UserId,
+                NotificationTypes.AiVideoGenerationSubmitted,
+                "Video generation started",
+                "Your video request was accepted and is being processed.",
+                new
+                {
+                    correlationId,
+                    chatId = chat.Id,
+                    resourceIds,
+                    model,
+                    aspectRatio,
+                    request.Seeds,
+                    enableTranslation,
+                    request.Watermark
+                },
+                request.UserId,
+                message.CreatedAt),
+            cancellationToken);
 
         return Result.Success(new ChatVideoResponse(chat.Id, correlationId));
     }

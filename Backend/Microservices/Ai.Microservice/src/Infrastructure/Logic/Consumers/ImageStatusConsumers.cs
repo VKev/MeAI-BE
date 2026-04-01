@@ -6,6 +6,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Contracts.ImageGenerating;
+using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Extensions;
 
 namespace Infrastructure.Logic.Consumers;
@@ -51,6 +52,23 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
                 "Image task updated to Completed. Id: {Id}, ResultUrls Count: {Count}",
                 imageTask.Id,
                 message.ResultUrls?.Count ?? 0);
+
+            await context.Publish(
+                NotificationRequestedEventFactory.CreateForUser(
+                    imageTask.UserId,
+                    NotificationTypes.AiImageGenerationCompleted,
+                    "Image generation completed",
+                    "Your generated image is ready.",
+                    new
+                    {
+                        message.CorrelationId,
+                        message.KieTaskId,
+                        resultCount = message.ResultUrls?.Count ?? 0,
+                        imageTask.Id,
+                        imageTask.CompletedAt
+                    },
+                    createdAt: message.CompletedAt),
+                context.CancellationToken);
 
             await TryAttachChatResultsAsync(
                 imageTask.UserId,
@@ -187,6 +205,24 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
             _logger.LogInformation(
                 "Image task updated to Failed. Id: {Id}",
                 imageTask.Id);
+
+            await context.Publish(
+                NotificationRequestedEventFactory.CreateForUser(
+                    imageTask.UserId,
+                    NotificationTypes.AiImageGenerationFailed,
+                    "Image generation failed",
+                    "Your image request could not be completed.",
+                    new
+                    {
+                        message.CorrelationId,
+                        message.KieTaskId,
+                        message.ErrorCode,
+                        message.ErrorMessage,
+                        imageTask.Id,
+                        imageTask.CompletedAt
+                    },
+                    createdAt: message.FailedAt),
+                context.CancellationToken);
         }
         else
         {

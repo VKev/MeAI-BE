@@ -5,6 +5,7 @@ using Infrastructure.Logic.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Contracts.VideoGenerating;
 using SharedLibrary.Extensions;
 
@@ -50,6 +51,37 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
                 "Video task updated to Completed. Id: {Id}, ResultUrls: {ResultUrls}",
                 videoTask.Id,
                 message.ResultUrls);
+
+            List<string>? resultUrls = null;
+            if (!string.IsNullOrWhiteSpace(message.ResultUrls))
+            {
+                try
+                {
+                    resultUrls = JsonSerializer.Deserialize<List<string>>(message.ResultUrls);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "Failed to parse result URLs for notification. CorrelationId: {CorrelationId}", message.CorrelationId);
+                }
+            }
+
+            await context.Publish(
+                NotificationRequestedEventFactory.CreateForUser(
+                    videoTask.UserId,
+                    NotificationTypes.AiVideoGenerationCompleted,
+                    "Video generation completed",
+                    "Your generated video is ready.",
+                    new
+                    {
+                        message.CorrelationId,
+                        message.VeoTaskId,
+                        resultCount = resultUrls?.Count ?? 0,
+                        message.Resolution,
+                        videoTask.Id,
+                        videoTask.CompletedAt
+                    },
+                    createdAt: message.CompletedAt),
+                context.CancellationToken);
 
             await TryAttachChatResultsAsync(videoTask.UserId, message.CorrelationId, message.ResultUrls, context.CancellationToken);
         }
@@ -203,6 +235,24 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
             _logger.LogInformation(
                 "Video task updated to Failed. Id: {Id}",
                 videoTask.Id);
+
+            await context.Publish(
+                NotificationRequestedEventFactory.CreateForUser(
+                    videoTask.UserId,
+                    NotificationTypes.AiVideoGenerationFailed,
+                    "Video generation failed",
+                    "Your video request could not be completed.",
+                    new
+                    {
+                        message.CorrelationId,
+                        message.VeoTaskId,
+                        message.ErrorCode,
+                        message.ErrorMessage,
+                        videoTask.Id,
+                        videoTask.CompletedAt
+                    },
+                    createdAt: message.FailedAt),
+                context.CancellationToken);
         }
         else
         {

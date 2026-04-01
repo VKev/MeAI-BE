@@ -2,10 +2,12 @@ using Application.Abstractions.Data;
 using Application.Abstractions.Payments;
 using Application.Subscriptions.Models;
 using Domain.Entities;
+using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Extensions;
 
 namespace Application.Subscriptions.Commands;
@@ -24,16 +26,19 @@ public sealed class PurchaseSubscriptionCommandHandler
     private readonly IRepository<Transaction> _transactionRepository;
     private readonly IRepository<UserSubscription> _userSubscriptionRepository;
     private readonly IStripePaymentService _stripePaymentService;
+    private readonly IBus _bus;
 
     public PurchaseSubscriptionCommandHandler(
         IUnitOfWork unitOfWork,
-        IStripePaymentService stripePaymentService)
+        IStripePaymentService stripePaymentService,
+        IBus bus)
     {
         _subscriptionRepository = unitOfWork.Repository<Subscription>();
         _userRepository = unitOfWork.Repository<User>();
         _transactionRepository = unitOfWork.Repository<Transaction>();
         _userSubscriptionRepository = unitOfWork.Repository<UserSubscription>();
         _stripePaymentService = stripePaymentService;
+        _bus = bus;
     }
 
     public async Task<Result<PurchaseSubscriptionResponse>> Handle(
@@ -168,6 +173,7 @@ public sealed class PurchaseSubscriptionCommandHandler
         await _transactionRepository.AddAsync(transaction, cancellationToken);
 
         Guid? userSubscriptionId = null;
+        DateTime? userSubscriptionEndDate = null;
         var subscriptionActivated = false;
         var isPaymentSucceeded = string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase);
         var isSubscriptionActive = string.Equals(status, "active", StringComparison.OrdinalIgnoreCase)
@@ -188,6 +194,7 @@ public sealed class PurchaseSubscriptionCommandHandler
 
             await _userSubscriptionRepository.AddAsync(userSubscription, cancellationToken);
             userSubscriptionId = userSubscription.Id;
+            userSubscriptionEndDate = userSubscription.EndDate;
             subscriptionActivated = true;
         }
 
@@ -204,6 +211,30 @@ public sealed class PurchaseSubscriptionCommandHandler
             transaction.Id,
             subscriptionActivated,
             userSubscriptionId);
+
+        if (subscriptionActivated)
+        {
+            await _bus.Publish(
+                NotificationRequestedEventFactory.CreateForUser(
+                    request.UserId,
+                    request.Renew ? NotificationTypes.UserSubscriptionRenewed : NotificationTypes.UserSubscriptionActivated,
+                    request.Renew ? "Subscription renewed" : "Subscription activated",
+                    request.Renew
+                        ? $"Your {subscription.Name} subscription was renewed successfully."
+                        : $"Your {subscription.Name} subscription is now active.",
+                    new
+                    {
+                        subscriptionId = subscription.Id,
+                        subscription.Name,
+                        transaction.Id,
+                        request.Renew,
+                        userSubscriptionId,
+                        userSubscriptionEndDate
+                    },
+                    request.UserId,
+                    now),
+                cancellationToken);
+        }
 
         return Result.Success(response);
     }
