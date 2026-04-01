@@ -78,7 +78,7 @@ public class ArchitectureTest
     [Fact]
     public void Controller_Should_have_DependencyOnMediatR()
     {
-        var assembly = typeof(Infrastructure.AssemblyReference).Assembly;
+        var assembly = typeof(WebApi.AssemblyReference).Assembly;
 
         var testResult = Types
             .InAssembly(assembly)

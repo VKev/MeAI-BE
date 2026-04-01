@@ -1,7 +1,6 @@
 using Application.Notifications.Models;
 using Domain.Entities;
 using Domain.Repositories;
-using FluentValidation;
 using SharedLibrary.Abstractions.Messaging;
 using SharedLibrary.Common.ResponseModel;
 
@@ -9,15 +8,6 @@ namespace Application.Notifications.Queries;
 
 public sealed record GetUserNotificationsQuery(Guid UserId, bool OnlyUnread, int Limit)
     : IQuery<IReadOnlyList<NotificationDeliveryModel>>;
-
-public sealed class GetUserNotificationsQueryValidator : AbstractValidator<GetUserNotificationsQuery>
-{
-    public GetUserNotificationsQueryValidator()
-    {
-        RuleFor(x => x.UserId).NotEmpty();
-        RuleFor(x => x.Limit).InclusiveBetween(1, 100);
-    }
-}
 
 public sealed class GetUserNotificationsQueryHandler
     : IQueryHandler<GetUserNotificationsQuery, IReadOnlyList<NotificationDeliveryModel>>

@@ -46,8 +46,8 @@ public sealed class NotificationDispatchService
             ? Guid.CreateVersion7()
             : message.NotificationId;
 
-        var existingNotification = await _notificationRepository.GetByIdAsync(notificationId, cancellationToken);
-        if (existingNotification is not null)
+        var notificationAlreadyExists = await _notificationRepository.ExistsAsync(notificationId, cancellationToken);
+        if (notificationAlreadyExists)
         {
             _logger.LogInformation(
                 "Notification event ignored because notification already exists. NotificationId: {NotificationId}",

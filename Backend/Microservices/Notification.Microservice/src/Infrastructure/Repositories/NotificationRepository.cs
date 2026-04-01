@@ -19,10 +19,9 @@ public sealed class NotificationRepository : INotificationRepository
         return _dbSet.AddAsync(notification, cancellationToken).AsTask();
     }
 
-    public Task<Notification?> GetByIdAsync(Guid notificationId, CancellationToken cancellationToken)
+    public Task<bool> ExistsAsync(Guid notificationId, CancellationToken cancellationToken)
     {
         return _dbSet.AsNoTracking()
-            .Include(notification => notification.UserNotifications)
-            .FirstOrDefaultAsync(notification => notification.Id == notificationId, cancellationToken);
+            .AnyAsync(notification => notification.Id == notificationId, cancellationToken);
     }
 }

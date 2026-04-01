@@ -53,7 +53,6 @@ public sealed class UserNotificationRepository : IUserNotificationRepository
         CancellationToken cancellationToken)
     {
         return await _dbSet
-            .Include(userNotification => userNotification.Notification)
             .Where(userNotification => userNotification.UserId == userId && !userNotification.IsRead)
             .ToListAsync(cancellationToken);
     }
