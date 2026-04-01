@@ -3,6 +3,7 @@ using Domain.Repositories;
 using MassTransit;
 using MediatR;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Contracts.VideoGenerating;
 using SharedLibrary.Extensions;
 
@@ -69,6 +70,23 @@ public sealed class ExtendVideoCommandHandler
         };
 
         await _bus.Publish(message, cancellationToken);
+
+        await _bus.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                request.UserId,
+                NotificationTypes.AiVideoExtensionSubmitted,
+                "Video extension started",
+                "Your video extension request was accepted and is being processed.",
+                new
+                {
+                    correlationId,
+                    request.OriginalCorrelationId,
+                    request.Seeds,
+                    request.Watermark
+                },
+                request.UserId,
+                message.CreatedAt),
+            cancellationToken);
 
         return Result.Success(new ExtendVideoCommandResponse(correlationId));
     }

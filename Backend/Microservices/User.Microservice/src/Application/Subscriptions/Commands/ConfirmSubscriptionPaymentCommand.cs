@@ -1,9 +1,11 @@
 using Application.Abstractions.Data;
 using Domain.Entities;
+using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Extensions;
 
 namespace Application.Subscriptions.Commands;
@@ -21,12 +23,14 @@ public sealed class ConfirmSubscriptionPaymentCommandHandler
     private readonly IRepository<Subscription> _subscriptionRepository;
     private readonly IRepository<Transaction> _transactionRepository;
     private readonly IRepository<UserSubscription> _userSubscriptionRepository;
+    private readonly IBus _bus;
 
-    public ConfirmSubscriptionPaymentCommandHandler(IUnitOfWork unitOfWork)
+    public ConfirmSubscriptionPaymentCommandHandler(IUnitOfWork unitOfWork, IBus bus)
     {
         _subscriptionRepository = unitOfWork.Repository<Subscription>();
         _transactionRepository = unitOfWork.Repository<Transaction>();
         _userSubscriptionRepository = unitOfWork.Repository<UserSubscription>();
+        _bus = bus;
     }
 
     public async Task<Result<bool>> Handle(
@@ -153,6 +157,27 @@ public sealed class ConfirmSubscriptionPaymentCommandHandler
             userSubscription.UpdatedAt = now;
             _userSubscriptionRepository.Update(userSubscription);
         }
+
+        await _bus.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                request.UserId,
+                request.Renew ? NotificationTypes.UserSubscriptionRenewed : NotificationTypes.UserSubscriptionActivated,
+                request.Renew ? "Subscription renewed" : "Subscription activated",
+                request.Renew
+                    ? $"Your {subscription.Name} subscription was renewed successfully."
+                    : $"Your {subscription.Name} subscription is now active.",
+                new
+                {
+                    subscriptionId = subscription.Id,
+                    subscription.Name,
+                    transaction.Id,
+                    request.Renew,
+                    userSubscriptionId = userSubscription.Id,
+                    userSubscription.EndDate
+                },
+                request.UserId,
+                now),
+            cancellationToken);
 
         return Result.Success(true);
     }

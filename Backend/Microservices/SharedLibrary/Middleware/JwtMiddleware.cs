@@ -31,6 +31,13 @@ public class JwtMiddleware
 
     private static string? ExtractToken(HttpContext context)
     {
+        if (context.Request.Path.StartsWithSegments("/hubs") &&
+            context.Request.Query.TryGetValue("access_token", out var queryToken) &&
+            !string.IsNullOrWhiteSpace(queryToken))
+        {
+            return queryToken.ToString().Trim();
+        }
+
         var cookieNames = new[] { "access_token" };
         foreach (var name in cookieNames)
         {

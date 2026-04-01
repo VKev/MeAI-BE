@@ -17,6 +17,7 @@ using Infrastructure.Logic.Facebook;
 using Infrastructure.Logic.Instagram;
 using Infrastructure.Logic.TikTok;
 using Infrastructure.Logic.Threads;
+using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using SharedLibrary.Authentication;
 using SharedLibrary.Configs;
@@ -65,6 +66,26 @@ namespace Infrastructure
                 return ConnectionMultiplexer.Connect(options);
             });
             services.AddSingleton<IVerificationCodeStore, RedisVerificationCodeStore>();
+            services.AddMassTransit(x =>
+            {
+                x.UsingRabbitMq((context, cfg) =>
+                {
+                    var env = context.GetRequiredService<EnvironmentConfig>();
+
+                    if (env.IsRabbitMqCloud && !string.IsNullOrEmpty(env.RabbitMqUrl))
+                    {
+                        cfg.Host(new Uri(env.RabbitMqUrl));
+                    }
+                    else
+                    {
+                        cfg.Host(env.RabbitMqHost, (ushort)env.RabbitMqPort, "/", h =>
+                        {
+                            h.Username(env.RabbitMqUser);
+                            h.Password(env.RabbitMqPassword);
+                        });
+                    }
+                });
+            });
             return services;
         }
     }
