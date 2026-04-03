@@ -51,7 +51,8 @@ public sealed class KieImageService : IKieImageService
                 ImageInput = request.ImageInput ?? new List<string>(),
                 AspectRatio = request.AspectRatio,
                 Resolution = request.Resolution,
-                OutputFormat = request.OutputFormat
+                OutputFormat = request.OutputFormat,
+                NumberOfVariances = request.NumberOfVariances
             },
             CallBackUrl = BuildCallbackUrl(request.CorrelationId)
         };
@@ -62,7 +63,7 @@ public sealed class KieImageService : IKieImageService
             httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
             httpRequest.Content = JsonContent.Create(payload, options: JsonOptions);
 
-            _logger.LogInformation("Sending image generation request to Kie API (nano-banana-pro)");
+            _logger.LogInformation("Sending image generation request to Kie API (nano-banana-pro) with variances {NumberOfVariances}", request.NumberOfVariances);
 
             var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -224,6 +225,9 @@ public sealed class KieImageService : IKieImageService
 
         [JsonPropertyName("output_format")]
         public string OutputFormat { get; set; } = "png";
+
+        [JsonPropertyName("number_of_variances")]
+        public int NumberOfVariances { get; set; } = 1;
     }
 
     private sealed class KieApiResponse

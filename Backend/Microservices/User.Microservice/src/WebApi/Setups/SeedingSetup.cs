@@ -32,6 +32,16 @@ public static class SeedingSetup
 
         try
         {
+            var configSeeder = scope.ServiceProvider.GetRequiredService<ConfigSeeder>();
+            await configSeeder.SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Failed to seed config at startup.");
+        }
+
+        try
+        {
             var subscriptionSeeder = scope.ServiceProvider.GetRequiredService<SubscriptionSeeder>();
             await subscriptionSeeder.SeedAsync();
         }

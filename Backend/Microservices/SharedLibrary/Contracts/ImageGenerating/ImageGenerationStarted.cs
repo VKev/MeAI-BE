@@ -16,5 +16,7 @@ public class ImageGenerationStarted
 
     public string OutputFormat { get; set; } = "png";
 
+    public int NumberOfVariances { get; set; } = 1;
+
     public DateTime CreatedAt { get; set; }
 }

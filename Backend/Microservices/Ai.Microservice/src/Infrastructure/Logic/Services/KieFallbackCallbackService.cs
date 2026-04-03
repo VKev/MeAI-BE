@@ -12,7 +12,8 @@ public interface IKieFallbackCallbackService
     Task<bool> SendImageSuccessCallbackAsync(
         Guid correlationId,
         string kieTaskId,
-        CancellationToken cancellationToken);
+        int numberOfVariances = 1,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class KieFallbackCallbackService : IKieFallbackCallbackService
@@ -40,7 +41,8 @@ public sealed class KieFallbackCallbackService : IKieFallbackCallbackService
     public async Task<bool> SendImageSuccessCallbackAsync(
         Guid correlationId,
         string kieTaskId,
-        CancellationToken cancellationToken)
+        int numberOfVariances = 1,
+        CancellationToken cancellationToken = default)
     {
         if (!_fallbackTemplateService.TryGetImageFallback(out var fallbackAsset))
         {
@@ -59,7 +61,9 @@ public sealed class KieFallbackCallbackService : IKieFallbackCallbackService
             return false;
         }
 
-        var resultJson = JsonSerializer.Serialize(new KieResultJson(new List<string> { fallbackAsset.ResultUrl }));
+        var varianceCount = Math.Max(1, numberOfVariances);
+        var resultJson = JsonSerializer.Serialize(new KieResultJson(
+            Enumerable.Repeat(fallbackAsset.ResultUrl, varianceCount).ToList()));
         var payload = new KieCallbackPayload(
             Code: 200,
             Msg: "Fallback success",

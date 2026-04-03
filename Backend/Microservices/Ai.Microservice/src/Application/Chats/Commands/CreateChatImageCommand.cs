@@ -20,7 +20,8 @@ public sealed record CreateChatImageCommand(
     IReadOnlyList<Guid> ResourceIds,
     string? AspectRatio,
     string? Resolution,
-    string? OutputFormat) : IRequest<Result<ChatImageResponse>>;
+    string? OutputFormat,
+    int? NumberOfVariances) : IRequest<Result<ChatImageResponse>>;
 
 public sealed record ChatImageResponse(
     Guid ChatId,
@@ -98,6 +99,7 @@ public sealed class CreateChatImageCommandHandler
         var aspectRatio = ResolveAspectRatio(request.AspectRatio, activeConfig?.MediaAspectRatio, "1:1");
         var resolution = string.IsNullOrWhiteSpace(request.Resolution) ? "1K" : request.Resolution.Trim();
         var outputFormat = string.IsNullOrWhiteSpace(request.OutputFormat) ? "png" : request.OutputFormat.Trim();
+        var numberOfVariances = ResolveNumberOfVariances(request.NumberOfVariances, activeConfig?.NumberOfVariances, 1);
 
         var correlationId = Guid.CreateVersion7();
 
@@ -105,7 +107,8 @@ public sealed class CreateChatImageCommandHandler
             correlationId,
             aspectRatio,
             resolution,
-            outputFormat);
+            outputFormat,
+            numberOfVariances);
 
         var chat = new Chat
         {
@@ -129,6 +132,7 @@ public sealed class CreateChatImageCommandHandler
             AspectRatio = aspectRatio,
             Resolution = resolution,
             OutputFormat = outputFormat,
+            NumberOfVariances = numberOfVariances,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
@@ -147,7 +151,8 @@ public sealed class CreateChatImageCommandHandler
                     resourceIds,
                     aspectRatio,
                     resolution,
-                    outputFormat
+                    outputFormat,
+                    numberOfVariances
                 },
                 request.UserId,
                 message.CreatedAt),
@@ -160,12 +165,28 @@ public sealed class CreateChatImageCommandHandler
         Guid CorrelationId,
         string AspectRatio,
         string Resolution,
-        string OutputFormat);
+        string OutputFormat,
+        int NumberOfVariances);
 
     private async Task<UserAiConfig?> TryGetActiveConfigAsync(CancellationToken cancellationToken)
     {
         var result = await _userConfigService.GetActiveConfigAsync(cancellationToken);
         return result.IsSuccess ? result.Value : null;
+    }
+
+    private static int ResolveNumberOfVariances(int? requestedValue, int? configuredValue, int fallback)
+    {
+        if (requestedValue.GetValueOrDefault() > 0)
+        {
+            return requestedValue.Value;
+        }
+
+        if (configuredValue.GetValueOrDefault() > 0)
+        {
+            return configuredValue.Value;
+        }
+
+        return fallback;
     }
 
     private static string ResolveAspectRatio(string? requestedValue, string? configuredValue, string fallback)
