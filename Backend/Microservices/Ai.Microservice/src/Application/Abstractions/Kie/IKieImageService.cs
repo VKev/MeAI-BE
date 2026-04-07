@@ -12,6 +12,7 @@ public sealed record KieGenerateRequest(
     string AspectRatio = "1:1",
     string Resolution = "1K",
     string OutputFormat = "png",
+    int NumberOfVariances = 1,
     Guid? CorrelationId = null);
 
 public sealed record KieGenerateResult(

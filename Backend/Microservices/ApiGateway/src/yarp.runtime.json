@@ -1,0 +1,123 @@
+{
+  "ReverseProxy": {
+    "Routes": [
+      {
+        "RouteId": "user-root",
+        "ClusterId": "user",
+        "Match": {
+          "Path": "/api/User"
+        }
+      },
+      {
+        "RouteId": "user-catchall",
+        "ClusterId": "user",
+        "Match": {
+          "Path": "/api/User/{**catch-all}"
+        }
+      },
+      {
+        "RouteId": "ai-root",
+        "ClusterId": "ai",
+        "Match": {
+          "Path": "/api/Ai"
+        }
+      },
+      {
+        "RouteId": "ai-catchall",
+        "ClusterId": "ai",
+        "Match": {
+          "Path": "/api/Ai/{**catch-all}"
+        }
+      },
+      {
+        "RouteId": "notification-root",
+        "ClusterId": "notification",
+        "Match": {
+          "Path": "/api/Notification"
+        }
+      },
+      {
+        "RouteId": "notification-catchall",
+        "ClusterId": "notification",
+        "Match": {
+          "Path": "/api/Notification/{**catch-all}"
+        }
+      },
+      {
+        "RouteId": "notification-hub-root",
+        "ClusterId": "notification",
+        "Match": {
+          "Path": "/hubs/notifications"
+        }
+      },
+      {
+        "RouteId": "notification-hub-catchall",
+        "ClusterId": "notification",
+        "Match": {
+          "Path": "/hubs/notifications/{**catch-all}"
+        }
+      },
+      {
+        "RouteId": "notification-hub-api-root",
+        "ClusterId": "notification",
+        "Match": {
+          "Path": "/api/Notification/hubs/notifications"
+        },
+        "Transforms": [
+          {
+            "PathRemovePrefix": "/api/Notification"
+          }
+        ]
+      },
+      {
+        "RouteId": "notification-hub-api-catchall",
+        "ClusterId": "notification",
+        "Match": {
+          "Path": "/api/Notification/hubs/notifications/{**catch-all}"
+        },
+        "Transforms": [
+          {
+            "PathRemovePrefix": "/api/Notification"
+          }
+        ]
+      },
+      {
+        "RouteId": "ai-gemini-root",
+        "ClusterId": "ai",
+        "Match": {
+          "Path": "/api/Gemini"
+        }
+      },
+      {
+        "RouteId": "ai-gemini-catchall",
+        "ClusterId": "ai",
+        "Match": {
+          "Path": "/api/Gemini/{**catch-all}"
+        }
+      }
+    ],
+    "Clusters": {
+      "user": {
+        "Destinations": {
+          "user-destination": {
+            "Address": "http://localhost:5002/"
+          }
+        }
+      },
+      "ai": {
+        "Destinations": {
+          "ai-destination": {
+            "Address": "http://localhost:5001/"
+          }
+        }
+      },
+      "notification": {
+        "Destinations": {
+          "notification-destination": {
+            "Address": "http://localhost:5006/"
+          }
+        }
+      }
+    }
+  }
+}

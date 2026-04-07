@@ -323,7 +323,8 @@ public sealed class ChatsController : ApiController
             ResourceIds: resourceIdsResult.Value,
             AspectRatio: request.AspectRatio,
             Resolution: request.Resolution,
-            OutputFormat: request.OutputFormat);
+            OutputFormat: request.OutputFormat,
+            NumberOfVariances: request.NumberOfVariances);
 
         var result = await _mediator.Send(command, cancellationToken);
 
@@ -418,7 +419,8 @@ public sealed record CreateChatImageRequest(
     List<string>? ResourceIds,
     string? AspectRatio,
     string? Resolution,
-    string? OutputFormat);
+    string? OutputFormat,
+    int? NumberOfVariances);
 
 public sealed record CreateChatRequest(
     string? ChatSessionId,

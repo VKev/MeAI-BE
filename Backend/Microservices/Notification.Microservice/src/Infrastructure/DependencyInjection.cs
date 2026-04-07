@@ -7,6 +7,7 @@ using Infrastructure.Repositories;
 using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using StackExchange.Redis;
+using SharedLibrary.Authentication;
 using SharedLibrary.Configs;
 
 namespace Infrastructure
@@ -15,6 +16,7 @@ namespace Infrastructure
     {
         public static IServiceCollection AddInfrastructure(this IServiceCollection services)
         {
+            services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<INotificationRepository, NotificationRepository>();
             services.AddScoped<IUserNotificationRepository, UserNotificationRepository>();

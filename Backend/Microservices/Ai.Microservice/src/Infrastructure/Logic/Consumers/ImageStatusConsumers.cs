@@ -177,9 +177,11 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
         var isAlreadyFallbackTask = fallbackTaskId.StartsWith("fallback-", StringComparison.OrdinalIgnoreCase);
         if (!isAlreadyFallbackTask)
         {
+            var numberOfVariances = await ResolveNumberOfVariancesAsync(message.CorrelationId, context.CancellationToken);
             var callbackSent = await _kieFallbackCallbackService.SendImageSuccessCallbackAsync(
                 message.CorrelationId,
                 fallbackTaskId,
+                numberOfVariances,
                 context.CancellationToken);
 
             if (callbackSent)
@@ -230,5 +232,59 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
                 "ImageTask not found for CorrelationId: {CorrelationId}",
                 message.CorrelationId);
         }
+    }
+
+    private async Task<int> ResolveNumberOfVariancesAsync(Guid correlationId, CancellationToken cancellationToken)
+    {
+        var correlationText = correlationId.ToString();
+        var candidates = await _dbContext.Chats
+            .AsNoTracking()
+            .Where(c => c.Config != null && !c.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        var matched = candidates.FirstOrDefault(c =>
+            c.Config != null &&
+            c.Config.Contains(correlationText, StringComparison.OrdinalIgnoreCase));
+
+        if (matched is null || string.IsNullOrWhiteSpace(matched.Config))
+        {
+            return 1;
+        }
+
+        try
+        {
+            var config = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(matched.Config);
+            if (config is null)
+            {
+                return 1;
+            }
+
+            if (config.TryGetValue("NumberOfVariances", out var numberElement) ||
+                config.TryGetValue("numberOfVariances", out numberElement))
+            {
+                if (numberElement.ValueKind == JsonValueKind.Number &&
+                    numberElement.TryGetInt32(out var value) &&
+                    value > 0)
+                {
+                    return value;
+                }
+
+                if (numberElement.ValueKind == JsonValueKind.String &&
+                    int.TryParse(numberElement.GetString(), out var parsedValue) &&
+                    parsedValue > 0)
+                {
+                    return parsedValue;
+                }
+            }
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to parse chat config while resolving image variance count. CorrelationId: {CorrelationId}",
+                correlationId);
+        }
+
+        return 1;
     }
 }

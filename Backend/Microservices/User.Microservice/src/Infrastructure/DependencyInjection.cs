@@ -34,6 +34,7 @@ namespace Infrastructure
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddScoped<AdminUserSeeder>();
             services.AddScoped<DefaultUserSeeder>();
+            services.AddScoped<ConfigSeeder>();
             services.AddScoped<SubscriptionSeeder>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<IEmailRepository, EmailRepository>();

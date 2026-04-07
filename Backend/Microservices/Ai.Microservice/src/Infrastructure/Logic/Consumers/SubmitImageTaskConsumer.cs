@@ -63,6 +63,7 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
             AspectRatio: message.AspectRatio,
             Resolution: message.Resolution,
             OutputFormat: message.OutputFormat,
+            NumberOfVariances: message.NumberOfVariances,
             CorrelationId: message.CorrelationId);
 
         var result = await _kieImageService.GenerateImageAsync(request, context.CancellationToken);
@@ -88,6 +89,7 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
             await TryHandleProviderAcceptedButUnprocessableAsync(
                 message.CorrelationId,
                 result.TaskId,
+                message.NumberOfVariances,
                 context.CancellationToken);
         }
         else
@@ -116,6 +118,7 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
             var callbackSent = await _kieFallbackCallbackService.SendImageSuccessCallbackAsync(
                 message.CorrelationId,
                 fallbackTaskId,
+                message.NumberOfVariances,
                 context.CancellationToken);
 
             if (callbackSent)
@@ -143,6 +146,7 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
     private async Task TryHandleProviderAcceptedButUnprocessableAsync(
         Guid correlationId,
         string kieTaskId,
+        int numberOfVariances,
         CancellationToken cancellationToken)
     {
         for (var attempt = 1; attempt <= MaxRecordInfoAttempts; attempt++)
@@ -168,6 +172,7 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
                 var callbackSent = await _kieFallbackCallbackService.SendImageSuccessCallbackAsync(
                     correlationId,
                     kieTaskId,
+                    numberOfVariances,
                     cancellationToken);
 
                 if (!callbackSent)
@@ -188,6 +193,7 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
                     await TryTriggerTimeoutFallbackAsync(
                         correlationId,
                         kieTaskId,
+                        numberOfVariances,
                         recordInfo.Data?.State,
                         cancellationToken);
                 }
@@ -209,6 +215,7 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
     private async Task TryTriggerTimeoutFallbackAsync(
         Guid correlationId,
         string kieTaskId,
+        int numberOfVariances,
         string? lastKnownState,
         CancellationToken cancellationToken)
     {
@@ -231,6 +238,7 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
         var callbackSent = await _kieFallbackCallbackService.SendImageSuccessCallbackAsync(
             correlationId,
             kieTaskId,
+            numberOfVariances,
             cancellationToken);
 
         if (!callbackSent)
