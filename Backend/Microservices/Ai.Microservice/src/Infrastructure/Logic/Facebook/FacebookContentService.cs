@@ -9,8 +9,12 @@ namespace Infrastructure.Logic.Facebook;
 public sealed class FacebookContentService : IFacebookContentService
 {
     private const string GraphApiBaseUrl = "https://graph.facebook.com/v25.0";
-    private const string PostFields =
-        "id,message,story,created_time,permalink_url,full_picture,shares,comments.limit(0).summary(true),reactions.limit(0).summary(true),attachments{media_type,type,url,title,description,media,target,subattachments}";
+    private const string BasePostFields =
+        "id,message,story,created_time,permalink_url,full_picture,shares,attachments{media_type,type,url,title,description,media,target{id},subattachments{media_type,type,url,title,description,media,target{id}}}";
+    private const string PostInsightMetrics =
+        "post_impressions_unique,post_reactions_by_type_total,post_activity_by_action_type";
+    private const string PageInsightFields = "id,name,followers_count,fan_count";
+    private const string CommentFields = "id,message,created_time,like_count,comment_count,permalink_url,from{id,name}";
 
     private readonly HttpClient _httpClient;
 
@@ -160,6 +164,109 @@ public sealed class FacebookContentService : IFacebookContentService
             lastError ?? new Error("Facebook.PostNotFound", "Facebook post was not found for the current account."));
     }
 
+    public async Task<Result<FacebookPageInsights>> GetPageInsightsAsync(
+        FacebookPageInsightsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.UserAccessToken))
+        {
+            return Result.Failure<FacebookPageInsights>(
+                new Error("Facebook.InvalidToken", "Facebook user access token is missing."));
+        }
+
+        var pagesResult = await ResolvePagesAsync(
+            request.UserAccessToken,
+            request.PreferredPageId,
+            request.PreferredPageAccessToken,
+            cancellationToken);
+
+        if (pagesResult.IsFailure)
+        {
+            return Result.Failure<FacebookPageInsights>(pagesResult.Error);
+        }
+
+        foreach (var page in pagesResult.Value)
+        {
+            var url =
+                $"{GraphApiBaseUrl}/{Uri.EscapeDataString(page.PageId)}?fields={Uri.EscapeDataString(PageInsightFields)}&access_token={Uri.EscapeDataString(page.PageAccessToken)}";
+
+            var response = await SendGetAsync<FacebookPageInsightsDto>(url, cancellationToken);
+            if (response.IsFailure)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(response.Value.Id))
+            {
+                continue;
+            }
+
+            return Result.Success(new FacebookPageInsights(
+                PageId: response.Value.Id!,
+                Name: response.Value.Name,
+                Followers: response.Value.FollowersCount,
+                Fans: response.Value.FanCount));
+        }
+
+        return Result.Failure<FacebookPageInsights>(
+            new Error("Facebook.ApiWarning", "Facebook page insights are unavailable."));
+    }
+
+    public async Task<Result<IReadOnlyList<SocialPlatformCommentItem>>> GetPostCommentsAsync(
+        FacebookPostCommentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.UserAccessToken) || string.IsNullOrWhiteSpace(request.PostId))
+        {
+            return Result.Failure<IReadOnlyList<SocialPlatformCommentItem>>(
+                new Error("Facebook.InvalidRequest", "Facebook access token and post id are required."));
+        }
+
+        var pagesResult = await ResolvePagesAsync(
+            request.UserAccessToken,
+            request.PreferredPageId,
+            request.PreferredPageAccessToken,
+            cancellationToken);
+
+        if (pagesResult.IsFailure)
+        {
+            return Result.Failure<IReadOnlyList<SocialPlatformCommentItem>>(pagesResult.Error);
+        }
+
+        var pages = OrderPagesForLookup(pagesResult.Value, request.PostId);
+        var limit = NormalizeCommentLimit(request.Limit);
+
+        foreach (var page in pages)
+        {
+            var url =
+                $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.PostId)}/comments?fields={Uri.EscapeDataString(CommentFields)}&filter=stream&limit={limit}&access_token={Uri.EscapeDataString(page.PageAccessToken)}";
+
+            var response = await SendGetAsync<FacebookCommentsApiResponse>(url, cancellationToken);
+            if (response.IsFailure)
+            {
+                continue;
+            }
+
+            var comments = (response.Value.Data ?? Array.Empty<FacebookCommentDto>())
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => new SocialPlatformCommentItem(
+                    Id: item.Id!,
+                    Text: item.Message,
+                    AuthorId: item.From?.Id,
+                    AuthorName: item.From?.Name,
+                    AuthorUsername: null,
+                    CreatedAt: ToDateTimeOffset(item.CreatedTime),
+                    LikeCount: item.LikeCount,
+                    ReplyCount: item.CommentCount,
+                    Permalink: item.PermalinkUrl))
+                .ToList();
+
+            return Result.Success<IReadOnlyList<SocialPlatformCommentItem>>(comments);
+        }
+
+        return Result.Success<IReadOnlyList<SocialPlatformCommentItem>>(Array.Empty<SocialPlatformCommentItem>());
+    }
+
     private async Task<Result<IReadOnlyList<PageAccessInfo>>> ResolvePagesAsync(
         string userAccessToken,
         string? preferredPageId,
@@ -243,7 +350,7 @@ public sealed class FacebookContentService : IFacebookContentService
     {
         var query = new List<string>
         {
-            $"fields={Uri.EscapeDataString(PostFields)}",
+            $"fields={Uri.EscapeDataString(BasePostFields)}",
             $"limit={limit}",
             $"access_token={Uri.EscapeDataString(pageAccessToken)}"
         };
@@ -281,7 +388,7 @@ public sealed class FacebookContentService : IFacebookContentService
         CancellationToken cancellationToken)
     {
         var url =
-            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(postId)}?fields={Uri.EscapeDataString(PostFields)}&access_token={Uri.EscapeDataString(pageAccessToken)}";
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(postId)}?fields={Uri.EscapeDataString(BasePostFields)}&access_token={Uri.EscapeDataString(pageAccessToken)}";
 
         var response = await SendGetAsync<FacebookPostDto>(url, cancellationToken, notFoundErrorCode: "Facebook.PostNotFound");
         if (response.IsFailure)
@@ -295,7 +402,154 @@ public sealed class FacebookContentService : IFacebookContentService
                 new Error("Facebook.PostNotFound", "Facebook post was not found for the current account."));
         }
 
-        return Result.Success(MapPost(pageId, response.Value));
+        var optionalMetricsTask = TryGetOptionalPostMetricsAsync(response.Value.Id, pageAccessToken, cancellationToken);
+        var videoViewCountTask = TryGetVideoViewCountAsync(response.Value, pageAccessToken, cancellationToken);
+
+        await Task.WhenAll(optionalMetricsTask, videoViewCountTask);
+
+        var optionalMetrics = await optionalMetricsTask;
+        var viewCount = await videoViewCountTask ?? optionalMetrics.ReachCount;
+
+        return Result.Success(MapPost(
+            pageId,
+            response.Value,
+            viewCount,
+            optionalMetrics.ReactionCount,
+            optionalMetrics.CommentCount,
+            response.Value.Shares?.Count ?? optionalMetrics.ShareCount,
+            optionalMetrics.ReactionBreakdown));
+    }
+
+    private async Task<FacebookOptionalMetrics> TryGetOptionalPostMetricsAsync(
+        string postId,
+        string pageAccessToken,
+        CancellationToken cancellationToken)
+    {
+        var insightsTask = TryGetPostInsightsAsync(postId, pageAccessToken, cancellationToken);
+        var reactionCountTask = TryGetReactionCountAsync(postId, pageAccessToken, cancellationToken);
+        var commentCountTask = TryGetCommentCountAsync(postId, pageAccessToken, cancellationToken);
+
+        await Task.WhenAll(insightsTask, reactionCountTask, commentCountTask);
+
+        var insights = await insightsTask;
+
+        return new FacebookOptionalMetrics(
+            ReachCount: insights?.ReachCount,
+            ReactionCount: await reactionCountTask ?? insights?.ReactionCount,
+            CommentCount: await commentCountTask ?? insights?.CommentCount,
+            ShareCount: insights?.ShareCount,
+            ReactionBreakdown: insights?.ReactionBreakdown);
+    }
+
+    private async Task<long?> TryGetCommentCountAsync(
+        string postId,
+        string pageAccessToken,
+        CancellationToken cancellationToken)
+    {
+        var url =
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(postId)}" +
+            $"/comments?summary=true&filter=stream&limit=0&access_token={Uri.EscapeDataString(pageAccessToken)}";
+
+        return await TryGetEdgeSummaryCountAsync(url, cancellationToken);
+    }
+
+    private async Task<long?> TryGetReactionCountAsync(
+        string postId,
+        string pageAccessToken,
+        CancellationToken cancellationToken)
+    {
+        var url =
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(postId)}" +
+            $"/reactions?summary=true&limit=0&access_token={Uri.EscapeDataString(pageAccessToken)}";
+
+        return await TryGetEdgeSummaryCountAsync(url, cancellationToken);
+    }
+
+    private async Task<long?> TryGetEdgeSummaryCountAsync(
+        string url,
+        CancellationToken cancellationToken)
+    {
+        var response = await SendGetAsync<FacebookEdgeSummaryResponse>(url, cancellationToken);
+        if (response.IsFailure)
+        {
+            return null;
+        }
+
+        return response.Value.Summary?.TotalCount;
+    }
+
+    private async Task<FacebookPostInsightMetrics?> TryGetPostInsightsAsync(
+        string postId,
+        string pageAccessToken,
+        CancellationToken cancellationToken)
+    {
+        var url =
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(postId)}" +
+            $"/insights?metric={Uri.EscapeDataString(PostInsightMetrics)}&access_token={Uri.EscapeDataString(pageAccessToken)}";
+
+        var response = await SendGetAsync<FacebookPostInsightsResponse>(url, cancellationToken);
+        if (response.IsFailure)
+        {
+            return null;
+        }
+
+        var reachCount = TryReadInsightMetricLong(response.Value, "post_impressions_unique");
+        var reactionCount = TryReadInsightMetricTotal(response.Value, "post_reactions_by_type_total");
+        var reactionBreakdown = TryReadInsightMetricBreakdown(response.Value, "post_reactions_by_type_total");
+        var commentCount = TryReadInsightMetricActionCount(response.Value, "post_activity_by_action_type", "comment");
+        var shareCount = TryReadInsightMetricActionCount(response.Value, "post_activity_by_action_type", "share");
+
+        if (reachCount is null && reactionCount is null && commentCount is null && shareCount is null &&
+            reactionBreakdown == null)
+        {
+            return null;
+        }
+
+        return new FacebookPostInsightMetrics(
+            ReachCount: reachCount,
+            ReactionCount: reactionCount,
+            CommentCount: commentCount,
+            ShareCount: shareCount,
+            ReactionBreakdown: reactionBreakdown);
+    }
+
+    private async Task<long?> TryGetVideoViewCountAsync(
+        FacebookPostDto post,
+        string pageAccessToken,
+        CancellationToken cancellationToken)
+    {
+        var attachment = post.Attachments?.Data?.FirstOrDefault();
+        var nestedAttachment = attachment?.Subattachments?.Data?.FirstOrDefault();
+        var effectiveAttachment = nestedAttachment ?? attachment;
+
+        var mediaType = NormalizeMediaType(
+            effectiveAttachment?.MediaType
+            ?? attachment?.MediaType
+            ?? effectiveAttachment?.Type
+            ?? attachment?.Type);
+
+        if (!string.Equals(mediaType, "video", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var videoId = TryGetVideoId(post);
+        if (string.IsNullOrWhiteSpace(videoId) || string.IsNullOrWhiteSpace(pageAccessToken))
+        {
+            return null;
+        }
+
+        var url =
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(videoId)}" +
+            $"/video_insights?metric=total_video_views&access_token={Uri.EscapeDataString(pageAccessToken)}";
+
+        var response = await SendGetAsync<FacebookVideoInsightsResponse>(url, cancellationToken);
+        if (response.IsFailure)
+        {
+            return null;
+        }
+
+        return TryReadInsightMetricValue(response.Value, "total_video_views");
     }
 
     private async Task<Result<TResponse>> SendGetAsync<TResponse>(
@@ -354,7 +608,14 @@ public sealed class FacebookContentService : IFacebookContentService
             .ToList();
     }
 
-    private static FacebookPostDetails MapPost(string pageId, FacebookPostDto post)
+    private static FacebookPostDetails MapPost(
+        string pageId,
+        FacebookPostDto post,
+        long? viewCount = null,
+        long? reactionCount = null,
+        long? commentCount = null,
+        long? shareCount = null,
+        IReadOnlyDictionary<string, long>? reactionBreakdown = null)
     {
         var attachment = post.Attachments?.Data?.FirstOrDefault();
         var nestedAttachment = attachment?.Subattachments?.Data?.FirstOrDefault();
@@ -363,7 +624,11 @@ public sealed class FacebookContentService : IFacebookContentService
         var mediaImageUrl = effectiveAttachment?.Media?.Image?.Src
                             ?? attachment?.Media?.Image?.Src;
 
-        var mediaType = NormalizeMediaType(effectiveAttachment?.MediaType ?? attachment?.MediaType ?? attachment?.Type);
+        var mediaType = NormalizeMediaType(
+            effectiveAttachment?.MediaType
+            ?? attachment?.MediaType
+            ?? effectiveAttachment?.Type
+            ?? attachment?.Type);
         var mediaUrl = effectiveAttachment?.Url
                        ?? attachment?.Url
                        ?? mediaImageUrl
@@ -385,9 +650,11 @@ public sealed class FacebookContentService : IFacebookContentService
             ThumbnailUrl: thumbnailUrl,
             AttachmentTitle: effectiveAttachment?.Title ?? attachment?.Title,
             AttachmentDescription: effectiveAttachment?.Description ?? attachment?.Description,
-            ReactionCount: post.Reactions?.Summary?.TotalCount,
-            CommentCount: post.Comments?.Summary?.TotalCount,
-            ShareCount: post.Shares?.Count);
+            ViewCount: viewCount,
+            ReactionCount: reactionCount ?? post.Reactions?.Summary?.TotalCount,
+            CommentCount: commentCount ?? post.Comments?.Summary?.TotalCount,
+            ShareCount: shareCount ?? post.Shares?.Count ?? 0,
+            ReactionBreakdown: reactionBreakdown);
     }
 
     private static string? NormalizeMediaType(string? value)
@@ -397,12 +664,17 @@ public sealed class FacebookContentService : IFacebookContentService
             return null;
         }
 
-        return value.ToLowerInvariant() switch
+        var normalized = value.ToLowerInvariant();
+
+        return normalized switch
         {
             "photo" => "image",
             "album" => "image",
             "video_inline" => "video",
-            _ => value.ToLowerInvariant()
+            _ when normalized.Contains("video", StringComparison.Ordinal) => "video",
+            _ when normalized.Contains("photo", StringComparison.Ordinal) => "image",
+            _ when normalized.Contains("image", StringComparison.Ordinal) => "image",
+            _ => normalized
         };
     }
 
@@ -414,6 +686,28 @@ public sealed class FacebookContentService : IFacebookContentService
         }
 
         return Math.Min(limit.Value, 50);
+    }
+
+    private static int NormalizeCommentLimit(int? limit)
+    {
+        if (limit is null or <= 0)
+        {
+            return 25;
+        }
+
+        return Math.Min(limit.Value, 100);
+    }
+
+    private static DateTimeOffset? ToDateTimeOffset(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed
+            : null;
     }
 
     private static FacebookCursorState? DecodeCursor(string? cursor)
@@ -456,6 +750,119 @@ public sealed class FacebookContentService : IFacebookContentService
         return postId[..separatorIndex];
     }
 
+    private static string? TryGetVideoId(FacebookPostDto post)
+    {
+        if (!string.IsNullOrWhiteSpace(post.ObjectId))
+        {
+            return post.ObjectId;
+        }
+
+        var attachment = post.Attachments?.Data?.FirstOrDefault();
+        var nestedAttachment = attachment?.Subattachments?.Data?.FirstOrDefault();
+
+        return nestedAttachment?.Target?.Id
+               ?? attachment?.Target?.Id;
+    }
+
+    private static long? TryReadInsightMetricValue(FacebookVideoInsightsResponse response, string metricName)
+    {
+        var metric = response.Data?.FirstOrDefault(item =>
+            string.Equals(item.Name, metricName, StringComparison.Ordinal));
+
+        return metric?.Values?.FirstOrDefault()?.Value;
+    }
+
+    private static long? TryReadInsightMetricLong(FacebookPostInsightsResponse response, string metricName)
+    {
+        var value = TryGetInsightMetricValue(response, metricName);
+        return value is null ? null : TryReadLong(value.Value);
+    }
+
+    private static long? TryReadInsightMetricTotal(FacebookPostInsightsResponse response, string metricName)
+    {
+        var breakdown = TryReadInsightMetricBreakdown(response, metricName);
+        if (breakdown == null)
+        {
+            return null;
+        }
+
+        return breakdown.Count == 0 ? null : breakdown.Values.Sum();
+    }
+
+    private static IReadOnlyDictionary<string, long>? TryReadInsightMetricBreakdown(
+        FacebookPostInsightsResponse response,
+        string metricName)
+    {
+        var value = TryGetInsightMetricValue(response, metricName);
+        if (value is null || value.Value.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var result = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var property in value.Value.EnumerateObject())
+        {
+            var metricValue = TryReadLong(property.Value);
+            if (metricValue is null)
+            {
+                continue;
+            }
+
+            result[property.Name] = metricValue.Value;
+        }
+
+        return result.Count == 0 ? null : result;
+    }
+
+    private static long? TryReadInsightMetricActionCount(
+        FacebookPostInsightsResponse response,
+        string metricName,
+        string actionName)
+    {
+        var value = TryGetInsightMetricValue(response, metricName);
+        if (value is null || value.Value.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (var property in value.Value.EnumerateObject())
+        {
+            if (!property.Name.Contains(actionName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return TryReadLong(property.Value);
+        }
+
+        return null;
+    }
+
+    private static JsonElement? TryGetInsightMetricValue(FacebookPostInsightsResponse response, string metricName)
+    {
+        var metric = response.Data?.FirstOrDefault(item =>
+            string.Equals(item.Name, metricName, StringComparison.Ordinal));
+
+        var value = metric?.Values?.FirstOrDefault()?.Value;
+        return value is null ? null : value.Value.Clone();
+    }
+
+    private static long? TryReadLong(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt64(out var numericValue))
+        {
+            return numericValue;
+        }
+
+        if (element.ValueKind == JsonValueKind.String && long.TryParse(element.GetString(), out var stringValue))
+        {
+            return stringValue;
+        }
+
+        return null;
+    }
+
     private static string? ReadGraphApiError(string payload)
     {
         if (string.IsNullOrWhiteSpace(payload))
@@ -477,6 +884,20 @@ public sealed class FacebookContentService : IFacebookContentService
     private sealed record FacebookCursorState(int PageIndex, string? PageCursor);
 
     private sealed record PageAccessInfo(string PageId, string PageAccessToken);
+
+    private sealed record FacebookOptionalMetrics(
+        long? ReachCount,
+        long? ReactionCount,
+        long? CommentCount,
+        long? ShareCount,
+        IReadOnlyDictionary<string, long>? ReactionBreakdown);
+
+    private sealed record FacebookPostInsightMetrics(
+        long? ReachCount,
+        long? ReactionCount,
+        long? CommentCount,
+        long? ShareCount,
+        IReadOnlyDictionary<string, long>? ReactionBreakdown);
 
     private sealed class FacebookPostsApiResponse
     {
@@ -514,6 +935,21 @@ public sealed class FacebookContentService : IFacebookContentService
         public string? AccessToken { get; set; }
     }
 
+    private sealed class FacebookPageInsightsDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("followers_count")]
+        public long? FollowersCount { get; set; }
+
+        [JsonPropertyName("fan_count")]
+        public long? FanCount { get; set; }
+    }
+
     private sealed class FacebookPostDto
     {
         [JsonPropertyName("id")]
@@ -533,6 +969,9 @@ public sealed class FacebookContentService : IFacebookContentService
 
         [JsonPropertyName("full_picture")]
         public string? FullPicture { get; set; }
+
+        [JsonPropertyName("object_id")]
+        public string? ObjectId { get; set; }
 
         [JsonPropertyName("shares")]
         public FacebookShareDto? Shares { get; set; }
@@ -557,6 +996,51 @@ public sealed class FacebookContentService : IFacebookContentService
     {
         [JsonPropertyName("summary")]
         public FacebookSummaryDto? Summary { get; set; }
+    }
+
+    private sealed class FacebookEdgeSummaryResponse
+    {
+        [JsonPropertyName("summary")]
+        public FacebookSummaryDto? Summary { get; set; }
+    }
+
+    private sealed class FacebookCommentsApiResponse
+    {
+        [JsonPropertyName("data")]
+        public FacebookCommentDto[]? Data { get; set; }
+    }
+
+    private sealed class FacebookCommentDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("message")]
+        public string? Message { get; set; }
+
+        [JsonPropertyName("created_time")]
+        public string? CreatedTime { get; set; }
+
+        [JsonPropertyName("like_count")]
+        public long? LikeCount { get; set; }
+
+        [JsonPropertyName("comment_count")]
+        public long? CommentCount { get; set; }
+
+        [JsonPropertyName("permalink_url")]
+        public string? PermalinkUrl { get; set; }
+
+        [JsonPropertyName("from")]
+        public FacebookCommentAuthorDto? From { get; set; }
+    }
+
+    private sealed class FacebookCommentAuthorDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
     }
 
     private sealed class FacebookSummaryDto
@@ -591,6 +1075,9 @@ public sealed class FacebookContentService : IFacebookContentService
         [JsonPropertyName("media")]
         public FacebookAttachmentMediaDto? Media { get; set; }
 
+        [JsonPropertyName("target")]
+        public FacebookAttachmentTargetDto? Target { get; set; }
+
         [JsonPropertyName("subattachments")]
         public FacebookAttachmentConnectionDto? Subattachments { get; set; }
     }
@@ -605,6 +1092,54 @@ public sealed class FacebookContentService : IFacebookContentService
     {
         [JsonPropertyName("src")]
         public string? Src { get; set; }
+    }
+
+    private sealed class FacebookAttachmentTargetDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+    }
+
+    private sealed class FacebookVideoInsightsResponse
+    {
+        [JsonPropertyName("data")]
+        public FacebookVideoInsightDto[]? Data { get; set; }
+    }
+
+    private sealed class FacebookVideoInsightDto
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("values")]
+        public FacebookVideoInsightValueDto[]? Values { get; set; }
+    }
+
+    private sealed class FacebookVideoInsightValueDto
+    {
+        [JsonPropertyName("value")]
+        public long? Value { get; set; }
+    }
+
+    private sealed class FacebookPostInsightsResponse
+    {
+        [JsonPropertyName("data")]
+        public FacebookPostInsightDto[]? Data { get; set; }
+    }
+
+    private sealed class FacebookPostInsightDto
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("values")]
+        public FacebookPostInsightValueDto[]? Values { get; set; }
+    }
+
+    private sealed class FacebookPostInsightValueDto
+    {
+        [JsonPropertyName("value")]
+        public JsonElement? Value { get; set; }
     }
 
     private sealed class GraphApiErrorResponse

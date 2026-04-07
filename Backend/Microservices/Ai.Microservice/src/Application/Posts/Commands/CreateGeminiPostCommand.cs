@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Resources;
@@ -23,15 +22,11 @@ public sealed record CreateGeminiPostCommand(
 public sealed class CreateGeminiPostCommandHandler
     : IRequestHandler<CreateGeminiPostCommand, Result<FacebookDraftPostResponse>>
 {
-    private const string DefaultPostType = "posts";
-
     private readonly IPostRepository _postRepository;
     private readonly IWorkspaceRepository _workspaceRepository;
     private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
     private readonly IGeminiCaptionService _geminiCaptionService;
-    private static readonly Regex HashtagRegex = new(@"#([\p{L}\p{Mn}\p{Nd}_]+)", RegexOptions.Compiled);
-    private static readonly Regex CollapseWhitespaceRegex = new(@"\s{2,}", RegexOptions.Compiled);
 
     public CreateGeminiPostCommandHandler(
         IPostRepository postRepository,
@@ -65,8 +60,8 @@ public sealed class CreateGeminiPostCommandHandler
             }
         }
 
-        var resolvedPostType = NormalizePostType(request.PostType);
-        if (!IsSupportedPostType(resolvedPostType))
+        var resolvedPostType = GeminiDraftPostHelper.NormalizePostType(request.PostType);
+        if (!GeminiDraftPostHelper.IsSupportedPostType(resolvedPostType))
         {
             return Result.Failure<FacebookDraftPostResponse>(
                 new Error("Facebook.InvalidPostType", "Post type must be 'posts' or 'reels'."));
@@ -113,7 +108,7 @@ public sealed class CreateGeminiPostCommandHandler
         var caption = request.Caption?.Trim();
         var captionGenerated = false;
 
-        var languageHint = ResolveLanguageHint(request.Language);
+        var languageHint = GeminiDraftPostHelper.ResolveLanguageHint(request.Language);
         var activeConfig = await TryGetActiveConfigAsync(cancellationToken);
         var preferredModel = string.IsNullOrWhiteSpace(activeConfig?.ChatModel)
             ? null
@@ -140,7 +135,7 @@ public sealed class CreateGeminiPostCommandHandler
         }
 
         caption ??= string.Empty;
-        var titleSource = NormalizeTitleContent(caption);
+        var titleSource = GeminiDraftPostHelper.NormalizeTitleContent(caption);
         var titleResult = await _geminiCaptionService.GenerateTitleAsync(
             new GeminiTitleRequest(titleSource, languageHint, preferredModel),
             cancellationToken);
@@ -150,7 +145,7 @@ public sealed class CreateGeminiPostCommandHandler
             return Result.Failure<FacebookDraftPostResponse>(titleResult.Error);
         }
 
-        var hashtags = ExtractHashtags(caption);
+        var hashtags = GeminiDraftPostHelper.ExtractHashtags(caption);
         var hashtagValue = hashtags.Count == 0 ? null : string.Join(' ', hashtags);
         var title = titleResult.Value.Trim();
 
@@ -184,29 +179,6 @@ public sealed class CreateGeminiPostCommandHandler
             resourceIds,
             captionGenerated));
     }
-
-    private static string NormalizePostType(string? postType)
-    {
-        if (string.IsNullOrWhiteSpace(postType))
-        {
-            return DefaultPostType;
-        }
-
-        var normalized = postType.Trim().ToLowerInvariant();
-        return normalized switch
-        {
-            "post" => "posts",
-            "posts" => "posts",
-            "reel" => "reels",
-            "reels" => "reels",
-            _ => postType.Trim()
-        };
-    }
-
-    private static bool IsSupportedPostType(string? postType) =>
-        string.Equals(postType, "posts", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(postType, "reels", StringComparison.OrdinalIgnoreCase);
-
     private static bool IsImageResource(UserResourcePresignResult resource)
     {
         if (!string.IsNullOrWhiteSpace(resource.ContentType) &&
@@ -229,70 +201,6 @@ public sealed class CreateGeminiPostCommandHandler
 
         return !string.IsNullOrWhiteSpace(resource.ResourceType) &&
                resource.ResourceType.Contains("video", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? ResolveLanguageHint(string? language)
-    {
-        if (string.IsNullOrWhiteSpace(language))
-        {
-            return null;
-        }
-
-        var normalized = language.Trim().ToLowerInvariant();
-        return normalized switch
-        {
-            "vi" => "Vietnamese",
-            "vn" => "Vietnamese",
-            "vietnamese" => "Vietnamese",
-            "en" => "English",
-            "english" => "English",
-            _ => null
-        };
-    }
-
-    private static IReadOnlyList<string> ExtractHashtags(string? caption)
-    {
-        if (string.IsNullOrWhiteSpace(caption))
-        {
-            return Array.Empty<string>();
-        }
-
-        var matches = HashtagRegex.Matches(caption);
-        if (matches.Count == 0)
-        {
-            return Array.Empty<string>();
-        }
-
-        var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var hashtags = new List<string>(matches.Count);
-
-        foreach (Match match in matches)
-        {
-            if (!match.Success)
-            {
-                continue;
-            }
-
-            var value = match.Value;
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                continue;
-            }
-
-            if (unique.Add(value))
-            {
-                hashtags.Add(value);
-            }
-        }
-
-        return hashtags;
-    }
-
-    private static string NormalizeTitleContent(string caption)
-    {
-        var withoutHashtags = HashtagRegex.Replace(caption, string.Empty);
-        var collapsed = CollapseWhitespaceRegex.Replace(withoutHashtags, " ");
-        return string.IsNullOrWhiteSpace(collapsed) ? caption : collapsed.Trim();
     }
 
     private async Task<UserAiConfig?> TryGetActiveConfigAsync(CancellationToken cancellationToken)

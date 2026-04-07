@@ -387,6 +387,14 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<string>("StripePriceId")
+                        .HasColumnType("text")
+                        .HasColumnName("stripe_price_id");
+
+                    b.Property<string>("StripeProductId")
+                        .HasColumnType("text")
+                        .HasColumnName("stripe_product_id");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -423,6 +431,10 @@ namespace Infrastructure.Migrations
                     b.Property<string>("PaymentMethod")
                         .HasColumnType("text")
                         .HasColumnName("payment_method");
+
+                    b.Property<string>("ProviderReferenceId")
+                        .HasColumnType("text")
+                        .HasColumnName("provider_reference_id");
 
                     b.Property<Guid?>("RelationId")
                         .HasColumnType("uuid")
@@ -617,6 +629,14 @@ namespace Infrastructure.Migrations
                     b.Property<string>("Status")
                         .HasColumnType("text")
                         .HasColumnName("status");
+
+                    b.Property<string>("StripeScheduleId")
+                        .HasColumnType("text")
+                        .HasColumnName("stripe_schedule_id");
+
+                    b.Property<string>("StripeSubscriptionId")
+                        .HasColumnType("text")
+                        .HasColumnName("stripe_subscription_id");
 
                     b.Property<Guid>("SubscriptionId")
                         .HasColumnType("uuid")

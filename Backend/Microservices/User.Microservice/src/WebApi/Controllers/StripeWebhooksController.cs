@@ -74,6 +74,8 @@ public sealed class StripeWebhooksController : ApiController
                 {
                     var result = await HandlePaymentSuccessAsync(
                         paymentIntent.Metadata,
+                        paymentIntent.Id,
+                        null,
                         paymentIntent.Status,
                         cancellationToken);
                     if (result.IsFailure)
@@ -111,7 +113,12 @@ public sealed class StripeWebhooksController : ApiController
                         }
                     }
 
-                    var result = await HandlePaymentSuccessAsync(metadata, invoice.Status, cancellationToken);
+                    var result = await HandlePaymentSuccessAsync(
+                        metadata,
+                        invoice.Id,
+                        invoice.SubscriptionId,
+                        invoice.Status,
+                        cancellationToken);
                     if (result.IsFailure)
                     {
                         return HandleFailure(result);
@@ -128,6 +135,8 @@ public sealed class StripeWebhooksController : ApiController
 
     private async Task<Result<bool>> HandlePaymentSuccessAsync(
         IDictionary<string, string> metadata,
+        string? providerReferenceId,
+        string? stripeSubscriptionId,
         string? status,
         CancellationToken cancellationToken)
     {
@@ -138,8 +147,21 @@ public sealed class StripeWebhooksController : ApiController
         }
 
         var normalizedStatus = string.IsNullOrWhiteSpace(status) ? "succeeded" : status.Trim();
-        var command = new ConfirmSubscriptionPaymentCommand(userId, subscriptionId, transactionId, renew, normalizedStatus);
-        return await _mediator.Send(command, cancellationToken);
+        var command = new ConfirmSubscriptionPaymentCommand(
+            userId,
+            subscriptionId,
+            transactionId,
+            providerReferenceId,
+            stripeSubscriptionId,
+            renew,
+            normalizedStatus);
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+        {
+            return Result.Failure<bool>(result.Error);
+        }
+
+        return Result.Success(true);
     }
 
     private static bool RequiresMetadata(IDictionary<string, string> metadata)

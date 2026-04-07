@@ -1,11 +1,11 @@
 using Application.Abstractions.Data;
 using Application.Subscriptions.Models;
+using Application.Subscriptions.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
-using SharedLibrary.Extensions;
 
 namespace Application.Subscriptions.Queries;
 
@@ -15,41 +15,44 @@ public sealed record GetCurrentUserSubscriptionQuery(Guid UserId)
 public sealed class GetCurrentUserSubscriptionQueryHandler
     : IRequestHandler<GetCurrentUserSubscriptionQuery, Result<CurrentUserSubscriptionResponse?>>
 {
-    private readonly IRepository<UserSubscription> _userSubscriptionRepository;
+    private readonly IUserSubscriptionStateService _userSubscriptionStateService;
     private readonly IRepository<Subscription> _subscriptionRepository;
 
-    public GetCurrentUserSubscriptionQueryHandler(IUnitOfWork unitOfWork)
+    public GetCurrentUserSubscriptionQueryHandler(
+        IUnitOfWork unitOfWork,
+        IUserSubscriptionStateService userSubscriptionStateService)
     {
-        _userSubscriptionRepository = unitOfWork.Repository<UserSubscription>();
         _subscriptionRepository = unitOfWork.Repository<Subscription>();
+        _userSubscriptionStateService = userSubscriptionStateService;
     }
 
     public async Task<Result<CurrentUserSubscriptionResponse?>> Handle(
         GetCurrentUserSubscriptionQuery request,
         CancellationToken cancellationToken)
     {
-        var now = DateTimeExtensions.PostgreSqlUtcNow;
+        var state = await _userSubscriptionStateService.GetStateAsync(request.UserId, cancellationToken, persistChanges: true);
+        if (state.Current == null)
+        {
+            return Result.Success<CurrentUserSubscriptionResponse?>(null);
+        }
 
-        var currentSubscription = await (
-            from userSubscription in _userSubscriptionRepository.GetAll().AsNoTracking()
-            join subscription in _subscriptionRepository.GetAll().AsNoTracking()
-                on userSubscription.SubscriptionId equals subscription.Id
-            where
-                userSubscription.UserId == request.UserId &&
-                !userSubscription.IsDeleted &&
-                !subscription.IsDeleted &&
-                (!userSubscription.EndDate.HasValue || userSubscription.EndDate.Value >= now)
-            orderby userSubscription.EndDate descending, userSubscription.CreatedAt descending
-            select new CurrentUserSubscriptionResponse(
-                userSubscription.Id,
-                userSubscription.SubscriptionId,
-                subscription.Name,
-                userSubscription.ActiveDate,
-                userSubscription.EndDate,
-                userSubscription.Status,
-                !userSubscription.EndDate.HasValue || userSubscription.EndDate.Value >= now))
-            .FirstOrDefaultAsync(cancellationToken);
+        var subscription = await _subscriptionRepository.GetAll()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Id == state.Current.SubscriptionId && !item.IsDeleted,
+                cancellationToken);
 
-        return Result.Success(currentSubscription);
+        var currentSubscription = new CurrentUserSubscriptionResponse(
+            state.Current.Id,
+            state.Current.SubscriptionId,
+            subscription?.Name,
+            state.Current.ActiveDate,
+            state.Current.EndDate,
+            state.Current.Status,
+            true,
+            true,
+            false);
+
+        return Result.Success<CurrentUserSubscriptionResponse?>(currentSubscription);
     }
 }

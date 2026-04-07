@@ -2,6 +2,7 @@ using System.Text.Json;
 using Application.Abstractions.Data;
 using Application.Abstractions.SocialMedia;
 using Application.Abstractions.TikTok;
+using Application.Subscriptions.Services;
 using Application.SocialMedias.Models;
 using Domain.Entities;
 using MediatR;
@@ -25,17 +26,20 @@ public sealed class CompleteTikTokOAuthCommandHandler
     private readonly ITikTokOAuthService _tikTokOAuthService;
     private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IMemoryCache _memoryCache;
+    private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly ISocialMediaProfileService _profileService;
 
     public CompleteTikTokOAuthCommandHandler(
         ITikTokOAuthService tikTokOAuthService,
         IUnitOfWork unitOfWork,
         IMemoryCache memoryCache,
+        IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
         ISocialMediaProfileService profileService)
     {
         _tikTokOAuthService = tikTokOAuthService;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _memoryCache = memoryCache;
+        _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _profileService = profileService;
     }
 
@@ -119,6 +123,18 @@ public sealed class CompleteTikTokOAuthCommandHandler
             return false;
         });
 
+        if (existingSocialMedia == null)
+        {
+            var entitlementResult = await _userSubscriptionEntitlementService.EnsureSocialAccountLinkAllowedAsync(
+                userId,
+                cancellationToken);
+
+            if (entitlementResult.IsFailure)
+            {
+                return Result.Failure<SocialMediaResponse>(entitlementResult.Error);
+            }
+        }
+
         SocialMedia socialMedia;
 
         if (existingSocialMedia != null)
@@ -149,7 +165,9 @@ public sealed class CompleteTikTokOAuthCommandHandler
                 ProfilePictureUrl: profile.AvatarUrl,
                 Bio: profile.BioDescription,
                 FollowerCount: profile.FollowerCount,
-                FollowingCount: profile.FollowingCount)
+                FollowingCount: profile.FollowingCount,
+                PostCount: null,
+                PageLikeCount: null)
             : null;
 
         return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile, includeMetadata: false));

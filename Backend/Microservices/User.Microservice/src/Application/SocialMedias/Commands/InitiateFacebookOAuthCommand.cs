@@ -1,5 +1,6 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Facebook;
+using Application.Subscriptions.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -17,13 +18,16 @@ public sealed class InitiateFacebookOAuthCommandHandler
     : IRequestHandler<InitiateFacebookOAuthCommand, Result<FacebookOAuthInitiationResponse>>
 {
     private readonly IFacebookOAuthService _facebookOAuthService;
+    private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly IRepository<User> _userRepository;
 
     public InitiateFacebookOAuthCommandHandler(
         IFacebookOAuthService facebookOAuthService,
+        IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
         IUnitOfWork unitOfWork)
     {
         _facebookOAuthService = facebookOAuthService;
+        _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _userRepository = unitOfWork.Repository<User>();
     }
 
@@ -39,6 +43,15 @@ public sealed class InitiateFacebookOAuthCommandHandler
         {
             return Result.Failure<FacebookOAuthInitiationResponse>(
                 new Error("User.NotFound", "User not found"));
+        }
+
+        var entitlementResult = await _userSubscriptionEntitlementService.EnsureSocialAccountLinkAllowedAsync(
+            request.UserId,
+            cancellationToken);
+
+        if (entitlementResult.IsFailure)
+        {
+            return Result.Failure<FacebookOAuthInitiationResponse>(entitlementResult.Error);
         }
 
         var (authorizationUrl, state) =

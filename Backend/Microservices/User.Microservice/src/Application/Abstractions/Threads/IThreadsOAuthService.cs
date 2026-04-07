@@ -23,6 +23,9 @@ public sealed class ThreadsUserProfile
     public string? Name { get; set; }
     public string? ThreadsProfilePictureUrl { get; set; }
     public string? ThreadsBiography { get; set; }
+    public int? FollowersCount { get; set; }
+    public int? FollowsCount { get; set; }
+    public int? MediaCount { get; set; }
 }
 
 public sealed class ThreadsTokenResponse

@@ -21,6 +21,10 @@ public sealed class Subscription
     [Column(TypeName = "numeric(18,2)")]
     public decimal? MeAiCoin { get; set; }
 
+    public string? StripeProductId { get; set; }
+
+    public string? StripePriceId { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 

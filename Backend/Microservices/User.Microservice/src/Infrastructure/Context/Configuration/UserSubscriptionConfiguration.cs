@@ -18,6 +18,8 @@ public sealed class UserSubscriptionConfiguration : IEntityTypeConfiguration<Use
         entity.Property(e => e.ActiveDate).HasColumnName("active_date").HasColumnType("timestamp with time zone");
         entity.Property(e => e.EndDate).HasColumnName("end_date").HasColumnType("timestamp with time zone");
         entity.Property(e => e.Status).HasColumnName("status");
+        entity.Property(e => e.StripeSubscriptionId).HasColumnName("stripe_subscription_id");
+        entity.Property(e => e.StripeScheduleId).HasColumnName("stripe_schedule_id");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");

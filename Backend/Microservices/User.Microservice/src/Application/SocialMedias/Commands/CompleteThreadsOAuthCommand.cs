@@ -2,6 +2,7 @@ using System.Text.Json;
 using Application.Abstractions.Data;
 using Application.Abstractions.SocialMedia;
 using Application.Abstractions.Threads;
+using Application.Subscriptions.Services;
 using Application.SocialMedias.Models;
 using Domain.Entities;
 using MediatR;
@@ -23,15 +24,18 @@ public sealed class CompleteThreadsOAuthCommandHandler
 {
     private readonly IThreadsOAuthService _threadsOAuthService;
     private readonly IRepository<SocialMedia> _socialMediaRepository;
+    private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly ISocialMediaProfileService _profileService;
 
     public CompleteThreadsOAuthCommandHandler(
         IThreadsOAuthService threadsOAuthService,
         IUnitOfWork unitOfWork,
+        IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
         ISocialMediaProfileService profileService)
     {
         _threadsOAuthService = threadsOAuthService;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
+        _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _profileService = profileService;
     }
 
@@ -89,16 +93,34 @@ public sealed class CompleteThreadsOAuthCommandHandler
                 MatchesThreadsAccount(sm.Metadata, threadsAccountId));
         }
 
+        if (matchedSocialMedia == null)
+        {
+            var entitlementResult = await _userSubscriptionEntitlementService.EnsureSocialAccountLinkAllowedAsync(
+                userId,
+                cancellationToken);
+
+            if (entitlementResult.IsFailure)
+            {
+                return Result.Failure<SocialMediaResponse>(entitlementResult.Error);
+            }
+        }
+
         var metadata = JsonDocument.Parse(JsonSerializer.Serialize(new
         {
+            id = profile?.Id ?? tokenResponse.UserId,
             user_id = tokenResponse.UserId,
             access_token = tokenResponse.AccessToken,
             expires_at = now.AddSeconds(tokenResponse.ExpiresIn),
             token_type = tokenResponse.TokenType,
             username = profile?.Username,
             name = profile?.Name,
+            profile_picture_url = profile?.ThreadsProfilePictureUrl,
             threads_profile_picture_url = profile?.ThreadsProfilePictureUrl,
-            threads_biography = profile?.ThreadsBiography
+            biography = profile?.ThreadsBiography,
+            threads_biography = profile?.ThreadsBiography,
+            followers_count = profile?.FollowersCount,
+            follows_count = profile?.FollowsCount,
+            media_count = profile?.MediaCount
         }));
 
         SocialMedia socialMedia;
@@ -130,8 +152,10 @@ public sealed class CompleteThreadsOAuthCommandHandler
                 DisplayName: profile.Name,
                 ProfilePictureUrl: profile.ThreadsProfilePictureUrl,
                 Bio: profile.ThreadsBiography,
-                FollowerCount: null,
-                FollowingCount: null)
+                FollowerCount: profile.FollowersCount,
+                FollowingCount: profile.FollowsCount,
+                PostCount: profile.MediaCount,
+                PageLikeCount: null)
             : null;
 
         return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile, includeMetadata: false));

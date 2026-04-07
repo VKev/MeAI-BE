@@ -16,7 +16,7 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
     private const string GraphApiBaseUrl = "https://graph.facebook.com/v24.0";
     private const string OAuthTokenEndpoint = "https://graph.facebook.com/v24.0/oauth/access_token";
     private const string DefaultScopes = "instagram_basic,pages_show_list";
-    private const string InstagramProfileFields = "id,username,name,profile_picture_url,biography";
+    private const string InstagramProfileFields = "id,username,name,profile_picture_url,biography,followers_count,follows_count,media_count";
 
     private static readonly string[] RequiredScopes = { "pages_show_list", "instagram_basic" };
 

@@ -20,6 +20,10 @@ public sealed class UserSubscription
 
     public string? Status { get; set; }
 
+    public string? StripeSubscriptionId { get; set; }
+
+    public string? StripeScheduleId { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 

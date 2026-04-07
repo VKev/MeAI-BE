@@ -21,6 +21,7 @@ public sealed class TransactionConfiguration : IEntityTypeConfiguration<Transact
         entity.Property(e => e.TokenUsed).HasColumnName("token_used");
         entity.Property(e => e.PaymentMethod).HasColumnName("payment_method");
         entity.Property(e => e.Status).HasColumnName("status");
+        entity.Property(e => e.ProviderReferenceId).HasColumnName("provider_reference_id");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");

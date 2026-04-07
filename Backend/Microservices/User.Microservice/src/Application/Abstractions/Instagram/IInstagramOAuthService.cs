@@ -53,6 +53,15 @@ public sealed class InstagramProfile
 
     [JsonPropertyName("biography")]
     public string? Biography { get; set; }
+
+    [JsonPropertyName("followers_count")]
+    public int? FollowersCount { get; set; }
+
+    [JsonPropertyName("follows_count")]
+    public int? FollowsCount { get; set; }
+
+    [JsonPropertyName("media_count")]
+    public int? MediaCount { get; set; }
 }
 
 public sealed class InstagramGraphProfileResult

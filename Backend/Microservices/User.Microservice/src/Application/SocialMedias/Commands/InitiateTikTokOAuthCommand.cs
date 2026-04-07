@@ -1,5 +1,6 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.TikTok;
+using Application.Subscriptions.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -20,15 +21,18 @@ public sealed class InitiateTikTokOAuthCommandHandler
 {
     private readonly ITikTokOAuthService _tikTokOAuthService;
     private readonly IMemoryCache _memoryCache;
+    private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly IRepository<User> _userRepository;
 
     public InitiateTikTokOAuthCommandHandler(
         ITikTokOAuthService tikTokOAuthService,
         IMemoryCache memoryCache,
+        IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
         IUnitOfWork unitOfWork)
     {
         _tikTokOAuthService = tikTokOAuthService;
         _memoryCache = memoryCache;
+        _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _userRepository = unitOfWork.Repository<User>();
     }
 
@@ -44,6 +48,15 @@ public sealed class InitiateTikTokOAuthCommandHandler
         {
             return Result.Failure<TikTokOAuthInitiationResponse>(
                 new Error("User.NotFound", "User not found"));
+        }
+
+        var entitlementResult = await _userSubscriptionEntitlementService.EnsureSocialAccountLinkAllowedAsync(
+            request.UserId,
+            cancellationToken);
+
+        if (entitlementResult.IsFailure)
+        {
+            return Result.Failure<TikTokOAuthInitiationResponse>(entitlementResult.Error);
         }
 
         var scopes = string.IsNullOrWhiteSpace(request.Scopes)

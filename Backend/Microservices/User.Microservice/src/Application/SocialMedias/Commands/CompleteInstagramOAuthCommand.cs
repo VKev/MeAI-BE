@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Application.Abstractions.Data;
 using Application.Abstractions.Instagram;
 using Application.Abstractions.SocialMedia;
+using Application.Subscriptions.Services;
 using Application.SocialMedias.Models;
 using Domain.Entities;
 using MediatR;
@@ -27,16 +28,19 @@ public sealed class CompleteInstagramOAuthCommandHandler
     private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IRepository<User> _userRepository;
     private readonly IInstagramOAuthService _instagramOAuthService;
+    private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly ISocialMediaProfileService _profileService;
 
     public CompleteInstagramOAuthCommandHandler(
         IUnitOfWork unitOfWork,
         IInstagramOAuthService instagramOAuthService,
+        IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
         ISocialMediaProfileService profileService)
     {
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _userRepository = unitOfWork.Repository<User>();
         _instagramOAuthService = instagramOAuthService;
+        _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _profileService = profileService;
     }
 
@@ -125,6 +129,18 @@ public sealed class CompleteInstagramOAuthCommandHandler
                 MatchesInstagramAccount(sm.Metadata, instagramAccountId));
         }
 
+        if (matchedSocialMedia == null)
+        {
+            var entitlementResult = await _userSubscriptionEntitlementService.EnsureSocialAccountLinkAllowedAsync(
+                userId,
+                cancellationToken);
+
+            if (entitlementResult.IsFailure)
+            {
+                return Result.Failure<SocialMediaResponse>(entitlementResult.Error);
+            }
+        }
+
         var payload = new Dictionary<string, object?>
         {
             ["provider"] = InstagramSocialMediaType,
@@ -140,6 +156,9 @@ public sealed class CompleteInstagramOAuthCommandHandler
             ["page_name"] = profileResult.Value.PageName,
             ["profile_picture_url"] = profile.ProfilePictureUrl,
             ["biography"] = profile.Biography,
+            ["followers_count"] = profile.FollowersCount,
+            ["follows_count"] = profile.FollowsCount,
+            ["media_count"] = profile.MediaCount,
             ["instagram_business_account_id"] = profileResult.Value.InstagramAccountId,
             ["instagram_account_type"] = profileResult.Value.InstagramAccountType
         };

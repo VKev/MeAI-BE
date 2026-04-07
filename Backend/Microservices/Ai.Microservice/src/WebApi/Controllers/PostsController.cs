@@ -117,6 +117,32 @@ public sealed class PostsController : ApiController
         return Ok(result);
     }
 
+    [HttpGet("social/{socialMediaId:guid}/dashboard-summary")]
+    [ProducesResponseType(typeof(Result<SocialPlatformDashboardSummaryResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetDashboardSummary(
+        Guid socialMediaId,
+        [FromQuery] int? postLimit,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new GetSocialMediaDashboardSummaryQuery(userId, socialMediaId, postLimit),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("social/{socialMediaId:guid}/platform-posts/{platformPostId}/analytics")]
     [ProducesResponseType(typeof(Result<SocialPlatformPostAnalyticsResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

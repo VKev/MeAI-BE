@@ -4,7 +4,8 @@ public sealed record PurchaseSubscriptionResponse(
     Guid SubscriptionId,
     float Cost,
     string Currency,
-    long Amount,
+    decimal Amount,
+    decimal CreditApplied,
     string? PaymentIntentId,
     string? ClientSecret,
     string Status,
@@ -12,4 +13,8 @@ public sealed record PurchaseSubscriptionResponse(
     bool Renew,
     Guid TransactionId,
     bool SubscriptionActivated,
-    Guid? UserSubscriptionId);
+    bool ScheduledChangeCreated,
+    Guid? UserSubscriptionId,
+    string ChangeType,
+    DateTime? EffectiveDate,
+    bool RequiresPayment);

@@ -1,5 +1,6 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Threads;
+using Application.Subscriptions.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -18,13 +19,16 @@ public sealed class InitiateThreadsOAuthCommandHandler
     : IRequestHandler<InitiateThreadsOAuthCommand, Result<ThreadsOAuthInitiationResponse>>
 {
     private readonly IThreadsOAuthService _threadsOAuthService;
+    private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly IRepository<User> _userRepository;
 
     public InitiateThreadsOAuthCommandHandler(
         IThreadsOAuthService threadsOAuthService,
+        IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
         IUnitOfWork unitOfWork)
     {
         _threadsOAuthService = threadsOAuthService;
+        _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _userRepository = unitOfWork.Repository<User>();
     }
 
@@ -40,6 +44,15 @@ public sealed class InitiateThreadsOAuthCommandHandler
         {
             return Result.Failure<ThreadsOAuthInitiationResponse>(
                 new Error("User.NotFound", "User not found"));
+        }
+
+        var entitlementResult = await _userSubscriptionEntitlementService.EnsureSocialAccountLinkAllowedAsync(
+            request.UserId,
+            cancellationToken);
+
+        if (entitlementResult.IsFailure)
+        {
+            return Result.Failure<ThreadsOAuthInitiationResponse>(entitlementResult.Error);
         }
 
         var (authorizationUrl, state) = _threadsOAuthService.GenerateAuthorizationUrl(request.UserId, request.Scopes);

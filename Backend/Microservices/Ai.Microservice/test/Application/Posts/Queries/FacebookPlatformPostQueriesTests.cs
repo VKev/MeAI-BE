@@ -1,4 +1,5 @@
 using Application.Abstractions.Facebook;
+using Application.Abstractions.Instagram;
 using Application.Abstractions.SocialMedias;
 using Application.Abstractions.Threads;
 using Application.Abstractions.TikTok;
@@ -21,6 +22,7 @@ public sealed class FacebookPlatformPostQueriesTests
         var socialMediaId = Guid.NewGuid();
 
         var facebookContentService = new Mock<IFacebookContentService>();
+        var instagramContentService = new Mock<IInstagramContentService>();
         var userSocialMediaService = new Mock<IUserSocialMediaService>();
         var tikTokContentService = new Mock<ITikTokContentService>();
         var threadsContentService = new Mock<IThreadsContentService>();
@@ -63,9 +65,15 @@ public sealed class FacebookPlatformPostQueriesTests
                         ThumbnailUrl: "https://cdn.example.com/thumb.jpg",
                         AttachmentTitle: "Campaign launch",
                         AttachmentDescription: "Description",
+                        ViewCount: null,
                         ReactionCount: 25,
                         CommentCount: 7,
-                        ShareCount: 3)
+                        ShareCount: 3,
+                        ReactionBreakdown: new Dictionary<string, long>
+                        {
+                            ["like"] = 20,
+                            ["love"] = 5
+                        })
                 ],
                 NextCursor: "next",
                 HasMore: true)));
@@ -80,6 +88,7 @@ public sealed class FacebookPlatformPostQueriesTests
 
         var handler = new GetSocialMediaPlatformPostsQueryHandler(
             facebookContentService.Object,
+            instagramContentService.Object,
             userSocialMediaService.Object,
             tikTokContentService.Object,
             threadsContentService.Object,
@@ -109,7 +118,12 @@ public sealed class FacebookPlatformPostQueriesTests
             Shares: 3,
             Reposts: null,
             Quotes: null,
-            TotalInteractions: 35));
+            TotalInteractions: 35,
+            ReactionBreakdown: new Dictionary<string, long>
+            {
+                ["like"] = 20,
+                ["love"] = 5
+            }));
     }
 
     [Fact]
@@ -120,6 +134,7 @@ public sealed class FacebookPlatformPostQueriesTests
         var postId = "123_456";
 
         var facebookContentService = new Mock<IFacebookContentService>();
+        var instagramContentService = new Mock<IInstagramContentService>();
         var userSocialMediaService = new Mock<IUserSocialMediaService>();
         var tikTokContentService = new Mock<ITikTokContentService>();
         var threadsContentService = new Mock<IThreadsContentService>();
@@ -166,9 +181,34 @@ public sealed class FacebookPlatformPostQueriesTests
                 ThumbnailUrl: "https://cdn.example.com/thumb.jpg",
                 AttachmentTitle: "Campaign launch",
                 AttachmentDescription: "Description",
+                ViewCount: 1200,
                 ReactionCount: 25,
                 CommentCount: 7,
-                ShareCount: 3)));
+                ShareCount: 3,
+                ReactionBreakdown: new Dictionary<string, long>
+                {
+                    ["like"] = 20,
+                    ["love"] = 5
+                })));
+
+        facebookContentService
+            .Setup(service => service.GetPageInsightsAsync(
+                It.Is<FacebookPageInsightsRequest>(request => request.UserAccessToken == "user-token"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new FacebookPageInsights(
+                PageId: "123",
+                Name: "MeAI",
+                Followers: 200,
+                Fans: 180)));
+
+        facebookContentService
+            .Setup(service => service.GetPostCommentsAsync(
+                It.Is<FacebookPostCommentsRequest>(request =>
+                    request.UserAccessToken == "user-token" &&
+                    request.PostId == postId &&
+                    request.Limit == 25),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success<IReadOnlyList<SocialPlatformCommentItem>>(Array.Empty<SocialPlatformCommentItem>()));
 
         postMetricSnapshotRepository
             .Setup(repository => repository.GetLatestForUpdateAsync(
@@ -185,6 +225,7 @@ public sealed class FacebookPlatformPostQueriesTests
                     metric.SocialMediaId == socialMediaId &&
                     metric.Platform == "facebook" &&
                     metric.PlatformPostId == postId &&
+                    metric.ViewCount == 1200 &&
                     metric.LikeCount == 25 &&
                     metric.CommentCount == 7 &&
                     metric.ShareCount == 3),
@@ -197,6 +238,7 @@ public sealed class FacebookPlatformPostQueriesTests
 
         var handler = new GetSocialMediaPlatformPostAnalyticsQueryHandler(
             facebookContentService.Object,
+            instagramContentService.Object,
             userSocialMediaService.Object,
             tikTokContentService.Object,
             threadsContentService.Object,
@@ -210,19 +252,169 @@ public sealed class FacebookPlatformPostQueriesTests
         result.Value.Platform.Should().Be("facebook");
         result.Value.PlatformPostId.Should().Be(postId);
         result.Value.Stats.Should().BeEquivalentTo(new SocialPlatformPostStatsResponse(
-            Views: null,
+            Views: 1200,
+            Reach: 1200,
+            Impressions: 1200,
             Likes: 25,
             Comments: 7,
             Replies: null,
             Shares: 3,
             Reposts: null,
             Quotes: null,
-            TotalInteractions: 35));
+            TotalInteractions: 35,
+            ReactionBreakdown: new Dictionary<string, long>
+            {
+                ["like"] = 20,
+                ["love"] = 5
+            }));
 
         postMetricSnapshotRepository.Verify(repository => repository.AddAsync(
             It.IsAny<PostMetricSnapshot>(),
             It.IsAny<CancellationToken>()), Times.Once);
         postMetricSnapshotRepository.Verify(repository => repository.SaveChangesAsync(
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task GetPlatformPostAnalytics_ShouldReturnInstagramMetrics()
+    {
+        var userId = Guid.NewGuid();
+        var socialMediaId = Guid.NewGuid();
+        var postId = "17890000000000000";
+
+        var facebookContentService = new Mock<IFacebookContentService>();
+        var instagramContentService = new Mock<IInstagramContentService>();
+        var userSocialMediaService = new Mock<IUserSocialMediaService>();
+        var tikTokContentService = new Mock<ITikTokContentService>();
+        var threadsContentService = new Mock<IThreadsContentService>();
+        var postMetricSnapshotRepository = new Mock<IPostMetricSnapshotRepository>();
+
+        userSocialMediaService
+            .Setup(service => service.GetSocialMediasAsync(
+                userId,
+                It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { socialMediaId })),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success<IReadOnlyList<UserSocialMediaResult>>(
+                new[]
+                {
+                    new UserSocialMediaResult(
+                        socialMediaId,
+                        "instagram",
+                        """{"access_token":"ig-token"}""")
+                }));
+
+        postMetricSnapshotRepository
+            .Setup(repository => repository.GetLatestAsync(
+                userId,
+                socialMediaId,
+                postId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PostMetricSnapshot?)null);
+
+        instagramContentService
+            .Setup(service => service.GetPostAsync(
+                It.Is<InstagramPostDetailsRequest>(request =>
+                    request.AccessToken == "ig-token" &&
+                    request.PostId == postId),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new InstagramPostDetails(
+                Id: postId,
+                Caption: "IG launch",
+                MediaType: "IMAGE",
+                MediaProductType: "FEED",
+                MediaUrl: "https://cdn.example.com/ig.jpg",
+                ThumbnailUrl: "https://cdn.example.com/ig-thumb.jpg",
+                Permalink: "https://instagram.com/p/abc",
+                Timestamp: "2026-03-18T09:00:00+0000",
+                Username: "meai",
+                LikeCount: 45,
+                CommentCount: 9)));
+
+        instagramContentService
+            .Setup(service => service.GetPostInsightsAsync(
+                It.Is<InstagramPostInsightsRequest>(request =>
+                    request.AccessToken == "ig-token" &&
+                    request.PostId == postId),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new InstagramPostInsights(
+                Views: 1100,
+                Reach: 980,
+                Impressions: 1300,
+                Saved: 15,
+                Shares: 6)));
+
+        instagramContentService
+            .Setup(service => service.GetAccountInsightsAsync(
+                It.Is<InstagramAccountInsightsRequest>(request =>
+                    request.AccessToken == "ig-token"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new InstagramAccountInsights(
+                Id: "ig-account",
+                Name: "MeAI IG",
+                Username: "meai",
+                Followers: 222,
+                Following: 12,
+                MediaCount: 8,
+                ProfilePictureUrl: "https://cdn.example.com/profile.jpg")));
+
+        instagramContentService
+            .Setup(service => service.GetPostCommentsAsync(
+                It.Is<InstagramPostCommentsRequest>(request =>
+                    request.AccessToken == "ig-token" &&
+                    request.PostId == postId &&
+                    request.Limit == 25),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success<IReadOnlyList<InstagramCommentItem>>(Array.Empty<InstagramCommentItem>()));
+
+        postMetricSnapshotRepository
+            .Setup(repository => repository.GetLatestForUpdateAsync(
+                userId,
+                socialMediaId,
+                postId,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PostMetricSnapshot?)null);
+
+        postMetricSnapshotRepository
+            .Setup(repository => repository.AddAsync(It.IsAny<PostMetricSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        postMetricSnapshotRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var handler = new GetSocialMediaPlatformPostAnalyticsQueryHandler(
+            facebookContentService.Object,
+            instagramContentService.Object,
+            userSocialMediaService.Object,
+            tikTokContentService.Object,
+            threadsContentService.Object,
+            postMetricSnapshotRepository.Object);
+
+        var result = await handler.Handle(
+            new GetSocialMediaPlatformPostAnalyticsQuery(userId, socialMediaId, postId),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Platform.Should().Be("instagram");
+        result.Value.Stats.Should().BeEquivalentTo(new SocialPlatformPostStatsResponse(
+            Views: 1100,
+            Reach: 980,
+            Impressions: 1300,
+            Likes: 45,
+            Comments: 9,
+            Replies: null,
+            Shares: 6,
+            Reposts: null,
+            Quotes: null,
+            TotalInteractions: 60,
+            Saves: 15,
+            ReactionBreakdown: null,
+            MetricBreakdown: new Dictionary<string, long>
+            {
+                ["reach"] = 980,
+                ["impressions"] = 1300,
+                ["shares"] = 6,
+                ["saved"] = 15
+            }));
     }
 }

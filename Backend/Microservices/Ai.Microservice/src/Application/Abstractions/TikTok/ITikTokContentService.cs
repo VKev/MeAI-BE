@@ -11,6 +11,10 @@ public interface ITikTokContentService
     Task<Result<TikTokVideoDetails>> GetVideoAsync(
         TikTokVideoDetailsRequest request,
         CancellationToken cancellationToken);
+
+    Task<Result<TikTokAccountInsights>> GetAccountInsightsAsync(
+        TikTokAccountInsightsRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record TikTokVideoListRequest(
@@ -21,6 +25,9 @@ public sealed record TikTokVideoListRequest(
 public sealed record TikTokVideoDetailsRequest(
     string AccessToken,
     string VideoId);
+
+public sealed record TikTokAccountInsightsRequest(
+    string AccessToken);
 
 public sealed record TikTokVideoPageResult(
     IReadOnlyList<TikTokVideoDetails> Videos,
@@ -40,3 +47,13 @@ public sealed record TikTokVideoDetails(
     long? LikeCount,
     long? CommentCount,
     long? ShareCount);
+
+public sealed record TikTokAccountInsights(
+    string? OpenId,
+    string? DisplayName,
+    string? AvatarUrl,
+    string? BioDescription,
+    long? FollowerCount,
+    long? FollowingCount,
+    long? LikesCount,
+    long? VideoCount);

@@ -51,6 +51,7 @@ namespace Infrastructure
             services.AddScoped<IGeminiContentModerationService, GeminiContentModerationService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
             services.AddScoped<IInstagramPublishService, InstagramPublishService>();
+            services.AddScoped<IInstagramContentService, InstagramContentService>();
             services.AddScoped<ITikTokPublishService, TikTokPublishService>();
             services.AddScoped<ITikTokContentService, TikTokContentService>();
             services.AddHttpClient("Threads");

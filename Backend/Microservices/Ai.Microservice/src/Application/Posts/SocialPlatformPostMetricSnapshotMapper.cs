@@ -93,6 +93,7 @@ internal static class SocialPlatformPostMetricSnapshotMapper
 
     private static SocialPlatformPostStatsResponse ToStats(PostMetricSnapshot metric)
     {
+        var rawStats = Deserialize<SocialPlatformPostStatsResponse>(metric.RawMetricsJson);
         var totalInteractions =
             (metric.LikeCount ?? 0) +
             (metric.CommentCount ?? 0) +
@@ -103,13 +104,18 @@ internal static class SocialPlatformPostMetricSnapshotMapper
 
         return new SocialPlatformPostStatsResponse(
             Views: metric.ViewCount,
+            Reach: rawStats?.Reach,
+            Impressions: rawStats?.Impressions,
             Likes: metric.LikeCount,
             Comments: metric.CommentCount,
             Replies: metric.ReplyCount,
             Shares: metric.ShareCount,
             Reposts: metric.RepostCount,
             Quotes: metric.QuoteCount,
-            TotalInteractions: totalInteractions);
+            TotalInteractions: totalInteractions,
+            Saves: rawStats?.Saves,
+            ReactionBreakdown: rawStats?.ReactionBreakdown,
+            MetricBreakdown: rawStats?.MetricBreakdown);
     }
 
     private static void ApplyStats(PostMetricSnapshot metric, SocialPlatformPostStatsResponse stats)
