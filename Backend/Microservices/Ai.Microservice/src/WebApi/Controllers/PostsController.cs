@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Security.Claims;
 using Application.Posts.Commands;
 using Application.Posts.Models;
@@ -254,11 +255,13 @@ public sealed class PostsController : ApiController
     }
 
     [HttpPost("publish")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(Result<PublishPostsResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Result<PublishPostResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Publish(
-        [FromBody] PublishPostRequest request,
+        [FromBody] JsonElement request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -266,17 +269,26 @@ public sealed class PostsController : ApiController
             return Unauthorized(new { Message = "Unauthorized" });
         }
 
-        var command = new PublishPostCommand(
+        var requestResult = ParsePublishPostsRequest(request);
+        if (requestResult.IsFailure)
+        {
+            return HandleFailure(Result.Failure<PublishPostsResponse>(requestResult.Error));
+        }
+
+        var command = new PublishPostsCommand(
             userId,
-            request.PostId,
-            request.SocialMediaId,
-            request.IsPrivate);
+            requestResult.Value.Targets);
 
         var result = await _mediator.Send(command, cancellationToken);
 
         if (result.IsFailure)
         {
             return HandleFailure(result);
+        }
+
+        if (requestResult.Value.ReturnSingleResponse)
+        {
+            return Ok(Result.Success(result.Value.Posts[0]));
         }
 
         return Ok(result);
@@ -310,6 +322,259 @@ public sealed class PostsController : ApiController
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(claimValue, out userId);
     }
+
+    private static Result<PublishPostsRequestPayload> ParsePublishPostsRequest(JsonElement request)
+    {
+        if (request.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
+            return Result.Failure<PublishPostsRequestPayload>(
+                new Error("Post.PublishInvalidRequest", "Request body is required."));
+        }
+
+        if (request.ValueKind == JsonValueKind.Array)
+        {
+            var targetsResult = ParsePublishTargetArray(request);
+            if (targetsResult.IsFailure)
+            {
+                return Result.Failure<PublishPostsRequestPayload>(targetsResult.Error);
+            }
+
+            return Result.Success(new PublishPostsRequestPayload(
+                targetsResult.Value,
+                false));
+        }
+
+        if (request.ValueKind != JsonValueKind.Object)
+        {
+            return Result.Failure<PublishPostsRequestPayload>(
+                new Error("Post.PublishInvalidRequest", "Request body must be a JSON object or array."));
+        }
+
+        if (TryGetProperty(request, "items", out var itemsElement) ||
+            TryGetProperty(request, "targets", out itemsElement) ||
+            TryGetProperty(request, "posts", out itemsElement))
+        {
+            if (itemsElement.ValueKind != JsonValueKind.Array)
+            {
+                return Result.Failure<PublishPostsRequestPayload>(
+                    new Error("Post.PublishInvalidRequest", "items must be a JSON array."));
+            }
+
+            var targetsResult = ParsePublishTargetArray(itemsElement);
+            if (targetsResult.IsFailure)
+            {
+                return Result.Failure<PublishPostsRequestPayload>(targetsResult.Error);
+            }
+
+            return Result.Success(new PublishPostsRequestPayload(
+                targetsResult.Value,
+                false));
+        }
+
+        var singleTargetResult = ParseSinglePublishTarget(request);
+        if (singleTargetResult.IsFailure)
+        {
+            return Result.Failure<PublishPostsRequestPayload>(singleTargetResult.Error);
+        }
+
+        return Result.Success(new PublishPostsRequestPayload(
+        [
+            singleTargetResult.Value
+        ], true));
+    }
+
+    private static Result<IReadOnlyList<PublishPostTargetInput>> ParsePublishTargetArray(JsonElement arrayElement)
+    {
+        var targets = new List<PublishPostTargetInput>();
+
+        foreach (var item in arrayElement.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.Null)
+            {
+                continue;
+            }
+
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                return Result.Failure<IReadOnlyList<PublishPostTargetInput>>(
+                    new Error("Post.PublishInvalidRequest", "Each publish target must be a JSON object."));
+            }
+
+            var targetResult = ParseSinglePublishTarget(item);
+            if (targetResult.IsFailure)
+            {
+                return Result.Failure<IReadOnlyList<PublishPostTargetInput>>(targetResult.Error);
+            }
+
+            targets.Add(targetResult.Value);
+        }
+
+        if (targets.Count == 0)
+        {
+            return Result.Failure<IReadOnlyList<PublishPostTargetInput>>(
+                new Error("Post.PublishMissingTargets", "At least one publish target is required."));
+        }
+
+        return Result.Success<IReadOnlyList<PublishPostTargetInput>>(targets);
+    }
+
+    private static Result<PublishPostTargetInput> ParseSinglePublishTarget(JsonElement item)
+    {
+        var postId = GetGuidProperty(item, "postId", "post_id");
+        if (!postId.HasValue)
+        {
+            return Result.Failure<PublishPostTargetInput>(
+                new Error("Post.PublishMissingPostId", "Each publish target must include a valid postId."));
+        }
+
+        var socialMediaIdsResult = GetGuidListProperty(
+            item,
+            "socialMediaIds",
+            "social_media_ids",
+            "socialMediaIdList",
+            "social_media_id_list");
+
+        if (socialMediaIdsResult.IsFailure)
+        {
+            return Result.Failure<PublishPostTargetInput>(socialMediaIdsResult.Error);
+        }
+
+        var socialMediaIds = socialMediaIdsResult.Value.ToList();
+        if (socialMediaIds.Count == 0)
+        {
+            var singleSocialMediaId = GetGuidProperty(item, "socialMediaId", "social_media_id");
+            if (singleSocialMediaId.HasValue)
+            {
+                socialMediaIds.Add(singleSocialMediaId.Value);
+            }
+        }
+
+        if (socialMediaIds.Count == 0)
+        {
+            return Result.Failure<PublishPostTargetInput>(
+                new Error("Post.PublishMissingSocialMedia", "Each publish target must include at least one social media id."));
+        }
+
+        return Result.Success(new PublishPostTargetInput(
+            postId.Value,
+            socialMediaIds,
+            GetBooleanProperty(item, "isPrivate", "is_private")));
+    }
+
+    private static Result<IReadOnlyList<Guid>> GetGuidListProperty(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!TryGetProperty(element, propertyName, out var value))
+            {
+                continue;
+            }
+
+            if (value.ValueKind != JsonValueKind.Array)
+            {
+                return Result.Failure<IReadOnlyList<Guid>>(
+                    new Error("Post.PublishInvalidRequest", $"{propertyName} must be an array of GUID values."));
+            }
+
+            var ids = new List<Guid>();
+            foreach (var item in value.EnumerateArray())
+            {
+                var parsedId = item.ValueKind == JsonValueKind.String &&
+                               Guid.TryParse(item.GetString(), out var stringId)
+                    ? stringId
+                    : item.ValueKind == JsonValueKind.Object || item.ValueKind == JsonValueKind.Array
+                        ? Guid.Empty
+                        : Guid.TryParse(item.ToString(), out var genericId)
+                            ? genericId
+                            : Guid.Empty;
+
+                if (parsedId == Guid.Empty)
+                {
+                    return Result.Failure<IReadOnlyList<Guid>>(
+                        new Error("Post.PublishInvalidRequest", $"{propertyName} must contain valid GUID values."));
+                }
+
+                if (!ids.Contains(parsedId))
+                {
+                    ids.Add(parsedId);
+                }
+            }
+
+            return Result.Success<IReadOnlyList<Guid>>(ids);
+        }
+
+        return Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+    }
+
+    private static Guid? GetGuidProperty(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!TryGetProperty(element, propertyName, out var value))
+            {
+                continue;
+            }
+
+            var raw = value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : value.ToString();
+
+            if (Guid.TryParse(raw, out var parsedId) && parsedId != Guid.Empty)
+            {
+                return parsedId;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool? GetBooleanProperty(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!TryGetProperty(element, propertyName, out var value))
+            {
+                continue;
+            }
+
+            if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                return value.GetBoolean();
+            }
+
+            if (value.ValueKind == JsonValueKind.String &&
+                bool.TryParse(value.GetString(), out var parsedBoolean))
+            {
+                return parsedBoolean;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (NormalizePropertyName(property.Name) == NormalizePropertyName(propertyName))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static string NormalizePropertyName(string propertyName)
+    {
+        var characters = propertyName
+            .Where(character => character is not (' ' or '_' or '-'))
+            .Select(char.ToLowerInvariant);
+
+        return new string(characters.ToArray());
+    }
 }
 
 public sealed record CreatePostRequest(
@@ -326,7 +591,6 @@ public sealed record UpdatePostRequest(
     PostContent? Content,
     string? Status);
 
-public sealed record PublishPostRequest(
-    Guid PostId,
-    Guid SocialMediaId,
-    bool? IsPrivate = null);
+sealed record PublishPostsRequestPayload(
+    IReadOnlyList<PublishPostTargetInput> Targets,
+    bool ReturnSingleResponse);

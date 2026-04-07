@@ -1,13 +1,12 @@
 namespace Application.Posts.Models;
 
 public sealed record GenerateSocialMediaCaptionsResponse(
-    string TemplateFileName,
-    string TemplateMimeType,
-    IReadOnlyList<SocialMediaCaptionsByPlatformResponse> SocialMedia);
+    IReadOnlyList<SocialMediaCaptionsByPostResponse> SocialMedia);
 
-public sealed record SocialMediaCaptionsByPlatformResponse(
-    string Type,
-    IReadOnlyList<string> ResourceList,
+public sealed record SocialMediaCaptionsByPostResponse(
+    Guid PostId,
+    string SocialMediaType,
+    IReadOnlyList<Guid> ResourceList,
     IReadOnlyList<GeneratedCaptionResponse> Captions);
 
 public sealed record GeneratedCaptionResponse(

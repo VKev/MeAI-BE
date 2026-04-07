@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Application.Posts.Commands;
 using Application.Posts.Models;
 using MediatR;
@@ -20,12 +21,28 @@ public sealed class GeminiController : ApiController
     }
 
     [HttpPost("post-prepare")]
-    [HttpPost("post/prepare")]
+    [Consumes("application/json")]
     [ProducesResponseType(typeof(Result<PrepareGeminiPostsResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> PreparePosts(
-        [FromBody] JsonElement payload,
+        [FromBody] PrepareGeminiPostsRequest? request,
+        CancellationToken cancellationToken)
+    {
+        return await PreparePostsInternal(request, cancellationToken);
+    }
+
+    [HttpPost("post/prepare")]
+    [ApiExplorerSettings(IgnoreApi = true)]
+    public async Task<IActionResult> PreparePostsAlias(
+        [FromBody] PrepareGeminiPostsRequest? request,
+        CancellationToken cancellationToken)
+    {
+        return await PreparePostsInternal(request, cancellationToken);
+    }
+
+    private async Task<IActionResult> PreparePostsInternal(
+        PrepareGeminiPostsRequest? request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -33,7 +50,7 @@ public sealed class GeminiController : ApiController
             return Unauthorized(new { Message = "Unauthorized" });
         }
 
-        var requestResult = ParsePrepareGeminiPostsRequest(payload);
+        var requestResult = ParsePrepareGeminiPostsRequest(request);
         if (requestResult.IsFailure)
         {
             return HandleFailure(Result.Failure<PrepareGeminiPostsResponse>(requestResult.Error));
@@ -58,12 +75,12 @@ public sealed class GeminiController : ApiController
     }
 
     [HttpPost("captions")]
-    [Consumes("multipart/form-data")]
+    [Consumes("application/json")]
     [ProducesResponseType(typeof(Result<GenerateSocialMediaCaptionsResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GenerateSocialMediaCaptions(
-        [FromForm] GenerateSocialMediaCaptionsRequest? request,
+        [FromBody] GenerateSocialMediaCaptionsRequest? request,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -77,31 +94,18 @@ public sealed class GeminiController : ApiController
                 new Error("Gemini.InvalidRequest", "Request body is required.")));
         }
 
-        if (request.TemplateResource is null || request.TemplateResource.Length == 0)
+        var requestResult = ParseGenerateSocialMediaCaptionsRequest(request);
+        if (requestResult.IsFailure)
         {
-            return HandleFailure(Result.Failure<GenerateSocialMediaCaptionsResponse>(
-                new Error("Gemini.TemplateResourceMissing", "templateResource file is required.")));
+            return HandleFailure(Result.Failure<GenerateSocialMediaCaptionsResponse>(requestResult.Error));
         }
-
-        var socialMediaResult = ParseSocialMediaInputs(request.SocialMedia);
-        if (socialMediaResult.IsFailure)
-        {
-            return HandleFailure(Result.Failure<GenerateSocialMediaCaptionsResponse>(socialMediaResult.Error));
-        }
-
-        await using var memoryStream = new MemoryStream();
-        await request.TemplateResource.CopyToAsync(memoryStream, cancellationToken);
 
         var result = await _mediator.Send(
             new GenerateSocialMediaCaptionsCommand(
                 userId,
-                new GeminiTemplateResourceInput(
-                    request.TemplateResource.FileName,
-                    request.TemplateResource.ContentType ?? "application/octet-stream",
-                    memoryStream.ToArray()),
-                socialMediaResult.Value,
-                request.Language,
-                request.Instruction),
+                requestResult.Value.SocialMedia,
+                requestResult.Value.Language,
+                requestResult.Value.Instruction),
             cancellationToken);
 
         if (result.IsFailure)
@@ -150,37 +154,30 @@ public sealed class GeminiController : ApiController
         return Guid.TryParse(claimValue, out userId);
     }
 
-    private static Result<PrepareGeminiPostsRequestPayload> ParsePrepareGeminiPostsRequest(JsonElement payload)
+    private static Result<PrepareGeminiPostsRequestPayload> ParsePrepareGeminiPostsRequest(
+        PrepareGeminiPostsRequest? request)
     {
-        if (payload.ValueKind != JsonValueKind.Object)
+        if (request is null)
         {
             return Result.Failure<PrepareGeminiPostsRequestPayload>(
-                new Error("Gemini.InvalidRequest", "Request body must be a JSON object."));
+                new Error("Gemini.InvalidRequest", "Request body is required."));
         }
 
-        var workspaceId = TryGetGuidProperty(payload, "workspaceId");
-        var postType = GetStringProperty(payload, "postType");
-        var language = GetStringProperty(payload, "language");
-        var instruction = GetStringProperty(payload, "instruction");
-
-        if (!TryGetProperty(payload, "socialMedia", out var socialMediaElement) ||
-            socialMediaElement.ValueKind != JsonValueKind.Array)
+        if (request.SocialMedia is null)
         {
             return Result.Failure<PrepareGeminiPostsRequestPayload>(
                 new Error("SocialMedia.InvalidRequest", "socialMedia must be a JSON array."));
         }
 
         var socialMedia = new List<PrepareGeminiPostSocialMediaInput>();
-        foreach (var item in socialMediaElement.EnumerateArray())
+        foreach (var item in request.SocialMedia)
         {
-            if (item.ValueKind != JsonValueKind.Object)
+            if (item is null)
             {
                 continue;
             }
 
-            var socialMediaId = TryGetGuidProperty(item, "socialMediaId");
-            var type = GetStringProperty(item, "type", "platform");
-            var resourceIdsResult = GetGuidList(item, "resourceIds", "resourceList", "resource list", "resources");
+            var resourceIdsResult = item.ResolveResourceIds();
 
             if (resourceIdsResult.IsFailure)
             {
@@ -188,8 +185,8 @@ public sealed class GeminiController : ApiController
             }
 
             socialMedia.Add(new PrepareGeminiPostSocialMediaInput(
-                socialMediaId,
-                type,
+                item.SocialMediaId,
+                item.ResolveType(),
                 resourceIdsResult.Value));
         }
 
@@ -200,68 +197,58 @@ public sealed class GeminiController : ApiController
         }
 
         return Result.Success(new PrepareGeminiPostsRequestPayload(
-            workspaceId,
+            request.WorkspaceId,
             socialMedia,
-            postType,
-            language,
-            instruction));
+            request.PostType,
+            request.Language,
+            request.Instruction));
     }
 
-    private static Result<List<SocialMediaCaptionPlatformInput>> ParseSocialMediaInputs(string? payload)
+    private static Result<GenerateSocialMediaCaptionsRequestPayload> ParseGenerateSocialMediaCaptionsRequest(
+        GenerateSocialMediaCaptionsRequest? request)
     {
-        if (string.IsNullOrWhiteSpace(payload))
+        if (request is null)
         {
-            return Result.Failure<List<SocialMediaCaptionPlatformInput>>(
-                new Error("SocialMedia.InvalidRequest", "socialMedia is required."));
+            return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(
+                new Error("Gemini.InvalidRequest", "Request body is required."));
         }
 
-        try
+        if (request.SocialMedia is null)
         {
-            using var document = JsonDocument.Parse(payload);
-            var socialMediaArray = document.RootElement;
-
-            if (document.RootElement.ValueKind == JsonValueKind.Object &&
-                TryGetProperty(document.RootElement, "socialMedia", out var nestedSocialMedia))
-            {
-                socialMediaArray = nestedSocialMedia;
-            }
-
-            if (socialMediaArray.ValueKind != JsonValueKind.Array)
-            {
-                return Result.Failure<List<SocialMediaCaptionPlatformInput>>(
-                    new Error("SocialMedia.InvalidRequest", "socialMedia must be a JSON array."));
-            }
-
-            var items = new List<SocialMediaCaptionPlatformInput>();
-
-            foreach (var item in socialMediaArray.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object)
-                {
-                    continue;
-                }
-
-                var type = GetStringProperty(item, "type", "platform");
-                var resourceList = GetStringList(item, "resourceList", "resource list", "resources");
-
-                items.Add(new SocialMediaCaptionPlatformInput(
-                    type ?? string.Empty,
-                    resourceList));
-            }
-
-            if (items.Count == 0)
-            {
-                return Result.Failure<List<SocialMediaCaptionPlatformInput>>(
-                    new Error("SocialMedia.InvalidRequest", "socialMedia must contain at least one item."));
-            }
-
-            return Result.Success(items);
+            return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(
+                new Error("SocialMedia.InvalidRequest", "socialMedia must be a JSON array."));
         }
-        catch (JsonException ex)
+
+        var socialMedia = new List<SocialMediaCaptionPostInput>();
+        foreach (var item in request.SocialMedia)
         {
-            return Result.Failure<List<SocialMediaCaptionPlatformInput>>(
-                new Error("SocialMedia.InvalidJson", $"socialMedia JSON is invalid: {ex.Message}"));
+            if (item is null)
+            {
+                continue;
+            }
+
+            var resourceIdsResult = item.ResolveResourceIds();
+            if (resourceIdsResult.IsFailure)
+            {
+                return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(resourceIdsResult.Error);
+            }
+
+            socialMedia.Add(new SocialMediaCaptionPostInput(
+                item.PostId ?? Guid.Empty,
+                item.ResolveSocialMediaType() ?? string.Empty,
+                resourceIdsResult.Value));
         }
+
+        if (socialMedia.Count == 0)
+        {
+            return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(
+                new Error("SocialMedia.InvalidRequest", "socialMedia must contain at least one item."));
+        }
+
+        return Result.Success(new GenerateSocialMediaCaptionsRequestPayload(
+            socialMedia,
+            request.Language,
+            request.Instruction));
     }
 
     private static IReadOnlyList<string> GetStringList(JsonElement item, params string[] propertyNames)
@@ -402,16 +389,288 @@ public sealed class GeminiController : ApiController
 
 public sealed class GenerateSocialMediaCaptionsRequest
 {
-    public IFormFile? TemplateResource { get; set; }
-    public string? SocialMedia { get; set; }
     public string? Language { get; set; }
     public string? Instruction { get; set; }
+    public IReadOnlyList<GenerateSocialMediaCaptionPostRequest>? SocialMedia { get; set; }
+}
+
+public sealed class GenerateSocialMediaCaptionPostRequest
+{
+    public Guid? PostId { get; set; }
+    public string? SocialMediaType { get; set; }
+    public string? Type { get; set; }
+    public string? Platform { get; set; }
+    public IReadOnlyList<Guid>? ResourceIds { get; set; }
+    public IReadOnlyList<Guid>? ResourceList { get; set; }
+    public IReadOnlyList<Guid>? Resources { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+
+    public string? ResolveSocialMediaType() =>
+        !string.IsNullOrWhiteSpace(SocialMediaType)
+            ? SocialMediaType
+            : !string.IsNullOrWhiteSpace(Type)
+                ? Type
+                : Platform;
+
+    public Result<IReadOnlyList<Guid>> ResolveResourceIds()
+    {
+        if (TryNormalizeGuidList(ResourceIds, out var directResourceIds))
+        {
+            return Result.Success<IReadOnlyList<Guid>>(directResourceIds);
+        }
+
+        if (TryNormalizeGuidList(ResourceList, out var resourceList))
+        {
+            return Result.Success<IReadOnlyList<Guid>>(resourceList);
+        }
+
+        if (TryNormalizeGuidList(Resources, out var resources))
+        {
+            return Result.Success<IReadOnlyList<Guid>>(resources);
+        }
+
+        if (TryResolveGuidListFromExtensionData("resource list", out var extensionResult))
+        {
+            return extensionResult;
+        }
+
+        return Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+    }
+
+    private bool TryResolveGuidListFromExtensionData(
+        string propertyName,
+        out Result<IReadOnlyList<Guid>> result)
+    {
+        result = Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+
+        if (ExtensionData is null || ExtensionData.Count == 0)
+        {
+            return false;
+        }
+
+        var normalizedTarget = NormalizePropertyName(propertyName);
+        foreach (var pair in ExtensionData)
+        {
+            if (NormalizePropertyName(pair.Key) != normalizedTarget)
+            {
+                continue;
+            }
+
+            if (pair.Value.ValueKind != JsonValueKind.Array)
+            {
+                result = Result.Failure<IReadOnlyList<Guid>>(
+                    new Error("Resource.InvalidRequest", $"{propertyName} must be an array of GUID values."));
+                return true;
+            }
+
+            var parsed = new List<Guid>();
+            foreach (var element in pair.Value.EnumerateArray())
+            {
+                var raw = element.ValueKind == JsonValueKind.String
+                    ? element.GetString()
+                    : element.ToString();
+
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    continue;
+                }
+
+                if (!Guid.TryParse(raw, out var resourceId) || resourceId == Guid.Empty)
+                {
+                    result = Result.Failure<IReadOnlyList<Guid>>(
+                        new Error("Resource.InvalidRequest", $"{propertyName} must contain valid GUID values."));
+                    return true;
+                }
+
+                if (!parsed.Contains(resourceId))
+                {
+                    parsed.Add(resourceId);
+                }
+            }
+
+            result = Result.Success<IReadOnlyList<Guid>>(parsed);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryNormalizeGuidList(
+        IReadOnlyList<Guid>? values,
+        out IReadOnlyList<Guid> normalized)
+    {
+        normalized = Array.Empty<Guid>();
+
+        if (values is null)
+        {
+            return false;
+        }
+
+        normalized = values
+            .Where(value => value != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        return true;
+    }
+
+    private static string NormalizePropertyName(string propertyName)
+    {
+        var characters = propertyName
+            .Where(character => character is not (' ' or '_' or '-'))
+            .Select(char.ToLowerInvariant);
+
+        return new string(characters.ToArray());
+    }
+}
+
+public sealed class PrepareGeminiPostsRequest
+{
+    public Guid? WorkspaceId { get; set; }
+    public string? PostType { get; set; }
+    public string? Language { get; set; }
+    public string? Instruction { get; set; }
+    public IReadOnlyList<PrepareGeminiPostSocialMediaRequest>? SocialMedia { get; set; }
+}
+
+public sealed class PrepareGeminiPostSocialMediaRequest
+{
+    public Guid? SocialMediaId { get; set; }
+    public string? Type { get; set; }
+    public string? Platform { get; set; }
+    public IReadOnlyList<Guid>? ResourceIds { get; set; }
+    public IReadOnlyList<Guid>? ResourceList { get; set; }
+    public IReadOnlyList<Guid>? Resources { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+
+    public string? ResolveType() =>
+        !string.IsNullOrWhiteSpace(Type) ? Type : Platform;
+
+    public Result<IReadOnlyList<Guid>> ResolveResourceIds()
+    {
+        if (TryNormalizeGuidList(ResourceIds, out var directResourceIds))
+        {
+            return Result.Success<IReadOnlyList<Guid>>(directResourceIds);
+        }
+
+        if (TryNormalizeGuidList(ResourceList, out var resourceList))
+        {
+            return Result.Success<IReadOnlyList<Guid>>(resourceList);
+        }
+
+        if (TryNormalizeGuidList(Resources, out var resources))
+        {
+            return Result.Success<IReadOnlyList<Guid>>(resources);
+        }
+
+        if (TryResolveGuidListFromExtensionData("resource list", out var extensionResult))
+        {
+            return extensionResult;
+        }
+
+        return Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+    }
+
+    private bool TryResolveGuidListFromExtensionData(
+        string propertyName,
+        out Result<IReadOnlyList<Guid>> result)
+    {
+        result = Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+
+        if (ExtensionData is null || ExtensionData.Count == 0)
+        {
+            return false;
+        }
+
+        var normalizedTarget = NormalizePropertyName(propertyName);
+        foreach (var pair in ExtensionData)
+        {
+            if (NormalizePropertyName(pair.Key) != normalizedTarget)
+            {
+                continue;
+            }
+
+            if (pair.Value.ValueKind != JsonValueKind.Array)
+            {
+                result = Result.Failure<IReadOnlyList<Guid>>(
+                    new Error("Resource.InvalidRequest", $"{propertyName} must be an array of GUID values."));
+                return true;
+            }
+
+            var parsed = new List<Guid>();
+            foreach (var element in pair.Value.EnumerateArray())
+            {
+                var raw = element.ValueKind == JsonValueKind.String
+                    ? element.GetString()
+                    : element.ToString();
+
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    continue;
+                }
+
+                if (!Guid.TryParse(raw, out var resourceId) || resourceId == Guid.Empty)
+                {
+                    result = Result.Failure<IReadOnlyList<Guid>>(
+                        new Error("Resource.InvalidRequest", $"{propertyName} must contain valid GUID values."));
+                    return true;
+                }
+
+                if (!parsed.Contains(resourceId))
+                {
+                    parsed.Add(resourceId);
+                }
+            }
+
+            result = Result.Success<IReadOnlyList<Guid>>(parsed);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryNormalizeGuidList(
+        IReadOnlyList<Guid>? values,
+        out IReadOnlyList<Guid> normalized)
+    {
+        normalized = Array.Empty<Guid>();
+
+        if (values is null)
+        {
+            return false;
+        }
+
+        normalized = values
+            .Where(value => value != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        return true;
+    }
+
+    private static string NormalizePropertyName(string propertyName)
+    {
+        var characters = propertyName
+            .Where(character => character is not (' ' or '_' or '-'))
+            .Select(char.ToLowerInvariant);
+
+        return new string(characters.ToArray());
+    }
 }
 
 sealed record PrepareGeminiPostsRequestPayload(
     Guid? WorkspaceId,
     IReadOnlyList<PrepareGeminiPostSocialMediaInput> SocialMedia,
     string? PostType,
+    string? Language,
+    string? Instruction);
+
+sealed record GenerateSocialMediaCaptionsRequestPayload(
+    IReadOnlyList<SocialMediaCaptionPostInput> SocialMedia,
     string? Language,
     string? Instruction);
 

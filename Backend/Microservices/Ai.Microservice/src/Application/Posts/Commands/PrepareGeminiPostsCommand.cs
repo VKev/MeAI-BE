@@ -30,6 +30,7 @@ public sealed class PrepareGeminiPostsCommandHandler
     private const int DefaultDraftCount = 3;
     private const int MaxDraftCount = 6;
 
+    private readonly IPostBuilderRepository _postBuilderRepository;
     private readonly IPostRepository _postRepository;
     private readonly IWorkspaceRepository _workspaceRepository;
     private readonly IUserConfigService _userConfigService;
@@ -38,6 +39,7 @@ public sealed class PrepareGeminiPostsCommandHandler
     private readonly IGeminiCaptionService _geminiCaptionService;
 
     public PrepareGeminiPostsCommandHandler(
+        IPostBuilderRepository postBuilderRepository,
         IPostRepository postRepository,
         IWorkspaceRepository workspaceRepository,
         IUserConfigService userConfigService,
@@ -45,6 +47,7 @@ public sealed class PrepareGeminiPostsCommandHandler
         IUserSocialMediaService userSocialMediaService,
         IGeminiCaptionService geminiCaptionService)
     {
+        _postBuilderRepository = postBuilderRepository;
         _postRepository = postRepository;
         _workspaceRepository = workspaceRepository;
         _userConfigService = userConfigService;
@@ -176,6 +179,16 @@ public sealed class PrepareGeminiPostsCommandHandler
         }
 
         var responseGroups = new List<PreparedSocialMediaDraftGroupResponse>(captionResults.Length);
+        var postBuilder = new PostBuilder
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = request.UserId,
+            WorkspaceId = workspaceId,
+            PostType = resolvedPostType,
+            CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
+        };
+
+        await _postBuilderRepository.AddAsync(postBuilder, cancellationToken);
 
         foreach (var captionResult in captionResults)
         {
@@ -192,6 +205,7 @@ public sealed class PrepareGeminiPostsCommandHandler
                 var post = new Post
                 {
                     Id = Guid.CreateVersion7(),
+                    PostBuilderId = postBuilder.Id,
                     UserId = request.UserId,
                     WorkspaceId = workspaceId,
                     SocialMediaId = batch.SocialMediaId,
@@ -231,6 +245,7 @@ public sealed class PrepareGeminiPostsCommandHandler
         await _postRepository.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new PrepareGeminiPostsResponse(
+            postBuilder.Id,
             workspaceId,
             resolvedPostType,
             responseGroups));

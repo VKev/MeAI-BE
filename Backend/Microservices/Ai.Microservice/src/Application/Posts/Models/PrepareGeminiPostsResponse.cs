@@ -1,6 +1,7 @@
 namespace Application.Posts.Models;
 
 public sealed record PrepareGeminiPostsResponse(
+    Guid PostBuilderId,
     Guid? WorkspaceId,
     string PostType,
     IReadOnlyList<PreparedSocialMediaDraftGroupResponse> SocialMedia);

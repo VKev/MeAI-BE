@@ -19,6 +19,7 @@ public sealed class PrepareGeminiPostsCommandTests
         var socialMediaId = Guid.NewGuid();
         var resourceId = Guid.NewGuid();
 
+        var postBuilderRepository = new Mock<IPostBuilderRepository>();
         var postRepository = new Mock<IPostRepository>();
         var workspaceRepository = new Mock<IWorkspaceRepository>();
         var userConfigService = new Mock<IUserConfigService>();
@@ -96,7 +97,12 @@ public sealed class PrepareGeminiPostsCommandTests
             .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(2);
 
+        postBuilderRepository
+            .Setup(repository => repository.AddAsync(It.IsAny<PostBuilder>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         var handler = new PrepareGeminiPostsCommandHandler(
+            postBuilderRepository.Object,
             postRepository.Object,
             workspaceRepository.Object,
             userConfigService.Object,
@@ -120,6 +126,7 @@ public sealed class PrepareGeminiPostsCommandTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        result.Value.PostBuilderId.Should().NotBeEmpty();
         result.Value.SocialMedia.Should().ContainSingle();
         result.Value.SocialMedia[0].Type.Should().Be("facebook");
         result.Value.SocialMedia[0].Drafts.Should().HaveCount(2);
@@ -128,6 +135,7 @@ public sealed class PrepareGeminiPostsCommandTests
 
         postRepository.Verify(repository => repository.AddAsync(
             It.Is<Post>(post =>
+                post.PostBuilderId == result.Value.PostBuilderId &&
                 post.SocialMediaId == socialMediaId &&
                 post.Status == "draft" &&
                 post.Content != null &&
@@ -135,6 +143,12 @@ public sealed class PrepareGeminiPostsCommandTests
                 post.Content.ResourceList.SequenceEqual(new[] { resourceId.ToString() }) &&
                 post.Content.PostType == "posts"),
             It.IsAny<CancellationToken>()), Times.Exactly(2));
+
+        postBuilderRepository.Verify(repository => repository.AddAsync(
+            It.Is<PostBuilder>(builder =>
+                builder.Id == result.Value.PostBuilderId &&
+                builder.PostType == "posts"),
+            It.IsAny<CancellationToken>()), Times.Once);
 
         postRepository.Verify(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }

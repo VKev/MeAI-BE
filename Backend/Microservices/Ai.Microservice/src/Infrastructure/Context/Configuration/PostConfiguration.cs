@@ -14,12 +14,14 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
 
         entity.ToTable("posts");
 
+        entity.HasIndex(e => e.PostBuilderId, "ix_posts_post_builder_id");
         entity.HasIndex(e => new { e.UserId, e.WorkspaceId, e.CreatedAt }, "ix_posts_user_workspace_created_at")
             .IsDescending(false, false, true);
 
         entity.HasIndex(e => e.WorkspaceId, "ix_posts_workspace_id");
 
         entity.Property(e => e.Id).HasColumnName("id");
+        entity.Property(e => e.PostBuilderId).HasColumnName("post_builder_id");
         entity.Property(e => e.UserId).HasColumnName("user_id");
         entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
         entity.Property(e => e.SocialMediaId).HasColumnName("social_media_id");
@@ -45,6 +47,12 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
+
+        entity.HasOne(e => e.PostBuilder)
+            .WithMany(builder => builder.Posts)
+            .HasForeignKey(e => e.PostBuilderId)
+            .OnDelete(DeleteBehavior.Cascade)
+            .HasConstraintName("posts_post_builder_id_fkey");
 
     }
 

@@ -1,5 +1,8 @@
 namespace Application.Posts.Models;
 
+public sealed record PublishPostsResponse(
+    IReadOnlyList<PublishPostResponse> Posts);
+
 public sealed record PublishPostResponse(
     Guid PostId,
     string Status,
