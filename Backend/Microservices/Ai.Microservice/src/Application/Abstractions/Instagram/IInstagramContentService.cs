@@ -15,6 +15,14 @@ public interface IInstagramContentService
     Task<Result<InstagramPostInsights>> GetPostInsightsAsync(
         InstagramPostInsightsRequest request,
         CancellationToken cancellationToken);
+
+    Task<Result<InstagramAccountInsights>> GetAccountInsightsAsync(
+        InstagramAccountInsightsRequest request,
+        CancellationToken cancellationToken);
+
+    Task<Result<IReadOnlyList<InstagramCommentItem>>> GetPostCommentsAsync(
+        InstagramPostCommentsRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record InstagramPostListRequest(
@@ -30,6 +38,15 @@ public sealed record InstagramPostDetailsRequest(
 public sealed record InstagramPostInsightsRequest(
     string AccessToken,
     string PostId);
+
+public sealed record InstagramAccountInsightsRequest(
+    string AccessToken,
+    string InstagramUserId);
+
+public sealed record InstagramPostCommentsRequest(
+    string AccessToken,
+    string PostId,
+    int? Limit = null);
 
 public sealed record InstagramPostPageResult(
     IReadOnlyList<InstagramPostDetails> Posts,
@@ -55,3 +72,21 @@ public sealed record InstagramPostInsights(
     long? Impressions,
     long? Saved,
     long? Shares);
+
+public sealed record InstagramAccountInsights(
+    string Id,
+    string? Name,
+    string? Username,
+    long? Followers,
+    long? Following,
+    long? MediaCount,
+    string? ProfilePictureUrl);
+
+public sealed record InstagramCommentItem(
+    string Id,
+    string? Text,
+    string? Username,
+    string? Timestamp,
+    long? LikeCount,
+    long? RepliesCount,
+    string? Permalink);

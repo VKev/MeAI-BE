@@ -11,6 +11,8 @@ public sealed class InstagramContentService : IInstagramContentService
     private const string PostFields =
         "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,username,like_count,comments_count";
     private const string InsightMetrics = "views,reach,impressions,saved,shares";
+    private const string AccountFields = "id,name,username,followers_count,follows_count,media_count,profile_picture_url";
+    private const string CommentFields = "id,text,timestamp,username,like_count,replies_count";
 
     private readonly HttpClient _httpClient;
 
@@ -155,6 +157,76 @@ public sealed class InstagramContentService : IInstagramContentService
             Shares: GetMetric(metrics, "shares")));
     }
 
+    public async Task<Result<InstagramAccountInsights>> GetAccountInsightsAsync(
+        InstagramAccountInsightsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.AccessToken))
+        {
+            return Result.Failure<InstagramAccountInsights>(
+                new Error("Instagram.InvalidToken", "Instagram access token is missing."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.InstagramUserId))
+        {
+            return Result.Failure<InstagramAccountInsights>(
+                new Error("Instagram.InvalidAccount", "Instagram business account id is missing."));
+        }
+
+        var url =
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.InstagramUserId)}?fields={Uri.EscapeDataString(AccountFields)}&access_token={Uri.EscapeDataString(request.AccessToken)}";
+
+        var response = await SendGetAsync<InstagramAccountDto>(url, cancellationToken, allowFailure: true);
+        if (response.IsFailure || string.IsNullOrWhiteSpace(response.Value.Id))
+        {
+            return Result.Failure<InstagramAccountInsights>(new Error("Instagram.ApiWarning", "Instagram account insights are unavailable."));
+        }
+
+        return Result.Success(new InstagramAccountInsights(
+            Id: response.Value.Id!,
+            Name: response.Value.Name,
+            Username: response.Value.Username,
+            Followers: response.Value.FollowersCount,
+            Following: response.Value.FollowsCount,
+            MediaCount: response.Value.MediaCount,
+            ProfilePictureUrl: response.Value.ProfilePictureUrl));
+    }
+
+    public async Task<Result<IReadOnlyList<InstagramCommentItem>>> GetPostCommentsAsync(
+        InstagramPostCommentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.AccessToken) || string.IsNullOrWhiteSpace(request.PostId))
+        {
+            return Result.Failure<IReadOnlyList<InstagramCommentItem>>(
+                new Error("Instagram.InvalidRequest", "Instagram access token and post id are required."));
+        }
+
+        var limit = NormalizeCommentLimit(request.Limit);
+        var url =
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.PostId)}/comments?fields={Uri.EscapeDataString(CommentFields)}&limit={limit}&access_token={Uri.EscapeDataString(request.AccessToken)}";
+
+        var response = await SendGetAsync<InstagramCommentsApiResponse>(url, cancellationToken, allowFailure: true);
+        if (response.IsFailure)
+        {
+            return Result.Success<IReadOnlyList<InstagramCommentItem>>(Array.Empty<InstagramCommentItem>());
+        }
+
+        var comments = (response.Value.Data ?? Array.Empty<InstagramCommentDto>())
+            .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+            .Select(item => new InstagramCommentItem(
+                Id: item.Id!,
+                Text: item.Text,
+                Username: item.Username,
+                Timestamp: item.Timestamp,
+                LikeCount: item.LikeCount,
+                RepliesCount: item.RepliesCount,
+                Permalink: null))
+            .ToList();
+
+        return Result.Success<IReadOnlyList<InstagramCommentItem>>(comments);
+    }
+
     private async Task<Result<TResponse>> SendGetAsync<TResponse>(
         string url,
         CancellationToken cancellationToken,
@@ -215,6 +287,16 @@ public sealed class InstagramContentService : IInstagramContentService
         }
 
         return Math.Min(limit.Value, 50);
+    }
+
+    private static int NormalizeCommentLimit(int? limit)
+    {
+        if (limit is null or <= 0)
+        {
+            return 25;
+        }
+
+        return Math.Min(limit.Value, 100);
     }
 
     private static InstagramPostDetails MapPost(InstagramPostDto post)
@@ -317,6 +399,57 @@ public sealed class InstagramContentService : IInstagramContentService
     {
         [JsonPropertyName("data")]
         public InstagramInsightMetricDto[]? Data { get; set; }
+    }
+
+    private sealed class InstagramAccountDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("username")]
+        public string? Username { get; set; }
+
+        [JsonPropertyName("followers_count")]
+        public long? FollowersCount { get; set; }
+
+        [JsonPropertyName("follows_count")]
+        public long? FollowsCount { get; set; }
+
+        [JsonPropertyName("media_count")]
+        public long? MediaCount { get; set; }
+
+        [JsonPropertyName("profile_picture_url")]
+        public string? ProfilePictureUrl { get; set; }
+    }
+
+    private sealed class InstagramCommentsApiResponse
+    {
+        [JsonPropertyName("data")]
+        public InstagramCommentDto[]? Data { get; set; }
+    }
+
+    private sealed class InstagramCommentDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("text")]
+        public string? Text { get; set; }
+
+        [JsonPropertyName("username")]
+        public string? Username { get; set; }
+
+        [JsonPropertyName("timestamp")]
+        public string? Timestamp { get; set; }
+
+        [JsonPropertyName("like_count")]
+        public long? LikeCount { get; set; }
+
+        [JsonPropertyName("replies_count")]
+        public long? RepliesCount { get; set; }
     }
 
     private sealed class InstagramInsightMetricDto

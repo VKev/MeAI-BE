@@ -13,6 +13,8 @@ public sealed class FacebookContentService : IFacebookContentService
         "id,message,story,created_time,permalink_url,full_picture,shares,attachments{media_type,type,url,title,description,media,target{id},subattachments{media_type,type,url,title,description,media,target{id}}}";
     private const string PostInsightMetrics =
         "post_impressions_unique,post_reactions_by_type_total,post_activity_by_action_type";
+    private const string PageInsightFields = "id,name,followers_count,fan_count";
+    private const string CommentFields = "id,message,created_time,like_count,comment_count,permalink_url,from{id,name}";
 
     private readonly HttpClient _httpClient;
 
@@ -160,6 +162,109 @@ public sealed class FacebookContentService : IFacebookContentService
 
         return Result.Failure<FacebookPostDetails>(
             lastError ?? new Error("Facebook.PostNotFound", "Facebook post was not found for the current account."));
+    }
+
+    public async Task<Result<FacebookPageInsights>> GetPageInsightsAsync(
+        FacebookPageInsightsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.UserAccessToken))
+        {
+            return Result.Failure<FacebookPageInsights>(
+                new Error("Facebook.InvalidToken", "Facebook user access token is missing."));
+        }
+
+        var pagesResult = await ResolvePagesAsync(
+            request.UserAccessToken,
+            request.PreferredPageId,
+            request.PreferredPageAccessToken,
+            cancellationToken);
+
+        if (pagesResult.IsFailure)
+        {
+            return Result.Failure<FacebookPageInsights>(pagesResult.Error);
+        }
+
+        foreach (var page in pagesResult.Value)
+        {
+            var url =
+                $"{GraphApiBaseUrl}/{Uri.EscapeDataString(page.PageId)}?fields={Uri.EscapeDataString(PageInsightFields)}&access_token={Uri.EscapeDataString(page.PageAccessToken)}";
+
+            var response = await SendGetAsync<FacebookPageInsightsDto>(url, cancellationToken);
+            if (response.IsFailure)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(response.Value.Id))
+            {
+                continue;
+            }
+
+            return Result.Success(new FacebookPageInsights(
+                PageId: response.Value.Id!,
+                Name: response.Value.Name,
+                Followers: response.Value.FollowersCount,
+                Fans: response.Value.FanCount));
+        }
+
+        return Result.Failure<FacebookPageInsights>(
+            new Error("Facebook.ApiWarning", "Facebook page insights are unavailable."));
+    }
+
+    public async Task<Result<IReadOnlyList<SocialPlatformCommentItem>>> GetPostCommentsAsync(
+        FacebookPostCommentsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.UserAccessToken) || string.IsNullOrWhiteSpace(request.PostId))
+        {
+            return Result.Failure<IReadOnlyList<SocialPlatformCommentItem>>(
+                new Error("Facebook.InvalidRequest", "Facebook access token and post id are required."));
+        }
+
+        var pagesResult = await ResolvePagesAsync(
+            request.UserAccessToken,
+            request.PreferredPageId,
+            request.PreferredPageAccessToken,
+            cancellationToken);
+
+        if (pagesResult.IsFailure)
+        {
+            return Result.Failure<IReadOnlyList<SocialPlatformCommentItem>>(pagesResult.Error);
+        }
+
+        var pages = OrderPagesForLookup(pagesResult.Value, request.PostId);
+        var limit = NormalizeCommentLimit(request.Limit);
+
+        foreach (var page in pages)
+        {
+            var url =
+                $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.PostId)}/comments?fields={Uri.EscapeDataString(CommentFields)}&filter=stream&limit={limit}&access_token={Uri.EscapeDataString(page.PageAccessToken)}";
+
+            var response = await SendGetAsync<FacebookCommentsApiResponse>(url, cancellationToken);
+            if (response.IsFailure)
+            {
+                continue;
+            }
+
+            var comments = (response.Value.Data ?? Array.Empty<FacebookCommentDto>())
+                .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+                .Select(item => new SocialPlatformCommentItem(
+                    Id: item.Id!,
+                    Text: item.Message,
+                    AuthorId: item.From?.Id,
+                    AuthorName: item.From?.Name,
+                    AuthorUsername: null,
+                    CreatedAt: ToDateTimeOffset(item.CreatedTime),
+                    LikeCount: item.LikeCount,
+                    ReplyCount: item.CommentCount,
+                    Permalink: item.PermalinkUrl))
+                .ToList();
+
+            return Result.Success<IReadOnlyList<SocialPlatformCommentItem>>(comments);
+        }
+
+        return Result.Success<IReadOnlyList<SocialPlatformCommentItem>>(Array.Empty<SocialPlatformCommentItem>());
     }
 
     private async Task<Result<IReadOnlyList<PageAccessInfo>>> ResolvePagesAsync(
@@ -583,6 +688,28 @@ public sealed class FacebookContentService : IFacebookContentService
         return Math.Min(limit.Value, 50);
     }
 
+    private static int NormalizeCommentLimit(int? limit)
+    {
+        if (limit is null or <= 0)
+        {
+            return 25;
+        }
+
+        return Math.Min(limit.Value, 100);
+    }
+
+    private static DateTimeOffset? ToDateTimeOffset(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return DateTimeOffset.TryParse(value, out var parsed)
+            ? parsed
+            : null;
+    }
+
     private static FacebookCursorState? DecodeCursor(string? cursor)
     {
         if (string.IsNullOrWhiteSpace(cursor))
@@ -808,6 +935,21 @@ public sealed class FacebookContentService : IFacebookContentService
         public string? AccessToken { get; set; }
     }
 
+    private sealed class FacebookPageInsightsDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("followers_count")]
+        public long? FollowersCount { get; set; }
+
+        [JsonPropertyName("fan_count")]
+        public long? FanCount { get; set; }
+    }
+
     private sealed class FacebookPostDto
     {
         [JsonPropertyName("id")]
@@ -860,6 +1002,45 @@ public sealed class FacebookContentService : IFacebookContentService
     {
         [JsonPropertyName("summary")]
         public FacebookSummaryDto? Summary { get; set; }
+    }
+
+    private sealed class FacebookCommentsApiResponse
+    {
+        [JsonPropertyName("data")]
+        public FacebookCommentDto[]? Data { get; set; }
+    }
+
+    private sealed class FacebookCommentDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("message")]
+        public string? Message { get; set; }
+
+        [JsonPropertyName("created_time")]
+        public string? CreatedTime { get; set; }
+
+        [JsonPropertyName("like_count")]
+        public long? LikeCount { get; set; }
+
+        [JsonPropertyName("comment_count")]
+        public long? CommentCount { get; set; }
+
+        [JsonPropertyName("permalink_url")]
+        public string? PermalinkUrl { get; set; }
+
+        [JsonPropertyName("from")]
+        public FacebookCommentAuthorDto? From { get; set; }
+    }
+
+    private sealed class FacebookCommentAuthorDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
     }
 
     private sealed class FacebookSummaryDto

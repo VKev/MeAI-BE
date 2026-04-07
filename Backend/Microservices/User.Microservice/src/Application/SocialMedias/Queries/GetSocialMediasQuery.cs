@@ -53,18 +53,18 @@ public sealed class GetSocialMediasQueryHandler
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        var responses = new List<SocialMediaResponse>();
-        foreach (var socialMedia in socialMedias)
-        {
-            var profileResult = await _profileService.GetUserProfileAsync(
-                socialMedia.Type,
-                socialMedia.Metadata,
-                cancellationToken);
+        var responses = await Task.WhenAll(
+            socialMedias.Select(async socialMedia =>
+            {
+                var profileResult = await _profileService.GetUserProfileAsync(
+                    socialMedia.Type,
+                    socialMedia.Metadata,
+                    cancellationToken);
 
-            var profile = profileResult.IsSuccess ? profileResult.Value : null;
-            responses.Add(SocialMediaMapping.ToResponse(socialMedia, profile));
-        }
+                var profile = profileResult.IsSuccess ? profileResult.Value : null;
+                return SocialMediaMapping.ToResponse(socialMedia, profile);
+            }));
 
-        return Result.Success(responses);
+        return Result.Success(responses.ToList());
     }
 }

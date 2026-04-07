@@ -191,6 +191,25 @@ public sealed class FacebookPlatformPostQueriesTests
                     ["love"] = 5
                 })));
 
+        facebookContentService
+            .Setup(service => service.GetPageInsightsAsync(
+                It.Is<FacebookPageInsightsRequest>(request => request.UserAccessToken == "user-token"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new FacebookPageInsights(
+                PageId: "123",
+                Name: "MeAI",
+                Followers: 200,
+                Fans: 180)));
+
+        facebookContentService
+            .Setup(service => service.GetPostCommentsAsync(
+                It.Is<FacebookPostCommentsRequest>(request =>
+                    request.UserAccessToken == "user-token" &&
+                    request.PostId == postId &&
+                    request.Limit == 25),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success<IReadOnlyList<SocialPlatformCommentItem>>(Array.Empty<SocialPlatformCommentItem>()));
+
         postMetricSnapshotRepository
             .Setup(repository => repository.GetLatestForUpdateAsync(
                 userId,
@@ -234,6 +253,8 @@ public sealed class FacebookPlatformPostQueriesTests
         result.Value.PlatformPostId.Should().Be(postId);
         result.Value.Stats.Should().BeEquivalentTo(new SocialPlatformPostStatsResponse(
             Views: 1200,
+            Reach: 1200,
+            Impressions: 1200,
             Likes: 25,
             Comments: 7,
             Replies: null,
@@ -322,6 +343,29 @@ public sealed class FacebookPlatformPostQueriesTests
                 Saved: 15,
                 Shares: 6)));
 
+        instagramContentService
+            .Setup(service => service.GetAccountInsightsAsync(
+                It.Is<InstagramAccountInsightsRequest>(request =>
+                    request.AccessToken == "ig-token"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new InstagramAccountInsights(
+                Id: "ig-account",
+                Name: "MeAI IG",
+                Username: "meai",
+                Followers: 222,
+                Following: 12,
+                MediaCount: 8,
+                ProfilePictureUrl: "https://cdn.example.com/profile.jpg")));
+
+        instagramContentService
+            .Setup(service => service.GetPostCommentsAsync(
+                It.Is<InstagramPostCommentsRequest>(request =>
+                    request.AccessToken == "ig-token" &&
+                    request.PostId == postId &&
+                    request.Limit == 25),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success<IReadOnlyList<InstagramCommentItem>>(Array.Empty<InstagramCommentItem>()));
+
         postMetricSnapshotRepository
             .Setup(repository => repository.GetLatestForUpdateAsync(
                 userId,
@@ -354,6 +398,8 @@ public sealed class FacebookPlatformPostQueriesTests
         result.Value.Platform.Should().Be("instagram");
         result.Value.Stats.Should().BeEquivalentTo(new SocialPlatformPostStatsResponse(
             Views: 1100,
+            Reach: 980,
+            Impressions: 1300,
             Likes: 45,
             Comments: 9,
             Replies: null,
@@ -361,6 +407,14 @@ public sealed class FacebookPlatformPostQueriesTests
             Reposts: null,
             Quotes: null,
             TotalInteractions: 60,
-            ReactionBreakdown: null));
+            Saves: 15,
+            ReactionBreakdown: null,
+            MetricBreakdown: new Dictionary<string, long>
+            {
+                ["reach"] = 980,
+                ["impressions"] = 1300,
+                ["shares"] = 6,
+                ["saved"] = 15
+            }));
     }
 }

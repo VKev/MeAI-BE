@@ -15,6 +15,14 @@ public interface IThreadsContentService
     Task<Result<ThreadsPostInsights>> GetPostInsightsAsync(
         ThreadsPostInsightsRequest request,
         CancellationToken cancellationToken);
+
+    Task<Result<ThreadsAccountInsights>> GetAccountInsightsAsync(
+        ThreadsAccountInsightsRequest request,
+        CancellationToken cancellationToken);
+
+    Task<Result<IReadOnlyList<ThreadsReplyItem>>> GetPostRepliesAsync(
+        ThreadsPostRepliesRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record ThreadsPostListRequest(
@@ -29,6 +37,14 @@ public sealed record ThreadsPostDetailsRequest(
 public sealed record ThreadsPostInsightsRequest(
     string AccessToken,
     string PostId);
+
+public sealed record ThreadsAccountInsightsRequest(
+    string AccessToken);
+
+public sealed record ThreadsPostRepliesRequest(
+    string AccessToken,
+    string PostId,
+    int? Limit = null);
 
 public sealed record ThreadsPostPageResult(
     IReadOnlyList<ThreadsPostDetails> Posts,
@@ -61,3 +77,20 @@ public sealed record ThreadsPostInsights(
     long? Reposts,
     long? Quotes,
     long? Shares);
+
+public sealed record ThreadsAccountInsights(
+    string Id,
+    string? Username,
+    string? Name,
+    string? Biography,
+    string? ProfilePictureUrl,
+    long? Followers);
+
+public sealed record ThreadsReplyItem(
+    string Id,
+    string? Text,
+    string? Username,
+    string? Timestamp,
+    long? LikeCount,
+    long? ReplyCount,
+    string? Permalink);

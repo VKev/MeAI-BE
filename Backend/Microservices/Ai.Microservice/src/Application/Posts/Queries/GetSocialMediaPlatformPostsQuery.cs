@@ -202,13 +202,22 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
                         PublishedAt: ToUnixTime(video.CreateTime),
                         Stats: new SocialPlatformPostStatsResponse(
                             Views: video.ViewCount,
+                            Reach: video.ViewCount,
+                            Impressions: video.ViewCount,
                             Likes: video.LikeCount,
                             Comments: video.CommentCount,
                             Replies: null,
                             Shares: video.ShareCount,
                             Reposts: null,
                             Quotes: null,
-                            TotalInteractions: (video.LikeCount ?? 0) + (video.CommentCount ?? 0) + (video.ShareCount ?? 0))))
+                            TotalInteractions: (video.LikeCount ?? 0) + (video.CommentCount ?? 0) + (video.ShareCount ?? 0),
+                            MetricBreakdown: new Dictionary<string, long>
+                            {
+                                ["views"] = video.ViewCount ?? 0,
+                                ["likes"] = video.LikeCount ?? 0,
+                                ["comments"] = video.CommentCount ?? 0,
+                                ["shares"] = video.ShareCount ?? 0
+                            })))
                 .ToList();
 
             var metrics = await _postMetricSnapshotRepository.GetLatestByPlatformPostIdsAsync(
@@ -467,18 +476,26 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
         var shares = primary.Shares ?? fallback.Shares;
         var reposts = primary.Reposts ?? fallback.Reposts;
         var quotes = primary.Quotes ?? fallback.Quotes;
+        var reach = primary.Reach ?? fallback.Reach;
+        var impressions = primary.Impressions ?? fallback.Impressions;
+        var saves = primary.Saves ?? fallback.Saves;
         var reactionBreakdown = primary.ReactionBreakdown ?? fallback.ReactionBreakdown;
+        var metricBreakdown = primary.MetricBreakdown ?? fallback.MetricBreakdown;
 
         return primary with
         {
             Views = primary.Views ?? fallback.Views,
+            Reach = reach,
+            Impressions = impressions,
             Likes = likes,
             Comments = comments,
             Replies = replies,
             Shares = shares,
             Reposts = reposts,
             Quotes = quotes,
+            Saves = saves,
             ReactionBreakdown = reactionBreakdown,
+            MetricBreakdown = metricBreakdown,
             TotalInteractions =
                 (likes ?? 0) +
                 (comments ?? 0) +

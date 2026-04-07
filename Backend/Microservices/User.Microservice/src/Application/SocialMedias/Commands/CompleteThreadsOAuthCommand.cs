@@ -107,13 +107,16 @@ public sealed class CompleteThreadsOAuthCommandHandler
 
         var metadata = JsonDocument.Parse(JsonSerializer.Serialize(new
         {
+            id = profile?.Id ?? tokenResponse.UserId,
             user_id = tokenResponse.UserId,
             access_token = tokenResponse.AccessToken,
             expires_at = now.AddSeconds(tokenResponse.ExpiresIn),
             token_type = tokenResponse.TokenType,
             username = profile?.Username,
             name = profile?.Name,
+            profile_picture_url = profile?.ThreadsProfilePictureUrl,
             threads_profile_picture_url = profile?.ThreadsProfilePictureUrl,
+            biography = profile?.ThreadsBiography,
             threads_biography = profile?.ThreadsBiography,
             followers_count = profile?.FollowersCount,
             follows_count = profile?.FollowsCount,

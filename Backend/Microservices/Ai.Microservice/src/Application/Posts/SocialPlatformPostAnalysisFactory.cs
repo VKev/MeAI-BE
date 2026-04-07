@@ -52,12 +52,28 @@ internal static class SocialPlatformPostAnalysisFactory
     {
         var highlights = new List<string>();
 
-        if (views is null || views <= 0)
+        if (views is null)
         {
             highlights.Add("Provider response does not expose enough view data for rate-based analysis.");
             if (totalInteractions > 0)
             {
                 highlights.Add($"The post still recorded {totalInteractions} tracked interactions.");
+            }
+
+            return highlights;
+        }
+
+        if (views <= 0)
+        {
+            highlights.Add("Tracked metrics are currently zero at the provider's latest sync.");
+
+            if (totalInteractions > 0)
+            {
+                highlights.Add($"The post still recorded {totalInteractions} tracked interactions.");
+            }
+            else
+            {
+                highlights.Add("Try refreshing later if the platform updates engagement counts with a delay.");
             }
 
             return highlights;

@@ -85,23 +85,31 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         string accessToken,
         CancellationToken cancellationToken)
     {
+        var metadataProfileResult = GetThreadsProfileFromMetadata(metadata);
+        var metadataProfile = metadataProfileResult.IsSuccess ? metadataProfileResult.Value : null;
         var result = await _threadsOAuthService.GetUserProfileAsync(accessToken, cancellationToken);
 
         if (result.IsFailure)
         {
-            return GetThreadsProfileFromMetadata(metadata);
+            return metadataProfileResult;
         }
 
         var profile = result.Value;
         return Result.Success(new SocialMediaUserProfile(
-            UserId: profile.Id,
-            Username: profile.Username,
-            DisplayName: profile.Name,
-            ProfilePictureUrl: profile.ThreadsProfilePictureUrl,
-            Bio: profile.ThreadsBiography,
-            FollowerCount: profile.FollowersCount,
-            FollowingCount: profile.FollowsCount,
-            PostCount: profile.MediaCount,
+            UserId: FirstNonEmpty(profile.Id, metadataProfile?.UserId),
+            Username: FirstNonEmpty(profile.Username, metadataProfile?.Username),
+            DisplayName: FirstNonEmpty(profile.Name, metadataProfile?.DisplayName),
+            ProfilePictureUrl: FirstNonEmpty(
+                profile.ThreadsProfilePictureUrl,
+                metadataProfile?.ProfilePictureUrl,
+                GetString(metadata.RootElement, "profile_picture_url")),
+            Bio: FirstNonEmpty(
+                profile.ThreadsBiography,
+                metadataProfile?.Bio,
+                GetString(metadata.RootElement, "biography")),
+            FollowerCount: profile.FollowersCount ?? metadataProfile?.FollowerCount,
+            FollowingCount: profile.FollowsCount ?? metadataProfile?.FollowingCount,
+            PostCount: profile.MediaCount ?? metadataProfile?.PostCount,
             PageLikeCount: null));
     }
 
@@ -233,17 +241,31 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         var root = metadata.RootElement;
 
         return Result.Success(new SocialMediaUserProfile(
-            UserId: root.TryGetProperty("user_id", out var userIdElement) ? userIdElement.GetString() : null,
-            Username: root.TryGetProperty("username", out var usernameElement) ? usernameElement.GetString() : null,
-            DisplayName: root.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null,
-            ProfilePictureUrl: root.TryGetProperty("threads_profile_picture_url", out var pictureElement)
-                ? pictureElement.GetString()
-                : null,
-            Bio: root.TryGetProperty("threads_biography", out var bioElement) ? bioElement.GetString() : null,
+            UserId: GetString(root, "user_id") ?? GetString(root, "id"),
+            Username: GetString(root, "username"),
+            DisplayName: GetString(root, "name"),
+            ProfilePictureUrl: GetString(root, "threads_profile_picture_url") ?? GetString(root, "profile_picture_url"),
+            Bio: GetString(root, "threads_biography") ?? GetString(root, "biography"),
             FollowerCount: TryGetIntValue(root, "followers_count"),
             FollowingCount: TryGetIntValue(root, "follows_count"),
             PostCount: TryGetIntValue(root, "media_count"),
             PageLikeCount: null));
+    }
+
+    private static string? GetString(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var element) ||
+            element.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return element.GetString();
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
     }
 
     private static int? TryGetIntValue(JsonElement root, string propertyName)

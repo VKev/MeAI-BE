@@ -104,6 +104,8 @@ internal static class SocialPlatformPostMetricSnapshotMapper
 
         return new SocialPlatformPostStatsResponse(
             Views: metric.ViewCount,
+            Reach: rawStats?.Reach,
+            Impressions: rawStats?.Impressions,
             Likes: metric.LikeCount,
             Comments: metric.CommentCount,
             Replies: metric.ReplyCount,
@@ -111,7 +113,9 @@ internal static class SocialPlatformPostMetricSnapshotMapper
             Reposts: metric.RepostCount,
             Quotes: metric.QuoteCount,
             TotalInteractions: totalInteractions,
-            ReactionBreakdown: rawStats?.ReactionBreakdown);
+            Saves: rawStats?.Saves,
+            ReactionBreakdown: rawStats?.ReactionBreakdown,
+            MetricBreakdown: rawStats?.MetricBreakdown);
     }
 
     private static void ApplyStats(PostMetricSnapshot metric, SocialPlatformPostStatsResponse stats)

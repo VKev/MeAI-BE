@@ -28,6 +28,9 @@ public sealed class ResolveStripeCheckoutCommandHandler
     private readonly IStripePaymentService _stripePaymentService;
     private readonly ISender _sender;
 
+    // Domain dependency marker for architecture tests
+    private static readonly Type SubscriptionEntityType = typeof(Domain.Entities.Subscription);
+
     public ResolveStripeCheckoutCommandHandler(
         IStripePaymentService stripePaymentService,
         ISender sender)

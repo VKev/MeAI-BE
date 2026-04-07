@@ -11,6 +11,8 @@ public sealed class ThreadsContentService : IThreadsContentService
     private const string PostFields =
         "id,media_product_type,media_type,media_url,gif_url,permalink,username,text,timestamp,shortcode,thumbnail_url,is_quote_post,has_replies,alt_text,link_attachment_url,topic_tag,profile_picture_url";
     private const string InsightsMetrics = "views,likes,replies,reposts,quotes,shares";
+    private const string AccountFields = "id,username,name,threads_biography,threads_profile_picture_url,followers_count";
+    private const string ReplyFields = "id,text,username,timestamp,like_count,reply_count,permalink";
 
     private readonly HttpClient _httpClient;
 
@@ -143,9 +145,73 @@ public sealed class ThreadsContentService : IThreadsContentService
             Shares: GetMetric(metrics, "shares")));
     }
 
+    public async Task<Result<ThreadsAccountInsights>> GetAccountInsightsAsync(
+        ThreadsAccountInsightsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.AccessToken))
+        {
+            return Result.Failure<ThreadsAccountInsights>(
+                new Error("Threads.InvalidToken", "Threads access token is missing."));
+        }
+
+        var url =
+            $"{GraphApiBaseUrl}/me?fields={Uri.EscapeDataString(AccountFields)}&access_token={Uri.EscapeDataString(request.AccessToken)}";
+
+        var response = await SendGetAsync<ThreadsAccountDto>(url, cancellationToken, allowFailure: true);
+        if (response.IsFailure || string.IsNullOrWhiteSpace(response.Value.Id))
+        {
+            return Result.Failure<ThreadsAccountInsights>(new Error("Threads.ApiWarning", "Threads account insights are unavailable."));
+        }
+
+        return Result.Success(new ThreadsAccountInsights(
+            Id: response.Value.Id!,
+            Username: response.Value.Username,
+            Name: response.Value.Name,
+            Biography: response.Value.Biography,
+            ProfilePictureUrl: response.Value.ProfilePictureUrl,
+            Followers: response.Value.FollowersCount));
+    }
+
+    public async Task<Result<IReadOnlyList<ThreadsReplyItem>>> GetPostRepliesAsync(
+        ThreadsPostRepliesRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.AccessToken) || string.IsNullOrWhiteSpace(request.PostId))
+        {
+            return Result.Failure<IReadOnlyList<ThreadsReplyItem>>(
+                new Error("Threads.InvalidRequest", "Threads access token and post id are required."));
+        }
+
+        var limit = NormalizeReplyLimit(request.Limit);
+        var url =
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.PostId)}/replies?fields={Uri.EscapeDataString(ReplyFields)}&limit={limit}&access_token={Uri.EscapeDataString(request.AccessToken)}";
+
+        var response = await SendGetAsync<ThreadsRepliesApiResponse>(url, cancellationToken, allowFailure: true);
+        if (response.IsFailure)
+        {
+            return Result.Success<IReadOnlyList<ThreadsReplyItem>>(Array.Empty<ThreadsReplyItem>());
+        }
+
+        var replies = (response.Value.Data ?? Array.Empty<ThreadsReplyDto>())
+            .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+            .Select(item => new ThreadsReplyItem(
+                Id: item.Id!,
+                Text: item.Text,
+                Username: item.Username,
+                Timestamp: item.Timestamp,
+                LikeCount: item.LikeCount,
+                ReplyCount: item.ReplyCount,
+                Permalink: item.Permalink))
+            .ToList();
+
+        return Result.Success<IReadOnlyList<ThreadsReplyItem>>(replies);
+    }
+
     private async Task<Result<TResponse>> SendGetAsync<TResponse>(
         string url,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowFailure = false)
     {
         try
         {
@@ -154,6 +220,11 @@ public sealed class ThreadsContentService : IThreadsContentService
 
             if (!response.IsSuccessStatusCode)
             {
+                if (allowFailure)
+                {
+                    return Result.Failure<TResponse>(new Error("Threads.ApiWarning", "Optional Threads endpoint is unavailable."));
+                }
+
                 return Result.Failure<TResponse>(
                     new Error("Threads.ApiError", ReadGraphApiError(body) ?? $"Threads API request failed with status code {(int)response.StatusCode}."));
             }
@@ -169,11 +240,21 @@ public sealed class ThreadsContentService : IThreadsContentService
         }
         catch (HttpRequestException ex)
         {
+            if (allowFailure)
+            {
+                return Result.Failure<TResponse>(new Error("Threads.ApiWarning", ex.Message));
+            }
+
             return Result.Failure<TResponse>(
                 new Error("Threads.NetworkError", $"Network error: {ex.Message}"));
         }
         catch (JsonException ex)
         {
+            if (allowFailure)
+            {
+                return Result.Failure<TResponse>(new Error("Threads.ApiWarning", ex.Message));
+            }
+
             return Result.Failure<TResponse>(
                 new Error("Threads.ParseError", $"JSON parse error: {ex.Message}"));
         }
@@ -187,6 +268,16 @@ public sealed class ThreadsContentService : IThreadsContentService
         }
 
         return Math.Min(limit.Value, 50);
+    }
+
+    private static int NormalizeReplyLimit(int? limit)
+    {
+        if (limit is null or <= 0)
+        {
+            return 25;
+        }
+
+        return Math.Min(limit.Value, 100);
     }
 
     private static ThreadsPostDetails MapPost(ThreadsPostDto post)
@@ -316,6 +407,57 @@ public sealed class ThreadsContentService : IThreadsContentService
     {
         [JsonPropertyName("data")]
         public ThreadsInsightMetricDto[]? Data { get; set; }
+    }
+
+    private sealed class ThreadsAccountDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("username")]
+        public string? Username { get; set; }
+
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("threads_biography")]
+        public string? Biography { get; set; }
+
+        [JsonPropertyName("threads_profile_picture_url")]
+        public string? ProfilePictureUrl { get; set; }
+
+        [JsonPropertyName("followers_count")]
+        public long? FollowersCount { get; set; }
+    }
+
+    private sealed class ThreadsRepliesApiResponse
+    {
+        [JsonPropertyName("data")]
+        public ThreadsReplyDto[]? Data { get; set; }
+    }
+
+    private sealed class ThreadsReplyDto
+    {
+        [JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [JsonPropertyName("text")]
+        public string? Text { get; set; }
+
+        [JsonPropertyName("username")]
+        public string? Username { get; set; }
+
+        [JsonPropertyName("timestamp")]
+        public string? Timestamp { get; set; }
+
+        [JsonPropertyName("like_count")]
+        public long? LikeCount { get; set; }
+
+        [JsonPropertyName("reply_count")]
+        public long? ReplyCount { get; set; }
+
+        [JsonPropertyName("permalink")]
+        public string? Permalink { get; set; }
     }
 
     private sealed class ThreadsInsightMetricDto
