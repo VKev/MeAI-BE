@@ -4,6 +4,7 @@ using Infrastructure.Configs;
 using Scalar.AspNetCore;
 using Serilog;
 using SharedLibrary.Configs;
+using WebApi.OpenApi;
 using WebApi.Setups;
 
 AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
@@ -20,7 +21,11 @@ var shouldAutoApplyMigrations = builder.ConfigureAutoMigrations();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddAuthorization();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddOperationTransformer(GeminiOpenApiTransformers.TransformAsync);
+    options.AddOperationTransformer(PostsOpenApiTransformers.TransformAsync);
+});
 var corsPolicyName = builder.AddCorsPolicy();
 
 builder.ConfigureSerilogLogging();

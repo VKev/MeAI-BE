@@ -3,25 +3,16 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Domain.Entities;
 
-public sealed class Post
+public sealed class PostBuilder
 {
     [Key]
     public Guid Id { get; set; }
-
-    public Guid? PostBuilderId { get; set; }
 
     public Guid UserId { get; set; }
 
     public Guid? WorkspaceId { get; set; }
 
-    public Guid? SocialMediaId { get; set; }
-
-    public string? Title { get; set; }
-
-    [Column(TypeName = "jsonb")]
-    public PostContent? Content { get; set; }
-
-    public string? Status { get; set; }
+    public string? PostType { get; set; }
 
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
@@ -32,5 +23,5 @@ public sealed class Post
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? DeletedAt { get; set; }
 
-    public PostBuilder? PostBuilder { get; set; }
+    public ICollection<Post> Posts { get; set; } = new List<Post>();
 }

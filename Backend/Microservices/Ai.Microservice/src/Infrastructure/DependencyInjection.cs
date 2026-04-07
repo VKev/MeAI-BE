@@ -94,6 +94,7 @@ namespace Infrastructure
             services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
             services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();
+            services.AddScoped<IPostBuilderRepository, PostBuilderRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
             services.AddScoped<IPostPublicationRepository, PostPublicationRepository>();
             services.AddScoped<IPostMetricSnapshotRepository, PostMetricSnapshotRepository>();

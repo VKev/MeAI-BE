@@ -111,6 +111,43 @@ public sealed class GeminiCaptionServiceTests
     }
 
     [Fact]
+    public async Task GenerateSocialMediaCaptionsAsync_ShouldFallbackWhenProviderRejectsResourceUris()
+    {
+        var responseBody =
+            """
+            {
+              "error": {
+                "message": "Request contains an invalid argument."
+              }
+            }
+            """;
+
+        var handler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
+        });
+
+        var service = CreateService(handler);
+
+        var result = await service.GenerateSocialMediaCaptionsAsync(
+            new GeminiSocialMediaCaptionRequest(
+                [new GeminiCaptionResource("https://cdn.example.com/asset.webp", "image/webp")],
+                null,
+                "facebook",
+                ["product teaser"],
+                2,
+                "English",
+                "Keep it direct"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().HaveCount(2);
+        result.Value[0].Caption.Should().Contain("Product teaser", Exactly.Once());
+        result.Value[0].Hashtags.Should().NotBeEmpty();
+        result.Value[0].TrendingHashtags.Should().NotBeEmpty();
+    }
+
+    [Fact]
     public async Task GenerateTitleAsync_ShouldFallbackWhenProviderIsTemporarilyUnavailable()
     {
         var responseBody =

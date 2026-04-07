@@ -18,6 +18,8 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<ChatSession> ChatSessions { get; set; }
 
+    public virtual DbSet<PostBuilder> PostBuilders { get; set; }
+
     public virtual DbSet<Post> Posts { get; set; }
 
     public virtual DbSet<PostResource> PostResources { get; set; }

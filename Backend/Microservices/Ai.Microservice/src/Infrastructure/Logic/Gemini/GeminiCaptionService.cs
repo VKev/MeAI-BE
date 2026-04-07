@@ -31,6 +31,13 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
         "deadline exceeded",
         "timed out"
     ];
+    private static readonly string[] LocalFallbackErrorCodes =
+    [
+        "Gemini.RequestFailed",
+        "Gemini.NetworkError",
+        "Gemini.ParseError",
+        "Gemini.EmptyResponse"
+    ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -254,6 +261,12 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
         if (string.IsNullOrWhiteSpace(error.Code) && string.IsNullOrWhiteSpace(error.Description))
         {
             return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(error.Code) &&
+            LocalFallbackErrorCodes.Contains(error.Code, StringComparer.OrdinalIgnoreCase))
+        {
+            return true;
         }
 
         var haystack = $"{error.Code} {error.Description}".ToLowerInvariant();
