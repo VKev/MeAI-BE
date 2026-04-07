@@ -29,9 +29,10 @@ public sealed record GeminiCaptionResource(
     string MimeType);
 
 public sealed record GeminiSocialMediaCaptionRequest(
-    GeminiInlineCaptionResource TemplateResource,
+    IReadOnlyList<GeminiCaptionResource> Resources,
+    GeminiInlineCaptionResource? InlineTemplateResource,
     string Platform,
-    IReadOnlyList<string> ResourceList,
+    IReadOnlyList<string> ResourceHints,
     int CaptionCount,
     string? LanguageHint,
     string? Instruction,

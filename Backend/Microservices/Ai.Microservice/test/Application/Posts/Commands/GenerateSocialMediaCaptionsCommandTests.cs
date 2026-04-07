@@ -63,6 +63,8 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
 
         geminiCaptionService.Verify(service => service.GenerateSocialMediaCaptionsAsync(
             It.Is<GeminiSocialMediaCaptionRequest>(request =>
+                request.Resources.Count == 0 &&
+                request.InlineTemplateResource != null &&
                 request.Platform == "tiktok" &&
                 request.CaptionCount == 4 &&
                 request.PreferredModel == "gemini-test-model"),
@@ -70,6 +72,8 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
 
         geminiCaptionService.Verify(service => service.GenerateSocialMediaCaptionsAsync(
             It.Is<GeminiSocialMediaCaptionRequest>(request =>
+                request.Resources.Count == 0 &&
+                request.InlineTemplateResource != null &&
                 request.Platform == "ig" &&
                 request.CaptionCount == 4 &&
                 request.PreferredModel == "gemini-test-model"),

@@ -18,6 +18,19 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
     private readonly string _defaultModel;
     private readonly HttpClient _httpClient;
     private static readonly Regex HashtagSplitRegex = new(@"[\s,]+", RegexOptions.Compiled);
+    private static readonly char[] SentenceTrimCharacters = [' ', '.', ',', ';', ':', '!', '?', '-', '"', '\''];
+    private static readonly string[] TransientFailureMarkers =
+    [
+        "high demand",
+        "try again later",
+        "temporarily unavailable",
+        "unavailable",
+        "overloaded",
+        "quota",
+        "rate limit",
+        "deadline exceeded",
+        "timed out"
+    ];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -93,10 +106,13 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
         GeminiSocialMediaCaptionRequest request,
         CancellationToken cancellationToken)
     {
-        if (request.TemplateResource.Content.Length == 0)
+        var hasInlineTemplate = request.InlineTemplateResource is { Content.Length: > 0 };
+        var hasResources = request.Resources.Count > 0;
+
+        if (!hasInlineTemplate && !hasResources)
         {
             return Result.Failure<IReadOnlyList<GeminiGeneratedCaption>>(
-                new Error("Gemini.TemplateResourceMissing", "Template resource is required."));
+                new Error("Gemini.TemplateResourceMissing", "At least one template resource is required."));
         }
 
         if (request.CaptionCount <= 0)
@@ -107,10 +123,43 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
 
         var prompt = BuildSocialMediaPrompt(
             request.Platform,
-            request.ResourceList,
+            request.ResourceHints,
             request.CaptionCount,
             request.LanguageHint,
             request.Instruction);
+
+        var parts = new List<GeminiPart>
+        {
+            new() { Text = prompt }
+        };
+
+        if (hasInlineTemplate)
+        {
+            parts.Add(new GeminiPart
+            {
+                InlineData = new GeminiInlineData
+                {
+                    MimeType = string.IsNullOrWhiteSpace(request.InlineTemplateResource!.MimeType)
+                        ? "application/octet-stream"
+                        : request.InlineTemplateResource.MimeType.Trim(),
+                    Data = Convert.ToBase64String(request.InlineTemplateResource.Content)
+                }
+            });
+        }
+
+        foreach (var resource in request.Resources)
+        {
+            parts.Add(new GeminiPart
+            {
+                FileData = new GeminiFileData
+                {
+                    FileUri = resource.FileUri,
+                    MimeType = string.IsNullOrWhiteSpace(resource.MimeType)
+                        ? "application/octet-stream"
+                        : resource.MimeType.Trim()
+                }
+            });
+        }
 
         var payload = new GeminiGenerateContentRequest
         {
@@ -119,20 +168,7 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
                 new GeminiContent
                 {
                     Role = "user",
-                    Parts =
-                    [
-                        new GeminiPart { Text = prompt },
-                        new GeminiPart
-                        {
-                            InlineData = new GeminiInlineData
-                            {
-                                MimeType = string.IsNullOrWhiteSpace(request.TemplateResource.MimeType)
-                                    ? "application/octet-stream"
-                                    : request.TemplateResource.MimeType.Trim(),
-                                Data = Convert.ToBase64String(request.TemplateResource.Content)
-                            }
-                        }
-                    ]
+                    Parts = parts
                 }
             ],
             GenerationConfig = new GeminiGenerationConfig
@@ -150,10 +186,21 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
 
         if (responseTextResult.IsFailure)
         {
+            if (ShouldUseLocalFallback(responseTextResult.Error))
+            {
+                return Result.Success<IReadOnlyList<GeminiGeneratedCaption>>(BuildFallbackCaptions(request));
+            }
+
             return Result.Failure<IReadOnlyList<GeminiGeneratedCaption>>(responseTextResult.Error);
         }
 
-        return ParseSocialMediaCaptions(responseTextResult.Value);
+        var parsedResult = ParseSocialMediaCaptions(responseTextResult.Value);
+        if (parsedResult.IsFailure && ShouldUseLocalFallback(parsedResult.Error))
+        {
+            return Result.Success<IReadOnlyList<GeminiGeneratedCaption>>(BuildFallbackCaptions(request));
+        }
+
+        return parsedResult;
     }
 
     public async Task<Result<string>> GenerateTitleAsync(
@@ -191,10 +238,196 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
 
         if (responseTextResult.IsFailure)
         {
+            if (ShouldUseLocalFallback(responseTextResult.Error))
+            {
+                return Result.Success(BuildFallbackTitle(request.Content));
+            }
+
             return Result.Failure<string>(responseTextResult.Error);
         }
 
         return Result.Success(responseTextResult.Value);
+    }
+
+    private static bool ShouldUseLocalFallback(Error error)
+    {
+        if (string.IsNullOrWhiteSpace(error.Code) && string.IsNullOrWhiteSpace(error.Description))
+        {
+            return false;
+        }
+
+        var haystack = $"{error.Code} {error.Description}".ToLowerInvariant();
+        return TransientFailureMarkers.Any(marker => haystack.Contains(marker, StringComparison.Ordinal));
+    }
+
+    private static IReadOnlyList<GeminiGeneratedCaption> BuildFallbackCaptions(GeminiSocialMediaCaptionRequest request)
+    {
+        var platform = request.Platform.ToLowerInvariant();
+        var platformName = platform switch
+        {
+            "facebook" => "Facebook",
+            "tiktok" => "TikTok",
+            "ig" => "Instagram",
+            "threads" => "Threads",
+            _ => request.Platform
+        };
+
+        var subject = ResolveFallbackSubject(request.ResourceHints, request.Resources);
+        var cta = platform switch
+        {
+            "facebook" => "Send us a message to learn more.",
+            "tiktok" => "Follow for the next drop.",
+            "ig" => "Save this post for later.",
+            "threads" => "Reply with your take.",
+            _ => "Check it out today."
+        };
+
+        string[] hooks = platform switch
+        {
+            "facebook" =>
+            [
+                "A practical update worth sharing",
+                "Built for people who want clearer results",
+                "A strong option when quality matters"
+            ],
+            "tiktok" =>
+            [
+                "POV: you found the upgrade early",
+                "This is the kind of drop that stops the scroll",
+                "Quick look, strong first impression"
+            ],
+            "ig" =>
+            [
+                "A polished look with real everyday value",
+                "Clean details, strong finish, easy to love",
+                "Designed to stand out without trying too hard"
+            ],
+            "threads" =>
+            [
+                "Small detail, big difference",
+                "One smart move can change the whole result",
+                "This is why thoughtful execution matters"
+            ],
+            _ =>
+            [
+                "A fresh update worth noticing",
+                "A clear option for your next move",
+                "Built to be noticed for the right reasons"
+            ]
+        };
+
+        var baseHashtags = BuildFallbackHashtags(platform, subject, trending: false);
+        var trendingHashtags = BuildFallbackHashtags(platform, subject, trending: true);
+        var captions = new List<GeminiGeneratedCaption>(request.CaptionCount);
+
+        for (var index = 0; index < request.CaptionCount; index++)
+        {
+            var hook = hooks[index % hooks.Length];
+            var caption =
+                $"{hook}. {subject} is ready for a sharper, more engaging launch on {platformName}. {cta}";
+
+            captions.Add(new GeminiGeneratedCaption(
+                caption,
+                baseHashtags,
+                trendingHashtags,
+                cta));
+        }
+
+        return captions;
+    }
+
+    private static string ResolveFallbackSubject(
+        IReadOnlyList<string> resourceHints,
+        IReadOnlyList<GeminiCaptionResource> resources)
+    {
+        var firstHint = resourceHints.FirstOrDefault(hint => !string.IsNullOrWhiteSpace(hint));
+        if (!string.IsNullOrWhiteSpace(firstHint))
+        {
+            return NormalizeSubject(firstHint);
+        }
+
+        var mimeType = resources.FirstOrDefault()?.MimeType?.Trim().ToLowerInvariant();
+        return mimeType switch
+        {
+            not null when mimeType.StartsWith("video/", StringComparison.Ordinal) => "This video concept",
+            not null when mimeType.StartsWith("image/", StringComparison.Ordinal) => "This visual concept",
+            _ => "This campaign concept"
+        };
+    }
+
+    private static string NormalizeSubject(string hint)
+    {
+        var cleaned = hint.Trim().Trim(SentenceTrimCharacters);
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            return "This campaign concept";
+        }
+
+        if (cleaned.Length > 60)
+        {
+            cleaned = cleaned[..60].TrimEnd(SentenceTrimCharacters);
+        }
+
+        return char.ToUpperInvariant(cleaned[0]) + cleaned[1..];
+    }
+
+    private static IReadOnlyList<string> BuildFallbackHashtags(
+        string platform,
+        string subject,
+        bool trending)
+    {
+        var subjectTag = "#" + new string(subject
+            .Where(char.IsLetterOrDigit)
+            .Take(18)
+            .ToArray());
+
+        if (string.IsNullOrWhiteSpace(subjectTag) || subjectTag == "#")
+        {
+            subjectTag = "#Campaign";
+        }
+
+        string[] tags = trending
+            ? platform switch
+            {
+                "facebook" => [subjectTag, "#TrendingNow", "#DiscoverMore", "#WorthSharing"],
+                "tiktok" => [subjectTag, "#FYP", "#ForYou", "#TikTokMadeMeWatch"],
+                "ig" => [subjectTag, "#ExplorePage", "#InstaDaily", "#NowTrending"],
+                "threads" => [subjectTag, "#ThreadsTalk", "#TrendingTopic", "#DailyTake"],
+                _ => [subjectTag, "#TrendingNow", "#DiscoverMore", "#DailyUpdate"]
+            }
+            : platform switch
+            {
+                "facebook" => [subjectTag, "#FacebookPost", "#BrandStory", "#CommunityUpdate"],
+                "tiktok" => [subjectTag, "#TikTok", "#CreatorMode", "#VideoDrop"],
+                "ig" => [subjectTag, "#Instagram", "#VisualStory", "#ContentDesign"],
+                "threads" => [subjectTag, "#Threads", "#ConversationStarter", "#HotTake"],
+                _ => [subjectTag, "#Campaign", "#SocialMedia", "#LaunchReady"]
+            };
+
+        return tags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string BuildFallbackTitle(string content)
+    {
+        var cleaned = content
+            .ReplaceLineEndings(" ")
+            .Trim();
+
+        var words = cleaned
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(word => !word.StartsWith("#", StringComparison.Ordinal))
+            .Take(8)
+            .ToArray();
+
+        if (words.Length == 0)
+        {
+            return "Draft Post";
+        }
+
+        return string.Join(' ', words).Trim(SentenceTrimCharacters);
     }
 
     private static string BuildPrompt(string postType, string? languageHint, string? instruction)

@@ -74,6 +74,7 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
         {
             var geminiResult = await _geminiCaptionService.GenerateSocialMediaCaptionsAsync(
                 new GeminiSocialMediaCaptionRequest(
+                    Array.Empty<GeminiCaptionResource>(),
                     new GeminiInlineCaptionResource(templateMimeType, request.TemplateResource.Content),
                     socialMedia.Type,
                     socialMedia.ResourceList,
