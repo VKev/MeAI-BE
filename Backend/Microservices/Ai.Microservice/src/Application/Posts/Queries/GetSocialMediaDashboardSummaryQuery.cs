@@ -140,7 +140,14 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
             return Result.Failure<SocialPlatformDashboardSummaryResponse>(postsTask.Result.Error);
         }
 
-        var posts = postsTask.Result.Value.Posts
+        var hydratedPosts = await HydrateFacebookPostsAsync(
+            userAccessToken,
+            SocialMediaMetadataHelper.GetString(metadata, "page_id"),
+            SocialMediaMetadataHelper.GetString(metadata, "page_access_token"),
+            postsTask.Result.Value.Posts,
+            cancellationToken);
+
+        var posts = hydratedPosts
             .Select(post => new SocialPlatformPostSummaryResponse(
                 PlatformPostId: post.Id,
                 Title: post.AttachmentTitle,
@@ -156,6 +163,8 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
                 PublishedAt: ToDateTimeOffset(post.CreatedTime),
                 Stats: new SocialPlatformPostStatsResponse(
                     Views: post.ViewCount,
+                    Reach: post.ReachCount,
+                    Impressions: post.ImpressionCount,
                     Likes: post.ReactionCount,
                     Comments: post.CommentCount,
                     Replies: null,
@@ -163,16 +172,19 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
                     Reposts: null,
                     Quotes: null,
                     TotalInteractions: (post.ReactionCount ?? 0) + (post.CommentCount ?? 0) + (post.ShareCount ?? 0),
-                    ReactionBreakdown: post.ReactionBreakdown)))
+                    ReactionBreakdown: post.ReactionBreakdown,
+                    MetricBreakdown: new Dictionary<string, long>
+                    {
+                        ["views"] = post.ViewCount ?? 0,
+                        ["reach"] = post.ReachCount ?? 0,
+                        ["impressions"] = post.ImpressionCount ?? 0,
+                        ["likes"] = post.ReactionCount ?? 0,
+                        ["comments"] = post.CommentCount ?? 0,
+                        ["shares"] = post.ShareCount ?? 0
+                    })))
             .ToList();
 
-        var enrichedPosts = await EnrichPostsWithCachedStatsAsync(
-            request.UserId,
-            request.SocialMediaId,
-            posts,
-            cancellationToken);
-
-        var dashboardPosts = CreateDashboardPosts(enrichedPosts);
+        var dashboardPosts = CreateDashboardPosts(posts);
         var accountInsightsResult = await accountInsightsTask;
         var accountInsights = accountInsightsResult.IsSuccess
             ? new SocialPlatformAccountInsightsResponse(
@@ -191,6 +203,47 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
             postsTask.Result.Value.HasMore,
             accountInsights,
             dashboardPosts));
+    }
+
+    private async Task<IReadOnlyList<FacebookPostDetails>> HydrateFacebookPostsAsync(
+        string userAccessToken,
+        string? preferredPageId,
+        string? preferredPageAccessToken,
+        IReadOnlyList<FacebookPostDetails> posts,
+        CancellationToken cancellationToken)
+    {
+        var tasks = posts.Select(post => HydrateFacebookPostAsync(
+                userAccessToken,
+                preferredPageId,
+                preferredPageAccessToken,
+                post,
+                cancellationToken))
+            .ToArray();
+
+        return await Task.WhenAll(tasks);
+    }
+
+    private async Task<FacebookPostDetails> HydrateFacebookPostAsync(
+        string userAccessToken,
+        string? preferredPageId,
+        string? preferredPageAccessToken,
+        FacebookPostDetails post,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(post.Id))
+        {
+            return post;
+        }
+
+        var postResult = await _facebookContentService.GetPostAsync(
+            new FacebookPostDetailsRequest(
+                UserAccessToken: userAccessToken,
+                PostId: post.Id,
+                PreferredPageId: preferredPageId,
+                PreferredPageAccessToken: preferredPageAccessToken),
+            cancellationToken);
+
+        return postResult.IsSuccess ? postResult.Value : post;
     }
 
     private async Task<Result<SocialPlatformDashboardSummaryResponse>> BuildTikTokSummaryAsync(

@@ -140,7 +140,7 @@ public sealed class FacebookContentServiceTests
             ThumbnailUrl: "https://cdn.example.com/thumb.jpg",
             AttachmentTitle: "Campaign launch",
             AttachmentDescription: "Description",
-            ViewCount: 1200,
+            ViewCount: null,
             ReactionCount: 25,
             CommentCount: 7,
             ShareCount: 3,
@@ -148,7 +148,9 @@ public sealed class FacebookContentServiceTests
             {
                 ["like"] = 20,
                 ["love"] = 5
-            }));
+            },
+            ReachCount: 1200,
+            ImpressionCount: null));
     }
 
     [Fact]

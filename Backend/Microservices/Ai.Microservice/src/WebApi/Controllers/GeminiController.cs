@@ -401,8 +401,6 @@ public sealed class GenerateSocialMediaCaptionPostRequest
     public string? Type { get; set; }
     public string? Platform { get; set; }
     public IReadOnlyList<Guid>? ResourceIds { get; set; }
-    public IReadOnlyList<Guid>? ResourceList { get; set; }
-    public IReadOnlyList<Guid>? Resources { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
@@ -421,22 +419,34 @@ public sealed class GenerateSocialMediaCaptionPostRequest
             return Result.Success<IReadOnlyList<Guid>>(directResourceIds);
         }
 
-        if (TryNormalizeGuidList(ResourceList, out var resourceList))
-        {
-            return Result.Success<IReadOnlyList<Guid>>(resourceList);
-        }
-
-        if (TryNormalizeGuidList(Resources, out var resources))
-        {
-            return Result.Success<IReadOnlyList<Guid>>(resources);
-        }
-
-        if (TryResolveGuidListFromExtensionData("resource list", out var extensionResult))
+        if (TryResolveGuidListFromExtensionData(out var extensionResult, "resourceList", "resources", "resource list"))
         {
             return extensionResult;
         }
 
         return Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+    }
+
+    private bool TryResolveGuidListFromExtensionData(
+        out Result<IReadOnlyList<Guid>> result,
+        params string[] propertyNames)
+    {
+        result = Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+
+        if (ExtensionData is null || ExtensionData.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var propertyName in propertyNames)
+        {
+            if (TryResolveGuidListFromExtensionData(propertyName, out result))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryResolveGuidListFromExtensionData(
@@ -541,8 +551,6 @@ public sealed class PrepareGeminiPostSocialMediaRequest
     public string? Type { get; set; }
     public string? Platform { get; set; }
     public IReadOnlyList<Guid>? ResourceIds { get; set; }
-    public IReadOnlyList<Guid>? ResourceList { get; set; }
-    public IReadOnlyList<Guid>? Resources { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
@@ -557,22 +565,34 @@ public sealed class PrepareGeminiPostSocialMediaRequest
             return Result.Success<IReadOnlyList<Guid>>(directResourceIds);
         }
 
-        if (TryNormalizeGuidList(ResourceList, out var resourceList))
-        {
-            return Result.Success<IReadOnlyList<Guid>>(resourceList);
-        }
-
-        if (TryNormalizeGuidList(Resources, out var resources))
-        {
-            return Result.Success<IReadOnlyList<Guid>>(resources);
-        }
-
-        if (TryResolveGuidListFromExtensionData("resource list", out var extensionResult))
+        if (TryResolveGuidListFromExtensionData(out var extensionResult, "resourceList", "resources", "resource list"))
         {
             return extensionResult;
         }
 
         return Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+    }
+
+    private bool TryResolveGuidListFromExtensionData(
+        out Result<IReadOnlyList<Guid>> result,
+        params string[] propertyNames)
+    {
+        result = Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+
+        if (ExtensionData is null || ExtensionData.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var propertyName in propertyNames)
+        {
+            if (TryResolveGuidListFromExtensionData(propertyName, out result))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryResolveGuidListFromExtensionData(

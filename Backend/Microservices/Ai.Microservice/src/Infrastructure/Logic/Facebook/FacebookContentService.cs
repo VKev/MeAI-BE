@@ -408,7 +408,7 @@ public sealed class FacebookContentService : IFacebookContentService
         await Task.WhenAll(optionalMetricsTask, videoViewCountTask);
 
         var optionalMetrics = await optionalMetricsTask;
-        var viewCount = await videoViewCountTask ?? optionalMetrics.ReachCount;
+        var viewCount = await videoViewCountTask;
 
         return Result.Success(MapPost(
             pageId,
@@ -417,7 +417,9 @@ public sealed class FacebookContentService : IFacebookContentService
             optionalMetrics.ReactionCount,
             optionalMetrics.CommentCount,
             response.Value.Shares?.Count ?? optionalMetrics.ShareCount,
-            optionalMetrics.ReactionBreakdown));
+            optionalMetrics.ReactionBreakdown,
+            optionalMetrics.ReachCount,
+            optionalMetrics.ImpressionCount));
     }
 
     private async Task<FacebookOptionalMetrics> TryGetOptionalPostMetricsAsync(
@@ -435,6 +437,7 @@ public sealed class FacebookContentService : IFacebookContentService
 
         return new FacebookOptionalMetrics(
             ReachCount: insights?.ReachCount,
+            ImpressionCount: insights?.ImpressionCount,
             ReactionCount: await reactionCountTask ?? insights?.ReactionCount,
             CommentCount: await commentCountTask ?? insights?.CommentCount,
             ShareCount: insights?.ShareCount,
@@ -507,6 +510,7 @@ public sealed class FacebookContentService : IFacebookContentService
 
         return new FacebookPostInsightMetrics(
             ReachCount: reachCount,
+            ImpressionCount: null,
             ReactionCount: reactionCount,
             CommentCount: commentCount,
             ShareCount: shareCount,
@@ -615,7 +619,9 @@ public sealed class FacebookContentService : IFacebookContentService
         long? reactionCount = null,
         long? commentCount = null,
         long? shareCount = null,
-        IReadOnlyDictionary<string, long>? reactionBreakdown = null)
+        IReadOnlyDictionary<string, long>? reactionBreakdown = null,
+        long? reachCount = null,
+        long? impressionCount = null)
     {
         var attachment = post.Attachments?.Data?.FirstOrDefault();
         var nestedAttachment = attachment?.Subattachments?.Data?.FirstOrDefault();
@@ -654,7 +660,9 @@ public sealed class FacebookContentService : IFacebookContentService
             ReactionCount: reactionCount ?? post.Reactions?.Summary?.TotalCount,
             CommentCount: commentCount ?? post.Comments?.Summary?.TotalCount,
             ShareCount: shareCount ?? post.Shares?.Count ?? 0,
-            ReactionBreakdown: reactionBreakdown);
+            ReactionBreakdown: reactionBreakdown,
+            ReachCount: reachCount,
+            ImpressionCount: impressionCount);
     }
 
     private static string? NormalizeMediaType(string? value)
@@ -887,6 +895,7 @@ public sealed class FacebookContentService : IFacebookContentService
 
     private sealed record FacebookOptionalMetrics(
         long? ReachCount,
+        long? ImpressionCount,
         long? ReactionCount,
         long? CommentCount,
         long? ShareCount,
@@ -894,6 +903,7 @@ public sealed class FacebookContentService : IFacebookContentService
 
     private sealed record FacebookPostInsightMetrics(
         long? ReachCount,
+        long? ImpressionCount,
         long? ReactionCount,
         long? CommentCount,
         long? ShareCount,

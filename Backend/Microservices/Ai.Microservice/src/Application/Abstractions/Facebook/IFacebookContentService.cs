@@ -68,7 +68,9 @@ public sealed record FacebookPostDetails(
     long? ReactionCount,
     long? CommentCount,
     long? ShareCount,
-    IReadOnlyDictionary<string, long>? ReactionBreakdown = null);
+    IReadOnlyDictionary<string, long>? ReactionBreakdown = null,
+    long? ReachCount = null,
+    long? ImpressionCount = null);
 
 public sealed record FacebookPageInsights(
     string PageId,
