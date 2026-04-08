@@ -114,11 +114,12 @@ public sealed class PrepareGeminiPostsCommandTests
             new PrepareGeminiPostsCommand(
                 Guid.NewGuid(),
                 null,
+                [resourceId],
                 [
                     new PrepareGeminiPostSocialMediaInput(
                         socialMediaId,
                         null,
-                        [resourceId])
+                        [])
                 ],
                 "posts",
                 "English",
@@ -127,6 +128,7 @@ public sealed class PrepareGeminiPostsCommandTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.PostBuilderId.Should().NotBeEmpty();
+        result.Value.ResourceIds.Should().Equal(resourceId);
         result.Value.SocialMedia.Should().ContainSingle();
         result.Value.SocialMedia[0].Type.Should().Be("facebook");
         result.Value.SocialMedia[0].Drafts.Should().HaveCount(2);
@@ -137,6 +139,7 @@ public sealed class PrepareGeminiPostsCommandTests
             It.Is<Post>(post =>
                 post.PostBuilderId == result.Value.PostBuilderId &&
                 post.SocialMediaId == socialMediaId &&
+                post.Platform == "facebook" &&
                 post.Status == "draft" &&
                 post.Content != null &&
                 post.Content.ResourceList != null &&
@@ -147,7 +150,8 @@ public sealed class PrepareGeminiPostsCommandTests
         postBuilderRepository.Verify(repository => repository.AddAsync(
             It.Is<PostBuilder>(builder =>
                 builder.Id == result.Value.PostBuilderId &&
-                builder.PostType == "posts"),
+                builder.PostType == "posts" &&
+                builder.ResourceIds == "[\"" + resourceId + "\"]"),
             It.IsAny<CancellationToken>()), Times.Once);
 
         postRepository.Verify(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);

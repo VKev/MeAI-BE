@@ -1,4 +1,7 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
+using SharedLibrary.Common;
+using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Posts;
 
@@ -30,6 +33,31 @@ internal static partial class GeminiDraftPostHelper
     public static bool IsSupportedPostType(string? postType) =>
         string.Equals(postType, "posts", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(postType, "reels", StringComparison.OrdinalIgnoreCase);
+
+    public static Result<string> NormalizePlatformType(string? rawType)
+    {
+        if (string.IsNullOrWhiteSpace(rawType))
+        {
+            return Result.Failure<string>(
+                new Error("SocialMedia.InvalidType", "Each social media item must include a type or socialMediaId."));
+        }
+
+        var normalized = rawType.Trim()
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .ToLowerInvariant();
+
+        return normalized switch
+        {
+            "facebook" or "fb" => Result.Success("facebook"),
+            "tiktok" => Result.Success("tiktok"),
+            "instagram" or "ig" => Result.Success("ig"),
+            "threads" => Result.Success("threads"),
+            _ => Result.Failure<string>(
+                new Error("SocialMedia.UnsupportedPlatform", "Only Facebook, Instagram, TikTok, and Threads are supported."))
+        };
+    }
 
     public static string? ResolveLanguageHint(string? language)
     {
@@ -104,6 +132,64 @@ internal static partial class GeminiDraftPostHelper
 
         return string.Join(' ', words).Trim(TitleTrimCharacters);
     }
+
+    public static string? SerializeResourceIds(IReadOnlyList<Guid> resourceIds)
+    {
+        var normalized = resourceIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .Select(id => id.ToString())
+            .ToList();
+
+        return normalized.Count == 0
+            ? null
+            : JsonSerializer.Serialize(normalized);
+    }
+
+    public static IReadOnlyList<Guid> ParseResourceIds(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<Guid>();
+        }
+
+        try
+        {
+            var values = JsonSerializer.Deserialize<List<string>>(json);
+            if (values is not null)
+            {
+                return values
+                    .Select(ParseGuid)
+                    .Where(id => id != Guid.Empty)
+                    .Distinct()
+                    .ToList();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        try
+        {
+            var values = JsonSerializer.Deserialize<List<Guid>>(json);
+            if (values is null)
+            {
+                return Array.Empty<Guid>();
+            }
+
+            return values
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<Guid>();
+        }
+    }
+
+    private static Guid ParseGuid(string? value) =>
+        Guid.TryParse(value, out var parsed) ? parsed : Guid.Empty;
 
     [GeneratedRegex("#([\\p{L}\\p{Mn}\\p{Nd}_]+)")]
     private static partial Regex HashtagPattern();

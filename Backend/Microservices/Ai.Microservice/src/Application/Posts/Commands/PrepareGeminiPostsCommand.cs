@@ -14,6 +14,7 @@ namespace Application.Posts.Commands;
 public sealed record PrepareGeminiPostsCommand(
     Guid UserId,
     Guid? WorkspaceId,
+    IReadOnlyList<Guid> ResourceIds,
     IReadOnlyList<PrepareGeminiPostSocialMediaInput> SocialMedia,
     string? PostType,
     string? Language,
@@ -89,12 +90,26 @@ public sealed class PrepareGeminiPostsCommandHandler
 
         var normalizedSocialMediaResult = await NormalizeSocialMediaInputsAsync(
             request.UserId,
+            request.ResourceIds,
             request.SocialMedia,
             cancellationToken);
 
         if (normalizedSocialMediaResult.IsFailure)
         {
             return Result.Failure<PrepareGeminiPostsResponse>(normalizedSocialMediaResult.Error);
+        }
+
+        var builderResourceIds = request.ResourceIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (builderResourceIds.Count == 0)
+        {
+            builderResourceIds = normalizedSocialMediaResult.Value
+                .SelectMany(item => item.ResourceIds)
+                .Distinct()
+                .ToList();
         }
 
         var allResourceIds = normalizedSocialMediaResult.Value
@@ -185,6 +200,7 @@ public sealed class PrepareGeminiPostsCommandHandler
             UserId = request.UserId,
             WorkspaceId = workspaceId,
             PostType = resolvedPostType,
+            ResourceIds = GeminiDraftPostHelper.SerializeResourceIds(builderResourceIds),
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
@@ -209,6 +225,7 @@ public sealed class PrepareGeminiPostsCommandHandler
                     UserId = request.UserId,
                     WorkspaceId = workspaceId,
                     SocialMediaId = batch.SocialMediaId,
+                    Platform = batch.Type,
                     Title = string.IsNullOrWhiteSpace(title) ? null : title,
                     Content = new PostContent
                     {
@@ -248,11 +265,13 @@ public sealed class PrepareGeminiPostsCommandHandler
             postBuilder.Id,
             workspaceId,
             resolvedPostType,
-            responseGroups));
+            responseGroups,
+            builderResourceIds));
     }
 
     private async Task<Result<IReadOnlyList<ResolvedSocialMediaInput>>> NormalizeSocialMediaInputsAsync(
         Guid userId,
+        IReadOnlyList<Guid> builderResourceIds,
         IReadOnlyList<PrepareGeminiPostSocialMediaInput> socialMediaInputs,
         CancellationToken cancellationToken)
     {
@@ -287,10 +306,24 @@ public sealed class PrepareGeminiPostsCommandHandler
                 .Distinct()
                 .ToList();
 
+            if (resourceIds.Count == 0 && builderResourceIds.Count > 0)
+            {
+                resourceIds = builderResourceIds
+                    .Where(id => id != Guid.Empty)
+                    .Distinct()
+                    .ToList();
+            }
+
             if (resourceIds.Count == 0)
             {
                 return Result.Failure<IReadOnlyList<ResolvedSocialMediaInput>>(
-                    new Error("Resource.Missing", "Each social media item must include at least one resource."));
+                    new Error("Resource.Missing", "Each social media item must include at least one resource or use builder resourceIds."));
+            }
+
+            if (builderResourceIds.Count > 0 && resourceIds.Any(id => !builderResourceIds.Contains(id)))
+            {
+                return Result.Failure<IReadOnlyList<ResolvedSocialMediaInput>>(
+                    new Error("Resource.InvalidRequest", "socialMedia.resourceIds must be contained in the builder resourceIds list."));
             }
 
             string? type = item.Type;
@@ -307,7 +340,7 @@ public sealed class PrepareGeminiPostsCommandHandler
                 type = socialMedia.Type;
             }
 
-            var normalizedTypeResult = NormalizePlatformType(type);
+            var normalizedTypeResult = GeminiDraftPostHelper.NormalizePlatformType(type);
             if (normalizedTypeResult.IsFailure)
             {
                 return Result.Failure<IReadOnlyList<ResolvedSocialMediaInput>>(normalizedTypeResult.Error);
@@ -321,32 +354,6 @@ public sealed class PrepareGeminiPostsCommandHandler
 
         return Result.Success<IReadOnlyList<ResolvedSocialMediaInput>>(normalized);
     }
-
-    private static Result<string> NormalizePlatformType(string? rawType)
-    {
-        if (string.IsNullOrWhiteSpace(rawType))
-        {
-            return Result.Failure<string>(
-                new Error("SocialMedia.InvalidType", "Each social media item must include a type or socialMediaId."));
-        }
-
-        var normalized = rawType.Trim()
-            .Replace(" ", string.Empty, StringComparison.Ordinal)
-            .Replace("_", string.Empty, StringComparison.Ordinal)
-            .Replace("-", string.Empty, StringComparison.Ordinal)
-            .ToLowerInvariant();
-
-        return normalized switch
-        {
-            "facebook" or "fb" => Result.Success("facebook"),
-            "tiktok" => Result.Success("tiktok"),
-            "instagram" or "ig" => Result.Success("ig"),
-            "threads" => Result.Success("threads"),
-            _ => Result.Failure<string>(
-                new Error("SocialMedia.UnsupportedPlatform", "Only Facebook, Instagram, TikTok, and Threads are supported."))
-        };
-    }
-
     private static bool TryResolveResources(
         IReadOnlyDictionary<Guid, UserResourcePresignResult> resourcesById,
         IReadOnlyList<Guid> resourceIds,

@@ -25,6 +25,7 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.Property(e => e.UserId).HasColumnName("user_id");
         entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
         entity.Property(e => e.SocialMediaId).HasColumnName("social_media_id");
+        entity.Property(e => e.Platform).HasColumnName("platform");
         entity.Property(e => e.Title).HasColumnName("title");
 
         var contentJsonOptions = new JsonSerializerOptions();

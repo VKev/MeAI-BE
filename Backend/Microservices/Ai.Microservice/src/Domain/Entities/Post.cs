@@ -16,6 +16,8 @@ public sealed class Post
 
     public Guid? SocialMediaId { get; set; }
 
+    public string? Platform { get; set; }
+
     public string? Title { get; set; }
 
     [Column(TypeName = "jsonb")]

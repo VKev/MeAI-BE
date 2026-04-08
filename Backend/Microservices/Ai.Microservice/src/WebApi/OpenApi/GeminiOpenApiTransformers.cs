@@ -14,32 +14,24 @@ internal static class GeminiOpenApiTransformers
         {
           "workspaceId": "11111111-1111-1111-1111-111111111111",
           "postType": "posts",
+          "resourceIds": [
+            "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+          ],
           "language": "English",
           "instruction": "Keep the captions product-focused and platform-native",
           "socialMedia": [
             {
-              "type": "Tiktok",
-              "resourceIds": [
-                "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-              ]
+              "type": "Tiktok"
             },
             {
-              "type": "Facebook",
-              "resourceIds": [
-                "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-              ]
+              "type": "Facebook"
             },
             {
-              "type": "IG",
-              "resourceIds": [
-                "cccccccc-cccc-cccc-cccc-cccccccccccc"
-              ]
+              "type": "IG"
             },
             {
-              "type": "Threads",
-              "resourceIds": [
-                "dddddddd-dddd-dddd-dddd-dddddddddddd"
-              ]
+              "type": "Threads"
             }
           ]
         }

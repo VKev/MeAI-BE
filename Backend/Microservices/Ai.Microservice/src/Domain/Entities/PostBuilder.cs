@@ -14,6 +14,9 @@ public sealed class PostBuilder
 
     public string? PostType { get; set; }
 
+    [Column(TypeName = "jsonb")]
+    public string? ResourceIds { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 
