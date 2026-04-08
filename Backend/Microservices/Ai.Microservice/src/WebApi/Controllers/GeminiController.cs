@@ -60,6 +60,7 @@ public sealed class GeminiController : ApiController
             new PrepareGeminiPostsCommand(
                 userId,
                 requestResult.Value.WorkspaceId,
+                requestResult.Value.ResourceIds,
                 requestResult.Value.SocialMedia,
                 requestResult.Value.PostType,
                 requestResult.Value.Language,
@@ -169,6 +170,11 @@ public sealed class GeminiController : ApiController
                 new Error("SocialMedia.InvalidRequest", "socialMedia must be a JSON array."));
         }
 
+        var builderResourceIds = request.ResourceIds?
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList() ?? new List<Guid>();
+
         var socialMedia = new List<PrepareGeminiPostSocialMediaInput>();
         foreach (var item in request.SocialMedia)
         {
@@ -198,6 +204,7 @@ public sealed class GeminiController : ApiController
 
         return Result.Success(new PrepareGeminiPostsRequestPayload(
             request.WorkspaceId,
+            builderResourceIds,
             socialMedia,
             request.PostType,
             request.Language,
@@ -401,8 +408,6 @@ public sealed class GenerateSocialMediaCaptionPostRequest
     public string? Type { get; set; }
     public string? Platform { get; set; }
     public IReadOnlyList<Guid>? ResourceIds { get; set; }
-    public IReadOnlyList<Guid>? ResourceList { get; set; }
-    public IReadOnlyList<Guid>? Resources { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
@@ -421,22 +426,34 @@ public sealed class GenerateSocialMediaCaptionPostRequest
             return Result.Success<IReadOnlyList<Guid>>(directResourceIds);
         }
 
-        if (TryNormalizeGuidList(ResourceList, out var resourceList))
-        {
-            return Result.Success<IReadOnlyList<Guid>>(resourceList);
-        }
-
-        if (TryNormalizeGuidList(Resources, out var resources))
-        {
-            return Result.Success<IReadOnlyList<Guid>>(resources);
-        }
-
-        if (TryResolveGuidListFromExtensionData("resource list", out var extensionResult))
+        if (TryResolveGuidListFromExtensionData(out var extensionResult, "resourceList", "resources", "resource list"))
         {
             return extensionResult;
         }
 
         return Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+    }
+
+    private bool TryResolveGuidListFromExtensionData(
+        out Result<IReadOnlyList<Guid>> result,
+        params string[] propertyNames)
+    {
+        result = Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+
+        if (ExtensionData is null || ExtensionData.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var propertyName in propertyNames)
+        {
+            if (TryResolveGuidListFromExtensionData(propertyName, out result))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryResolveGuidListFromExtensionData(
@@ -529,6 +546,7 @@ public sealed class GenerateSocialMediaCaptionPostRequest
 public sealed class PrepareGeminiPostsRequest
 {
     public Guid? WorkspaceId { get; set; }
+    public IReadOnlyList<Guid>? ResourceIds { get; set; }
     public string? PostType { get; set; }
     public string? Language { get; set; }
     public string? Instruction { get; set; }
@@ -541,11 +559,6 @@ public sealed class PrepareGeminiPostSocialMediaRequest
     public string? Type { get; set; }
     public string? Platform { get; set; }
     public IReadOnlyList<Guid>? ResourceIds { get; set; }
-    public IReadOnlyList<Guid>? ResourceList { get; set; }
-    public IReadOnlyList<Guid>? Resources { get; set; }
-
-    [JsonExtensionData]
-    public Dictionary<string, JsonElement>? ExtensionData { get; set; }
 
     public string? ResolveType() =>
         !string.IsNullOrWhiteSpace(Type) ? Type : Platform;
@@ -557,80 +570,7 @@ public sealed class PrepareGeminiPostSocialMediaRequest
             return Result.Success<IReadOnlyList<Guid>>(directResourceIds);
         }
 
-        if (TryNormalizeGuidList(ResourceList, out var resourceList))
-        {
-            return Result.Success<IReadOnlyList<Guid>>(resourceList);
-        }
-
-        if (TryNormalizeGuidList(Resources, out var resources))
-        {
-            return Result.Success<IReadOnlyList<Guid>>(resources);
-        }
-
-        if (TryResolveGuidListFromExtensionData("resource list", out var extensionResult))
-        {
-            return extensionResult;
-        }
-
         return Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
-    }
-
-    private bool TryResolveGuidListFromExtensionData(
-        string propertyName,
-        out Result<IReadOnlyList<Guid>> result)
-    {
-        result = Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
-
-        if (ExtensionData is null || ExtensionData.Count == 0)
-        {
-            return false;
-        }
-
-        var normalizedTarget = NormalizePropertyName(propertyName);
-        foreach (var pair in ExtensionData)
-        {
-            if (NormalizePropertyName(pair.Key) != normalizedTarget)
-            {
-                continue;
-            }
-
-            if (pair.Value.ValueKind != JsonValueKind.Array)
-            {
-                result = Result.Failure<IReadOnlyList<Guid>>(
-                    new Error("Resource.InvalidRequest", $"{propertyName} must be an array of GUID values."));
-                return true;
-            }
-
-            var parsed = new List<Guid>();
-            foreach (var element in pair.Value.EnumerateArray())
-            {
-                var raw = element.ValueKind == JsonValueKind.String
-                    ? element.GetString()
-                    : element.ToString();
-
-                if (string.IsNullOrWhiteSpace(raw))
-                {
-                    continue;
-                }
-
-                if (!Guid.TryParse(raw, out var resourceId) || resourceId == Guid.Empty)
-                {
-                    result = Result.Failure<IReadOnlyList<Guid>>(
-                        new Error("Resource.InvalidRequest", $"{propertyName} must contain valid GUID values."));
-                    return true;
-                }
-
-                if (!parsed.Contains(resourceId))
-                {
-                    parsed.Add(resourceId);
-                }
-            }
-
-            result = Result.Success<IReadOnlyList<Guid>>(parsed);
-            return true;
-        }
-
-        return false;
     }
 
     private static bool TryNormalizeGuidList(
@@ -664,6 +604,7 @@ public sealed class PrepareGeminiPostSocialMediaRequest
 
 sealed record PrepareGeminiPostsRequestPayload(
     Guid? WorkspaceId,
+    IReadOnlyList<Guid> ResourceIds,
     IReadOnlyList<PrepareGeminiPostSocialMediaInput> SocialMedia,
     string? PostType,
     string? Language,

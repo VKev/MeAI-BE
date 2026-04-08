@@ -70,8 +70,9 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
         }
 
         var isTikTok = string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase);
+        var isFacebook = string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase);
 
-        if (!request.Refresh && !isTikTok)
+        if (!request.Refresh && !isTikTok && !isFacebook)
         {
             var cachedMetric = await _postMetricSnapshotRepository.GetLatestAsync(
                 request.UserId,
@@ -132,8 +133,8 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
 
             var stats = new SocialPlatformPostStatsResponse(
                 Views: postDetails.ViewCount,
-                Reach: postDetails.ViewCount,
-                Impressions: postDetails.ViewCount,
+                Reach: postDetails.ReachCount,
+                Impressions: postDetails.ImpressionCount,
                 Likes: postDetails.ReactionCount,
                 Comments: postDetails.CommentCount,
                 Replies: null,
@@ -143,7 +144,16 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
                 TotalInteractions: (postDetails.ReactionCount ?? 0) +
                                    (postDetails.CommentCount ?? 0) +
                                    (postDetails.ShareCount ?? 0),
-                ReactionBreakdown: postDetails.ReactionBreakdown);
+                ReactionBreakdown: postDetails.ReactionBreakdown,
+                MetricBreakdown: new Dictionary<string, long>
+                {
+                    ["views"] = postDetails.ViewCount ?? 0,
+                    ["reach"] = postDetails.ReachCount ?? 0,
+                    ["impressions"] = postDetails.ImpressionCount ?? 0,
+                    ["likes"] = postDetails.ReactionCount ?? 0,
+                    ["comments"] = postDetails.CommentCount ?? 0,
+                    ["shares"] = postDetails.ShareCount ?? 0
+                });
 
             var post = new SocialPlatformPostSummaryResponse(
                 PlatformPostId: postDetails.Id,

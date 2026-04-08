@@ -66,17 +66,44 @@ public sealed class FacebookPlatformPostQueriesTests
                         AttachmentTitle: "Campaign launch",
                         AttachmentDescription: "Description",
                         ViewCount: null,
-                        ReactionCount: 25,
-                        CommentCount: 7,
+                        ReactionCount: null,
+                        CommentCount: null,
                         ShareCount: 3,
-                        ReactionBreakdown: new Dictionary<string, long>
-                        {
-                            ["like"] = 20,
-                            ["love"] = 5
-                        })
+                        ReactionBreakdown: null)
                 ],
                 NextCursor: "next",
                 HasMore: true)));
+
+        facebookContentService
+            .Setup(service => service.GetPostAsync(
+                It.Is<FacebookPostDetailsRequest>(request =>
+                    request.UserAccessToken == "user-token" &&
+                    request.PostId == "123_456"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new FacebookPostDetails(
+                Id: "123_456",
+                PageId: "123",
+                Message: "Launch update",
+                Story: null,
+                PermalinkUrl: "https://facebook.com/123_456",
+                CreatedTime: "2026-03-18T09:00:00+0000",
+                FullPictureUrl: "https://cdn.example.com/full.jpg",
+                MediaType: "image",
+                MediaUrl: "https://cdn.example.com/media.jpg",
+                ThumbnailUrl: "https://cdn.example.com/thumb.jpg",
+                AttachmentTitle: "Campaign launch",
+                AttachmentDescription: "Description",
+                ViewCount: 800,
+                ReactionCount: 25,
+                CommentCount: 7,
+                ShareCount: 3,
+                ReactionBreakdown: new Dictionary<string, long>
+                {
+                    ["like"] = 20,
+                    ["love"] = 5
+                },
+                ReachCount: 1200,
+                ImpressionCount: null)));
 
         postMetricSnapshotRepository
             .Setup(repository => repository.GetLatestByPlatformPostIdsAsync(
@@ -111,7 +138,9 @@ public sealed class FacebookPlatformPostQueriesTests
         item.MediaType.Should().Be("image");
         item.Permalink.Should().Be("https://facebook.com/123_456");
         item.Stats.Should().BeEquivalentTo(new SocialPlatformPostStatsResponse(
-            Views: null,
+            Views: 800,
+            Reach: 1200,
+            Impressions: null,
             Likes: 25,
             Comments: 7,
             Replies: null,
@@ -119,6 +148,15 @@ public sealed class FacebookPlatformPostQueriesTests
             Reposts: null,
             Quotes: null,
             TotalInteractions: 35,
+            MetricBreakdown: new Dictionary<string, long>
+            {
+                ["views"] = 800,
+                ["reach"] = 1200,
+                ["impressions"] = 0,
+                ["likes"] = 25,
+                ["comments"] = 7,
+                ["shares"] = 3
+            },
             ReactionBreakdown: new Dictionary<string, long>
             {
                 ["like"] = 20,
@@ -181,7 +219,7 @@ public sealed class FacebookPlatformPostQueriesTests
                 ThumbnailUrl: "https://cdn.example.com/thumb.jpg",
                 AttachmentTitle: "Campaign launch",
                 AttachmentDescription: "Description",
-                ViewCount: 1200,
+                ViewCount: 800,
                 ReactionCount: 25,
                 CommentCount: 7,
                 ShareCount: 3,
@@ -189,7 +227,9 @@ public sealed class FacebookPlatformPostQueriesTests
                 {
                     ["like"] = 20,
                     ["love"] = 5
-                })));
+                },
+                ReachCount: 1200,
+                ImpressionCount: null)));
 
         facebookContentService
             .Setup(service => service.GetPageInsightsAsync(
@@ -225,7 +265,7 @@ public sealed class FacebookPlatformPostQueriesTests
                     metric.SocialMediaId == socialMediaId &&
                     metric.Platform == "facebook" &&
                     metric.PlatformPostId == postId &&
-                    metric.ViewCount == 1200 &&
+                    metric.ViewCount == 800 &&
                     metric.LikeCount == 25 &&
                     metric.CommentCount == 7 &&
                     metric.ShareCount == 3),
@@ -252,9 +292,9 @@ public sealed class FacebookPlatformPostQueriesTests
         result.Value.Platform.Should().Be("facebook");
         result.Value.PlatformPostId.Should().Be(postId);
         result.Value.Stats.Should().BeEquivalentTo(new SocialPlatformPostStatsResponse(
-            Views: 1200,
+            Views: 800,
             Reach: 1200,
-            Impressions: 1200,
+            Impressions: null,
             Likes: 25,
             Comments: 7,
             Replies: null,
@@ -262,6 +302,15 @@ public sealed class FacebookPlatformPostQueriesTests
             Reposts: null,
             Quotes: null,
             TotalInteractions: 35,
+            MetricBreakdown: new Dictionary<string, long>
+            {
+                ["views"] = 800,
+                ["reach"] = 1200,
+                ["impressions"] = 0,
+                ["likes"] = 25,
+                ["comments"] = 7,
+                ["shares"] = 3
+            },
             ReactionBreakdown: new Dictionary<string, long>
             {
                 ["like"] = 20,

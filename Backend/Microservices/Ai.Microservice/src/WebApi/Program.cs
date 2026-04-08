@@ -1,5 +1,6 @@
 using Application;
 using Infrastructure;
+using Infrastructure.Configuration;
 using Infrastructure.Configs;
 using Scalar.AspNetCore;
 using Serilog;
@@ -32,6 +33,8 @@ builder.ConfigureSerilogLogging();
 builder.Services.AddSingleton<EnvironmentConfig>();
 builder.Services.Configure<VeoOptions>(
     builder.Configuration.GetSection(VeoOptions.SectionName));
+builder.Services.Configure<SampleSeedOptions>(
+    builder.Configuration.GetSection(SampleSeedOptions.SectionName));
 builder.AddDatabase();
 
 builder.Services
@@ -41,6 +44,7 @@ builder.Services
 var app = builder.Build();
 
 app.ApplyMigrationsIfEnabled(shouldAutoApplyMigrations);
+await app.SeedSampleDataAsync();
 app.MapHealthEndpoints();
 
 app.UseSerilogRequestLogging();

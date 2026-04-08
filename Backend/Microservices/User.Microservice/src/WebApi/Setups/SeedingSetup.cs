@@ -52,6 +52,16 @@ public static class SeedingSetup
 
         try
         {
+            var sampleDataSeeder = scope.ServiceProvider.GetRequiredService<SampleDataSeeder>();
+            await sampleDataSeeder.SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Failed to seed sample data at startup.");
+        }
+
+        try
+        {
             var context = scope.ServiceProvider.GetRequiredService<MyDbContext>();
             if (await context.Database.CanConnectAsync())
             {

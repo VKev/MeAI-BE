@@ -1,0 +1,107 @@
+{
+  "workspace": {
+    "id": "01962400-5b96-70e4-a111-16b24b010001",
+    "name": "Sample Creator Workspace",
+    "type": "content-lab",
+    "description": "Preloaded workspace with mixed media resources and linked AI chats."
+  },
+  "chatSession": {
+    "id": "01962400-5b96-70e4-a111-16b24b010002",
+    "name": "Sample Content Planning Session"
+  },
+  "resources": [
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010003",
+      "fileName": "sample-image-01.png",
+      "resourceType": "image",
+      "contentType": "image/png",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010004",
+      "fileName": "sample-image-02.png",
+      "resourceType": "image",
+      "contentType": "image/png",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010005",
+      "fileName": "sample-image-03.png",
+      "resourceType": "image",
+      "contentType": "image/png",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010006",
+      "fileName": "sample-image-04.png",
+      "resourceType": "image",
+      "contentType": "image/png",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010007",
+      "fileName": "sample-image-05.png",
+      "resourceType": "image",
+      "contentType": "image/png",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010008",
+      "fileName": "sample-image-06.png",
+      "resourceType": "image",
+      "contentType": "image/png",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010009",
+      "fileName": "sample-video-01.mp4",
+      "resourceType": "video",
+      "contentType": "video/mp4",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b01000a",
+      "fileName": "sample-video-02.mp4",
+      "resourceType": "video",
+      "contentType": "video/mp4",
+      "status": "ready"
+    }
+  ],
+  "chats": [
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b01000b",
+      "prompt": "Build a launch concept using the first two hero images and the short demo video.",
+      "resourceIds": [
+        "01962400-5b96-70e4-a111-16b24b010003",
+        "01962400-5b96-70e4-a111-16b24b010004",
+        "01962400-5b96-70e4-a111-16b24b010009"
+      ]
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b01000c",
+      "prompt": "Draft a behind-the-scenes storyboard with the workshop images and supporting b-roll.",
+      "resourceIds": [
+        "01962400-5b96-70e4-a111-16b24b010005",
+        "01962400-5b96-70e4-a111-16b24b010006",
+        "01962400-5b96-70e4-a111-16b24b01000a"
+      ]
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b01000d",
+      "prompt": "Suggest an audience-first recruitment post using the community photos.",
+      "resourceIds": [
+        "01962400-5b96-70e4-a111-16b24b010007",
+        "01962400-5b96-70e4-a111-16b24b010008"
+      ]
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b01000e",
+      "prompt": "Plan a recap carousel that mixes the event highlights with one supporting motion asset.",
+      "resourceIds": [
+        "01962400-5b96-70e4-a111-16b24b010003",
+        "01962400-5b96-70e4-a111-16b24b010006",
+        "01962400-5b96-70e4-a111-16b24b010009"
+      ]
+    }
+  ]
+}

@@ -16,6 +16,178 @@ namespace AiMicroservice.Tests.Application.Posts.Queries;
 public sealed class DashboardSummaryQueryTests
 {
     [Fact]
+    public async Task GetDashboardSummary_ShouldReturnFacebookAggregatedSummaryFromLiveMetrics()
+    {
+        var userId = Guid.NewGuid();
+        var socialMediaId = Guid.NewGuid();
+
+        var facebookContentService = new Mock<IFacebookContentService>();
+        var instagramContentService = new Mock<IInstagramContentService>();
+        var userSocialMediaService = new Mock<IUserSocialMediaService>();
+        var tikTokContentService = new Mock<ITikTokContentService>();
+        var threadsContentService = new Mock<IThreadsContentService>();
+        var postMetricSnapshotRepository = new Mock<IPostMetricSnapshotRepository>();
+
+        userSocialMediaService
+            .Setup(service => service.GetSocialMediasAsync(
+                userId,
+                It.Is<IReadOnlyList<Guid>>(ids => ids.SequenceEqual(new[] { socialMediaId })),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success<IReadOnlyList<UserSocialMediaResult>>(
+                new[]
+                {
+                    new UserSocialMediaResult(
+                        socialMediaId,
+                        "facebook",
+                        """{"access_token":"fb-token"}""")
+                }));
+
+        facebookContentService
+            .Setup(service => service.GetPostsAsync(
+                It.Is<FacebookPostListRequest>(request =>
+                    request.UserAccessToken == "fb-token" &&
+                    request.Limit == 5 &&
+                    request.Cursor == null),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new FacebookPostPageResult(
+                Posts:
+                [
+                    new FacebookPostDetails(
+                        Id: "123_456",
+                        PageId: "123",
+                        Message: "Launch update",
+                        Story: null,
+                        PermalinkUrl: "https://facebook.com/123_456",
+                        CreatedTime: "2026-03-18T09:00:00+0000",
+                        FullPictureUrl: "https://cdn.example.com/full-1.jpg",
+                        MediaType: "image",
+                        MediaUrl: "https://cdn.example.com/media-1.jpg",
+                        ThumbnailUrl: "https://cdn.example.com/thumb-1.jpg",
+                        AttachmentTitle: "Campaign launch",
+                        AttachmentDescription: "Description",
+                        ViewCount: null,
+                        ReactionCount: null,
+                        CommentCount: null,
+                        ShareCount: 2),
+                    new FacebookPostDetails(
+                        Id: "123_789",
+                        PageId: "123",
+                        Message: "Customer story",
+                        Story: null,
+                        PermalinkUrl: "https://facebook.com/123_789",
+                        CreatedTime: "2026-03-17T09:00:00+0000",
+                        FullPictureUrl: "https://cdn.example.com/full-2.jpg",
+                        MediaType: "video",
+                        MediaUrl: "https://cdn.example.com/media-2.mp4",
+                        ThumbnailUrl: "https://cdn.example.com/thumb-2.jpg",
+                        AttachmentTitle: "Customer story",
+                        AttachmentDescription: "Story description",
+                        ViewCount: null,
+                        ReactionCount: null,
+                        CommentCount: null,
+                        ShareCount: 1)
+                ],
+                NextCursor: "next",
+                HasMore: true)));
+
+        facebookContentService
+            .Setup(service => service.GetPostAsync(
+                It.Is<FacebookPostDetailsRequest>(request =>
+                    request.UserAccessToken == "fb-token" &&
+                    request.PostId == "123_456"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new FacebookPostDetails(
+                Id: "123_456",
+                PageId: "123",
+                Message: "Launch update",
+                Story: null,
+                PermalinkUrl: "https://facebook.com/123_456",
+                CreatedTime: "2026-03-18T09:00:00+0000",
+                FullPictureUrl: "https://cdn.example.com/full-1.jpg",
+                MediaType: "image",
+                MediaUrl: "https://cdn.example.com/media-1.jpg",
+                ThumbnailUrl: "https://cdn.example.com/thumb-1.jpg",
+                AttachmentTitle: "Campaign launch",
+                AttachmentDescription: "Description",
+                ViewCount: 800,
+                ReactionCount: 25,
+                CommentCount: 7,
+                ShareCount: 2,
+                ReactionBreakdown: new Dictionary<string, long> { ["like"] = 20, ["love"] = 5 },
+                ReachCount: 1200,
+                ImpressionCount: null)));
+
+        facebookContentService
+            .Setup(service => service.GetPostAsync(
+                It.Is<FacebookPostDetailsRequest>(request =>
+                    request.UserAccessToken == "fb-token" &&
+                    request.PostId == "123_789"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new FacebookPostDetails(
+                Id: "123_789",
+                PageId: "123",
+                Message: "Customer story",
+                Story: null,
+                PermalinkUrl: "https://facebook.com/123_789",
+                CreatedTime: "2026-03-17T09:00:00+0000",
+                FullPictureUrl: "https://cdn.example.com/full-2.jpg",
+                MediaType: "video",
+                MediaUrl: "https://cdn.example.com/media-2.mp4",
+                ThumbnailUrl: "https://cdn.example.com/thumb-2.jpg",
+                AttachmentTitle: "Customer story",
+                AttachmentDescription: "Story description",
+                ViewCount: 400,
+                ReactionCount: 10,
+                CommentCount: 3,
+                ShareCount: 1,
+                ReactionBreakdown: new Dictionary<string, long> { ["like"] = 8, ["wow"] = 2 },
+                ReachCount: 900,
+                ImpressionCount: null)));
+
+        facebookContentService
+            .Setup(service => service.GetPageInsightsAsync(
+                It.Is<FacebookPageInsightsRequest>(request => request.UserAccessToken == "fb-token"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new FacebookPageInsights(
+                PageId: "123",
+                Name: "MeAI Facebook",
+                Followers: 500,
+                Fans: 450)));
+
+        var handler = new GetSocialMediaDashboardSummaryQueryHandler(
+            facebookContentService.Object,
+            instagramContentService.Object,
+            userSocialMediaService.Object,
+            tikTokContentService.Object,
+            threadsContentService.Object,
+            postMetricSnapshotRepository.Object);
+
+        var result = await handler.Handle(
+            new GetSocialMediaDashboardSummaryQuery(userId, socialMediaId, 5),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Platform.Should().Be("facebook");
+        result.Value.FetchedPostCount.Should().Be(2);
+        result.Value.HasMorePosts.Should().BeTrue();
+        result.Value.LatestPublishedPostId.Should().Be("123_456");
+        result.Value.AggregatedStats.Should().BeEquivalentTo(new SocialPlatformPostStatsResponse(
+            Views: 1200,
+            Reach: 2100,
+            Impressions: 0,
+            Likes: 35,
+            Comments: 10,
+            Replies: 0,
+            Shares: 3,
+            Reposts: 0,
+            Quotes: 0,
+            TotalInteractions: 48,
+            Saves: null));
+        result.Value.AccountInsights!.Followers.Should().Be(500);
+        result.Value.Posts[0].Post.Stats!.MetricBreakdown.Should().Contain(new KeyValuePair<string, long>("reach", 1200));
+    }
+
+    [Fact]
     public async Task GetDashboardSummary_ShouldReturnTikTokAggregatedSummary()
     {
         var userId = Guid.NewGuid();

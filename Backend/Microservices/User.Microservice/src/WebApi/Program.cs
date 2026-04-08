@@ -46,6 +46,8 @@ builder.Services.Configure<AdminSeedOptions>(
     builder.Configuration.GetSection(AdminSeedOptions.SectionName));
 builder.Services.Configure<DefaultUserSeedOptions>(
     builder.Configuration.GetSection(DefaultUserSeedOptions.SectionName));
+builder.Services.Configure<SampleSeedOptions>(
+    builder.Configuration.GetSection(SampleSeedOptions.SectionName));
 builder.Services.Configure<ConfigSeedOptions>(
     builder.Configuration.GetSection(ConfigSeedOptions.SectionName));
 builder.Services.Configure<EmailOptions>(

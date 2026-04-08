@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.OpenApi;
+using Microsoft.OpenApi;
 
 namespace WebApi.OpenApi;
 
@@ -45,9 +46,54 @@ internal static class PostsOpenApiTransformers
 
         if (operation.RequestBody.Content.TryGetValue("application/json", out var mediaType))
         {
+            mediaType.Schema = BuildPublishSchema();
             mediaType.Example = JsonNode.Parse(PublishExample);
         }
 
+        if (operation.RequestBody.Content.TryGetValue("application/*+json", out var extendedJsonMediaType))
+        {
+            extendedJsonMediaType.Schema = BuildPublishSchema();
+            extendedJsonMediaType.Example = JsonNode.Parse(PublishExample);
+        }
+
         return Task.CompletedTask;
+    }
+
+    private static OpenApiSchema BuildPublishSchema()
+    {
+        return new OpenApiSchema
+        {
+            Type = JsonSchemaType.Array,
+            Items = new OpenApiSchema
+            {
+                Type = JsonSchemaType.Object,
+                Properties = new Dictionary<string, IOpenApiSchema>
+                {
+                    ["postId"] = (IOpenApiSchema)new OpenApiSchema
+                    {
+                        Type = JsonSchemaType.String,
+                        Format = "uuid"
+                    },
+                    ["socialMediaIds"] = (IOpenApiSchema)new OpenApiSchema
+                    {
+                        Type = JsonSchemaType.Array,
+                        Items = new OpenApiSchema
+                        {
+                            Type = JsonSchemaType.String,
+                            Format = "uuid"
+                        }
+                    },
+                    ["isPrivate"] = (IOpenApiSchema)new OpenApiSchema
+                    {
+                        Type = JsonSchemaType.Boolean
+                    }
+                },
+                Required = new HashSet<string>
+                {
+                    "postId",
+                    "socialMediaIds"
+                }
+            }
+        };
     }
 }

@@ -203,6 +203,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<string>("Platform")
+                        .HasColumnType("text")
+                        .HasColumnName("platform");
+
                     b.Property<Guid?>("PostBuilderId")
                         .HasColumnType("uuid")
                         .HasColumnName("post_builder_id");
@@ -262,6 +266,10 @@ namespace Infrastructure.Migrations
                     b.Property<string>("PostType")
                         .HasColumnType("text")
                         .HasColumnName("post_type");
+
+                    b.Property<string>("ResourceIds")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("resource_ids");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

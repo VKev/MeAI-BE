@@ -23,6 +23,7 @@ using Infrastructure.Logic.TikTok;
 using Infrastructure.Logic.Workspaces;
 using Infrastructure.Repositories;
 using Infrastructure.Logic.Sagas;
+using Infrastructure.Logic.Seeding;
 using Infrastructure.Logic.Services;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
@@ -94,6 +95,7 @@ namespace Infrastructure
             services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
             services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();
+            services.AddScoped<SampleDataSeeder>();
             services.AddScoped<IPostBuilderRepository, PostBuilderRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
             services.AddScoped<IPostPublicationRepository, PostPublicationRepository>();

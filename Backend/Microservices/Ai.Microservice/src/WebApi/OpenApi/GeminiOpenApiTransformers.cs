@@ -14,32 +14,24 @@ internal static class GeminiOpenApiTransformers
         {
           "workspaceId": "11111111-1111-1111-1111-111111111111",
           "postType": "posts",
+          "resourceIds": [
+            "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+          ],
           "language": "English",
           "instruction": "Keep the captions product-focused and platform-native",
           "socialMedia": [
             {
-              "type": "Tiktok",
-              "resourceList": [
-                "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-              ]
+              "type": "Tiktok"
             },
             {
-              "type": "Facebook",
-              "resourceList": [
-                "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-              ]
+              "type": "Facebook"
             },
             {
-              "type": "IG",
-              "resourceList": [
-                "cccccccc-cccc-cccc-cccc-cccccccccccc"
-              ]
+              "type": "IG"
             },
             {
-              "type": "Threads",
-              "resourceList": [
-                "dddddddd-dddd-dddd-dddd-dddddddddddd"
-              ]
+              "type": "Threads"
             }
           ]
         }
@@ -54,28 +46,28 @@ internal static class GeminiOpenApiTransformers
             {
               "postId": "11111111-1111-1111-1111-111111111111",
               "socialMediaType": "TikTok",
-              "resourceList": [
+              "resourceIds": [
                 "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
               ]
             },
             {
               "postId": "22222222-2222-2222-2222-222222222222",
               "socialMediaType": "Facebook",
-              "resourceList": [
+              "resourceIds": [
                 "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
               ]
             },
             {
               "postId": "33333333-3333-3333-3333-333333333333",
               "socialMediaType": "IG",
-              "resourceList": [
+              "resourceIds": [
                 "cccccccc-cccc-cccc-cccc-cccccccccccc"
               ]
             },
             {
               "postId": "44444444-4444-4444-4444-444444444444",
               "socialMediaType": "Threads",
-              "resourceList": [
+              "resourceIds": [
                 "dddddddd-dddd-dddd-dddd-dddddddddddd"
               ]
             }
