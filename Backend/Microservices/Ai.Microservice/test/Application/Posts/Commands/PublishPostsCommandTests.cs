@@ -8,8 +8,10 @@ using Application.Posts.Commands;
 using Domain.Entities;
 using Domain.Repositories;
 using FluentAssertions;
+using MassTransit;
 using Moq;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.Notifications;
 
 namespace AiMicroservice.Tests.Application.Posts.Commands;
 
@@ -36,6 +38,11 @@ public sealed class PublishPostsCommandTests
         var instagramPublishService = new Mock<IInstagramPublishService>();
         var tikTokPublishService = new Mock<ITikTokPublishService>();
         var threadsPublishService = new Mock<IThreadsPublishService>();
+        var bus = new Mock<IBus>();
+
+        bus
+            .Setup(service => service.Publish(It.IsAny<NotificationRequestedEvent>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         postRepository
             .Setup(repository => repository.GetByIdForUpdateAsync(firstPostId, It.IsAny<CancellationToken>()))
@@ -159,7 +166,8 @@ public sealed class PublishPostsCommandTests
             facebookPublishService.Object,
             instagramPublishService.Object,
             tikTokPublishService.Object,
-            threadsPublishService.Object);
+            threadsPublishService.Object,
+            bus.Object);
 
         var result = await handler.Handle(
             new PublishPostsCommand(
@@ -183,6 +191,24 @@ public sealed class PublishPostsCommandTests
             post.Results.Count == 1 &&
             post.Results[0].SocialMediaId == instagramId &&
             post.Results[0].ExternalPostId == "instagram-post-1");
+
+        bus.Verify(service => service.Publish(
+            It.Is<NotificationRequestedEvent>(notification =>
+                notification.Type == NotificationTypes.AiPostPublishCompleted &&
+                notification.Message == "Your post was published to 2 destinations." &&
+                notification.RecipientUserIds.Count == 1 &&
+                notification.RecipientUserIds[0] == userId &&
+                notification.CreatedByUserId == userId),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        bus.Verify(service => service.Publish(
+            It.Is<NotificationRequestedEvent>(notification =>
+                notification.Type == NotificationTypes.AiPostPublishCompleted &&
+                notification.Message == "Your post was published to 1 destination." &&
+                notification.RecipientUserIds.Count == 1 &&
+                notification.RecipientUserIds[0] == userId &&
+                notification.CreatedByUserId == userId),
+            It.IsAny<CancellationToken>()), Times.Once);
 
         facebookPublishService.Verify(service => service.PublishAsync(
             It.Is<FacebookPublishRequest>(request =>
@@ -212,6 +238,121 @@ public sealed class PublishPostsCommandTests
     }
 
     [Fact]
+    public async Task Handle_ShouldPublishFailureNotificationWhenDestinationPublishFails()
+    {
+        var userId = Guid.NewGuid();
+        var postId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        var resourceId = Guid.NewGuid();
+        var facebookId = Guid.NewGuid();
+
+        var postRepository = new Mock<IPostRepository>();
+        var postPublicationRepository = new Mock<IPostPublicationRepository>();
+        var userResourceService = new Mock<IUserResourceService>();
+        var userSocialMediaService = new Mock<IUserSocialMediaService>();
+        var facebookPublishService = new Mock<IFacebookPublishService>();
+        var instagramPublishService = new Mock<IInstagramPublishService>();
+        var tikTokPublishService = new Mock<ITikTokPublishService>();
+        var threadsPublishService = new Mock<IThreadsPublishService>();
+        var bus = new Mock<IBus>();
+
+        bus
+            .Setup(service => service.Publish(It.IsAny<NotificationRequestedEvent>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        postRepository
+            .Setup(repository => repository.GetByIdForUpdateAsync(postId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Post
+            {
+                Id = postId,
+                UserId = userId,
+                WorkspaceId = workspaceId,
+                Content = new PostContent
+                {
+                    Content = "Caption",
+                    PostType = "posts",
+                    ResourceList = [resourceId.ToString()]
+                },
+                Status = "draft"
+            });
+
+        userSocialMediaService
+            .Setup(service => service.GetSocialMediasAsync(
+                userId,
+                It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 1 && ids[0] == facebookId),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success<IReadOnlyList<UserSocialMediaResult>>(
+            [
+                new UserSocialMediaResult(
+                    facebookId,
+                    "facebook",
+                    "{\"user_access_token\":\"facebook-token\",\"page_id\":\"page-1\",\"page_access_token\":\"page-token\"}")
+            ]));
+
+        userResourceService
+            .Setup(service => service.GetPresignedResourcesAsync(
+                userId,
+                It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 1 && ids[0] == resourceId),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success<IReadOnlyList<UserResourcePresignResult>>(
+            [
+                new UserResourcePresignResult(
+                    resourceId,
+                    "https://cdn.example.com/post.png",
+                    "image/png",
+                    "image")
+            ]));
+
+        facebookPublishService
+            .Setup(service => service.PublishAsync(
+                It.IsAny<FacebookPublishRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<IReadOnlyList<FacebookPublishResult>>(
+                new Error("Facebook.PublishFailed", "Facebook publish failed.")));
+
+        var handler = new PublishPostsCommandHandler(
+            postRepository.Object,
+            postPublicationRepository.Object,
+            userResourceService.Object,
+            userSocialMediaService.Object,
+            facebookPublishService.Object,
+            instagramPublishService.Object,
+            tikTokPublishService.Object,
+            threadsPublishService.Object,
+            bus.Object);
+
+        var result = await handler.Handle(
+            new PublishPostsCommand(
+                userId,
+                [new PublishPostTargetInput(postId, [facebookId])]),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Facebook.PublishFailed");
+
+        bus.Verify(service => service.Publish(
+            It.Is<NotificationRequestedEvent>(notification =>
+                notification.Type == NotificationTypes.AiPostPublishFailed &&
+                notification.Title == "Post publish failed" &&
+                notification.Message == "Facebook publish failed." &&
+                notification.RecipientUserIds.Count == 1 &&
+                notification.RecipientUserIds[0] == userId &&
+                notification.CreatedByUserId == userId),
+            It.IsAny<CancellationToken>()), Times.Once);
+
+        facebookPublishService.Verify(service => service.PublishAsync(
+            It.IsAny<FacebookPublishRequest>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        instagramPublishService.VerifyNoOtherCalls();
+        tikTokPublishService.VerifyNoOtherCalls();
+        threadsPublishService.VerifyNoOtherCalls();
+        postPublicationRepository.Verify(repository => repository.AddRangeAsync(
+            It.IsAny<IEnumerable<PostPublication>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        postRepository.Verify(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Handle_ShouldFailWhenTargetsAreMissing()
     {
         var postRepository = new Mock<IPostRepository>();
@@ -222,6 +363,7 @@ public sealed class PublishPostsCommandTests
         var instagramPublishService = new Mock<IInstagramPublishService>();
         var tikTokPublishService = new Mock<ITikTokPublishService>();
         var threadsPublishService = new Mock<IThreadsPublishService>();
+        var bus = new Mock<IBus>();
 
         var handler = new PublishPostsCommandHandler(
             postRepository.Object,
@@ -231,7 +373,8 @@ public sealed class PublishPostsCommandTests
             facebookPublishService.Object,
             instagramPublishService.Object,
             tikTokPublishService.Object,
-            threadsPublishService.Object);
+            threadsPublishService.Object,
+            bus.Object);
 
         var result = await handler.Handle(
             new PublishPostsCommand(Guid.NewGuid(), []),
@@ -241,5 +384,6 @@ public sealed class PublishPostsCommandTests
         result.Error.Code.Should().Be("Post.PublishMissingTargets");
         userSocialMediaService.VerifyNoOtherCalls();
         postRepository.VerifyNoOtherCalls();
+        bus.VerifyNoOtherCalls();
     }
 }

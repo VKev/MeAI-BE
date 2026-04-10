@@ -8,8 +8,10 @@ using Application.Abstractions.TikTok;
 using Application.Posts.Models;
 using Domain.Entities;
 using Domain.Repositories;
+using MassTransit;
 using MediatR;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Extensions;
 
 namespace Application.Posts.Commands;
@@ -40,6 +42,7 @@ public sealed class PublishPostsCommandHandler
     private readonly IInstagramPublishService _instagramPublishService;
     private readonly ITikTokPublishService _tikTokPublishService;
     private readonly IThreadsPublishService _threadsPublishService;
+    private readonly IBus _bus;
 
     public PublishPostsCommandHandler(
         IPostRepository postRepository,
@@ -49,7 +52,8 @@ public sealed class PublishPostsCommandHandler
         IFacebookPublishService facebookPublishService,
         IInstagramPublishService instagramPublishService,
         ITikTokPublishService tikTokPublishService,
-        IThreadsPublishService threadsPublishService)
+        IThreadsPublishService threadsPublishService,
+        IBus bus)
     {
         _postRepository = postRepository;
         _postPublicationRepository = postPublicationRepository;
@@ -59,6 +63,7 @@ public sealed class PublishPostsCommandHandler
         _instagramPublishService = instagramPublishService;
         _tikTokPublishService = tikTokPublishService;
         _threadsPublishService = threadsPublishService;
+        _bus = bus;
     }
 
     public async Task<Result<PublishPostsResponse>> Handle(
@@ -108,6 +113,13 @@ public sealed class PublishPostsCommandHandler
 
                 if (publishResult.IsFailure)
                 {
+                    await NotifyPublicationFailedAsync(
+                        request.UserId,
+                        target.Post,
+                        socialMedia,
+                        publishResult.Error,
+                        cancellationToken);
+
                     return Result.Failure<PublishPostsResponse>(publishResult.Error);
                 }
 
@@ -117,6 +129,12 @@ public sealed class PublishPostsCommandHandler
                     publishResult.Value,
                     cancellationToken);
             }
+
+            await NotifyPublicationCompletedAsync(
+                request.UserId,
+                target.Post,
+                destinationResults,
+                cancellationToken);
 
             publishedPosts.Add(new PublishPostResponse(
                 target.Post.Id,
@@ -456,6 +474,67 @@ public sealed class PublishPostsCommandHandler
                 threadsPublishResult.Value.ThreadsUserId,
                 threadsPublishResult.Value.PostId)
         ]);
+    }
+
+    private async Task NotifyPublicationCompletedAsync(
+        Guid userId,
+        Post post,
+        IReadOnlyList<PublishPostDestinationResult> publishResults,
+        CancellationToken cancellationToken)
+    {
+        await _bus.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                userId,
+                NotificationTypes.AiPostPublishCompleted,
+                "Post published",
+                publishResults.Count == 1
+                    ? "Your post was published to 1 destination."
+                    : $"Your post was published to {publishResults.Count} destinations.",
+                new
+                {
+                    postId = post.Id,
+                    post.Status,
+                    post.WorkspaceId,
+                    destinations = publishResults.Select(result => new
+                    {
+                        result.SocialMediaId,
+                        result.SocialMediaType,
+                        result.PageId,
+                        result.ExternalPostId
+                    }).ToList()
+                },
+                userId),
+            cancellationToken);
+    }
+
+    private async Task NotifyPublicationFailedAsync(
+        Guid userId,
+        Post post,
+        UserSocialMediaResult socialMedia,
+        Error error,
+        CancellationToken cancellationToken)
+    {
+        await _bus.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                userId,
+                NotificationTypes.AiPostPublishFailed,
+                "Post publish failed",
+                error.Description,
+                new
+                {
+                    postId = post.Id,
+                    post.Status,
+                    post.WorkspaceId,
+                    socialMediaId = socialMedia.SocialMediaId,
+                    socialMediaType = socialMedia.Type,
+                    error = new
+                    {
+                        error.Code,
+                        error.Description
+                    }
+                },
+                userId),
+            cancellationToken);
     }
 
     private async Task PersistPublishResultsAsync(
