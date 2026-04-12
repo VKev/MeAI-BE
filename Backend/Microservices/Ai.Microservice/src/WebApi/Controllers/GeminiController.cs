@@ -62,7 +62,6 @@ public sealed class GeminiController : ApiController
                 requestResult.Value.WorkspaceId,
                 requestResult.Value.ResourceIds,
                 requestResult.Value.SocialMedia,
-                requestResult.Value.PostType,
                 requestResult.Value.Language,
                 requestResult.Value.Instruction),
             cancellationToken);
@@ -191,8 +190,8 @@ public sealed class GeminiController : ApiController
             }
 
             socialMedia.Add(new PrepareGeminiPostSocialMediaInput(
-                item.SocialMediaId,
-                item.ResolveType(),
+                item.Platform,
+                item.ResolvePostType(),
                 resourceIdsResult.Value));
         }
 
@@ -206,7 +205,6 @@ public sealed class GeminiController : ApiController
             request.WorkspaceId,
             builderResourceIds,
             socialMedia,
-            request.PostType,
             request.Language,
             request.Instruction));
     }
@@ -547,7 +545,6 @@ public sealed class PrepareGeminiPostsRequest
 {
     public Guid? WorkspaceId { get; set; }
     public IReadOnlyList<Guid>? ResourceIds { get; set; }
-    public string? PostType { get; set; }
     public string? Language { get; set; }
     public string? Instruction { get; set; }
     public IReadOnlyList<PrepareGeminiPostSocialMediaRequest>? SocialMedia { get; set; }
@@ -555,13 +552,11 @@ public sealed class PrepareGeminiPostsRequest
 
 public sealed class PrepareGeminiPostSocialMediaRequest
 {
-    public Guid? SocialMediaId { get; set; }
-    public string? Type { get; set; }
     public string? Platform { get; set; }
+    public string? Type { get; set; }
     public IReadOnlyList<Guid>? ResourceIds { get; set; }
 
-    public string? ResolveType() =>
-        !string.IsNullOrWhiteSpace(Type) ? Type : Platform;
+    public string? ResolvePostType() => Type;
 
     public Result<IReadOnlyList<Guid>> ResolveResourceIds()
     {
@@ -591,22 +586,12 @@ public sealed class PrepareGeminiPostSocialMediaRequest
 
         return true;
     }
-
-    private static string NormalizePropertyName(string propertyName)
-    {
-        var characters = propertyName
-            .Where(character => character is not (' ' or '_' or '-'))
-            .Select(char.ToLowerInvariant);
-
-        return new string(characters.ToArray());
-    }
 }
 
 sealed record PrepareGeminiPostsRequestPayload(
     Guid? WorkspaceId,
     IReadOnlyList<Guid> ResourceIds,
     IReadOnlyList<PrepareGeminiPostSocialMediaInput> SocialMedia,
-    string? PostType,
     string? Language,
     string? Instruction);
 

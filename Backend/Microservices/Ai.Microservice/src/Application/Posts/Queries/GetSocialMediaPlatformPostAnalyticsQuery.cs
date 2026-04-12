@@ -312,7 +312,11 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
             }
 
             var insightsResult = await _instagramContentService.GetPostInsightsAsync(
-                new InstagramPostInsightsRequest(accessToken, request.PlatformPostId),
+                new InstagramPostInsightsRequest(
+                    accessToken,
+                    request.PlatformPostId,
+                    postResult.Value.MediaType,
+                    postResult.Value.MediaProductType),
                 cancellationToken);
 
             if (insightsResult.IsFailure)

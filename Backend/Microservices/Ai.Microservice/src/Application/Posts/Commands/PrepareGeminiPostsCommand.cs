@@ -1,7 +1,6 @@
 using Application.Abstractions.Configs;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Resources;
-using Application.Abstractions.SocialMedias;
 using Application.Posts.Models;
 using Domain.Entities;
 using Domain.Repositories;
@@ -16,12 +15,11 @@ public sealed record PrepareGeminiPostsCommand(
     Guid? WorkspaceId,
     IReadOnlyList<Guid> ResourceIds,
     IReadOnlyList<PrepareGeminiPostSocialMediaInput> SocialMedia,
-    string? PostType,
     string? Language,
     string? Instruction) : IRequest<Result<PrepareGeminiPostsResponse>>;
 
 public sealed record PrepareGeminiPostSocialMediaInput(
-    Guid? SocialMediaId,
+    string? Platform,
     string? Type,
     IReadOnlyList<Guid> ResourceIds);
 
@@ -36,7 +34,6 @@ public sealed class PrepareGeminiPostsCommandHandler
     private readonly IWorkspaceRepository _workspaceRepository;
     private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
-    private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly IGeminiCaptionService _geminiCaptionService;
 
     public PrepareGeminiPostsCommandHandler(
@@ -45,7 +42,6 @@ public sealed class PrepareGeminiPostsCommandHandler
         IWorkspaceRepository workspaceRepository,
         IUserConfigService userConfigService,
         IUserResourceService userResourceService,
-        IUserSocialMediaService userSocialMediaService,
         IGeminiCaptionService geminiCaptionService)
     {
         _postBuilderRepository = postBuilderRepository;
@@ -53,7 +49,6 @@ public sealed class PrepareGeminiPostsCommandHandler
         _workspaceRepository = workspaceRepository;
         _userConfigService = userConfigService;
         _userResourceService = userResourceService;
-        _userSocialMediaService = userSocialMediaService;
         _geminiCaptionService = geminiCaptionService;
     }
 
@@ -81,23 +76,17 @@ public sealed class PrepareGeminiPostsCommandHandler
                 new Error("SocialMedia.InvalidRequest", "At least one social media item is required."));
         }
 
-        var resolvedPostType = GeminiDraftPostHelper.NormalizePostType(request.PostType);
-        if (!GeminiDraftPostHelper.IsSupportedPostType(resolvedPostType))
-        {
-            return Result.Failure<PrepareGeminiPostsResponse>(
-                new Error("Post.InvalidPostType", "Post type must be 'posts' or 'reels'."));
-        }
-
-        var normalizedSocialMediaResult = await NormalizeSocialMediaInputsAsync(
-            request.UserId,
+        var normalizedSocialMediaResult = NormalizeSocialMediaInputs(
             request.ResourceIds,
-            request.SocialMedia,
-            cancellationToken);
+            request.SocialMedia);
 
         if (normalizedSocialMediaResult.IsFailure)
         {
             return Result.Failure<PrepareGeminiPostsResponse>(normalizedSocialMediaResult.Error);
         }
+
+        var normalizedSocialMedia = normalizedSocialMediaResult.Value;
+        var resolvedBuilderPostType = ResolveBuilderPostType(normalizedSocialMedia);
 
         var builderResourceIds = request.ResourceIds
             .Where(id => id != Guid.Empty)
@@ -106,13 +95,13 @@ public sealed class PrepareGeminiPostsCommandHandler
 
         if (builderResourceIds.Count == 0)
         {
-            builderResourceIds = normalizedSocialMediaResult.Value
+            builderResourceIds = normalizedSocialMedia
                 .SelectMany(item => item.ResourceIds)
                 .Distinct()
                 .ToList();
         }
 
-        var allResourceIds = normalizedSocialMediaResult.Value
+        var allResourceIds = normalizedSocialMedia
             .SelectMany(item => item.ResourceIds)
             .Distinct()
             .ToList();
@@ -144,7 +133,7 @@ public sealed class PrepareGeminiPostsCommandHandler
             1,
             MaxDraftCount);
 
-        var captionTasks = normalizedSocialMediaResult.Value
+        var captionTasks = normalizedSocialMedia
             .Select(async socialMedia =>
             {
                 if (!TryResolveResources(resourcesById, socialMedia.ResourceIds, out var orderedResources))
@@ -165,7 +154,7 @@ public sealed class PrepareGeminiPostsCommandHandler
                     new GeminiSocialMediaCaptionRequest(
                         geminiResources,
                         null,
-                        socialMedia.Type,
+                        socialMedia.Platform,
                         Array.Empty<string>(),
                         draftCount,
                         languageHint,
@@ -179,8 +168,9 @@ public sealed class PrepareGeminiPostsCommandHandler
                 }
 
                 return Result.Success(new CaptionBatch(
-                    socialMedia.SocialMediaId,
-                    socialMedia.Type,
+                    null,
+                    socialMedia.Platform,
+                    socialMedia.PostType,
                     socialMedia.ResourceIds,
                     captionsResult.Value));
             })
@@ -199,7 +189,7 @@ public sealed class PrepareGeminiPostsCommandHandler
             Id = Guid.CreateVersion7(),
             UserId = request.UserId,
             WorkspaceId = workspaceId,
-            PostType = resolvedPostType,
+            PostType = resolvedBuilderPostType,
             ResourceIds = GeminiDraftPostHelper.SerializeResourceIds(builderResourceIds),
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
@@ -225,14 +215,14 @@ public sealed class PrepareGeminiPostsCommandHandler
                     UserId = request.UserId,
                     WorkspaceId = workspaceId,
                     SocialMediaId = batch.SocialMediaId,
-                    Platform = batch.Type,
+                    Platform = batch.Platform,
                     Title = string.IsNullOrWhiteSpace(title) ? null : title,
                     Content = new PostContent
                     {
                         Content = caption.Caption,
                         Hashtag = hashtags.Count == 0 ? null : string.Join(' ', hashtags),
                         ResourceList = batch.ResourceIds.Select(id => id.ToString()).ToList(),
-                        PostType = resolvedPostType
+                        PostType = batch.PostType
                     },
                     Status = "draft",
                     CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
@@ -243,7 +233,7 @@ public sealed class PrepareGeminiPostsCommandHandler
                 drafts.Add(new PreparedDraftPostResponse(
                     post.Id,
                     post.Status ?? "draft",
-                    resolvedPostType,
+                    batch.PostType,
                     caption.Caption,
                     title,
                     batch.ResourceIds,
@@ -254,7 +244,8 @@ public sealed class PrepareGeminiPostsCommandHandler
 
             responseGroups.Add(new PreparedSocialMediaDraftGroupResponse(
                 batch.SocialMediaId,
-                batch.Type,
+                batch.Platform,
+                batch.PostType,
                 batch.ResourceIds,
                 drafts));
         }
@@ -264,39 +255,15 @@ public sealed class PrepareGeminiPostsCommandHandler
         return Result.Success(new PrepareGeminiPostsResponse(
             postBuilder.Id,
             workspaceId,
-            resolvedPostType,
+            resolvedBuilderPostType,
             responseGroups,
             builderResourceIds));
     }
 
-    private async Task<Result<IReadOnlyList<ResolvedSocialMediaInput>>> NormalizeSocialMediaInputsAsync(
-        Guid userId,
+    private static Result<IReadOnlyList<ResolvedSocialMediaInput>> NormalizeSocialMediaInputs(
         IReadOnlyList<Guid> builderResourceIds,
-        IReadOnlyList<PrepareGeminiPostSocialMediaInput> socialMediaInputs,
-        CancellationToken cancellationToken)
+        IReadOnlyList<PrepareGeminiPostSocialMediaInput> socialMediaInputs)
     {
-        var requestedSocialMediaIds = socialMediaInputs
-            .Where(item => item.SocialMediaId.HasValue && item.SocialMediaId.Value != Guid.Empty)
-            .Select(item => item.SocialMediaId!.Value)
-            .Distinct()
-            .ToList();
-
-        var socialMediaById = new Dictionary<Guid, UserSocialMediaResult>();
-        if (requestedSocialMediaIds.Count > 0)
-        {
-            var socialMediasResult = await _userSocialMediaService.GetSocialMediasAsync(
-                userId,
-                requestedSocialMediaIds,
-                cancellationToken);
-
-            if (socialMediasResult.IsFailure)
-            {
-                return Result.Failure<IReadOnlyList<ResolvedSocialMediaInput>>(socialMediasResult.Error);
-            }
-
-            socialMediaById = socialMediasResult.Value.ToDictionary(item => item.SocialMediaId);
-        }
-
         var normalized = new List<ResolvedSocialMediaInput>(socialMediaInputs.Count);
 
         foreach (var item in socialMediaInputs)
@@ -326,34 +293,38 @@ public sealed class PrepareGeminiPostsCommandHandler
                     new Error("Resource.InvalidRequest", "socialMedia.resourceIds must be contained in the builder resourceIds list."));
             }
 
-            string? type = item.Type;
-            Guid? socialMediaId = item.SocialMediaId == Guid.Empty ? null : item.SocialMediaId;
-
-            if (socialMediaId.HasValue)
+            var platformResult = GeminiDraftPostHelper.NormalizePlatformType(item.Platform);
+            if (platformResult.IsFailure)
             {
-                if (!socialMediaById.TryGetValue(socialMediaId.Value, out var socialMedia))
-                {
-                    return Result.Failure<IReadOnlyList<ResolvedSocialMediaInput>>(
-                        new Error("SocialMedia.NotFound", "Social media account not found."));
-                }
-
-                type = socialMedia.Type;
+                return Result.Failure<IReadOnlyList<ResolvedSocialMediaInput>>(platformResult.Error);
             }
 
-            var normalizedTypeResult = GeminiDraftPostHelper.NormalizePlatformType(type);
-            if (normalizedTypeResult.IsFailure)
+            var postType = GeminiDraftPostHelper.NormalizePostType(item.Type);
+            if (!GeminiDraftPostHelper.IsSupportedPostType(postType))
             {
-                return Result.Failure<IReadOnlyList<ResolvedSocialMediaInput>>(normalizedTypeResult.Error);
+                return Result.Failure<IReadOnlyList<ResolvedSocialMediaInput>>(
+                    new Error("Post.InvalidPostType", "Post type must be 'posts' or 'reels'."));
             }
 
             normalized.Add(new ResolvedSocialMediaInput(
-                socialMediaId,
-                normalizedTypeResult.Value,
+                platformResult.Value,
+                postType,
                 resourceIds));
         }
 
         return Result.Success<IReadOnlyList<ResolvedSocialMediaInput>>(normalized);
     }
+
+    private static string? ResolveBuilderPostType(IReadOnlyList<ResolvedSocialMediaInput> socialMedia)
+    {
+        var distinctTypes = socialMedia
+            .Select(item => item.PostType)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return distinctTypes.Count == 1 ? distinctTypes[0] : null;
+    }
+
     private static bool TryResolveResources(
         IReadOnlyDictionary<Guid, UserResourcePresignResult> resourcesById,
         IReadOnlyList<Guid> resourceIds,
@@ -380,13 +351,14 @@ public sealed class PrepareGeminiPostsCommandHandler
     }
 
     private sealed record ResolvedSocialMediaInput(
-        Guid? SocialMediaId,
-        string Type,
+        string Platform,
+        string PostType,
         IReadOnlyList<Guid> ResourceIds);
 
     private sealed record CaptionBatch(
         Guid? SocialMediaId,
-        string Type,
+        string Platform,
+        string PostType,
         IReadOnlyList<Guid> ResourceIds,
         IReadOnlyList<GeminiGeneratedCaption> Captions);
 }

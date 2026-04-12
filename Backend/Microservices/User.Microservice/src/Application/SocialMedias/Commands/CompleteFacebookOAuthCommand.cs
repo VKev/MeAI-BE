@@ -94,6 +94,13 @@ public sealed class CompleteFacebookOAuthCommandHandler
         }
 
         var profile = profileResult.Value;
+        var accountCandidates = ResolveAccountCandidates(profile);
+
+        if (accountCandidates.Count == 0)
+        {
+            return Result.Failure<SocialMediaResponse>(
+                new Error("Facebook.PageMissing", "No Facebook page is available for this account."));
+        }
 
         var now = DateTimeExtensions.PostgreSqlUtcNow;
         var user = await _userRepository.GetAll()
@@ -113,22 +120,16 @@ public sealed class CompleteFacebookOAuthCommandHandler
                 !sm.IsDeleted)
             .ToListAsync(cancellationToken);
 
-        var facebookAccountId = profile.PageId ?? profile.Id;
-        SocialMedia? matchedSocialMedia = null;
+        var matchedAccounts = accountCandidates.ToDictionary(
+            candidate => candidate.Identifier,
+            candidate => userFacebookAccounts.FirstOrDefault(sm => MatchesFacebookAccount(sm.Metadata, candidate.Identifier)));
 
-        if (!string.IsNullOrWhiteSpace(facebookAccountId))
+        var newAccountCount = matchedAccounts.Values.Count(socialMedia => socialMedia == null);
+        if (newAccountCount > 0)
         {
-            matchedSocialMedia = userFacebookAccounts.FirstOrDefault(sm =>
-                (TryGetMetadataValue(sm.Metadata, "page_id", out var existingPageId) &&
-                 string.Equals(existingPageId, facebookAccountId, StringComparison.Ordinal)) ||
-                (TryGetMetadataValue(sm.Metadata, "id", out var existingId) &&
-                 string.Equals(existingId, facebookAccountId, StringComparison.Ordinal)));
-        }
-
-        if (matchedSocialMedia == null)
-        {
-            var entitlementResult = await _userSubscriptionEntitlementService.EnsureSocialAccountLinkAllowedAsync(
+            var entitlementResult = await EnsureSocialAccountLinkAllowedAsync(
                 userId,
+                newAccountCount,
                 cancellationToken);
 
             if (entitlementResult.IsFailure)
@@ -137,7 +138,7 @@ public sealed class CompleteFacebookOAuthCommandHandler
             }
         }
 
-        var shouldUpdateUser = matchedSocialMedia != null || userFacebookAccounts.Count == 0;
+        var shouldUpdateUser = matchedAccounts.Values.Any(socialMedia => socialMedia != null) || userFacebookAccounts.Count == 0;
 
         var resolvedEmail = user.Email;
         var resolvedName = user.FullName ?? user.Username;
@@ -185,41 +186,29 @@ public sealed class CompleteFacebookOAuthCommandHandler
             _userRepository.Update(user);
         }
 
-        var payload = new Dictionary<string, object?>
-        {
-            ["provider"] = FacebookSocialMediaType,
-            ["id"] = profile.Id,
-            ["page_id"] = profile.PageId,
-            ["page_name"] = profile.PageName,
-            ["name"] = resolvedName,
-            ["email"] = resolvedEmail,
-            ["profile_picture_url"] = profile.ProfilePictureUrl,
-            ["page_access_token"] = profile.PageAccessToken,
-            ["page_fan_count"] = profile.PageLikeCount,
-            ["page_followers_count"] = profile.PageFollowerCount,
-            ["page_post_count"] = profile.PagePostCount,
-            ["access_token"] = tokenResult.Value.AccessToken
-        };
+        var persistedSocialMedias = new List<SocialMedia>(accountCandidates.Count);
 
-        if (tokenResult.Value.ExpiresIn > 0)
+        foreach (var candidate in accountCandidates)
         {
-            payload["expires_at"] = now.AddSeconds(tokenResult.Value.ExpiresIn);
-        }
+            var metadata = CreateMetadataDocument(
+                profile,
+                candidate,
+                resolvedName,
+                resolvedEmail,
+                tokenResult.Value.AccessToken,
+                tokenResult.Value.ExpiresIn,
+                now);
 
-        var metadata = JsonDocument.Parse(JsonSerializer.Serialize(payload, MetadataJsonOptions));
+            if (matchedAccounts[candidate.Identifier] is { } matchedSocialMedia)
+            {
+                matchedSocialMedia.Metadata?.Dispose();
+                matchedSocialMedia.Metadata = metadata;
+                matchedSocialMedia.UpdatedAt = now;
+                persistedSocialMedias.Add(matchedSocialMedia);
+                continue;
+            }
 
-        SocialMedia socialMedia;
-
-        if (matchedSocialMedia != null)
-        {
-            matchedSocialMedia.Metadata?.Dispose();
-            matchedSocialMedia.Metadata = metadata;
-            matchedSocialMedia.UpdatedAt = now;
-            socialMedia = matchedSocialMedia;
-        }
-        else
-        {
-            socialMedia = new SocialMedia
+            var socialMedia = new SocialMedia
             {
                 Id = Guid.CreateVersion7(),
                 UserId = userId,
@@ -228,15 +217,18 @@ public sealed class CompleteFacebookOAuthCommandHandler
                 CreatedAt = now
             };
             await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
+            persistedSocialMedias.Add(socialMedia);
         }
 
+        var primarySocialMedia = persistedSocialMedias[0];
+
         var socialProfileResult = await _profileService.GetUserProfileAsync(
-            socialMedia.Type,
-            socialMedia.Metadata,
+            primarySocialMedia.Type,
+            primarySocialMedia.Metadata,
             cancellationToken);
 
         var socialProfile = socialProfileResult.IsSuccess ? socialProfileResult.Value : null;
-        return Result.Success(SocialMediaMapping.ToResponse(socialMedia, socialProfile, includeMetadata: false));
+        return Result.Success(SocialMediaMapping.ToResponse(primarySocialMedia, socialProfile, includeMetadata: false));
     }
 
     private static string NormalizeEmail(string email) =>
@@ -265,5 +257,130 @@ public sealed class CompleteFacebookOAuthCommandHandler
 
         return false;
     }
+
+    private async Task<Result<UserSubscriptionEntitlement>> EnsureSocialAccountLinkAllowedAsync(
+        Guid userId,
+        int newAccountCount,
+        CancellationToken cancellationToken)
+    {
+        var entitlement = await _userSubscriptionEntitlementService.GetCurrentEntitlementAsync(userId, cancellationToken);
+
+        if (!entitlement.HasActivePlan)
+        {
+            return Result.Failure<UserSubscriptionEntitlement>(
+                new Error("Subscription.Required", "An active subscription is required to link social accounts."));
+        }
+
+        if (entitlement.MaxSocialAccounts <= 0)
+        {
+            return Result.Failure<UserSubscriptionEntitlement>(
+                new Error("SocialMedia.LimitUnavailable", "Your current plan does not include social account linking."));
+        }
+
+        var currentSocialAccountCount = await _socialMediaRepository.GetAll()
+            .AsNoTracking()
+            .CountAsync(item => item.UserId == userId && !item.IsDeleted, cancellationToken);
+
+        if (currentSocialAccountCount + newAccountCount > entitlement.MaxSocialAccounts)
+        {
+            return Result.Failure<UserSubscriptionEntitlement>(
+                new Error(
+                    "SocialMedia.LimitExceeded",
+                    $"Your current plan allows up to {entitlement.MaxSocialAccounts} linked social account(s). Upgrade to add more."));
+        }
+
+        return Result.Success(entitlement);
+    }
+
+    private static JsonDocument CreateMetadataDocument(
+        FacebookProfileResponse profile,
+        FacebookAccountCandidate candidate,
+        string? resolvedName,
+        string? resolvedEmail,
+        string accessToken,
+        int expiresIn,
+        DateTime now)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["provider"] = FacebookSocialMediaType,
+            ["id"] = profile.Id,
+            ["page_id"] = candidate.PageId,
+            ["page_name"] = candidate.PageName,
+            ["name"] = resolvedName,
+            ["email"] = resolvedEmail,
+            ["profile_picture_url"] = profile.ProfilePictureUrl,
+            ["page_access_token"] = candidate.PageAccessToken,
+            ["page_fan_count"] = candidate.PageLikeCount,
+            ["page_followers_count"] = candidate.PageFollowerCount,
+            ["page_post_count"] = candidate.PagePostCount,
+            ["access_token"] = accessToken
+        };
+
+        if (expiresIn > 0)
+        {
+            payload["expires_at"] = now.AddSeconds(expiresIn);
+        }
+
+        return JsonDocument.Parse(JsonSerializer.Serialize(payload, MetadataJsonOptions));
+    }
+
+    private static List<FacebookAccountCandidate> ResolveAccountCandidates(FacebookProfileResponse profile)
+    {
+        if (profile.Pages.Count > 0)
+        {
+            return profile.Pages
+                .Where(page => !string.IsNullOrWhiteSpace(page.Id))
+                .Select(page => new FacebookAccountCandidate(
+                    page.Id,
+                    page.Id,
+                    page.Name,
+                    page.AccessToken,
+                    page.FanCount,
+                    page.FollowersCount,
+                    page.PostCount))
+                .ToList();
+        }
+
+        var identifier = profile.PageId ?? profile.Id;
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return [];
+        }
+
+        return
+        [
+            new FacebookAccountCandidate(
+                identifier,
+                profile.PageId,
+                profile.PageName ?? profile.Name,
+                profile.PageAccessToken,
+                profile.PageLikeCount,
+                profile.PageFollowerCount,
+                profile.PagePostCount)
+        ];
+    }
+
+    private static bool MatchesFacebookAccount(JsonDocument? metadata, string identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return false;
+        }
+
+        return (TryGetMetadataValue(metadata, "page_id", out var existingPageId) &&
+                string.Equals(existingPageId, identifier, StringComparison.Ordinal)) ||
+               (TryGetMetadataValue(metadata, "id", out var existingId) &&
+                string.Equals(existingId, identifier, StringComparison.Ordinal));
+    }
+
+    private sealed record FacebookAccountCandidate(
+        string Identifier,
+        string? PageId,
+        string? PageName,
+        string? PageAccessToken,
+        int? PageLikeCount,
+        int? PageFollowerCount,
+        int? PagePostCount);
 
 }

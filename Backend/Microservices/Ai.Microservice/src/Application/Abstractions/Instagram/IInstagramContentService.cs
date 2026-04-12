@@ -37,7 +37,9 @@ public sealed record InstagramPostDetailsRequest(
 
 public sealed record InstagramPostInsightsRequest(
     string AccessToken,
-    string PostId);
+    string PostId,
+    string? MediaType = null,
+    string? MediaProductType = null);
 
 public sealed record InstagramAccountInsightsRequest(
     string AccessToken,

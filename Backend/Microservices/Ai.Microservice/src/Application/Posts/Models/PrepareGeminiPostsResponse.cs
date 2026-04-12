@@ -3,12 +3,13 @@ namespace Application.Posts.Models;
 public sealed record PrepareGeminiPostsResponse(
     Guid PostBuilderId,
     Guid? WorkspaceId,
-    string PostType,
+    string? PostType,
     IReadOnlyList<PreparedSocialMediaDraftGroupResponse> SocialMedia,
     IReadOnlyList<Guid> ResourceIds);
 
 public sealed record PreparedSocialMediaDraftGroupResponse(
     Guid? SocialMediaId,
+    string Platform,
     string Type,
     IReadOnlyList<Guid> ResourceIds,
     IReadOnlyList<PreparedDraftPostResponse> Drafts);

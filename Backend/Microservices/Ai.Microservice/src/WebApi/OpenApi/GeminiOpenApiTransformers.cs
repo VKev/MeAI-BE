@@ -13,7 +13,6 @@ internal static class GeminiOpenApiTransformers
         """
         {
           "workspaceId": "11111111-1111-1111-1111-111111111111",
-          "postType": "posts",
           "resourceIds": [
             "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
             "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
@@ -22,16 +21,15 @@ internal static class GeminiOpenApiTransformers
           "instruction": "Keep the captions product-focused and platform-native",
           "socialMedia": [
             {
-              "type": "Tiktok"
+              "platform": "facebook",
+              "type": "posts"
             },
             {
-              "type": "Facebook"
-            },
-            {
-              "type": "IG"
-            },
-            {
-              "type": "Threads"
+              "platform": "tiktok",
+              "type": "reels",
+              "resourceIds": [
+                "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+              ]
             }
           ]
         }
