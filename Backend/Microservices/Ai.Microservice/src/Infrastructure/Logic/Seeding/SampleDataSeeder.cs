@@ -110,7 +110,11 @@ public sealed class SampleDataSeeder
             existingChat.ReferenceResourceIds = JsonSerializer.Serialize(
                 chatItem.ResourceIds.Select(item => item.ToString()),
                 SerializerOptions);
-            existingChat.ResultResourceIds = null;
+            existingChat.ResultResourceIds = chatItem.ResultResourceIds.Count == 0
+                ? null
+                : JsonSerializer.Serialize(
+                    chatItem.ResultResourceIds.Select(item => item.ToString()),
+                    SerializerOptions);
             existingChat.Config = null;
             existingChat.DeletedAt = null;
             existingChat.UpdatedAt = now;
@@ -224,6 +228,8 @@ public sealed class SampleDataSeeder
         public required string Prompt { get; set; }
 
         public List<Guid> ResourceIds { get; set; } = [];
+
+        public List<Guid> ResultResourceIds { get; set; } = [];
     }
 
     public sealed class SampleSeedState

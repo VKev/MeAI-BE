@@ -294,6 +294,43 @@ public sealed class PostsController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("prepare")]
+    [ApiExplorerSettings(IgnoreApi = true)]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(Result<PrepareGeminiPostsResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Prepare(
+        [FromBody] PrepareGeminiPostsRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var requestResult = ParsePreparePostsRequest(request);
+        if (requestResult.IsFailure)
+        {
+            return HandleFailure(Result.Failure<PrepareGeminiPostsResponse>(requestResult.Error));
+        }
+
+        var result = await _mediator.Send(
+            new PrepareGeminiPostsCommand(
+                userId,
+                requestResult.Value.WorkspaceId,
+                requestResult.Value.ResourceIds,
+                requestResult.Value.SocialMedia),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpPost("{postId:guid}/check-sensitive")]
     [ProducesResponseType(typeof(Result<CheckSensitiveContentResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -381,6 +418,58 @@ public sealed class PostsController : ApiController
         [
             singleTargetResult.Value
         ], true));
+    }
+
+    private static Result<PrepareGeminiPostsRequestPayload> ParsePreparePostsRequest(
+        PrepareGeminiPostsRequest? request)
+    {
+        if (request is null)
+        {
+            return Result.Failure<PrepareGeminiPostsRequestPayload>(
+                new Error("Post.PrepareInvalidRequest", "Request body is required."));
+        }
+
+        if (request.SocialMedia is null)
+        {
+            return Result.Failure<PrepareGeminiPostsRequestPayload>(
+                new Error("SocialMedia.InvalidRequest", "socialMedia must be a JSON array."));
+        }
+
+        var builderResourceIds = request.ResourceIds?
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList() ?? new List<Guid>();
+
+        var socialMedia = new List<PrepareGeminiPostSocialMediaInput>();
+        foreach (var item in request.SocialMedia)
+        {
+            if (item is null)
+            {
+                continue;
+            }
+
+            var resourceIdsResult = item.ResolveResourceIds();
+            if (resourceIdsResult.IsFailure)
+            {
+                return Result.Failure<PrepareGeminiPostsRequestPayload>(resourceIdsResult.Error);
+            }
+
+            socialMedia.Add(new PrepareGeminiPostSocialMediaInput(
+                item.Platform,
+                item.ResolvePostType(),
+                resourceIdsResult.Value));
+        }
+
+        if (socialMedia.Count == 0)
+        {
+            return Result.Failure<PrepareGeminiPostsRequestPayload>(
+                new Error("SocialMedia.InvalidRequest", "socialMedia must contain at least one item."));
+        }
+
+        return Result.Success(new PrepareGeminiPostsRequestPayload(
+            request.WorkspaceId,
+            builderResourceIds,
+            socialMedia));
     }
 
     private static Result<IReadOnlyList<PublishPostTargetInput>> ParsePublishTargetArray(JsonElement arrayElement)
