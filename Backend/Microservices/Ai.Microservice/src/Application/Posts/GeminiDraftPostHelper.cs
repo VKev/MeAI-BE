@@ -39,7 +39,7 @@ internal static partial class GeminiDraftPostHelper
         if (string.IsNullOrWhiteSpace(rawType))
         {
             return Result.Failure<string>(
-                new Error("SocialMedia.InvalidType", "Each social media item must include a type or socialMediaId."));
+                new Error("SocialMedia.InvalidType", "Each social media item must include a platform."));
         }
 
         var normalized = rawType.Trim()

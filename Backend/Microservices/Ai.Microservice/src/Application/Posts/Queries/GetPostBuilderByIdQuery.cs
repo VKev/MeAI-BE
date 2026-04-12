@@ -79,14 +79,15 @@ public sealed class GetPostBuilderByIdQueryHandler
         foreach (var post in posts)
         {
             var platform = ResolvePlatform(post, socialMediaTypesById);
-            var groupKey = $"{post.SocialMediaId?.ToString() ?? "none"}:{platform}";
+            var type = ResolvePostType(post, postBuilder);
+            var groupKey = $"{post.SocialMediaId?.ToString() ?? "none"}:{platform}:{type}";
 
             if (!groupLookup.TryGetValue(groupKey, out var group))
             {
                 group = new PostBuilderSocialMediaGroupBuilder(
                     post.SocialMediaId,
                     platform,
-                    postBuilder.PostType);
+                    type);
                 groupLookup[groupKey] = group;
             }
 
@@ -138,9 +139,17 @@ public sealed class GetPostBuilderByIdQueryHandler
         return "unknown";
     }
 
+    private static string ResolvePostType(Post post, PostBuilder postBuilder)
+    {
+        var resolved = GeminiDraftPostHelper.NormalizePostType(post.Content?.PostType ?? postBuilder.PostType);
+        return GeminiDraftPostHelper.IsSupportedPostType(resolved)
+            ? resolved
+            : GeminiDraftPostHelper.NormalizePostType(null);
+    }
+
     private sealed class PostBuilderSocialMediaGroupBuilder
     {
-        public PostBuilderSocialMediaGroupBuilder(Guid? socialMediaId, string platform, string? type)
+        public PostBuilderSocialMediaGroupBuilder(Guid? socialMediaId, string platform, string type)
         {
             SocialMediaId = socialMediaId;
             Platform = platform;
@@ -151,7 +160,7 @@ public sealed class GetPostBuilderByIdQueryHandler
 
         public string Platform { get; }
 
-        public string? Type { get; }
+        public string Type { get; }
 
         public List<PostResponse> Posts { get; } = [];
     }

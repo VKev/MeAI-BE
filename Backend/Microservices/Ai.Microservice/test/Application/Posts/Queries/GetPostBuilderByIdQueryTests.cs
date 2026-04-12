@@ -13,7 +13,7 @@ namespace AiMicroservice.Tests.Application.Posts.Queries;
 public sealed class GetPostBuilderByIdQueryTests
 {
     [Fact]
-    public async Task Handle_ShouldReturnBuilderDetailsGroupedByPlatform()
+    public async Task Handle_ShouldReturnBuilderDetailsGroupedByPlatformAndType()
     {
         var userId = Guid.NewGuid();
         var builderId = Guid.NewGuid();
@@ -21,6 +21,7 @@ public sealed class GetPostBuilderByIdQueryTests
         var firstResourceId = Guid.NewGuid();
         var secondResourceId = Guid.NewGuid();
         var thirdResourceId = Guid.NewGuid();
+        var fourthResourceId = Guid.NewGuid();
 
         var postBuilderRepository = new Mock<IPostBuilderRepository>();
         var userResourceService = new Mock<IUserResourceService>();
@@ -44,6 +45,23 @@ public sealed class GetPostBuilderByIdQueryTests
                     ResourceList = [firstResourceId.ToString()]
                 },
                 Status = "draft",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-3)
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                PostBuilderId = builderId,
+                SocialMediaId = null,
+                Platform = "tiktok",
+                Title = "TikTok post draft",
+                Content = new PostContent
+                {
+                    Content = "TikTok post caption",
+                    PostType = "posts",
+                    ResourceList = [secondResourceId.ToString()]
+                },
+                Status = "draft",
                 CreatedAt = DateTime.UtcNow.AddMinutes(-2)
             },
             new()
@@ -53,12 +71,12 @@ public sealed class GetPostBuilderByIdQueryTests
                 PostBuilderId = builderId,
                 SocialMediaId = null,
                 Platform = "tiktok",
-                Title = "TikTok draft",
+                Title = "TikTok reel draft",
                 Content = new PostContent
                 {
-                    Content = "TikTok caption",
-                    PostType = "posts",
-                    ResourceList = [secondResourceId.ToString(), thirdResourceId.ToString()]
+                    Content = "TikTok reel caption",
+                    PostType = "reels",
+                    ResourceList = [thirdResourceId.ToString(), fourthResourceId.ToString()]
                 },
                 Status = "draft",
                 CreatedAt = DateTime.UtcNow.AddMinutes(-1)
@@ -72,9 +90,9 @@ public sealed class GetPostBuilderByIdQueryTests
                 Id = builderId,
                 UserId = userId,
                 WorkspaceId = Guid.NewGuid(),
-                PostType = "posts",
-                ResourceIds = $"[\"{firstResourceId}\",\"{secondResourceId}\",\"{thirdResourceId}\"]",
-                CreatedAt = DateTime.UtcNow.AddMinutes(-3),
+                PostType = null,
+                ResourceIds = $"[\"{firstResourceId}\",\"{secondResourceId}\",\"{thirdResourceId}\",\"{fourthResourceId}\"]",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-4),
                 Posts = posts
             });
 
@@ -84,13 +102,15 @@ public sealed class GetPostBuilderByIdQueryTests
                 It.Is<IReadOnlyList<Guid>>(ids =>
                     ids.Contains(firstResourceId) &&
                     ids.Contains(secondResourceId) &&
-                    ids.Contains(thirdResourceId)),
+                    ids.Contains(thirdResourceId) &&
+                    ids.Contains(fourthResourceId)),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success<IReadOnlyList<UserResourcePresignResult>>(
             [
                 new UserResourcePresignResult(firstResourceId, "https://cdn.example.com/1.jpg", "image/jpeg", "image"),
                 new UserResourcePresignResult(secondResourceId, "https://cdn.example.com/2.jpg", "image/jpeg", "image"),
-                new UserResourcePresignResult(thirdResourceId, "https://cdn.example.com/3.mp4", "video/mp4", "video")
+                new UserResourcePresignResult(thirdResourceId, "https://cdn.example.com/3.mp4", "video/mp4", "video"),
+                new UserResourcePresignResult(fourthResourceId, "https://cdn.example.com/4.jpg", "image/jpeg", "image")
             ]));
 
         postPublicationRepository
@@ -124,11 +144,17 @@ public sealed class GetPostBuilderByIdQueryTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Id.Should().Be(builderId);
-        result.Value.ResourceIds.Should().Equal(firstResourceId, secondResourceId, thirdResourceId);
-        result.Value.SocialMedia.Should().HaveCount(2);
+        result.Value.Type.Should().BeNull();
+        result.Value.ResourceIds.Should().Equal(firstResourceId, secondResourceId, thirdResourceId, fourthResourceId);
+        result.Value.SocialMedia.Should().HaveCount(3);
         result.Value.SocialMedia[0].Platform.Should().Be("facebook");
+        result.Value.SocialMedia[0].Type.Should().Be("posts");
         result.Value.SocialMedia[0].Posts.Should().ContainSingle();
         result.Value.SocialMedia[1].Platform.Should().Be("tiktok");
+        result.Value.SocialMedia[1].Type.Should().Be("posts");
         result.Value.SocialMedia[1].Posts.Should().ContainSingle();
+        result.Value.SocialMedia[2].Platform.Should().Be("tiktok");
+        result.Value.SocialMedia[2].Type.Should().Be("reels");
+        result.Value.SocialMedia[2].Posts.Should().ContainSingle();
     }
 }

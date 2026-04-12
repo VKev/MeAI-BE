@@ -10,7 +10,6 @@ public sealed class InstagramContentService : IInstagramContentService
     private const string GraphApiBaseUrl = "https://graph.facebook.com/v24.0";
     private const string PostFields =
         "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,username,like_count,comments_count";
-    private const string InsightMetrics = "views,reach,impressions,saved,shares";
     private const string AccountFields = "id,name,username,followers_count,follows_count,media_count,profile_picture_url";
     private const string CommentFields = "id,text,timestamp,username,like_count,replies_count";
 
@@ -129,32 +128,37 @@ public sealed class InstagramContentService : IInstagramContentService
                 new Error("Instagram.InvalidPostId", "Instagram post id is required."));
         }
 
-        var url =
-            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.PostId)}/insights?metric={Uri.EscapeDataString(InsightMetrics)}&access_token={Uri.EscapeDataString(request.AccessToken)}";
-
-        var response = await SendGetAsync<InstagramInsightsApiResponse>(url, cancellationToken, allowFailure: true);
-        if (response.IsFailure)
+        foreach (var metricSet in GetInsightMetricCandidates(request))
         {
+            var url =
+                $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.PostId)}/insights?metric={Uri.EscapeDataString(metricSet)}&access_token={Uri.EscapeDataString(request.AccessToken)}";
+
+            var response = await SendGetAsync<InstagramInsightsApiResponse>(url, cancellationToken, allowFailure: true);
+            if (response.IsFailure)
+            {
+                continue;
+            }
+
+            var metrics = (response.Value.Data ?? Array.Empty<InstagramInsightMetricDto>())
+                .ToDictionary(
+                    item => item.Name ?? string.Empty,
+                    item => item.GetLongValue(),
+                    StringComparer.OrdinalIgnoreCase);
+
             return Result.Success(new InstagramPostInsights(
-                Views: null,
-                Reach: null,
-                Impressions: null,
-                Saved: null,
-                Shares: null));
+                Views: GetMetric(metrics, "views"),
+                Reach: GetMetric(metrics, "reach"),
+                Impressions: GetMetric(metrics, "impressions"),
+                Saved: GetMetric(metrics, "saved"),
+                Shares: GetMetric(metrics, "shares")));
         }
 
-        var metrics = (response.Value.Data ?? Array.Empty<InstagramInsightMetricDto>())
-            .ToDictionary(
-                item => item.Name ?? string.Empty,
-                item => item.GetLongValue(),
-                StringComparer.OrdinalIgnoreCase);
-
         return Result.Success(new InstagramPostInsights(
-            Views: GetMetric(metrics, "views"),
-            Reach: GetMetric(metrics, "reach"),
-            Impressions: GetMetric(metrics, "impressions"),
-            Saved: GetMetric(metrics, "saved"),
-            Shares: GetMetric(metrics, "shares")));
+            Views: null,
+            Reach: null,
+            Impressions: null,
+            Saved: null,
+            Shares: null));
     }
 
     public async Task<Result<InstagramAccountInsights>> GetAccountInsightsAsync(
@@ -318,6 +322,33 @@ public sealed class InstagramContentService : IInstagramContentService
     private static long? GetMetric(IReadOnlyDictionary<string, long?> metrics, string name)
     {
         return metrics.TryGetValue(name, out var value) ? value : null;
+    }
+
+    private static IReadOnlyList<string> GetInsightMetricCandidates(InstagramPostInsightsRequest request)
+    {
+        var includeViews = IsViewMetricSupported(request.MediaType, request.MediaProductType);
+        var candidates = new List<string>();
+
+        if (includeViews)
+        {
+            candidates.Add("views,reach,impressions,saved,shares");
+            candidates.Add("reach,impressions,saved,shares");
+        }
+        else
+        {
+            candidates.Add("reach,impressions,saved,shares");
+        }
+
+        candidates.Add("reach,impressions,saved");
+        candidates.Add("reach,impressions");
+
+        return candidates;
+    }
+
+    private static bool IsViewMetricSupported(string? mediaType, string? mediaProductType)
+    {
+        return string.Equals(mediaType, "VIDEO", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(mediaProductType, "REELS", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? ReadGraphApiError(string payload)

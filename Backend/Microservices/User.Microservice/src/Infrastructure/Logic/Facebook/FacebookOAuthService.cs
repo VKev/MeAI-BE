@@ -159,7 +159,8 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
 
     public async Task<Result<FacebookProfileResponse>> FetchProfileAsync(
         string accessToken,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? preferredPageId = null)
     {
         try
         {
@@ -184,15 +185,27 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
                     new Error("Facebook.ProfileMissing", "Facebook profile is missing"));
             }
 
-            var page = await FetchPrimaryPageAsync(accessToken, cancellationToken);
-            if (page != null)
+            var pages = await FetchPagesAsync(accessToken, cancellationToken);
+            profile.Pages = pages
+                .Where(page => !string.IsNullOrWhiteSpace(page.Id))
+                .Select(page => new FacebookPageProfile(
+                    page.Id!,
+                    page.Name,
+                    page.AccessToken,
+                    page.FanCount,
+                    page.FollowersCount,
+                    page.Posts?.Summary?.TotalCount))
+                .ToList();
+
+            var selectedPage = SelectPage(pages, preferredPageId);
+            if (selectedPage != null)
             {
-                profile.PageId = page.Id;
-                profile.PageName = page.Name;
-                profile.PageAccessToken = page.AccessToken;
-                profile.PageLikeCount = page.FanCount;
-                profile.PageFollowerCount = page.FollowersCount;
-                profile.PagePostCount = page.Posts?.Summary?.TotalCount;
+                profile.PageId = selectedPage.Id;
+                profile.PageName = selectedPage.Name;
+                profile.PageAccessToken = selectedPage.AccessToken;
+                profile.PageLikeCount = selectedPage.FanCount;
+                profile.PageFollowerCount = selectedPage.FollowersCount;
+                profile.PagePostCount = selectedPage.Posts?.Summary?.TotalCount;
             }
 
             return Result.Success(profile);
@@ -272,7 +285,9 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
         }
     }
 
-    private async Task<FacebookPageDataResponse?> FetchPrimaryPageAsync(string accessToken, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<FacebookPageDataResponse>> FetchPagesAsync(
+        string accessToken,
+        CancellationToken cancellationToken)
     {
         var url =
             $"{GraphApiBaseUrl}/me/accounts?fields={Uri.EscapeDataString(PageFields)}&access_token={Uri.EscapeDataString(accessToken)}";
@@ -280,12 +295,35 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
         using var response = await _httpClient.GetAsync(url, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            return null;
+            return [];
         }
 
         var payload = await response.Content.ReadAsStringAsync(cancellationToken);
         var pages = JsonSerializer.Deserialize<FacebookPagesResponse>(payload, JsonOptions);
-        return pages?.Data?.FirstOrDefault(page => !string.IsNullOrWhiteSpace(page.Id));
+        return pages?.Data ?? [];
+    }
+
+    private static FacebookPageDataResponse? SelectPage(
+        IReadOnlyList<FacebookPageDataResponse> pages,
+        string? preferredPageId)
+    {
+        if (pages.Count == 0)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(preferredPageId))
+        {
+            var preferredPage = pages.FirstOrDefault(page =>
+                string.Equals(page.Id, preferredPageId, StringComparison.Ordinal));
+
+            if (preferredPage != null)
+            {
+                return preferredPage;
+            }
+        }
+
+        return pages.FirstOrDefault(page => !string.IsNullOrWhiteSpace(page.Id));
     }
 
     private static string FormatGraphApiErrorMessage(GraphApiError error)

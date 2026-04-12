@@ -118,7 +118,11 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         string accessToken,
         CancellationToken cancellationToken)
     {
-        var result = await _facebookOAuthService.FetchProfileAsync(accessToken, cancellationToken);
+        var preferredPageId = GetString(metadata.RootElement, "page_id");
+        var result = await _facebookOAuthService.FetchProfileAsync(
+            accessToken,
+            cancellationToken,
+            preferredPageId);
 
         if (result.IsFailure)
         {
@@ -129,7 +133,7 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         return Result.Success(new SocialMediaUserProfile(
             UserId: profile.PageId ?? profile.Id,
             Username: null,
-            DisplayName: profile.PageName ?? profile.Name,
+            DisplayName: profile.Name ?? profile.PageName,
             ProfilePictureUrl: profile.ProfilePictureUrl,
             Bio: null,
             FollowerCount: profile.PageFollowerCount,
@@ -217,9 +221,9 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         var userId = root.TryGetProperty("page_id", out var pageIdElement)
             ? pageIdElement.GetString()
             : root.TryGetProperty("id", out var idElement) ? idElement.GetString() : null;
-        var displayName = root.TryGetProperty("page_name", out var pageNameElement)
-            ? pageNameElement.GetString()
-            : root.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
+        var displayName = root.TryGetProperty("name", out var nameElement)
+            ? nameElement.GetString()
+            : root.TryGetProperty("page_name", out var pageNameElement) ? pageNameElement.GetString() : null;
         var profilePictureUrl = root.TryGetProperty("profile_picture_url", out var pictureElement)
             ? pictureElement.GetString()
             : null;

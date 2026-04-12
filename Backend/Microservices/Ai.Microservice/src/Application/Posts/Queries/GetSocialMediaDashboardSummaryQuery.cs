@@ -397,30 +397,10 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
             return Result.Failure<SocialPlatformDashboardSummaryResponse>(postsTask.Result.Error);
         }
 
-        var posts = postsTask.Result.Value.Posts
-            .Select(post => new SocialPlatformPostSummaryResponse(
-                PlatformPostId: post.Id,
-                Title: null,
-                Text: post.Caption,
-                Description: null,
-                MediaType: post.MediaType,
-                MediaUrl: post.MediaUrl,
-                ThumbnailUrl: post.ThumbnailUrl,
-                Permalink: post.Permalink,
-                ShareUrl: post.Permalink,
-                EmbedUrl: null,
-                DurationSeconds: null,
-                PublishedAt: ToDateTimeOffset(post.Timestamp),
-                Stats: new SocialPlatformPostStatsResponse(
-                    Views: null,
-                    Likes: post.LikeCount,
-                    Comments: post.CommentCount,
-                    Replies: null,
-                    Shares: null,
-                    Reposts: null,
-                    Quotes: null,
-                    TotalInteractions: (post.LikeCount ?? 0) + (post.CommentCount ?? 0))))
-            .ToList();
+        var posts = await HydrateInstagramPostsAsync(
+            accessToken,
+            postsTask.Result.Value.Posts,
+            cancellationToken);
 
         var enrichedPosts = await EnrichPostsWithCachedStatsAsync(
             request.UserId,
@@ -643,6 +623,68 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
             .ToList();
     }
 
+    private async Task<IReadOnlyList<SocialPlatformPostSummaryResponse>> HydrateInstagramPostsAsync(
+        string accessToken,
+        IReadOnlyList<InstagramPostDetails> posts,
+        CancellationToken cancellationToken)
+    {
+        var liveInsightsTasks = posts
+            .Where(post => !string.IsNullOrWhiteSpace(post.Id))
+            .ToDictionary(
+                post => post.Id,
+                post => _instagramContentService.GetPostInsightsAsync(
+                    new InstagramPostInsightsRequest(
+                        accessToken,
+                        post.Id,
+                        post.MediaType,
+                        post.MediaProductType),
+                    cancellationToken),
+                StringComparer.Ordinal);
+
+        await Task.WhenAll(liveInsightsTasks.Values);
+
+        return posts
+            .Select(post =>
+            {
+                liveInsightsTasks.TryGetValue(post.Id, out var insightsTask);
+                var insights = insightsTask is { Result.IsSuccess: true } ? insightsTask.Result.Value : null;
+                var shares = insights?.Shares;
+
+                return new SocialPlatformPostSummaryResponse(
+                    PlatformPostId: post.Id,
+                    Title: null,
+                    Text: post.Caption,
+                    Description: null,
+                    MediaType: post.MediaType,
+                    MediaUrl: post.MediaUrl,
+                    ThumbnailUrl: post.ThumbnailUrl,
+                    Permalink: post.Permalink,
+                    ShareUrl: post.Permalink,
+                    EmbedUrl: null,
+                    DurationSeconds: null,
+                    PublishedAt: ToDateTimeOffset(post.Timestamp),
+                    Stats: new SocialPlatformPostStatsResponse(
+                        Views: insights?.Views ?? insights?.Reach,
+                        Reach: insights?.Reach,
+                        Impressions: insights?.Impressions,
+                        Likes: post.LikeCount,
+                        Comments: post.CommentCount,
+                        Replies: null,
+                        Shares: shares,
+                        Reposts: null,
+                        Quotes: null,
+                        TotalInteractions: (post.LikeCount ?? 0) + (post.CommentCount ?? 0) + (shares ?? 0),
+                        Saves: insights?.Saved,
+                        MetricBreakdown: CreateMetricBreakdown(
+                            ("views", insights?.Views ?? insights?.Reach),
+                            ("reach", insights?.Reach),
+                            ("impressions", insights?.Impressions),
+                            ("shares", shares),
+                            ("saved", insights?.Saved))));
+            })
+            .ToList();
+    }
+
     private static IReadOnlyList<SocialPlatformDashboardPostResponse> CreateDashboardPosts(
         IReadOnlyList<SocialPlatformPostSummaryResponse> posts)
     {
@@ -683,6 +725,7 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
         var sourceStats = posts
             .Select(item => item.Post.Stats)
             .Where(item => item != null)
+            .Select(item => item!)
             .ToList();
 
         if (sourceStats.Count == 0)
@@ -704,17 +747,40 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
         var hasSaves = sourceStats.Any(item => item!.Saves.HasValue);
 
         return new SocialPlatformPostStatsResponse(
-            Views: sourceStats.Sum(item => item!.Views ?? 0),
-            Reach: sourceStats.Sum(item => item!.Reach ?? 0),
-            Impressions: sourceStats.Sum(item => item!.Impressions ?? 0),
-            Likes: sourceStats.Sum(item => item!.Likes ?? 0),
-            Comments: sourceStats.Sum(item => item!.Comments ?? 0),
-            Replies: sourceStats.Sum(item => item!.Replies ?? 0),
-            Shares: sourceStats.Sum(item => item!.Shares ?? 0),
-            Reposts: sourceStats.Sum(item => item!.Reposts ?? 0),
-            Quotes: sourceStats.Sum(item => item!.Quotes ?? 0),
-            TotalInteractions: sourceStats.Sum(item => item!.TotalInteractions),
-            Saves: hasSaves ? sourceStats.Sum(item => item!.Saves ?? 0) : null);
+            Views: SumNullable(sourceStats, item => item.Views),
+            Reach: SumNullable(sourceStats, item => item.Reach),
+            Impressions: SumNullable(sourceStats, item => item.Impressions),
+            Likes: sourceStats.Sum(item => item.Likes ?? 0),
+            Comments: sourceStats.Sum(item => item.Comments ?? 0),
+            Replies: sourceStats.Sum(item => item.Replies ?? 0),
+            Shares: sourceStats.Sum(item => item.Shares ?? 0),
+            Reposts: sourceStats.Sum(item => item.Reposts ?? 0),
+            Quotes: sourceStats.Sum(item => item.Quotes ?? 0),
+            TotalInteractions: sourceStats.Sum(item => item.TotalInteractions),
+            Saves: hasSaves ? sourceStats.Sum(item => item.Saves ?? 0) : null);
+    }
+
+    private static long? SumNullable(
+        IReadOnlyList<SocialPlatformPostStatsResponse> sourceStats,
+        Func<SocialPlatformPostStatsResponse, long?> selector)
+    {
+        var values = sourceStats
+            .Select(selector)
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .ToList();
+
+        return values.Count == 0 ? null : values.Sum();
+    }
+
+    private static IReadOnlyDictionary<string, long>? CreateMetricBreakdown(
+        params (string Key, long? Value)[] metrics)
+    {
+        var breakdown = metrics
+            .Where(metric => metric.Value.HasValue)
+            .ToDictionary(metric => metric.Key, metric => metric.Value!.Value, StringComparer.Ordinal);
+
+        return breakdown.Count == 0 ? null : breakdown;
     }
 
     private static DateTimeOffset? ToUnixTime(long? unixSeconds)

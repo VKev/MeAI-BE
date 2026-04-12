@@ -19,7 +19,8 @@ public interface IFacebookOAuthService
 
     Task<Result<FacebookProfileResponse>> FetchProfileAsync(
         string accessToken,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        string? preferredPageId = null);
 
     bool TryValidateState(string state, out Guid userId);
 }
@@ -67,7 +68,18 @@ public sealed class FacebookProfileResponse
 
     [JsonIgnore]
     public int? PagePostCount { get; set; }
+
+    [JsonIgnore]
+    public IReadOnlyList<FacebookPageProfile> Pages { get; set; } = [];
 }
+
+public sealed record FacebookPageProfile(
+    string Id,
+    string? Name,
+    string? AccessToken,
+    int? FanCount,
+    int? FollowersCount,
+    int? PostCount);
 
 public sealed class FacebookProfilePictureResponse
 {
