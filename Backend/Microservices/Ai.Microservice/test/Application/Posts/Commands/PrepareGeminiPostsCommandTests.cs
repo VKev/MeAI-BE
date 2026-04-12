@@ -1,5 +1,3 @@
-using Application.Abstractions.Configs;
-using Application.Abstractions.Gemini;
 using Application.Abstractions.Resources;
 using Application.Posts.Commands;
 using Domain.Entities;
@@ -13,24 +11,14 @@ namespace AiMicroservice.Tests.Application.Posts.Commands;
 public sealed class PrepareGeminiPostsCommandTests
 {
     [Fact]
-    public async Task Handle_ShouldCreateDraftPostsForEachGeneratedCaption()
+    public async Task Handle_ShouldCreateOneEmptyDraftPostPerRequestedPlatform()
     {
         var resourceId = Guid.NewGuid();
 
         var postBuilderRepository = new Mock<IPostBuilderRepository>();
         var postRepository = new Mock<IPostRepository>();
         var workspaceRepository = new Mock<IWorkspaceRepository>();
-        var userConfigService = new Mock<IUserConfigService>();
         var userResourceService = new Mock<IUserResourceService>();
-        var geminiCaptionService = new Mock<IGeminiCaptionService>();
-
-        userConfigService
-            .Setup(service => service.GetActiveConfigAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success<UserAiConfig?>(new UserAiConfig(
-                Guid.NewGuid(),
-                "gemini-test-model",
-                null,
-                2)));
 
         userResourceService
             .Setup(service => service.GetPresignedResourcesAsync(
@@ -46,43 +34,13 @@ public sealed class PrepareGeminiPostsCommandTests
                     "image")
             ]));
 
-        geminiCaptionService
-            .Setup(service => service.GenerateSocialMediaCaptionsAsync(
-                It.Is<GeminiSocialMediaCaptionRequest>(request =>
-                    request.InlineTemplateResource == null &&
-                    request.Platform == "facebook" &&
-                    request.Resources.Count == 1 &&
-                    request.Resources[0].FileUri == "https://cdn.example.com/resource.jpg" &&
-                    request.CaptionCount == 2),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success<IReadOnlyList<GeminiGeneratedCaption>>(
-            [
-                new GeminiGeneratedCaption(
-                    "Caption one #Launch",
-                    ["#Launch"],
-                    ["#trend1"],
-                    "Try now"),
-                new GeminiGeneratedCaption(
-                    "Caption two #Promo",
-                    ["#Promo"],
-                    ["#trend2"],
-                    "Shop now")
-            ]));
-
-        geminiCaptionService
-            .Setup(service => service.GenerateTitleAsync(
-                It.IsAny<GeminiTitleRequest>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync((GeminiTitleRequest request, CancellationToken _) =>
-                Result.Success($"Title for {request.Content.Split(' ')[0]}"));
-
         postRepository
             .Setup(repository => repository.AddAsync(It.IsAny<Post>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         postRepository
             .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(2);
+            .ReturnsAsync(1);
 
         postBuilderRepository
             .Setup(repository => repository.AddAsync(It.IsAny<PostBuilder>(), It.IsAny<CancellationToken>()))
@@ -92,9 +50,7 @@ public sealed class PrepareGeminiPostsCommandTests
             postBuilderRepository.Object,
             postRepository.Object,
             workspaceRepository.Object,
-            userConfigService.Object,
-            userResourceService.Object,
-            geminiCaptionService.Object);
+            userResourceService.Object);
 
         var result = await handler.Handle(
             new PrepareGeminiPostsCommand(
@@ -106,9 +62,7 @@ public sealed class PrepareGeminiPostsCommandTests
                         "facebook",
                         "posts",
                         [])
-                ],
-                "English",
-                "Keep it concise"),
+                ]),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -119,21 +73,27 @@ public sealed class PrepareGeminiPostsCommandTests
         result.Value.SocialMedia[0].SocialMediaId.Should().BeNull();
         result.Value.SocialMedia[0].Platform.Should().Be("facebook");
         result.Value.SocialMedia[0].Type.Should().Be("posts");
-        result.Value.SocialMedia[0].Drafts.Should().HaveCount(2);
-        result.Value.SocialMedia[0].Drafts[0].Caption.Should().Be("Caption one #Launch");
-        result.Value.SocialMedia[0].Drafts[1].TrendingHashtags.Should().Equal("#trend2");
+        result.Value.SocialMedia[0].Drafts.Should().HaveCount(1);
+        result.Value.SocialMedia[0].Drafts[0].Caption.Should().BeEmpty();
+        result.Value.SocialMedia[0].Drafts[0].Title.Should().BeNull();
+        result.Value.SocialMedia[0].Drafts[0].Hashtags.Should().BeEmpty();
+        result.Value.SocialMedia[0].Drafts[0].TrendingHashtags.Should().BeEmpty();
+        result.Value.SocialMedia[0].Drafts[0].CallToAction.Should().BeNull();
 
         postRepository.Verify(repository => repository.AddAsync(
             It.Is<Post>(post =>
                 post.PostBuilderId == result.Value.PostBuilderId &&
                 post.SocialMediaId == null &&
                 post.Platform == "facebook" &&
+                post.Title == null &&
                 post.Status == "draft" &&
                 post.Content != null &&
+                post.Content.Content == null &&
+                post.Content.Hashtag == null &&
                 post.Content.ResourceList != null &&
                 post.Content.ResourceList.SequenceEqual(new[] { resourceId.ToString() }) &&
                 post.Content.PostType == "posts"),
-            It.IsAny<CancellationToken>()), Times.Exactly(2));
+            It.IsAny<CancellationToken>()), Times.Once);
 
         postBuilderRepository.Verify(repository => repository.AddAsync(
             It.Is<PostBuilder>(builder =>

@@ -1,5 +1,3 @@
-using Application.Abstractions.Configs;
-using Application.Abstractions.Gemini;
 using Application.Abstractions.Resources;
 using Application.Posts.Models;
 using Domain.Entities;
@@ -14,9 +12,7 @@ public sealed record PrepareGeminiPostsCommand(
     Guid UserId,
     Guid? WorkspaceId,
     IReadOnlyList<Guid> ResourceIds,
-    IReadOnlyList<PrepareGeminiPostSocialMediaInput> SocialMedia,
-    string? Language,
-    string? Instruction) : IRequest<Result<PrepareGeminiPostsResponse>>;
+    IReadOnlyList<PrepareGeminiPostSocialMediaInput> SocialMedia) : IRequest<Result<PrepareGeminiPostsResponse>>;
 
 public sealed record PrepareGeminiPostSocialMediaInput(
     string? Platform,
@@ -26,30 +22,21 @@ public sealed record PrepareGeminiPostSocialMediaInput(
 public sealed class PrepareGeminiPostsCommandHandler
     : IRequestHandler<PrepareGeminiPostsCommand, Result<PrepareGeminiPostsResponse>>
 {
-    private const int DefaultDraftCount = 3;
-    private const int MaxDraftCount = 6;
-
     private readonly IPostBuilderRepository _postBuilderRepository;
     private readonly IPostRepository _postRepository;
     private readonly IWorkspaceRepository _workspaceRepository;
-    private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
-    private readonly IGeminiCaptionService _geminiCaptionService;
 
     public PrepareGeminiPostsCommandHandler(
         IPostBuilderRepository postBuilderRepository,
         IPostRepository postRepository,
         IWorkspaceRepository workspaceRepository,
-        IUserConfigService userConfigService,
-        IUserResourceService userResourceService,
-        IGeminiCaptionService geminiCaptionService)
+        IUserResourceService userResourceService)
     {
         _postBuilderRepository = postBuilderRepository;
         _postRepository = postRepository;
         _workspaceRepository = workspaceRepository;
-        _userConfigService = userConfigService;
         _userResourceService = userResourceService;
-        _geminiCaptionService = geminiCaptionService;
     }
 
     public async Task<Result<PrepareGeminiPostsResponse>> Handle(
@@ -122,68 +109,19 @@ public sealed class PrepareGeminiPostsCommandHandler
             return Result.Failure<PrepareGeminiPostsResponse>(resourcesResult.Error);
         }
 
-        var resourcesById = resourcesResult.Value.ToDictionary(resource => resource.ResourceId);
-        var languageHint = GeminiDraftPostHelper.ResolveLanguageHint(request.Language);
-        var activeConfig = await TryGetActiveConfigAsync(cancellationToken);
-        var preferredModel = string.IsNullOrWhiteSpace(activeConfig?.ChatModel)
-            ? null
-            : activeConfig.ChatModel.Trim();
-        var draftCount = Math.Clamp(
-            activeConfig?.NumberOfVariances ?? DefaultDraftCount,
-            1,
-            MaxDraftCount);
+        var returnedResourceIds = resourcesResult.Value
+            .Select(resource => resource.ResourceId)
+            .Distinct()
+            .ToHashSet();
 
-        var captionTasks = normalizedSocialMedia
-            .Select(async socialMedia =>
-            {
-                if (!TryResolveResources(resourcesById, socialMedia.ResourceIds, out var orderedResources))
-                {
-                    return Result.Failure<CaptionBatch>(
-                        new Error("Resource.NotFound", "One or more resources were not found."));
-                }
-
-                var geminiResources = orderedResources
-                    .Select(resource => new GeminiCaptionResource(
-                        resource.PresignedUrl,
-                        string.IsNullOrWhiteSpace(resource.ContentType)
-                            ? "application/octet-stream"
-                            : resource.ContentType))
-                    .ToList();
-
-                var captionsResult = await _geminiCaptionService.GenerateSocialMediaCaptionsAsync(
-                    new GeminiSocialMediaCaptionRequest(
-                        geminiResources,
-                        null,
-                        socialMedia.Platform,
-                        Array.Empty<string>(),
-                        draftCount,
-                        languageHint,
-                        request.Instruction,
-                        preferredModel),
-                    cancellationToken);
-
-                if (captionsResult.IsFailure)
-                {
-                    return Result.Failure<CaptionBatch>(captionsResult.Error);
-                }
-
-                return Result.Success(new CaptionBatch(
-                    null,
-                    socialMedia.Platform,
-                    socialMedia.PostType,
-                    socialMedia.ResourceIds,
-                    captionsResult.Value));
-            })
-            .ToList();
-
-        var captionResults = await Task.WhenAll(captionTasks);
-        var failedCaptionResult = captionResults.FirstOrDefault(result => result.IsFailure);
-        if (failedCaptionResult is not null && failedCaptionResult.IsFailure)
+        var missingResourceId = allResourceIds.FirstOrDefault(id => !returnedResourceIds.Contains(id));
+        if (missingResourceId != Guid.Empty)
         {
-            return Result.Failure<PrepareGeminiPostsResponse>(failedCaptionResult.Error);
+            return Result.Failure<PrepareGeminiPostsResponse>(
+                new Error("Resource.NotFound", "One or more resources were not found."));
         }
 
-        var responseGroups = new List<PreparedSocialMediaDraftGroupResponse>(captionResults.Length);
+        var responseGroups = new List<PreparedSocialMediaDraftGroupResponse>(normalizedSocialMedia.Count);
         var postBuilder = new PostBuilder
         {
             Id = Guid.CreateVersion7(),
@@ -196,57 +134,49 @@ public sealed class PrepareGeminiPostsCommandHandler
 
         await _postBuilderRepository.AddAsync(postBuilder, cancellationToken);
 
-        foreach (var captionResult in captionResults)
+        foreach (var socialMedia in normalizedSocialMedia)
         {
-            var batch = captionResult.Value;
-            var drafts = new List<PreparedDraftPostResponse>(batch.Captions.Count);
-
-            foreach (var caption in batch.Captions)
+            var post = new Post
             {
-                var hashtags = caption.Hashtags.Count == 0
-                    ? GeminiDraftPostHelper.ExtractHashtags(caption.Caption)
-                    : caption.Hashtags;
-                var title = GeminiDraftPostHelper.BuildDraftTitle(caption.Caption);
-
-                var post = new Post
+                Id = Guid.CreateVersion7(),
+                PostBuilderId = postBuilder.Id,
+                UserId = request.UserId,
+                WorkspaceId = workspaceId,
+                SocialMediaId = null,
+                Platform = socialMedia.Platform,
+                Title = null,
+                Content = new PostContent
                 {
-                    Id = Guid.CreateVersion7(),
-                    PostBuilderId = postBuilder.Id,
-                    UserId = request.UserId,
-                    WorkspaceId = workspaceId,
-                    SocialMediaId = batch.SocialMediaId,
-                    Platform = batch.Platform,
-                    Title = string.IsNullOrWhiteSpace(title) ? null : title,
-                    Content = new PostContent
-                    {
-                        Content = caption.Caption,
-                        Hashtag = hashtags.Count == 0 ? null : string.Join(' ', hashtags),
-                        ResourceList = batch.ResourceIds.Select(id => id.ToString()).ToList(),
-                        PostType = batch.PostType
-                    },
-                    Status = "draft",
-                    CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
-                };
+                    Content = null,
+                    Hashtag = null,
+                    ResourceList = socialMedia.ResourceIds.Select(id => id.ToString()).ToList(),
+                    PostType = socialMedia.PostType
+                },
+                Status = "draft",
+                CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
+            };
 
-                await _postRepository.AddAsync(post, cancellationToken);
+            await _postRepository.AddAsync(post, cancellationToken);
 
-                drafts.Add(new PreparedDraftPostResponse(
+            var drafts = new List<PreparedDraftPostResponse>(1)
+            {
+                new(
                     post.Id,
                     post.Status ?? "draft",
-                    batch.PostType,
-                    caption.Caption,
-                    title,
-                    batch.ResourceIds,
-                    hashtags,
-                    caption.TrendingHashtags,
-                    caption.CallToAction));
-            }
+                    socialMedia.PostType,
+                    string.Empty,
+                    null,
+                    socialMedia.ResourceIds,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    null)
+            };
 
             responseGroups.Add(new PreparedSocialMediaDraftGroupResponse(
-                batch.SocialMediaId,
-                batch.Platform,
-                batch.PostType,
-                batch.ResourceIds,
+                null,
+                socialMedia.Platform,
+                socialMedia.PostType,
+                socialMedia.ResourceIds,
                 drafts));
         }
 
@@ -325,40 +255,8 @@ public sealed class PrepareGeminiPostsCommandHandler
         return distinctTypes.Count == 1 ? distinctTypes[0] : null;
     }
 
-    private static bool TryResolveResources(
-        IReadOnlyDictionary<Guid, UserResourcePresignResult> resourcesById,
-        IReadOnlyList<Guid> resourceIds,
-        out List<UserResourcePresignResult> orderedResources)
-    {
-        orderedResources = new List<UserResourcePresignResult>(resourceIds.Count);
-        foreach (var resourceId in resourceIds)
-        {
-            if (!resourcesById.TryGetValue(resourceId, out var resource))
-            {
-                return false;
-            }
-
-            orderedResources.Add(resource);
-        }
-
-        return true;
-    }
-
-    private async Task<UserAiConfig?> TryGetActiveConfigAsync(CancellationToken cancellationToken)
-    {
-        var result = await _userConfigService.GetActiveConfigAsync(cancellationToken);
-        return result.IsSuccess ? result.Value : null;
-    }
-
     private sealed record ResolvedSocialMediaInput(
         string Platform,
         string PostType,
         IReadOnlyList<Guid> ResourceIds);
-
-    private sealed record CaptionBatch(
-        Guid? SocialMediaId,
-        string Platform,
-        string PostType,
-        IReadOnlyList<Guid> ResourceIds,
-        IReadOnlyList<GeminiGeneratedCaption> Captions);
 }

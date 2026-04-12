@@ -65,6 +65,48 @@
       "resourceType": "video",
       "contentType": "video/mp4",
       "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b01000f",
+      "fileName": "sample-result-image-01.jpg",
+      "resourceType": "image",
+      "contentType": "image/jpeg",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010010",
+      "fileName": "sample-result-image-02.jpg",
+      "resourceType": "image",
+      "contentType": "image/jpeg",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010011",
+      "fileName": "sample-result-image-03.jpg",
+      "resourceType": "image",
+      "contentType": "image/jpeg",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010012",
+      "fileName": "sample-result-image-04.jpg",
+      "resourceType": "image",
+      "contentType": "image/jpeg",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010013",
+      "fileName": "sample-result-video-01.mp4",
+      "resourceType": "video",
+      "contentType": "video/mp4",
+      "status": "ready"
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b010014",
+      "fileName": "sample-result-video-02.mp4",
+      "resourceType": "video",
+      "contentType": "video/mp4",
+      "status": "ready"
     }
   ],
   "chats": [
@@ -75,6 +117,10 @@
         "01962400-5b96-70e4-a111-16b24b010003",
         "01962400-5b96-70e4-a111-16b24b010004",
         "01962400-5b96-70e4-a111-16b24b010009"
+      ],
+      "resultResourceIds": [
+        "01962400-5b96-70e4-a111-16b24b01000f",
+        "01962400-5b96-70e4-a111-16b24b010010"
       ]
     },
     {
@@ -84,6 +130,10 @@
         "01962400-5b96-70e4-a111-16b24b010005",
         "01962400-5b96-70e4-a111-16b24b010006",
         "01962400-5b96-70e4-a111-16b24b01000a"
+      ],
+      "resultResourceIds": [
+        "01962400-5b96-70e4-a111-16b24b010011",
+        "01962400-5b96-70e4-a111-16b24b010013"
       ]
     },
     {
@@ -92,6 +142,9 @@
       "resourceIds": [
         "01962400-5b96-70e4-a111-16b24b010007",
         "01962400-5b96-70e4-a111-16b24b010008"
+      ],
+      "resultResourceIds": [
+        "01962400-5b96-70e4-a111-16b24b010012"
       ]
     },
     {
@@ -101,6 +154,9 @@
         "01962400-5b96-70e4-a111-16b24b010003",
         "01962400-5b96-70e4-a111-16b24b010006",
         "01962400-5b96-70e4-a111-16b24b010009"
+      ],
+      "resultResourceIds": [
+        "01962400-5b96-70e4-a111-16b24b010014"
       ]
     }
   ]
