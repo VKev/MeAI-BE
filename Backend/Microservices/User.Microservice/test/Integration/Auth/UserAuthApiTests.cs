@@ -164,6 +164,62 @@ public sealed class UserAuthApiTests(UserAuthApiFixture fixture) : IClassFixture
         document.RootElement.GetProperty("detail").GetString().Should().Be("Invalid or expired code");
     }
 
+    [Fact]
+    public async Task ChangePassword_WithCorrectOldPassword_UpdatesPassword()
+    {
+        using var client = fixture.CreateClient();
+        var registration = CreateRegistration();
+        const string newPassword = "N3wPass!";
+
+        await RegisterAsync(client, registration);
+
+        var changeResponse = await client.PostAsJsonAsync(
+            "/api/User/auth/change-password",
+            new ChangePasswordRequest(registration.Password, newPassword));
+
+        changeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var changePayload = await ReadJsonAsync<ApiResultContract<MessageResponse>>(changeResponse);
+        changePayload.IsSuccess.Should().BeTrue();
+        changePayload.Value.Message.Should().Be("Password changed successfully.");
+
+        await LogoutAsync(client);
+
+        var oldLoginResponse = await client.PostAsJsonAsync(
+            "/api/User/auth/login",
+            new LoginRequest(registration.Email, registration.Password));
+
+        oldLoginResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var newLoginResponse = await client.PostAsJsonAsync(
+            "/api/User/auth/login",
+            new LoginRequest(registration.Email, newPassword));
+
+        newLoginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var loginPayload = await ReadJsonAsync<ApiResultContract<LoginResponse>>(newLoginResponse);
+        loginPayload.IsSuccess.Should().BeTrue();
+        loginPayload.Value.Email.Should().Be(registration.Email.ToLowerInvariant());
+    }
+
+    [Fact]
+    public async Task ChangePassword_WithWrongOldPassword_ReturnsProblemDetails()
+    {
+        using var client = fixture.CreateClient();
+        var registration = CreateRegistration();
+
+        await RegisterAsync(client, registration);
+
+        var response = await client.PostAsJsonAsync(
+            "/api/User/auth/change-password",
+            new ChangePasswordRequest("WrongOldPass1!", "N3wPass!"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        document.RootElement.GetProperty("status").GetInt32().Should().Be(400);
+        document.RootElement.GetProperty("type").GetString().Should().Be("Auth.InvalidOldPassword");
+        document.RootElement.GetProperty("detail").GetString().Should().Be("Old password is incorrect");
+    }
+
     private static RegistrationData CreateRegistration()
     {
         var suffix = Guid.NewGuid().ToString("N")[..10];
