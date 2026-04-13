@@ -19,6 +19,8 @@ public sealed class MappingProfile : Profile
         CreateMap<GoogleLoginRequest, LoginWithGoogleCommand>();
         CreateMap<ForgotPasswordRequest, ForgotPasswordCommand>();
         CreateMap<ResetPasswordRequest, ResetPasswordCommand>();
+        CreateMap<ChangePasswordRequest, ChangePasswordCommand>()
+            .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<SendVerificationCodeRequest, SendEmailVerificationCodeCommand>();
         CreateMap<VerifyEmailRequest, VerifyEmailCommand>();
         CreateMap<EditProfileRequest, EditProfileCommand>()
