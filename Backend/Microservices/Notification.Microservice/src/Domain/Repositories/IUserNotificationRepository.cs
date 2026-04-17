@@ -13,5 +13,6 @@ public interface IUserNotificationRepository
         Guid userId,
         bool onlyUnread,
         int limit,
+        string? source,
         CancellationToken cancellationToken);
 }

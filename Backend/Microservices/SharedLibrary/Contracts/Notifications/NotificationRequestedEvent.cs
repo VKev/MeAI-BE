@@ -4,6 +4,8 @@ public class NotificationRequestedEvent
 {
     public Guid NotificationId { get; set; }
 
+    public string Source { get; set; } = null!;
+
     public string Type { get; set; } = null!;
 
     public string Title { get; set; } = null!;

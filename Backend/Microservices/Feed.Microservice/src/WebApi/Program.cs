@@ -1,0 +1,65 @@
+using Application;
+using Infrastructure;
+using Infrastructure.Context;
+using Scalar.AspNetCore;
+using Serilog;
+using SharedLibrary.Configs;
+using WebApi.Middleware;
+using WebApi.Setups;
+
+var builder = WebApplication.CreateBuilder(args);
+var shouldAutoApplyMigrations = builder.ConfigureAutoMigrations();
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddAuthorization();
+builder.Services.AddOpenApi(options =>
+{
+
+});
+builder.Services.AddAutoMapper(_ => { }, typeof(WebApi.AssemblyReference).Assembly);
+
+var corsPolicyName = builder.AddCorsPolicy();
+builder.ConfigureSerilogLogging();
+
+builder.Services.AddSingleton<EnvironmentConfig>();
+builder.AddDatabase();
+
+builder.Services
+    .AddApplication()
+    .AddInfrastructure();
+
+var app = builder.Build();
+app.ApplyMigrationsIfEnabled(shouldAutoApplyMigrations);
+app.MapHealthEndpoints();
+app.MapDebugEndpoints();
+
+// ---------- middleware order matters ----------
+
+// 2) Logging
+app.UseSerilogRequestLogging();
+
+// 3) FluentValidation errors
+app.UseMiddleware<ValidationExceptionMiddleware>();
+
+// 4) Only redirect to HTTPS if scheme is already corrected by step #2
+if (!app.Environment.IsDevelopment()) app.UseHttpsRedirection();
+
+// 5) CORS
+app.UseCors(corsPolicyName);
+
+// 6) Auth pipeline
+app.UseAuthenticationPipeline();
+
+// Log startup information
+app.LogStartupInfo(builder.Configuration);
+
+app.MapOpenApi();
+app.MapScalarApiReference("docs", opts =>
+{
+    opts.WithTitle("Feed API");
+});
+
+app.MapControllers();
+
+app.Run();

@@ -16,6 +16,7 @@ public sealed class NotificationConfiguration : IEntityTypeConfiguration<Notific
             .IsDescending(false, true);
 
         entity.Property(e => e.Id).HasColumnName("id");
+        entity.Property(e => e.Source).HasColumnName("source").HasMaxLength(100).IsRequired();
         entity.Property(e => e.Type).HasColumnName("type").HasMaxLength(100).IsRequired();
         entity.Property(e => e.Title).HasColumnName("title").HasMaxLength(250).IsRequired();
         entity.Property(e => e.Message).HasColumnName("message").HasMaxLength(2000).IsRequired();

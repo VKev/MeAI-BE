@@ -80,7 +80,8 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
                         videoTask.Id,
                         videoTask.CompletedAt
                     },
-                    createdAt: message.CompletedAt),
+                    createdAt: message.CompletedAt,
+                    source: NotificationSourceConstants.Creator),
                 context.CancellationToken);
 
             await TryAttachChatResultsAsync(videoTask.UserId, message.CorrelationId, message.ResultUrls, context.CancellationToken);
@@ -251,7 +252,8 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
                         videoTask.Id,
                         videoTask.CompletedAt
                     },
-                    createdAt: message.FailedAt),
+                    createdAt: message.FailedAt,
+                    source: NotificationSourceConstants.Creator),
                 context.CancellationToken);
         }
         else

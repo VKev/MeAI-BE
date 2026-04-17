@@ -155,7 +155,8 @@ public sealed class CreateChatImageCommandHandler
                     numberOfVariances
                 },
                 request.UserId,
-                message.CreatedAt),
+                message.CreatedAt,
+                NotificationSourceConstants.Creator),
             cancellationToken);
 
         return Result.Success(new ChatImageResponse(chat.Id, correlationId));

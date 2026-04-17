@@ -27,6 +27,7 @@ public sealed class NotificationsController : ApiController
     public async Task<IActionResult> GetMyNotifications(
         [FromQuery] bool onlyUnread = false,
         [FromQuery] int limit = 50,
+        [FromQuery] string? source = null,
         CancellationToken cancellationToken = default)
     {
         if (!TryGetUserId(out var userId))
@@ -35,7 +36,7 @@ public sealed class NotificationsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetUserNotificationsQuery(userId, onlyUnread, limit),
+            new GetUserNotificationsQuery(userId, onlyUnread, limit, source),
             cancellationToken);
 
         if (result.IsFailure)

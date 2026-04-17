@@ -126,6 +126,7 @@ export type NotificationDeliveryModel = {
   notificationId: string;
   userNotificationId: string;
   userId: string;
+  source: string;
   type: string;
   title: string;
   message: string;
@@ -176,12 +177,12 @@ API Gateway expose các route notification:
 - `/api/Notification/notifications`
 
 ### 6.2. REST API hiện có
-- `GET /api/Notification/notifications` -> lấy danh sách notification
+- `GET /api/Notification/notifications?source={Creator|Social}` -> lấy danh sách notification (hỗ trợ filter theo source)
 - `PATCH /api/Notification/notifications/{userNotificationId}/read` -> đánh dấu một notification đã đọc
 - `PATCH /api/Notification/notifications/read-all` -> đánh dấu tất cả đã đọc
 
 Ví dụ frontend nên dùng qua gateway:
-- `GET /api/Notification/notifications?onlyUnread=false&limit=50`
+- `GET /api/Notification/notifications?onlyUnread=false&limit=50&source=Creator`
 - `PATCH /api/Notification/notifications/{userNotificationId}/read`
 - `PATCH /api/Notification/notifications/read-all`
 
@@ -264,8 +265,13 @@ export function createNotificationConnection(baseUrl: string, accessToken: strin
 import { useEffect, useMemo, useState } from "react";
 import { createNotificationConnection, type NotificationDeliveryModel } from "./notification-signalr";
 
-async function fetchNotifications(baseUrl: string, accessToken: string) {
-  const response = await fetch(`${baseUrl}/api/Notification/notifications?onlyUnread=false&limit=50`, {
+async function fetchNotifications(baseUrl: string, accessToken: string, source?: string) {
+  let url = `${baseUrl}/api/Notification/notifications?onlyUnread=false&limit=50`;
+  if (source) {
+    url += `&source=${source}`;
+  }
+
+  const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },
@@ -280,7 +286,7 @@ async function fetchNotifications(baseUrl: string, accessToken: string) {
   return (result.value ?? []) as NotificationDeliveryModel[];
 }
 
-export function useNotifications(baseUrl: string, accessToken: string) {
+export function useNotifications(baseUrl: string, accessToken: string, source?: string) {
   const [items, setItems] = useState<NotificationDeliveryModel[]>([]);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -295,6 +301,9 @@ export function useNotifications(baseUrl: string, accessToken: string) {
     let disposed = false;
 
     const upsert = (notification: NotificationDeliveryModel) => {
+      // Nếu có truyền filter source, ta kiểm tra và bỏ qua các notification không thuộc source này
+      if (source && notification.source !== source) return;
+
       setItems((current) => {
         const existingIndex = current.findIndex(
           (item) => item.userNotificationId === notification.userNotificationId,
@@ -313,13 +322,13 @@ export function useNotifications(baseUrl: string, accessToken: string) {
     connection.on("NotificationReceived", upsert);
     connection.onreconnected(async () => {
       setIsConnected(true);
-      const latest = await fetchNotifications(baseUrl, accessToken);
+      const latest = await fetchNotifications(baseUrl, accessToken, source);
       if (!disposed) setItems(latest);
     });
     connection.onclose(() => setIsConnected(false));
 
     (async () => {
-      const initial = await fetchNotifications(baseUrl, accessToken);
+      const initial = await fetchNotifications(baseUrl, accessToken, source);
       if (!disposed) setItems(initial);
 
       await connection.start();
