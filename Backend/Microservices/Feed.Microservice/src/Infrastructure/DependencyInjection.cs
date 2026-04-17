@@ -1,10 +1,19 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Ai;
+using Application.Abstractions.Notifications;
+using Application.Abstractions.Resources;
+using Infrastructure.Logic.Ai;
+using Infrastructure.Logic.Notifications;
+using Infrastructure.Logic.Resources;
 using Infrastructure.Repositories;
 using MassTransit;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using StackExchange.Redis;
 using SharedLibrary.Authentication;
 using SharedLibrary.Configs;
+using SharedLibrary.Grpc.AiFeed;
+using SharedLibrary.Grpc.UserResources;
 
 namespace Infrastructure
 {
@@ -14,6 +23,26 @@ namespace Infrastructure
         {
             services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
+            services.AddGrpcClient<UserResourceService.UserResourceServiceClient>((sp, options) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var grpcUrl = configuration["UserService:GrpcUrl"]
+                              ?? configuration["UserService__GrpcUrl"]
+                              ?? "http://user-microservice:5004";
+                options.Address = new Uri(grpcUrl);
+            });
+            services.AddGrpcClient<AiFeedPostService.AiFeedPostServiceClient>((sp, options) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var grpcUrl = configuration["AiService:GrpcUrl"]
+                              ?? configuration["AiService__GrpcUrl"]
+                              ?? "http://ai-microservice:5005";
+                options.Address = new Uri(grpcUrl);
+            });
+            services.AddScoped<IUserResourceService, UserResourceGrpcService>();
+            services.AddScoped<IAiFeedPostService, AiFeedPostGrpcService>();
+            services.AddScoped<IFeedNotificationService, FeedNotificationService>();
+            services.AddScoped<FeedNotificationFactory>();
             services.AddSingleton<IConnectionMultiplexer>(sp =>
             {
                 var env = sp.GetRequiredService<EnvironmentConfig>();

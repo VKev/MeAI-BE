@@ -17,6 +17,12 @@
     <PackageReference Include="MassTransit.EntityFrameworkCore" Version="8.5.7" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.7" />
     <PackageReference Include="MassTransit.Redis" Version="8.5.7" />
+    <PackageReference Include="Google.Protobuf" Version="3.27.3" />
+    <PackageReference Include="Grpc.Net.ClientFactory" Version="2.67.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.67.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.1">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -33,6 +39,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\SharedLibrary\SharedLibrary.csproj" />
     <ProjectReference Include="..\Application\Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="..\..\..\SharedLibrary\Protos\user_resources.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\SharedLibrary\Protos\ai_feed.proto" GrpcServices="Client" />
   </ItemGroup>
 
   <Target Name="CopyEFCoreTargetsFile" BeforeTargets="BeforeBuild">

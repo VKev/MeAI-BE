@@ -148,7 +148,13 @@ internal static class YarpRuntimeSetup
                 Service: "Notification",
                 ContainerHost: "notification-microservice",
                 ContainerPort: 5006,
-                LocalPort: 5006)
+                LocalPort: 5006),
+            new ServiceDefinition(
+                Prefix: "FEED",
+                Service: "Feed",
+                ContainerHost: "feed-microservice",
+                ContainerPort: 5007,
+                LocalPort: 5007)
         };
 
         var addedServices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

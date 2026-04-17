@@ -12,6 +12,8 @@ public sealed class Post
 
     public string? Content { get; set; }
 
+    public Guid[] ResourceIds { get; set; } = Array.Empty<Guid>();
+
     public string? MediaUrl { get; set; }
 
     public string? MediaType { get; set; } // "Image", "Video", null
