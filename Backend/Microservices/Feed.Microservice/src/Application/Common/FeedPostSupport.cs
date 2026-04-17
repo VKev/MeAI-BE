@@ -1,0 +1,179 @@
+using Application.Abstractions.Data;
+using Application.Abstractions.Resources;
+using Application.Posts.Models;
+using Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
+
+namespace Application.Common;
+
+internal static partial class FeedPostSupport
+{
+    private static readonly Regex HashtagRegex = HashtagRegexFactory();
+
+    public static string? NormalizeOptionalText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    public static string NormalizeRequiredText(string value)
+    {
+        return value.Trim();
+    }
+
+    public static IReadOnlyList<Guid> NormalizeResourceIds(IReadOnlyCollection<Guid>? resourceIds)
+    {
+        return (resourceIds ?? Array.Empty<Guid>())
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+    }
+
+    public static IReadOnlyList<string> ExtractHashtags(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return Array.Empty<string>();
+        }
+
+        return HashtagRegex.Matches(content)
+            .Select(match => match.Value.Trim().ToLowerInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public static string? BuildHashtagText(IReadOnlyList<string> hashtags)
+    {
+        return hashtags.Count == 0 ? null : string.Join(' ', hashtags);
+    }
+
+    public static string BuildPreview(string? value, int maxLength = 120)
+    {
+        var normalized = NormalizeOptionalText(value);
+        if (string.IsNullOrEmpty(normalized))
+        {
+            return string.Empty;
+        }
+
+        if (normalized.Length <= maxLength)
+        {
+            return normalized;
+        }
+
+        return normalized[..maxLength].TrimEnd() + "...";
+    }
+
+    public static async Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> LoadHashtagsByPostIdsAsync(
+        IUnitOfWork unitOfWork,
+        IReadOnlyCollection<Guid> postIds,
+        CancellationToken cancellationToken)
+    {
+        if (postIds.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<string>>();
+        }
+
+        var ids = postIds.Distinct().ToList();
+
+        var rows = await (
+                from postHashtag in unitOfWork.Repository<PostHashtag>().GetAll()
+                join hashtag in unitOfWork.Repository<Hashtag>().GetAll() on postHashtag.HashtagId equals hashtag.Id
+                where ids.Contains(postHashtag.PostId)
+                select new { postHashtag.PostId, hashtag.Name })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(row => row.PostId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group
+                    .Select(item => item.Name)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(item => item, StringComparer.OrdinalIgnoreCase)
+                    .ToList());
+    }
+
+    public static async Task<IReadOnlyDictionary<Guid, IReadOnlyList<UserResourcePresignResult>>> LoadPresignedMediaByPostIdsAsync(
+        IUserResourceService userResourceService,
+        Guid requesterUserId,
+        IReadOnlyCollection<Post> posts,
+        CancellationToken cancellationToken)
+    {
+        if (posts.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<UserResourcePresignResult>>();
+        }
+
+        var resourceIds = posts
+            .SelectMany(post => post.ResourceIds ?? Array.Empty<Guid>())
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (resourceIds.Count == 0)
+        {
+            return posts.ToDictionary(post => post.Id, _ => (IReadOnlyList<UserResourcePresignResult>)Array.Empty<UserResourcePresignResult>());
+        }
+
+        var presignResult = await userResourceService.GetPresignedResourcesAsync(requesterUserId, resourceIds, cancellationToken);
+        if (presignResult.IsFailure)
+        {
+            return posts.ToDictionary(post => post.Id, _ => (IReadOnlyList<UserResourcePresignResult>)Array.Empty<UserResourcePresignResult>());
+        }
+
+        var resourcesById = presignResult.Value.ToDictionary(item => item.ResourceId, item => item);
+
+        return posts.ToDictionary(
+            post => post.Id,
+            post => (IReadOnlyList<UserResourcePresignResult>)(post.ResourceIds ?? Array.Empty<Guid>())
+                .Where(resourcesById.ContainsKey)
+                .Select(resourceId => resourcesById[resourceId])
+                .ToList());
+    }
+
+    public static async Task<IReadOnlyList<PostResponse>> ToPostResponsesAsync(
+        IUnitOfWork unitOfWork,
+        IUserResourceService userResourceService,
+        Guid requesterUserId,
+        IReadOnlyList<Post> posts,
+        CancellationToken cancellationToken)
+    {
+        if (posts.Count == 0)
+        {
+            return Array.Empty<PostResponse>();
+        }
+
+        var hashtags = await LoadHashtagsByPostIdsAsync(
+            unitOfWork,
+            posts.Select(post => post.Id).ToList(),
+            cancellationToken);
+
+        var mediaByPostId = await LoadPresignedMediaByPostIdsAsync(
+            userResourceService,
+            requesterUserId,
+            posts,
+            cancellationToken);
+
+        return posts
+            .Select(post => PostResponseMapping.ToResponse(
+                post,
+                hashtags.TryGetValue(post.Id, out var hashtagValues) ? hashtagValues : Array.Empty<string>(),
+                mediaByPostId.TryGetValue(post.Id, out var mediaValues) ? mediaValues : Array.Empty<UserResourcePresignResult>()))
+            .ToList();
+    }
+
+    public static async Task<PostResponse> ToPostResponseAsync(
+        IUnitOfWork unitOfWork,
+        IUserResourceService userResourceService,
+        Guid requesterUserId,
+        Post post,
+        CancellationToken cancellationToken)
+    {
+        var responses = await ToPostResponsesAsync(unitOfWork, userResourceService, requesterUserId, new[] { post }, cancellationToken);
+        return responses[0];
+    }
+
+    [GeneratedRegex(@"(?<!\w)#[\p{L}\p{M}\p{N}_]+", RegexOptions.Compiled)]
+    private static partial Regex HashtagRegexFactory();
+}
