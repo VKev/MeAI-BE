@@ -27,7 +27,7 @@ public class MyDbContextFactory : IDesignTimeDbContextFactory<MyDbContext>
 
             var host = config["Database:Host"] ?? config["DATABASE__HOST"] ?? config["DATABASE_HOST"] ?? "localhost";
             var port = config["Database:Port"] ?? config["DATABASE__PORT"] ?? config["DATABASE_PORT"] ?? "5432";
-            var database = config["Database:Name"] ?? config["DATABASE__NAME"] ?? config["DATABASE_NAME"] ?? "notificationdb";
+            var database = config["Database:Name"] ?? config["DATABASE__NAME"] ?? config["DATABASE_NAME"] ?? "feeddb";
             var username = config["Database:Username"] ?? config["DATABASE__USERNAME"] ?? config["DATABASE_USERNAME"] ?? "postgres";
             var password = config["Database:Password"] ?? config["DATABASE__PASSWORD"] ?? config["DATABASE_PASSWORD"] ?? "password";
             var sslMode = config["Database:SslMode"] ?? config["DATABASE__SSLMODE"] ?? config["DATABASE_SSLMODE"] ?? "Prefer";

@@ -1,0 +1,52 @@
+using Application.Abstractions.Data;
+using Application.Abstractions.Resources;
+using Application.Common;
+using Application.Posts.Models;
+using Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using SharedLibrary.Abstractions.Messaging;
+
+namespace Application.Posts.Queries;
+
+public sealed record GetFeedPostsQuery(Guid UserId) : IQuery<IReadOnlyList<PostResponse>>;
+
+public sealed class GetFeedPostsQueryHandler : IQueryHandler<GetFeedPostsQuery, IReadOnlyList<PostResponse>>
+{
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IUserResourceService _userResourceService;
+
+    public GetFeedPostsQueryHandler(IUnitOfWork unitOfWork, IUserResourceService userResourceService)
+    {
+        _unitOfWork = unitOfWork;
+        _userResourceService = userResourceService;
+    }
+
+    public async Task<SharedLibrary.Common.ResponseModel.Result<IReadOnlyList<PostResponse>>> Handle(
+        GetFeedPostsQuery request,
+        CancellationToken cancellationToken)
+    {
+        var followedUserIds = await _unitOfWork.Repository<Follow>()
+            .GetAll()
+            .Where(follow => follow.FollowerId == request.UserId)
+            .Select(follow => follow.FolloweeId)
+            .ToListAsync(cancellationToken);
+
+        followedUserIds.Add(request.UserId);
+
+        var posts = await _unitOfWork.Repository<Post>()
+            .GetAll()
+            .Where(post => !post.IsDeleted && post.DeletedAt == null && followedUserIds.Contains(post.UserId))
+            .OrderByDescending(post => post.CreatedAt)
+            .ThenByDescending(post => post.Id)
+            .ToListAsync(cancellationToken);
+
+        var response = await FeedPostSupport.ToPostResponsesAsync(
+            _unitOfWork,
+            _userResourceService,
+            request.UserId,
+            posts,
+            cancellationToken);
+
+        return SharedLibrary.Common.ResponseModel.Result.Success<IReadOnlyList<PostResponse>>(response);
+    }
+}

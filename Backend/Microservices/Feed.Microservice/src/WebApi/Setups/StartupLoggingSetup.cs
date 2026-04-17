@@ -5,7 +5,7 @@ public static class StartupLoggingSetup
     public static void LogStartupInfo(this WebApplication app, IConfiguration configuration)
     {
         var logger = app.Services.GetRequiredService<ILogger<Program>>();
-        logger.LogInformation("Notification microservice started on port {Port}",
-            configuration["ASPNETCORE_URLS"] ?? "5006");
+        logger.LogInformation("Feed microservice started on {Urls}",
+            configuration["ASPNETCORE_URLS"] ?? "http://localhost:5007");
     }
 }

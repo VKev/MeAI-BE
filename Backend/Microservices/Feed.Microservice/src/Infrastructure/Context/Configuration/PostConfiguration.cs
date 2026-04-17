@@ -16,6 +16,7 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.Property(e => e.Id).HasColumnName("id");
         entity.Property(e => e.UserId).HasColumnName("user_id");
         entity.Property(e => e.Content).HasColumnName("content");
+        entity.Property(e => e.ResourceIds).HasColumnName("resource_ids").HasColumnType("uuid[]");
         entity.Property(e => e.MediaUrl).HasColumnName("media_url");
         entity.Property(e => e.MediaType).HasColumnName("media_type");
         entity.Property(e => e.LikesCount).HasColumnName("likes_count");

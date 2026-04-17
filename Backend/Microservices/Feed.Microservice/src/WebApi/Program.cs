@@ -7,6 +7,8 @@ using SharedLibrary.Configs;
 using WebApi.Middleware;
 using WebApi.Setups;
 
+AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
 var builder = WebApplication.CreateBuilder(args);
 var shouldAutoApplyMigrations = builder.ConfigureAutoMigrations();
 
@@ -63,3 +65,7 @@ app.MapScalarApiReference("docs", opts =>
 app.MapControllers();
 
 app.Run();
+
+public partial class Program
+{
+}
