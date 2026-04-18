@@ -13,6 +13,8 @@ public sealed class CommentConfiguration : IEntityTypeConfiguration<Comment>
 
         entity.HasIndex(e => e.PostId, "ix_comments_post_id");
         entity.HasIndex(e => e.UserId, "ix_comments_user_id");
+        entity.HasIndex(e => new { e.PostId, e.ParentCommentId, e.CreatedAt, e.Id }, "ix_comments_post_parent_created_at_id");
+        entity.HasIndex(e => new { e.ParentCommentId, e.CreatedAt, e.Id }, "ix_comments_parent_created_at_id");
 
         entity.Property(e => e.Id).HasColumnName("id");
         entity.Property(e => e.PostId).HasColumnName("post_id");

@@ -12,6 +12,7 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.ToTable("posts");
 
         entity.HasIndex(e => e.UserId, "ix_posts_user_id");
+        entity.HasIndex(e => new { e.CreatedAt, e.Id }, "ix_posts_created_at_id");
 
         entity.Property(e => e.Id).HasColumnName("id");
         entity.Property(e => e.UserId).HasColumnName("user_id");
