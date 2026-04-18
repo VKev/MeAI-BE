@@ -5,6 +5,8 @@ namespace Application.Common;
 internal static class FeedErrors
 {
     public static readonly Error PostNotFound = new("Feed.Post.NotFound", "The requested post was not found.");
+    public static readonly Error PostAlreadyLiked = new("Feed.Post.Like.Exists", "You have already liked this post.");
+    public static readonly Error PostNotLiked = new("Feed.Post.Like.NotFound", "You have not liked this post.");
     public static readonly Error CommentNotFound = new("Feed.Comment.NotFound", "The requested comment was not found.");
     public static readonly Error ReportNotFound = new("Feed.Report.NotFound", "The requested report was not found.");
     public static readonly Error EmptyPost = new("Feed.Post.Empty", "A post must include content or at least one resource.");

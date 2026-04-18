@@ -21,14 +21,16 @@ public sealed record PostResponse(
     int SharesCount,
     IReadOnlyList<string> Hashtags,
     DateTime? CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    bool IsLikedByCurrentUser);
 
 internal static class PostResponseMapping
 {
     public static PostResponse ToResponse(
         Post post,
         IReadOnlyList<string> hashtags,
-        IReadOnlyList<UserResourcePresignResult> media)
+        IReadOnlyList<UserResourcePresignResult> media,
+        bool isLikedByCurrentUser = false)
     {
         var mediaResponses = media
             .Select(item => new PostMediaResponse(
@@ -52,6 +54,7 @@ internal static class PostResponseMapping
             post.SharesCount,
             hashtags,
             post.CreatedAt,
-            post.UpdatedAt);
+            post.UpdatedAt,
+            isLikedByCurrentUser);
     }
 }
