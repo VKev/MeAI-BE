@@ -8,41 +8,40 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Comments.Queries;
 
-public sealed record GetCommentsByPostIdQuery(
-    Guid PostId,
+public sealed record GetCommentRepliesQuery(
+    Guid CommentId,
     DateTime? CursorCreatedAt,
     Guid? CursorId,
     int? Limit) : IQuery<IReadOnlyList<CommentResponse>>;
 
-public sealed class GetCommentsByPostIdQueryHandler : IQueryHandler<GetCommentsByPostIdQuery, IReadOnlyList<CommentResponse>>
+public sealed class GetCommentRepliesQueryHandler : IQueryHandler<GetCommentRepliesQuery, IReadOnlyList<CommentResponse>>
 {
     private readonly IUnitOfWork _unitOfWork;
 
-    public GetCommentsByPostIdQueryHandler(IUnitOfWork unitOfWork)
+    public GetCommentRepliesQueryHandler(IUnitOfWork unitOfWork)
     {
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<IReadOnlyList<CommentResponse>>> Handle(GetCommentsByPostIdQuery request, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<CommentResponse>>> Handle(GetCommentRepliesQuery request, CancellationToken cancellationToken)
     {
         var pagination = FeedPaginationSupport.Normalize(request.CursorCreatedAt, request.CursorId, request.Limit);
 
-        var postExists = await _unitOfWork.Repository<Post>()
+        var parentCommentExists = await _unitOfWork.Repository<Comment>()
             .GetAll()
             .AsNoTracking()
-            .AnyAsync(item => item.Id == request.PostId && !item.IsDeleted && item.DeletedAt == null, cancellationToken);
+            .AnyAsync(item => item.Id == request.CommentId && !item.IsDeleted && item.DeletedAt == null, cancellationToken);
 
-        if (!postExists)
+        if (!parentCommentExists)
         {
-            return Result.Failure<IReadOnlyList<CommentResponse>>(FeedErrors.PostNotFound);
+            return Result.Failure<IReadOnlyList<CommentResponse>>(FeedErrors.CommentNotFound);
         }
 
         var query = _unitOfWork.Repository<Comment>()
             .GetAll()
             .AsNoTracking()
             .Where(item =>
-                item.PostId == request.PostId &&
-                item.ParentCommentId == null &&
+                item.ParentCommentId == request.CommentId &&
                 !item.IsDeleted &&
                 item.DeletedAt == null);
 

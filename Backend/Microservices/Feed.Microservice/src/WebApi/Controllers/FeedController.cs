@@ -58,14 +58,20 @@ public sealed class FeedController : ApiController
     [ProducesResponseType(typeof(Result<IReadOnlyList<PostResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetFeed(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetFeed(
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new GetFeedPostsQuery(userId), cancellationToken);
+        var result = await _mediator.Send(
+            new GetFeedPostsQuery(userId, cursorCreatedAt, cursorId, limit),
+            cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);
@@ -138,14 +144,48 @@ public sealed class FeedController : ApiController
     [ProducesResponseType(typeof(Result<IReadOnlyList<CommentResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetComments(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetComments(
+        Guid id,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out _))
         {
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new GetCommentsByPostIdQuery(id), cancellationToken);
+        var result = await _mediator.Send(
+            new GetCommentsByPostIdQuery(id, cursorCreatedAt, cursorId, limit),
+            cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("comments/{id:guid}/replies")]
+    [ProducesResponseType(typeof(Result<IReadOnlyList<CommentResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetCommentReplies(
+        Guid id,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out _))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new GetCommentRepliesQuery(id, cursorCreatedAt, cursorId, limit),
+            cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);
