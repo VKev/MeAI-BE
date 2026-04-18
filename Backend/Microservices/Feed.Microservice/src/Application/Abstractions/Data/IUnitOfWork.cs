@@ -8,5 +8,6 @@ namespace Application.Abstractions.Data;
 public interface IUnitOfWork : IDisposable
 {
     IRepository<T> Repository<T>() where T : class;
+    bool HasChanges();
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

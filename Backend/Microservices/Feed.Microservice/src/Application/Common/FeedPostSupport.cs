@@ -132,6 +132,32 @@ internal static partial class FeedPostSupport
                 .ToList());
     }
 
+    public static async Task<IReadOnlySet<Guid>> LoadLikedPostIdsByUserAsync(
+        IUnitOfWork unitOfWork,
+        Guid requesterUserId,
+        IReadOnlyCollection<Guid> postIds,
+        CancellationToken cancellationToken)
+    {
+        if (postIds.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        var ids = postIds.Distinct().ToHashSet();
+
+        var likedPostIds = await unitOfWork.Repository<PostLike>()
+            .GetAll()
+            .AsNoTracking()
+            .Where(item => item.UserId == requesterUserId && ids.Contains(item.PostId))
+            .Select(item => item.PostId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return likedPostIds.Count == 0
+            ? new HashSet<Guid>()
+            : likedPostIds.ToHashSet();
+    }
+
     public static async Task<IReadOnlyList<PostResponse>> ToPostResponsesAsync(
         IUnitOfWork unitOfWork,
         IUserResourceService userResourceService,
@@ -144,9 +170,14 @@ internal static partial class FeedPostSupport
             return Array.Empty<PostResponse>();
         }
 
+        var postIds = posts
+            .Select(post => post.Id)
+            .Distinct()
+            .ToList();
+
         var hashtags = await LoadHashtagsByPostIdsAsync(
             unitOfWork,
-            posts.Select(post => post.Id).ToList(),
+            postIds,
             cancellationToken);
 
         var mediaByPostId = await LoadPresignedMediaByPostIdsAsync(
@@ -155,11 +186,18 @@ internal static partial class FeedPostSupport
             posts,
             cancellationToken);
 
+        var likedPostIds = await LoadLikedPostIdsByUserAsync(
+            unitOfWork,
+            requesterUserId,
+            postIds,
+            cancellationToken);
+
         return posts
             .Select(post => PostResponseMapping.ToResponse(
                 post,
                 hashtags.TryGetValue(post.Id, out var hashtagValues) ? hashtagValues : Array.Empty<string>(),
-                mediaByPostId.TryGetValue(post.Id, out var mediaValues) ? mediaValues : Array.Empty<UserResourcePresignResult>()))
+                mediaByPostId.TryGetValue(post.Id, out var mediaValues) ? mediaValues : Array.Empty<UserResourcePresignResult>(),
+                likedPostIds.Contains(post.Id)))
             .ToList();
     }
 

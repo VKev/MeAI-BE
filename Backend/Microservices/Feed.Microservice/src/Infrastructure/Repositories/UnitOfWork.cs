@@ -27,6 +27,11 @@ public sealed class UnitOfWork : IUnitOfWork
         return newRepository;
     }
 
+    public bool HasChanges()
+    {
+        return _dbContext.ChangeTracker.HasChanges();
+    }
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         return _dbContext.SaveChangesAsync(cancellationToken);

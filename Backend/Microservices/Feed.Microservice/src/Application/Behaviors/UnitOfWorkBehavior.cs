@@ -32,6 +32,11 @@ public class UnitOfWorkBehavior<TRequest, TResponse> : IPipelineBehavior<TReques
             return response;
         }
 
+        if (!_unitOfWork.HasChanges())
+        {
+            return response;
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return response;
     }

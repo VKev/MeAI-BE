@@ -26,6 +26,7 @@ public sealed class GetPostByIdQueryHandler : IQueryHandler<GetPostByIdQuery, Po
     {
         var post = await _unitOfWork.Repository<Post>()
             .GetAll()
+            .AsNoTracking()
             .FirstOrDefaultAsync(
                 item => item.Id == request.PostId && !item.IsDeleted && item.DeletedAt == null,
                 cancellationToken);
