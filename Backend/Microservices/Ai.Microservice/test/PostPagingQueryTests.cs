@@ -84,6 +84,16 @@ public sealed class PostPagingQueryTests
     private static PostResponseBuilder CreatePostResponseBuilder()
     {
         var userResourceService = new Mock<IUserResourceService>(MockBehavior.Strict);
+        userResourceService
+            .Setup(service => service.GetPublicUserProfilesByIdsAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<Guid> userIds, CancellationToken _) =>
+                Result.Success<IReadOnlyDictionary<Guid, PublicUserProfileResult>>(
+                    userIds.ToDictionary(
+                        id => id,
+                        id => new PublicUserProfileResult(id, $"user-{id:N}", null, null))));
+
         var publicationRepository = new Mock<IPostPublicationRepository>();
         publicationRepository
             .Setup(repository => repository.GetByPostIdsAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<CancellationToken>()))

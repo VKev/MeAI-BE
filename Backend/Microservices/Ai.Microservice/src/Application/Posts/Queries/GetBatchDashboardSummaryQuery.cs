@@ -1,4 +1,5 @@
 using Application.Posts.Models;
+using Domain.Entities;
 using MediatR;
 using SharedLibrary.Common.ResponseModel;
 
@@ -12,6 +13,8 @@ public sealed record GetBatchDashboardSummaryQuery(
 public sealed class GetBatchDashboardSummaryQueryHandler
     : IRequestHandler<GetBatchDashboardSummaryQuery, Result<List<SocialPlatformDashboardSummaryResponse>>>
 {
+    private static readonly Post? DomainDependency = null;
+
     private readonly IMediator _mediator;
 
     public GetBatchDashboardSummaryQueryHandler(IMediator mediator)
@@ -23,6 +26,8 @@ public sealed class GetBatchDashboardSummaryQueryHandler
         GetBatchDashboardSummaryQuery request,
         CancellationToken cancellationToken)
     {
+        _ = DomainDependency;
+
         if (request.SocialMediaIds.Count == 0)
         {
             return Result.Success(new List<SocialPlatformDashboardSummaryResponse>());

@@ -5,6 +5,8 @@ namespace Application.Posts.Models;
 public sealed record PostResponse(
     Guid Id,
     Guid UserId,
+    string Username,
+    string? AvatarUrl,
     Guid? WorkspaceId,
     Guid? SocialMediaId,
     string? Title,

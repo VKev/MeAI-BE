@@ -8,6 +8,7 @@ service UserResourceService {
   rpc GetPresignedResources (GetPresignedResourcesRequest) returns (GetPresignedResourcesResponse);
   rpc GetPublicResources (GetPublicResourcesRequest) returns (GetPresignedResourcesResponse);
   rpc GetPublicUserProfileByUsername (GetPublicUserProfileByUsernameRequest) returns (GetPublicUserProfileByUsernameResponse);
+  rpc GetPublicUserProfilesByIds (GetPublicUserProfilesByIdsRequest) returns (GetPublicUserProfilesByIdsResponse);
   rpc CreateResourcesFromUrls (CreateResourcesFromUrlsRequest) returns (CreateResourcesFromUrlsResponse);
   rpc GetActiveConfig (GetActiveConfigRequest) returns (GetActiveConfigResponse);
 }
@@ -49,6 +50,21 @@ message GetPublicUserProfileByUsernameResponse {
   string username = 2;
   string full_name = 3;
   string avatar_url = 4;
+}
+
+message GetPublicUserProfilesByIdsRequest {
+  repeated string user_ids = 1;
+}
+
+message PublicUserProfile {
+  string user_id = 1;
+  string username = 2;
+  string full_name = 3;
+  string avatar_url = 4;
+}
+
+message GetPublicUserProfilesByIdsResponse {
+  repeated PublicUserProfile profiles = 1;
 }
 
 message CreateResourcesFromUrlsRequest {

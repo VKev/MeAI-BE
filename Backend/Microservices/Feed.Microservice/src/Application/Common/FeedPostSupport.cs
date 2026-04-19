@@ -10,6 +10,7 @@ namespace Application.Common;
 internal static partial class FeedPostSupport
 {
     private static readonly Regex HashtagRegex = HashtagRegexFactory();
+    private const string UnknownUsername = "unknown";
 
     public static string? NormalizeOptionalText(string? value)
     {
@@ -195,14 +196,23 @@ internal static partial class FeedPostSupport
             postIds,
             cancellationToken);
 
+        var authorsByUserId = await LoadPostAuthorsByUserIdsAsync(
+            userResourceService,
+            posts.Select(post => post.UserId).ToList(),
+            cancellationToken);
+
         return posts
             .Select(post =>
             {
                 bool? isLikedByCurrentUser = requesterUserId.HasValue ? likedPostIds.Contains(post.Id) : null;
                 bool? canDelete = requesterUserId.HasValue ? post.UserId == requesterUserId.Value : null;
+                var author = authorsByUserId.TryGetValue(post.UserId, out var authorResponse)
+                    ? authorResponse
+                    : CreateFallbackAuthor(post.UserId);
 
                 return PostResponseMapping.ToResponse(
                     post,
+                    author,
                     hashtags.TryGetValue(post.Id, out var hashtagValues) ? hashtagValues : Array.Empty<string>(),
                     mediaByPostId.TryGetValue(post.Id, out var mediaValues) ? mediaValues : Array.Empty<UserResourcePresignResult>(),
                     isLikedByCurrentUser,
@@ -220,6 +230,39 @@ internal static partial class FeedPostSupport
     {
         var responses = await ToPostResponsesAsync(unitOfWork, userResourceService, requesterUserId, new[] { post }, cancellationToken);
         return responses[0];
+    }
+
+    private static async Task<IReadOnlyDictionary<Guid, PostAuthorResponse>> LoadPostAuthorsByUserIdsAsync(
+        IUserResourceService userResourceService,
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken)
+    {
+        var distinctUserIds = userIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (distinctUserIds.Count == 0)
+        {
+            return new Dictionary<Guid, PostAuthorResponse>();
+        }
+
+        var profilesResult = await userResourceService.GetPublicUserProfilesByIdsAsync(distinctUserIds, cancellationToken);
+        if (profilesResult.IsFailure)
+        {
+            return distinctUserIds.ToDictionary(id => id, CreateFallbackAuthor);
+        }
+
+        return distinctUserIds.ToDictionary(
+            id => id,
+            id => profilesResult.Value.TryGetValue(id, out var profile)
+                ? new PostAuthorResponse(profile.UserId, profile.Username, profile.AvatarUrl)
+                : CreateFallbackAuthor(id));
+    }
+
+    private static PostAuthorResponse CreateFallbackAuthor(Guid userId)
+    {
+        return new PostAuthorResponse(userId, UnknownUsername, null);
     }
 
     [GeneratedRegex(@"(?<!\w)#[\p{L}\p{M}\p{N}_]+", RegexOptions.Compiled)]
