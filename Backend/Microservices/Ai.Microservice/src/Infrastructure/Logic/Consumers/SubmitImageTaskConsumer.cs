@@ -86,6 +86,8 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
                 CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
             });
 
+            // Kie uses callbacks — no need to poll for completion.
+            // Only check once for immediate rejection (credit/quota issues).
             await TryHandleProviderAcceptedButUnprocessableAsync(
                 message.CorrelationId,
                 result.TaskId,
@@ -188,16 +190,8 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
 
             if (!ShouldRetryRecordInfo(recordInfo) || attempt == MaxRecordInfoAttempts)
             {
-                if (attempt == MaxRecordInfoAttempts && ShouldRetryRecordInfo(recordInfo))
-                {
-                    await TryTriggerTimeoutFallbackAsync(
-                        correlationId,
-                        kieTaskId,
-                        numberOfVariances,
-                        recordInfo.Data?.State,
-                        cancellationToken);
-                }
-
+                // Task is still in a waiting/processing state — Kie will call back when done.
+                // Do NOT trigger fallback here; let the callback arrive naturally.
                 return;
             }
 

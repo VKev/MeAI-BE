@@ -12,4 +12,7 @@ public sealed class SubscriptionLimits
 
     [JsonPropertyName("number_of_workspaces")]
     public int? NumberOfWorkspaces { get; set; }
+
+    [JsonPropertyName("max_pages_per_social_account")]
+    public int? MaxPagesPerSocialAccount { get; set; }
 }

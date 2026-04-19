@@ -2,7 +2,7 @@ namespace Infrastructure.Configs;
 
 public sealed class VeoOptions
 {
-    public const string SectionName = "Veo";
+    public const string SectionName = "Kie";
 
     public string ApiKey { get; set; } = string.Empty;
 

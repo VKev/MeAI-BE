@@ -28,8 +28,8 @@ services:
       Jwt__Audience: MicroservicesApp
       Jwt__ExpirationMinutes: 60
       AutoApply__Migrations: "true"
-      Veo__ApiKey: your-veo-api-key
-      Veo__CallbackUrl: http://api-gateway:8080/api/Ai/veo/callback
+      Kie__ApiKey: your-kie-api-key
+      Kie__CallbackUrl: http://api-gateway:8080/api/Ai/kie/callback
     depends_on:
       postgres:
         condition: service_healthy

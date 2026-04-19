@@ -7,6 +7,7 @@ using Application.SocialMedias.Models;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
@@ -26,17 +27,20 @@ public sealed class CompleteThreadsOAuthCommandHandler
     private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly ISocialMediaProfileService _profileService;
+    private readonly ILogger<CompleteThreadsOAuthCommandHandler> _logger;
 
     public CompleteThreadsOAuthCommandHandler(
         IThreadsOAuthService threadsOAuthService,
         IUnitOfWork unitOfWork,
         IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
-        ISocialMediaProfileService profileService)
+        ISocialMediaProfileService profileService,
+        ILogger<CompleteThreadsOAuthCommandHandler> logger)
     {
         _threadsOAuthService = threadsOAuthService;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _profileService = profileService;
+        _logger = logger;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(
@@ -73,6 +77,17 @@ public sealed class CompleteThreadsOAuthCommandHandler
         // Fetch user profile to include in metadata
         var profileResult = await _threadsOAuthService.GetUserProfileAsync(tokenResponse.AccessToken, cancellationToken);
         var profile = profileResult.IsSuccess ? profileResult.Value : null;
+
+        if (profileResult.IsFailure)
+        {
+            _logger.LogWarning("Threads profile fetch failed during callback: {Error}", profileResult.Error.Description);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Threads profile fetched during callback: Id={Id}, Username={Username}, Name={Name}, HasPicture={HasPicture}, Bio={Bio}",
+                profile?.Id, profile?.Username, profile?.Name, profile?.ThreadsProfilePictureUrl != null, profile?.ThreadsBiography);
+        }
 
         var userThreadsAccounts = await _socialMediaRepository.GetAll()
             .Where(sm =>

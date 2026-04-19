@@ -48,6 +48,26 @@ public sealed class SocialMediasController : ApiController
         return Ok(result);
     }
 
+    [HttpGet("facebook-pages")]
+    [ProducesResponseType(typeof(Result<List<SocialMediaResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetFacebookPages(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(new GetFacebookPagesQuery(userId), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(Result<SocialMediaResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
