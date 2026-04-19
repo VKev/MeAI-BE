@@ -260,16 +260,10 @@ public sealed class CompleteFacebookOAuthCommandHandler
 
     private async Task<Result<UserSubscriptionEntitlement>> EnsureSocialAccountLinkAllowedAsync(
         Guid userId,
-        int newAccountCount,
+        int newPageCount,
         CancellationToken cancellationToken)
     {
         var entitlement = await _userSubscriptionEntitlementService.GetCurrentEntitlementAsync(userId, cancellationToken);
-
-        if (!entitlement.HasActivePlan)
-        {
-            return Result.Failure<UserSubscriptionEntitlement>(
-                new Error("Subscription.Required", "An active subscription is required to link social accounts."));
-        }
 
         if (entitlement.MaxSocialAccounts <= 0)
         {
@@ -277,16 +271,37 @@ public sealed class CompleteFacebookOAuthCommandHandler
                 new Error("SocialMedia.LimitUnavailable", "Your current plan does not include social account linking."));
         }
 
-        var currentSocialAccountCount = await _socialMediaRepository.GetAll()
+        var existingFacebookCount = await _socialMediaRepository.GetAll()
             .AsNoTracking()
-            .CountAsync(item => item.UserId == userId && !item.IsDeleted, cancellationToken);
+            .CountAsync(item => item.UserId == userId && item.Type == FacebookSocialMediaType && !item.IsDeleted, cancellationToken);
 
-        if (currentSocialAccountCount + newAccountCount > entitlement.MaxSocialAccounts)
+        var isNewConnection = existingFacebookCount == 0;
+
+        if (isNewConnection)
+        {
+            var currentAccountCount = await _socialMediaRepository.GetAll()
+                .AsNoTracking()
+                .Where(item => item.UserId == userId && !item.IsDeleted)
+                .Select(item => item.Type)
+                .Distinct()
+                .CountAsync(cancellationToken);
+
+            if (currentAccountCount + 1 > entitlement.MaxSocialAccounts)
+            {
+                return Result.Failure<UserSubscriptionEntitlement>(
+                    new Error(
+                        "SocialMedia.LimitExceeded",
+                        $"Your current plan allows up to {entitlement.MaxSocialAccounts} linked social account(s). Upgrade to add more."));
+            }
+        }
+
+        var totalPages = existingFacebookCount + newPageCount;
+        if (totalPages > entitlement.MaxPagesPerSocialAccount)
         {
             return Result.Failure<UserSubscriptionEntitlement>(
                 new Error(
-                    "SocialMedia.LimitExceeded",
-                    $"Your current plan allows up to {entitlement.MaxSocialAccounts} linked social account(s). Upgrade to add more."));
+                    "SocialMedia.PageLimitExceeded",
+                    $"Your current plan allows up to {entitlement.MaxPagesPerSocialAccount} page(s) per social account. Upgrade to add more."));
         }
 
         return Result.Success(entitlement);

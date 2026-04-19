@@ -134,7 +134,7 @@ public sealed class SampleDataSeeder
         Guid workspaceId,
         CancellationToken cancellationToken)
     {
-        for (var attempt = 0; attempt < 30; attempt++)
+        for (var attempt = 0; attempt < 180; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 

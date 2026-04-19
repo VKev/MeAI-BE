@@ -21,4 +21,7 @@ public sealed record SocialMediaUserProfile(
     int? FollowerCount,
     int? FollowingCount,
     int? PostCount,
-    int? PageLikeCount);
+    int? PageLikeCount,
+    string? PageId = null,
+    string? PageName = null,
+    string? PageProfilePictureUrl = null);

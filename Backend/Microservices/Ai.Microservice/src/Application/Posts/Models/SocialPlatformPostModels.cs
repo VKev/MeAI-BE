@@ -47,6 +47,10 @@ public sealed record SocialPlatformDashboardSummaryResponse(
     SocialPlatformAccountInsightsResponse? AccountInsights,
     IReadOnlyList<SocialPlatformDashboardPostResponse> Posts);
 
+public sealed record BatchDashboardSummaryRequest(
+    List<Guid> SocialMediaIds,
+    int? PostLimit = null);
+
 public sealed record SocialPlatformDashboardPostResponse(
     SocialPlatformPostSummaryResponse Post,
     SocialPlatformPostAnalysisResponse? Analysis);

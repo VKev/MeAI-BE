@@ -22,11 +22,17 @@ public sealed record UserSubscriptionEntitlement(
     UserSubscription? CurrentSubscription,
     Subscription? CurrentPlan)
 {
+    private const int FreeTierMaxSocialAccounts = 2;
+    private const int FreeTierMaxWorkspaces = int.MaxValue;
+    private const int FreeTierMaxPagesPerSocialAccount = 5;
+
     public bool HasActivePlan => CurrentSubscription != null && CurrentPlan != null;
 
-    public int MaxWorkspaces => CurrentPlan?.Limits?.NumberOfWorkspaces ?? 0;
+    public int MaxWorkspaces => CurrentPlan?.Limits?.NumberOfWorkspaces ?? FreeTierMaxWorkspaces;
 
-    public int MaxSocialAccounts => CurrentPlan?.Limits?.NumberOfSocialAccounts ?? 0;
+    public int MaxSocialAccounts => CurrentPlan?.Limits?.NumberOfSocialAccounts ?? FreeTierMaxSocialAccounts;
+
+    public int MaxPagesPerSocialAccount => CurrentPlan?.Limits?.MaxPagesPerSocialAccount ?? FreeTierMaxPagesPerSocialAccount;
 
     public decimal CoinAllowance => CurrentPlan?.MeAiCoin ?? 0m;
 }
