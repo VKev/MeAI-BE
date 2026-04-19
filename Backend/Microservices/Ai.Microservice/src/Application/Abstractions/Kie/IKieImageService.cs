@@ -9,6 +9,7 @@ public interface IKieImageService
 public sealed record KieGenerateRequest(
     string Prompt,
     List<string>? ImageInput = null,
+    string? Model = null,
     string AspectRatio = "1:1",
     string Resolution = "1K",
     string OutputFormat = "png",

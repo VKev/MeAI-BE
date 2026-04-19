@@ -60,6 +60,7 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
         var request = new KieGenerateRequest(
             Prompt: message.Prompt,
             ImageInput: message.ImageUrls,
+            Model: message.Model,
             AspectRatio: message.AspectRatio,
             Resolution: message.Resolution,
             OutputFormat: message.OutputFormat,

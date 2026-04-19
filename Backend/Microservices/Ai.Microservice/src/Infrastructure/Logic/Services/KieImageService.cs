@@ -44,7 +44,7 @@ public sealed class KieImageService : IKieImageService
 
         var payload = new KieCreateTaskRequest
         {
-            Model = "nano-banana-pro",
+            Model = request.Model ?? "google/nano-banana-pro",
             Input = new KieInputParams
             {
                 Prompt = request.Prompt,
@@ -63,7 +63,8 @@ public sealed class KieImageService : IKieImageService
             httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
             httpRequest.Content = JsonContent.Create(payload, options: JsonOptions);
 
-            _logger.LogInformation("Sending image generation request to Kie API (nano-banana-pro) with variances {NumberOfVariances}", request.NumberOfVariances);
+            _logger.LogInformation("Sending image generation request to Kie API. Model: {Model}, AspectRatio: {AspectRatio}, Resolution: {Resolution}, Variances: {NumberOfVariances}",
+                payload.Model, request.AspectRatio, request.Resolution, request.NumberOfVariances);
 
             var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
