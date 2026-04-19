@@ -49,12 +49,6 @@ public sealed class UserSubscriptionEntitlementService : IUserSubscriptionEntitl
     {
         var entitlement = await GetCurrentEntitlementAsync(userId, cancellationToken);
 
-        if (!entitlement.HasActivePlan)
-        {
-            return Result.Failure<UserSubscriptionEntitlement>(
-                new Error("Subscription.Required", "An active subscription is required to create a workspace."));
-        }
-
         if (entitlement.MaxWorkspaces <= 0)
         {
             return Result.Failure<UserSubscriptionEntitlement>(
@@ -84,12 +78,6 @@ public sealed class UserSubscriptionEntitlementService : IUserSubscriptionEntitl
     {
         var entitlement = await GetCurrentEntitlementAsync(userId, cancellationToken);
 
-        if (!entitlement.HasActivePlan)
-        {
-            return Result.Failure<UserSubscriptionEntitlement>(
-                new Error("Subscription.Required", "An active subscription is required to link social accounts."));
-        }
-
         if (entitlement.MaxSocialAccounts <= 0)
         {
             return Result.Failure<UserSubscriptionEntitlement>(
@@ -98,9 +86,10 @@ public sealed class UserSubscriptionEntitlementService : IUserSubscriptionEntitl
 
         var currentSocialAccountCount = await _socialMediaRepository.GetAll()
             .AsNoTracking()
-            .CountAsync(
-                item => item.UserId == userId && !item.IsDeleted,
-                cancellationToken);
+            .Where(item => item.UserId == userId && !item.IsDeleted)
+            .Select(item => item.Type)
+            .Distinct()
+            .CountAsync(cancellationToken);
 
         if (currentSocialAccountCount >= entitlement.MaxSocialAccounts)
         {

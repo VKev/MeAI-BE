@@ -4,6 +4,7 @@ using Application.Abstractions.Instagram;
 using Application.Abstractions.SocialMedia;
 using Application.Abstractions.Threads;
 using Application.Abstractions.TikTok;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 
@@ -15,17 +16,20 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
     private readonly IThreadsOAuthService _threadsOAuthService;
     private readonly IFacebookOAuthService _facebookOAuthService;
     private readonly IInstagramOAuthService _instagramOAuthService;
+    private readonly ILogger<SocialMediaProfileService> _logger;
 
     public SocialMediaProfileService(
         ITikTokOAuthService tikTokOAuthService,
         IThreadsOAuthService threadsOAuthService,
         IFacebookOAuthService facebookOAuthService,
-        IInstagramOAuthService instagramOAuthService)
+        IInstagramOAuthService instagramOAuthService,
+        ILogger<SocialMediaProfileService> logger)
     {
         _tikTokOAuthService = tikTokOAuthService;
         _threadsOAuthService = threadsOAuthService;
         _facebookOAuthService = facebookOAuthService;
         _instagramOAuthService = instagramOAuthService;
+        _logger = logger;
     }
 
     public async Task<Result<SocialMediaUserProfile>> GetUserProfileAsync(
@@ -87,18 +91,41 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
     {
         var metadataProfileResult = GetThreadsProfileFromMetadata(metadata);
         var metadataProfile = metadataProfileResult.IsSuccess ? metadataProfileResult.Value : null;
+
         var result = await _threadsOAuthService.GetUserProfileAsync(accessToken, cancellationToken);
+
+        // If profile fetch fails, try refreshing the token and retrying
+        if (result.IsFailure)
+        {
+            _logger.LogWarning("Threads profile fetch failed: {Error}. Attempting token refresh.", result.Error.Description);
+
+            var refreshResult = await _threadsOAuthService.RefreshTokenAsync(accessToken, cancellationToken);
+            if (refreshResult.IsSuccess)
+            {
+                _logger.LogInformation("Threads token refreshed successfully. Retrying profile fetch.");
+                result = await _threadsOAuthService.GetUserProfileAsync(refreshResult.Value.AccessToken, cancellationToken);
+            }
+            else
+            {
+                _logger.LogWarning("Threads token refresh also failed: {Error}", refreshResult.Error.Description);
+            }
+        }
 
         if (result.IsFailure)
         {
+            _logger.LogWarning("Threads profile fetch failed after retry. Falling back to metadata. MetadataProfile: Username={Username}, DisplayName={DisplayName}",
+                metadataProfile?.Username, metadataProfile?.DisplayName);
             return metadataProfileResult;
         }
 
         var profile = result.Value;
+        _logger.LogInformation("Threads profile fetched: Id={Id}, Username={Username}, Name={Name}, HasPicture={HasPicture}",
+            profile.Id, profile.Username, profile.Name, profile.ThreadsProfilePictureUrl != null);
+
         return Result.Success(new SocialMediaUserProfile(
             UserId: FirstNonEmpty(profile.Id, metadataProfile?.UserId),
             Username: FirstNonEmpty(profile.Username, metadataProfile?.Username),
-            DisplayName: FirstNonEmpty(profile.Name, metadataProfile?.DisplayName),
+            DisplayName: FirstNonEmpty(profile.Name, profile.Username, metadataProfile?.DisplayName, metadataProfile?.Username),
             ProfilePictureUrl: FirstNonEmpty(
                 profile.ThreadsProfilePictureUrl,
                 metadataProfile?.ProfilePictureUrl,
@@ -130,16 +157,23 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         }
 
         var profile = result.Value;
+        var pageProfilePictureUrl = !string.IsNullOrWhiteSpace(profile.PageId)
+            ? $"https://graph.facebook.com/v24.0/{profile.PageId}/picture?type=large"
+            : null;
+
         return Result.Success(new SocialMediaUserProfile(
-            UserId: profile.PageId ?? profile.Id,
+            UserId: profile.Id,
             Username: null,
-            DisplayName: profile.Name ?? profile.PageName,
+            DisplayName: profile.Name,
             ProfilePictureUrl: profile.ProfilePictureUrl,
             Bio: null,
             FollowerCount: profile.PageFollowerCount,
             FollowingCount: null,
             PostCount: profile.PagePostCount,
-            PageLikeCount: profile.PageLikeCount));
+            PageLikeCount: profile.PageLikeCount,
+            PageId: profile.PageId,
+            PageName: profile.PageName,
+            PageProfilePictureUrl: pageProfilePictureUrl));
     }
 
     private async Task<Result<SocialMediaUserProfile>> GetInstagramProfileAsync(
@@ -218,26 +252,24 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
     {
         var root = metadata.RootElement;
 
-        var userId = root.TryGetProperty("page_id", out var pageIdElement)
-            ? pageIdElement.GetString()
-            : root.TryGetProperty("id", out var idElement) ? idElement.GetString() : null;
-        var displayName = root.TryGetProperty("name", out var nameElement)
-            ? nameElement.GetString()
-            : root.TryGetProperty("page_name", out var pageNameElement) ? pageNameElement.GetString() : null;
-        var profilePictureUrl = root.TryGetProperty("profile_picture_url", out var pictureElement)
-            ? pictureElement.GetString()
+        var pageId = GetString(root, "page_id");
+        var pageProfilePictureUrl = !string.IsNullOrWhiteSpace(pageId)
+            ? $"https://graph.facebook.com/v24.0/{pageId}/picture?type=large"
             : null;
 
         return Result.Success(new SocialMediaUserProfile(
-            UserId: userId,
+            UserId: GetString(root, "id"),
             Username: null,
-            DisplayName: displayName,
-            ProfilePictureUrl: profilePictureUrl,
+            DisplayName: GetString(root, "name"),
+            ProfilePictureUrl: GetString(root, "profile_picture_url"),
             Bio: null,
             FollowerCount: TryGetIntValue(root, "page_followers_count"),
             FollowingCount: null,
             PostCount: TryGetIntValue(root, "page_post_count"),
-            PageLikeCount: TryGetIntValue(root, "page_fan_count")));
+            PageLikeCount: TryGetIntValue(root, "page_fan_count"),
+            PageId: pageId,
+            PageName: GetString(root, "page_name"),
+            PageProfilePictureUrl: pageProfilePictureUrl));
     }
 
     private static Result<SocialMediaUserProfile> GetThreadsProfileFromMetadata(JsonDocument metadata)
@@ -247,7 +279,7 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         return Result.Success(new SocialMediaUserProfile(
             UserId: GetString(root, "user_id") ?? GetString(root, "id"),
             Username: GetString(root, "username"),
-            DisplayName: GetString(root, "name"),
+            DisplayName: GetString(root, "name") ?? GetString(root, "username"),
             ProfilePictureUrl: GetString(root, "threads_profile_picture_url") ?? GetString(root, "profile_picture_url"),
             Bio: GetString(root, "threads_biography") ?? GetString(root, "biography"),
             FollowerCount: TryGetIntValue(root, "followers_count"),

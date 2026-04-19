@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Abstractions.Threads;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 
@@ -23,6 +24,7 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
     private readonly string _scopes;
     private readonly string _authorizationBaseUrl;
     private readonly HttpClient _httpClient;
+    private readonly ILogger<ThreadsOAuthService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -31,8 +33,9 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
-    public ThreadsOAuthService(IConfiguration configuration, IHttpClientFactory httpClientFactory)
+    public ThreadsOAuthService(IConfiguration configuration, IHttpClientFactory httpClientFactory, ILogger<ThreadsOAuthService> logger)
     {
+        _logger = logger;
         _clientId = configuration["Threads:AppId"]
                      ?? throw new InvalidOperationException("Threads:AppId is not configured");
         _clientSecret = configuration["Threads:AppSecret"]
@@ -133,12 +136,20 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         CancellationToken cancellationToken)
     {
         const string baseUrl = "https://graph.threads.net/me";
-        var url = $"{baseUrl}?fields=id,username,name,threads_profile_picture_url,threads_biography,followers_count,follows_count,media_count&access_token={Uri.EscapeDataString(accessToken)}";
+
+        // Fetch basic profile fields first (these don't require threads_manage_insights)
+        var basicFields = "id,username,name,threads_profile_picture_url,threads_biography";
+        var basicUrl = $"{baseUrl}?fields={basicFields}&access_token={Uri.EscapeDataString(accessToken)}";
+
+        ThreadsApiProfileResponse? profile;
 
         try
         {
-            var response = await _httpClient.GetAsync(url, cancellationToken);
+            var response = await _httpClient.GetAsync(basicUrl, cancellationToken);
             var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            _logger.LogInformation("Threads basic profile API response: Status={StatusCode}, Body={Body}",
+                response.StatusCode, responseBody);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -147,19 +158,7 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
                     new Error("Threads.ProfileError", error?.ErrorMessage ?? $"Failed to fetch profile: {response.StatusCode}"));
             }
 
-            var profile = JsonSerializer.Deserialize<ThreadsApiProfileResponse>(responseBody, JsonOptions);
-
-            return Result.Success(new ThreadsUserProfile
-            {
-                Id = profile?.Id,
-                Username = profile?.Username,
-                Name = profile?.Name,
-                ThreadsProfilePictureUrl = profile?.ThreadsProfilePictureUrl,
-                ThreadsBiography = profile?.ThreadsBiography,
-                FollowersCount = profile?.FollowersCount,
-                FollowsCount = profile?.FollowsCount,
-                MediaCount = profile?.MediaCount
-            });
+            profile = JsonSerializer.Deserialize<ThreadsApiProfileResponse>(responseBody, JsonOptions);
         }
         catch (HttpRequestException ex)
         {
@@ -171,6 +170,47 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
             return Result.Failure<ThreadsUserProfile>(
                 new Error("Threads.ParseError", $"JSON parse error: {ex.Message}"));
         }
+
+        // Try fetching insight fields separately (requires threads_manage_insights scope)
+        int? followersCount = null;
+        int? followsCount = null;
+        int? mediaCount = null;
+
+        try
+        {
+            var insightFields = "id,followers_count,follows_count,media_count";
+            var insightUrl = $"{baseUrl}?fields={insightFields}&access_token={Uri.EscapeDataString(accessToken)}";
+            var insightResponse = await _httpClient.GetAsync(insightUrl, cancellationToken);
+            var insightBody = await insightResponse.Content.ReadAsStringAsync(cancellationToken);
+
+            if (insightResponse.IsSuccessStatusCode)
+            {
+                var insightProfile = JsonSerializer.Deserialize<ThreadsApiProfileResponse>(insightBody, JsonOptions);
+                followersCount = insightProfile?.FollowersCount;
+                followsCount = insightProfile?.FollowsCount;
+                mediaCount = insightProfile?.MediaCount;
+            }
+            else
+            {
+                _logger.LogWarning("Threads insight fields fetch failed (non-critical): {Body}", insightBody);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Threads insight fields fetch failed (non-critical)");
+        }
+
+        return Result.Success(new ThreadsUserProfile
+        {
+            Id = profile?.Id,
+            Username = profile?.Username,
+            Name = profile?.Name,
+            ThreadsProfilePictureUrl = profile?.ThreadsProfilePictureUrl,
+            ThreadsBiography = profile?.ThreadsBiography,
+            FollowersCount = followersCount ?? profile?.FollowersCount,
+            FollowsCount = followsCount ?? profile?.FollowsCount,
+            MediaCount = mediaCount ?? profile?.MediaCount
+        });
     }
 
     private async Task<Result<ThreadsTokenResponse>> SendTokenRequestAsync(

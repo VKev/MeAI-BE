@@ -29,9 +29,9 @@ public sealed class SubscriptionSeeder
 
         var seeds = new[]
         {
-            new { Name = "Subscription 10000", Coin = 10000m, Limit = 3 },
-            new { Name = "Subscription 15000", Coin = 15000m, Limit = 5 },
-            new { Name = "Subscription 20000", Coin = 20000m, Limit = 10 }
+            new { Name = "Subscription 10000", Coin = 10000m, SocialAccounts = 8, ContentRate = 5, MaxPages = 10 },
+            new { Name = "Subscription 15000", Coin = 15000m, SocialAccounts = 15, ContentRate = 10, MaxPages = 20 },
+            new { Name = "Subscription 20000", Coin = 20000m, SocialAccounts = 30, ContentRate = 20, MaxPages = 50 }
         };
 
         var toAdd = new List<Subscription>();
@@ -51,9 +51,10 @@ public sealed class SubscriptionSeeder
                 MeAiCoin = seed.Coin,
                 Limits = new SubscriptionLimits
                 {
-                    NumberOfSocialAccounts = seed.Limit,
-                    RateLimitForContentCreation = seed.Limit,
-                    NumberOfWorkspaces = seed.Limit
+                    NumberOfSocialAccounts = seed.SocialAccounts,
+                    RateLimitForContentCreation = seed.ContentRate,
+                    NumberOfWorkspaces = null,
+                    MaxPagesPerSocialAccount = seed.MaxPages
                 },
                 CreatedAt = now,
                 UpdatedAt = now
