@@ -53,6 +53,14 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
                 imageTask.Id,
                 message.ResultUrls?.Count ?? 0);
 
+            // Attach results to chat BEFORE publishing notification
+            // so the FE refetch gets the updated data immediately
+            await TryAttachChatResultsAsync(
+                imageTask.UserId,
+                message.CorrelationId,
+                message.ResultUrls,
+                context.CancellationToken);
+
             await context.Publish(
                 NotificationRequestedEventFactory.CreateForUser(
                     imageTask.UserId,
@@ -69,12 +77,6 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
                     },
                     createdAt: message.CompletedAt,
                     source: NotificationSourceConstants.Creator),
-                context.CancellationToken);
-
-            await TryAttachChatResultsAsync(
-                imageTask.UserId,
-                message.CorrelationId,
-                message.ResultUrls,
                 context.CancellationToken);
         }
         else

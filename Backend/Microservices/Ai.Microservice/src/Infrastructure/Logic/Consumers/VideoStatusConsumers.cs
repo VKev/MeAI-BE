@@ -65,6 +65,10 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
                 }
             }
 
+            // Attach results to chat BEFORE publishing notification
+            // so the FE refetch gets the updated data immediately
+            await TryAttachChatResultsAsync(videoTask.UserId, message.CorrelationId, message.ResultUrls, context.CancellationToken);
+
             await context.Publish(
                 NotificationRequestedEventFactory.CreateForUser(
                     videoTask.UserId,
@@ -83,8 +87,6 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
                     createdAt: message.CompletedAt,
                     source: NotificationSourceConstants.Creator),
                 context.CancellationToken);
-
-            await TryAttachChatResultsAsync(videoTask.UserId, message.CorrelationId, message.ResultUrls, context.CancellationToken);
         }
         else
         {
