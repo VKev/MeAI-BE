@@ -9,6 +9,8 @@ using Application.Follows.Queries;
 using Application.Posts.Commands;
 using Application.Posts.Models;
 using Application.Posts.Queries;
+using Application.Profiles.Models;
+using Application.Profiles.Queries;
 using Application.Reports.Commands;
 using Application.Reports.Models;
 using Application.Reports.Queries;
@@ -29,6 +31,45 @@ public sealed class FeedController : ApiController
     public FeedController(IMediator mediator)
         : base(mediator)
     {
+    }
+
+    [HttpGet("profiles/{username}")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(Result<PublicProfileResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetPublicProfileByUsername(string username, CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetPublicProfileByUsernameQuery(username), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("profiles/{username}/posts")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(Result<IReadOnlyList<PostResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetPostsByUsername(
+        string username,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        Guid? requestingUserId = TryGetUserId(out var userId) ? userId : null;
+
+        var result = await _mediator.Send(
+            new GetPostsByUsernameQuery(username, cursorCreatedAt, cursorId, limit, requestingUserId),
+            cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
     }
 
     [HttpPost("posts")]
@@ -81,17 +122,14 @@ public sealed class FeedController : ApiController
     }
 
     [HttpGet("posts/{id:guid}")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(Result<PostResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetPostById(Guid id, CancellationToken cancellationToken)
     {
-        if (!TryGetUserId(out var userId))
-        {
-            return Unauthorized(new MessageResponse("Unauthorized"));
-        }
+        Guid? requestingUserId = TryGetUserId(out var userId) ? userId : null;
 
-        var result = await _mediator.Send(new GetPostByIdQuery(id, userId), cancellationToken);
+        var result = await _mediator.Send(new GetPostByIdQuery(id, requestingUserId), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);
@@ -181,8 +219,8 @@ public sealed class FeedController : ApiController
     }
 
     [HttpGet("posts/{id:guid}/comments")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(Result<IReadOnlyList<CommentResponse>>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetComments(
         Guid id,
@@ -191,13 +229,10 @@ public sealed class FeedController : ApiController
         [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        if (!TryGetUserId(out _))
-        {
-            return Unauthorized(new MessageResponse("Unauthorized"));
-        }
+        Guid? requestingUserId = TryGetUserId(out var userId) ? userId : null;
 
         var result = await _mediator.Send(
-            new GetCommentsByPostIdQuery(id, cursorCreatedAt, cursorId, limit),
+            new GetCommentsByPostIdQuery(id, cursorCreatedAt, cursorId, limit, requestingUserId),
             cancellationToken);
         if (result.IsFailure)
         {
@@ -208,8 +243,8 @@ public sealed class FeedController : ApiController
     }
 
     [HttpGet("comments/{id:guid}/replies")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(Result<IReadOnlyList<CommentResponse>>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetCommentReplies(
         Guid id,
@@ -218,14 +253,31 @@ public sealed class FeedController : ApiController
         [FromQuery] int? limit,
         CancellationToken cancellationToken)
     {
-        if (!TryGetUserId(out _))
+        Guid? requestingUserId = TryGetUserId(out var userId) ? userId : null;
+
+        var result = await _mediator.Send(
+            new GetCommentRepliesQuery(id, cursorCreatedAt, cursorId, limit, requestingUserId),
+            cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpDelete("comments/{id:guid}")]
+    [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DeleteComment(Guid id, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(
-            new GetCommentRepliesQuery(id, cursorCreatedAt, cursorId, limit),
-            cancellationToken);
+        var result = await _mediator.Send(new DeleteCommentCommand(userId, id), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);
@@ -362,14 +414,40 @@ public sealed class FeedController : ApiController
     [ProducesResponseType(typeof(Result<IReadOnlyList<ReportResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetAdminReports(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAdminReports(
+        [FromQuery] string? status,
+        [FromQuery] string? targetType,
+        CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out _))
         {
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new GetAdminReportsQuery(), cancellationToken);
+        var result = await _mediator.Send(new GetAdminReportsQuery(status, targetType), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPatch("admin/reports/{id:guid}")]
+    [Authorize("ADMIN", "Admin")]
+    [ProducesResponseType(typeof(Result<ReportResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ReviewReport(Guid id, [FromBody] ReviewReportRequest request, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var adminUserId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new ReviewReportCommand(adminUserId, id, request.Status, request.Action, request.ResolutionNote),
+            cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);
@@ -392,3 +470,5 @@ public sealed record CreateCommentRequest(Guid PostId, string Content);
 public sealed record ReplyToCommentRequest(string Content);
 
 public sealed record CreateReportRequest(string TargetType, Guid TargetId, string Reason);
+
+public sealed record ReviewReportRequest(string Status, string? Action, string? ResolutionNote);
