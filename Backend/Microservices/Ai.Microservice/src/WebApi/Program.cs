@@ -7,6 +7,8 @@ using Serilog;
 using SharedLibrary.Configs;
 using WebApi.OpenApi;
 using WebApi.Setups;
+using WebApi.Grpc;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
 
@@ -19,9 +21,22 @@ if (!string.IsNullOrWhiteSpace(solutionDirectory))
 var builder = WebApplication.CreateBuilder(args);
 var shouldAutoApplyMigrations = builder.ConfigureAutoMigrations();
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(5001, listenOptions =>
+    {
+        listenOptions.Protocols = HttpProtocols.Http1;
+    });
+    options.ListenAnyIP(5005, listenOptions =>
+    {
+        listenOptions.Protocols = HttpProtocols.Http2;
+    });
+});
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddAuthorization();
+builder.Services.AddGrpc();
 builder.Services.AddOpenApi(options =>
 {
     options.AddOperationTransformer(GeminiOpenApiTransformers.TransformAsync);
@@ -63,8 +78,14 @@ app.MapScalarApiReference("docs", opts =>
     opts.WithTitle("Ai API");
 });
 
+app.MapGrpcService<AiFeedPostGrpcService>();
 app.MapControllers();
 
 app.LogStartupInfo(builder.Configuration);
 
 app.Run();
+
+public partial class Program
+{
+}
+

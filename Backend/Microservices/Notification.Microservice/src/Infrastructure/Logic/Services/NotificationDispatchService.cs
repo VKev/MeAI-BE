@@ -62,6 +62,7 @@ public sealed class NotificationDispatchService
         var notification = new Notification
         {
             Id = notificationId,
+            Source = message.Source,
             Type = message.Type,
             Title = message.Title,
             Message = message.Message,
@@ -101,6 +102,7 @@ public sealed class NotificationDispatchService
                 notification.Id,
                 userNotification.Id,
                 userNotification.UserId,
+                notification.Source,
                 notification.Type,
                 notification.Title,
                 notification.Message,

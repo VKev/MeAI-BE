@@ -4,6 +4,7 @@ public sealed record NotificationDeliveryModel(
     Guid NotificationId,
     Guid UserNotificationId,
     Guid UserId,
+    string Source,
     string Type,
     string Title,
     string Message,

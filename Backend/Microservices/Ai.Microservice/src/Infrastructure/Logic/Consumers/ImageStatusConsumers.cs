@@ -67,7 +67,8 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
                         imageTask.Id,
                         imageTask.CompletedAt
                     },
-                    createdAt: message.CompletedAt),
+                    createdAt: message.CompletedAt,
+                    source: NotificationSourceConstants.Creator),
                 context.CancellationToken);
 
             await TryAttachChatResultsAsync(
@@ -223,7 +224,8 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
                         imageTask.Id,
                         imageTask.CompletedAt
                     },
-                    createdAt: message.FailedAt),
+                    createdAt: message.FailedAt,
+                    source: NotificationSourceConstants.Creator),
                 context.CancellationToken);
         }
         else

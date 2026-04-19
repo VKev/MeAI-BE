@@ -4,6 +4,8 @@ public sealed class Notification
 {
     public Guid Id { get; set; }
 
+    public string Source { get; set; } = null!;
+
     public string Type { get; set; } = null!;
 
     public string Title { get; set; } = null!;

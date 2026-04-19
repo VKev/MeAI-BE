@@ -6,7 +6,7 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Notifications.Queries;
 
-public sealed record GetUserNotificationsQuery(Guid UserId, bool OnlyUnread, int Limit)
+public sealed record GetUserNotificationsQuery(Guid UserId, bool OnlyUnread, int Limit, string? Source)
     : IQuery<IReadOnlyList<NotificationDeliveryModel>>;
 
 public sealed class GetUserNotificationsQueryHandler
@@ -27,6 +27,7 @@ public sealed class GetUserNotificationsQueryHandler
             request.UserId,
             request.OnlyUnread,
             request.Limit,
+            request.Source,
             cancellationToken);
 
         var response = userNotifications
@@ -42,6 +43,7 @@ public sealed class GetUserNotificationsQueryHandler
             userNotification.NotificationId,
             userNotification.Id,
             userNotification.UserId,
+            userNotification.Notification.Source,
             userNotification.Notification.Type,
             userNotification.Notification.Title,
             userNotification.Notification.Message,

@@ -61,6 +61,7 @@ public sealed class UserNotificationRepository : IUserNotificationRepository
         Guid userId,
         bool onlyUnread,
         int limit,
+        string? source,
         CancellationToken cancellationToken)
     {
         var query = _dbSet.AsNoTracking()
@@ -70,6 +71,11 @@ public sealed class UserNotificationRepository : IUserNotificationRepository
         if (onlyUnread)
         {
             query = query.Where(userNotification => !userNotification.IsRead);
+        }
+
+        if (!string.IsNullOrWhiteSpace(source))
+        {
+            query = query.Where(userNotification => userNotification.Notification.Source == source);
         }
 
         return await query

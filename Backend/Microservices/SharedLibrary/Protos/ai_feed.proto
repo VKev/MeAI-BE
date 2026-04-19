@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+option csharp_namespace = "SharedLibrary.Grpc.AiFeed";
+
+package aifeed;
+
+service AiFeedPostService {
+  rpc CreateMirrorPost (CreateMirrorPostRequest) returns (CreateMirrorPostResponse);
+}
+
+message AiFeedPostContent {
+  string content = 1;
+  string hashtag_text = 2;
+  repeated string resource_ids = 3;
+  string post_type = 4;
+}
+
+message CreateMirrorPostRequest {
+  string user_id = 1;
+  string workspace_id = 2;
+  string social_media_id = 3;
+  string title = 4;
+  AiFeedPostContent content = 5;
+  string status = 6;
+}
+
+message CreateMirrorPostResponse {
+  string post_id = 1;
+  string created_at = 2;
+}

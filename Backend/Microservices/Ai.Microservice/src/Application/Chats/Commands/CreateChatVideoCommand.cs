@@ -158,7 +158,8 @@ public sealed class CreateChatVideoCommandHandler
                     request.Watermark
                 },
                 request.UserId,
-                message.CreatedAt),
+                message.CreatedAt,
+                NotificationSourceConstants.Creator),
             cancellationToken);
 
         return Result.Success(new ChatVideoResponse(chat.Id, correlationId));
