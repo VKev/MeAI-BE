@@ -9,6 +9,10 @@ public sealed record ReportResponse(
     Guid TargetId,
     string Reason,
     string Status,
+    Guid? ReviewedByAdminId,
+    DateTime? ReviewedAt,
+    string? ResolutionNote,
+    string? ActionType,
     DateTime? CreatedAt,
     DateTime? UpdatedAt);
 
@@ -23,6 +27,10 @@ internal static class ReportResponseMapping
             report.TargetId,
             report.Reason,
             report.Status,
+            report.ReviewedByAdminId,
+            report.ReviewedAt,
+            report.ResolutionNote,
+            report.ActionType,
             report.CreatedAt,
             report.UpdatedAt);
     }

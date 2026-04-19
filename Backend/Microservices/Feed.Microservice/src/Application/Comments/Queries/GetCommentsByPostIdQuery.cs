@@ -12,7 +12,8 @@ public sealed record GetCommentsByPostIdQuery(
     Guid PostId,
     DateTime? CursorCreatedAt,
     Guid? CursorId,
-    int? Limit) : IQuery<IReadOnlyList<CommentResponse>>;
+    int? Limit,
+    Guid? RequestingUserId) : IQuery<IReadOnlyList<CommentResponse>>;
 
 public sealed class GetCommentsByPostIdQueryHandler : IQueryHandler<GetCommentsByPostIdQuery, IReadOnlyList<CommentResponse>>
 {
@@ -27,12 +28,12 @@ public sealed class GetCommentsByPostIdQueryHandler : IQueryHandler<GetCommentsB
     {
         var pagination = FeedPaginationSupport.Normalize(request.CursorCreatedAt, request.CursorId, request.Limit);
 
-        var postExists = await _unitOfWork.Repository<Post>()
+        var post = await _unitOfWork.Repository<Post>()
             .GetAll()
             .AsNoTracking()
-            .AnyAsync(item => item.Id == request.PostId && !item.IsDeleted && item.DeletedAt == null, cancellationToken);
+            .FirstOrDefaultAsync(item => item.Id == request.PostId && !item.IsDeleted && item.DeletedAt == null, cancellationToken);
 
-        if (!postExists)
+        if (post is null)
         {
             return Result.Failure<IReadOnlyList<CommentResponse>>(FeedErrors.PostNotFound);
         }
@@ -61,8 +62,12 @@ public sealed class GetCommentsByPostIdQueryHandler : IQueryHandler<GetCommentsB
             .Take(pagination.Limit)
             .ToListAsync(cancellationToken);
 
+        bool? canDelete = request.RequestingUserId.HasValue
+            ? request.RequestingUserId.Value == post.UserId
+            : null;
+
         var response = comments
-            .Select(CommentResponseMapping.ToResponse)
+            .Select(comment => CommentResponseMapping.ToResponse(comment, canDelete))
             .ToList();
 
         return Result.Success<IReadOnlyList<CommentResponse>>(response);

@@ -87,6 +87,6 @@ public sealed class ReplyToCommentCommandHandler : ICommandHandler<ReplyToCommen
             FeedPostSupport.BuildPreview(content),
             cancellationToken);
 
-        return Result.Success(CommentResponseMapping.ToResponse(reply));
+        return Result.Success(CommentResponseMapping.ToResponse(reply, post.UserId == request.UserId));
     }
 }

@@ -8,18 +8,21 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Reports.Queries;
 
-public sealed record GetAdminReportsQuery(string? Status, string? TargetType) : IQuery<IReadOnlyList<ReportResponse>>;
+public sealed record GetMyReportsQuery(
+    Guid ReporterId,
+    string? Status,
+    string? TargetType) : IQuery<IReadOnlyList<ReportResponse>>;
 
-public sealed class GetAdminReportsQueryHandler : IQueryHandler<GetAdminReportsQuery, IReadOnlyList<ReportResponse>>
+public sealed class GetMyReportsQueryHandler : IQueryHandler<GetMyReportsQuery, IReadOnlyList<ReportResponse>>
 {
     private readonly IUnitOfWork _unitOfWork;
 
-    public GetAdminReportsQueryHandler(IUnitOfWork unitOfWork)
+    public GetMyReportsQueryHandler(IUnitOfWork unitOfWork)
     {
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<IReadOnlyList<ReportResponse>>> Handle(GetAdminReportsQuery request, CancellationToken cancellationToken)
+    public async Task<Result<IReadOnlyList<ReportResponse>>> Handle(GetMyReportsQuery request, CancellationToken cancellationToken)
     {
         var normalizedStatus = request.Status is null ? null : FeedModerationSupport.NormalizeStatus(request.Status);
         if (request.Status is not null && normalizedStatus is null)
@@ -35,7 +38,8 @@ public sealed class GetAdminReportsQueryHandler : IQueryHandler<GetAdminReportsQ
 
         var query = _unitOfWork.Repository<Report>()
             .GetAll()
-            .AsNoTracking();
+            .AsNoTracking()
+            .Where(item => item.ReporterId == request.ReporterId);
 
         if (normalizedStatus is not null)
         {
@@ -52,7 +56,6 @@ public sealed class GetAdminReportsQueryHandler : IQueryHandler<GetAdminReportsQ
             .ThenByDescending(item => item.Id)
             .ToListAsync(cancellationToken);
 
-        var response = reports.Select(ReportResponseMapping.ToResponse).ToList();
-        return Result.Success<IReadOnlyList<ReportResponse>>(response);
+        return Result.Success<IReadOnlyList<ReportResponse>>(reports.Select(ReportResponseMapping.ToResponse).ToList());
     }
 }

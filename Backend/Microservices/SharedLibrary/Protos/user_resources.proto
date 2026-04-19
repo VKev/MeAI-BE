@@ -6,6 +6,8 @@ package user.resources;
 
 service UserResourceService {
   rpc GetPresignedResources (GetPresignedResourcesRequest) returns (GetPresignedResourcesResponse);
+  rpc GetPublicResources (GetPublicResourcesRequest) returns (GetPresignedResourcesResponse);
+  rpc GetPublicUserProfileByUsername (GetPublicUserProfileByUsernameRequest) returns (GetPublicUserProfileByUsernameResponse);
   rpc CreateResourcesFromUrls (CreateResourcesFromUrlsRequest) returns (CreateResourcesFromUrlsResponse);
   rpc GetActiveConfig (GetActiveConfigRequest) returns (GetActiveConfigResponse);
 }
@@ -23,6 +25,10 @@ message GetPresignedResourcesRequest {
   repeated string resource_ids = 2;
 }
 
+message GetPublicResourcesRequest {
+  repeated string resource_ids = 1;
+}
+
 message PresignedResource {
   string resource_id = 1;
   string presigned_url = 2;
@@ -32,6 +38,17 @@ message PresignedResource {
 
 message GetPresignedResourcesResponse {
   repeated PresignedResource resources = 1;
+}
+
+message GetPublicUserProfileByUsernameRequest {
+  string username = 1;
+}
+
+message GetPublicUserProfileByUsernameResponse {
+  string user_id = 1;
+  string username = 2;
+  string full_name = 3;
+  string avatar_url = 4;
 }
 
 message CreateResourcesFromUrlsRequest {

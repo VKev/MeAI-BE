@@ -96,7 +96,6 @@ internal static partial class FeedPostSupport
 
     public static async Task<IReadOnlyDictionary<Guid, IReadOnlyList<UserResourcePresignResult>>> LoadPresignedMediaByPostIdsAsync(
         IUserResourceService userResourceService,
-        Guid requesterUserId,
         IReadOnlyCollection<Post> posts,
         CancellationToken cancellationToken)
     {
@@ -116,7 +115,7 @@ internal static partial class FeedPostSupport
             return posts.ToDictionary(post => post.Id, _ => (IReadOnlyList<UserResourcePresignResult>)Array.Empty<UserResourcePresignResult>());
         }
 
-        var presignResult = await userResourceService.GetPresignedResourcesAsync(requesterUserId, resourceIds, cancellationToken);
+        var presignResult = await userResourceService.GetPublicPresignedResourcesAsync(resourceIds, cancellationToken);
         if (presignResult.IsFailure)
         {
             return posts.ToDictionary(post => post.Id, _ => (IReadOnlyList<UserResourcePresignResult>)Array.Empty<UserResourcePresignResult>());
@@ -134,10 +133,15 @@ internal static partial class FeedPostSupport
 
     public static async Task<IReadOnlySet<Guid>> LoadLikedPostIdsByUserAsync(
         IUnitOfWork unitOfWork,
-        Guid requesterUserId,
+        Guid? requesterUserId,
         IReadOnlyCollection<Guid> postIds,
         CancellationToken cancellationToken)
     {
+        if (!requesterUserId.HasValue || requesterUserId.Value == Guid.Empty)
+        {
+            return new HashSet<Guid>();
+        }
+
         if (postIds.Count == 0)
         {
             return new HashSet<Guid>();
@@ -148,7 +152,7 @@ internal static partial class FeedPostSupport
         var likedPostIds = await unitOfWork.Repository<PostLike>()
             .GetAll()
             .AsNoTracking()
-            .Where(item => item.UserId == requesterUserId && ids.Contains(item.PostId))
+            .Where(item => item.UserId == requesterUserId.Value && ids.Contains(item.PostId))
             .Select(item => item.PostId)
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -161,7 +165,7 @@ internal static partial class FeedPostSupport
     public static async Task<IReadOnlyList<PostResponse>> ToPostResponsesAsync(
         IUnitOfWork unitOfWork,
         IUserResourceService userResourceService,
-        Guid requesterUserId,
+        Guid? requesterUserId,
         IReadOnlyList<Post> posts,
         CancellationToken cancellationToken)
     {
@@ -182,7 +186,6 @@ internal static partial class FeedPostSupport
 
         var mediaByPostId = await LoadPresignedMediaByPostIdsAsync(
             userResourceService,
-            requesterUserId,
             posts,
             cancellationToken);
 
@@ -193,18 +196,25 @@ internal static partial class FeedPostSupport
             cancellationToken);
 
         return posts
-            .Select(post => PostResponseMapping.ToResponse(
-                post,
-                hashtags.TryGetValue(post.Id, out var hashtagValues) ? hashtagValues : Array.Empty<string>(),
-                mediaByPostId.TryGetValue(post.Id, out var mediaValues) ? mediaValues : Array.Empty<UserResourcePresignResult>(),
-                likedPostIds.Contains(post.Id)))
+            .Select(post =>
+            {
+                bool? isLikedByCurrentUser = requesterUserId.HasValue ? likedPostIds.Contains(post.Id) : null;
+                bool? canDelete = requesterUserId.HasValue ? post.UserId == requesterUserId.Value : null;
+
+                return PostResponseMapping.ToResponse(
+                    post,
+                    hashtags.TryGetValue(post.Id, out var hashtagValues) ? hashtagValues : Array.Empty<string>(),
+                    mediaByPostId.TryGetValue(post.Id, out var mediaValues) ? mediaValues : Array.Empty<UserResourcePresignResult>(),
+                    isLikedByCurrentUser,
+                    canDelete);
+            })
             .ToList();
     }
 
     public static async Task<PostResponse> ToPostResponseAsync(
         IUnitOfWork unitOfWork,
         IUserResourceService userResourceService,
-        Guid requesterUserId,
+        Guid? requesterUserId,
         Post post,
         CancellationToken cancellationToken)
     {

@@ -11,11 +11,12 @@ public sealed record CommentResponse(
     int LikesCount,
     int RepliesCount,
     DateTime? CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    bool? CanDelete);
 
 internal static class CommentResponseMapping
 {
-    public static CommentResponse ToResponse(Comment comment)
+    public static CommentResponse ToResponse(Comment comment, bool? canDelete = null)
     {
         return new CommentResponse(
             comment.Id,
@@ -26,6 +27,7 @@ internal static class CommentResponseMapping
             comment.LikesCount,
             comment.RepliesCount,
             comment.CreatedAt,
-            comment.UpdatedAt);
+            comment.UpdatedAt,
+            canDelete);
     }
 }
