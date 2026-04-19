@@ -83,17 +83,10 @@ public sealed class UserResourceGrpcService : IUserResourceService
                 },
                 cancellationToken: cancellationToken);
 
-            if (!Guid.TryParse(response.UserId, out var userId) || userId == Guid.Empty)
-            {
-                return Result.Failure<PublicUserProfileResult>(
-                    new Error("UserResources.InvalidUserId", "The public profile response contained an invalid user id."));
-            }
-
-            return Result.Success(new PublicUserProfileResult(
-                userId,
-                response.Username,
-                string.IsNullOrWhiteSpace(response.FullName) ? null : response.FullName,
-                string.IsNullOrWhiteSpace(response.AvatarUrl) ? null : response.AvatarUrl));
+            var profileResult = MapPublicUserProfile(response.UserId, response.Username, response.FullName, response.AvatarUrl);
+            return profileResult.IsFailure
+                ? Result.Failure<PublicUserProfileResult>(profileResult.Error)
+                : Result.Success(profileResult.Value);
         }
         catch (RpcException ex)
         {
@@ -102,6 +95,67 @@ public sealed class UserResourceGrpcService : IUserResourceService
                     ex.StatusCode == StatusCode.NotFound ? "UserResources.NotFound" : "UserResources.GrpcError",
                     ex.Status.Detail));
         }
+    }
+
+    public async Task<Result<IReadOnlyDictionary<Guid, PublicUserProfileResult>>> GetPublicUserProfilesByIdsAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken)
+    {
+        if (userIds.Count == 0)
+        {
+            return Result.Success<IReadOnlyDictionary<Guid, PublicUserProfileResult>>(
+                new Dictionary<Guid, PublicUserProfileResult>());
+        }
+
+        try
+        {
+            var response = await _client.GetPublicUserProfilesByIdsAsync(
+                new GetPublicUserProfilesByIdsRequest
+                {
+                    UserIds = { userIds.Where(id => id != Guid.Empty).Distinct().Select(id => id.ToString()) }
+                },
+                cancellationToken: cancellationToken);
+
+            var profiles = new Dictionary<Guid, PublicUserProfileResult>();
+            foreach (var profile in response.Profiles)
+            {
+                var profileResult = MapPublicUserProfile(profile.UserId, profile.Username, profile.FullName, profile.AvatarUrl);
+                if (profileResult.IsFailure)
+                {
+                    return Result.Failure<IReadOnlyDictionary<Guid, PublicUserProfileResult>>(profileResult.Error);
+                }
+
+                profiles[profileResult.Value.UserId] = profileResult.Value;
+            }
+
+            return Result.Success<IReadOnlyDictionary<Guid, PublicUserProfileResult>>(profiles);
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<IReadOnlyDictionary<Guid, PublicUserProfileResult>>(
+                new Error(
+                    ex.StatusCode == StatusCode.NotFound ? "UserResources.NotFound" : "UserResources.GrpcError",
+                    ex.Status.Detail));
+        }
+    }
+
+    private static Result<PublicUserProfileResult> MapPublicUserProfile(
+        string userIdValue,
+        string username,
+        string fullName,
+        string avatarUrl)
+    {
+        if (!Guid.TryParse(userIdValue, out var userId) || userId == Guid.Empty)
+        {
+            return Result.Failure<PublicUserProfileResult>(
+                new Error("UserResources.InvalidUserId", "The public profile response contained an invalid user id."));
+        }
+
+        return Result.Success(new PublicUserProfileResult(
+            userId,
+            username,
+            string.IsNullOrWhiteSpace(fullName) ? null : fullName,
+            string.IsNullOrWhiteSpace(avatarUrl) ? null : avatarUrl));
     }
 
     private static IReadOnlyList<UserResourcePresignResult> MapResources(GetPresignedResourcesResponse response)

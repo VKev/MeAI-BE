@@ -22,8 +22,6 @@ public sealed class Post
 
     public int CommentsCount { get; set; }
 
-    public int SharesCount { get; set; }
-
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 

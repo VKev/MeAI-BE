@@ -95,4 +95,45 @@ public sealed class UserResourceGrpcService : IUserResourceService
                 new Error("UserResources.GrpcError", ex.Status.Detail));
         }
     }
+
+    public async Task<Result<IReadOnlyDictionary<Guid, PublicUserProfileResult>>> GetPublicUserProfilesByIdsAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken)
+    {
+        if (userIds.Count == 0)
+        {
+            return Result.Success<IReadOnlyDictionary<Guid, PublicUserProfileResult>>(
+                new Dictionary<Guid, PublicUserProfileResult>());
+        }
+
+        var request = new GetPublicUserProfilesByIdsRequest();
+        request.UserIds.AddRange(userIds.Select(id => id.ToString()));
+
+        try
+        {
+            var response = await _client.GetPublicUserProfilesByIdsAsync(request, cancellationToken: cancellationToken);
+            var result = response.Profiles
+                .Select(profile => new
+                {
+                    IsValid = Guid.TryParse(profile.UserId, out var parsedId),
+                    ParsedId = parsedId,
+                    Profile = profile
+                })
+                .Where(item => item.IsValid)
+                .ToDictionary(
+                    item => item.ParsedId,
+                    item => new PublicUserProfileResult(
+                        item.ParsedId,
+                        item.Profile.Username,
+                        string.IsNullOrWhiteSpace(item.Profile.FullName) ? null : item.Profile.FullName,
+                        string.IsNullOrWhiteSpace(item.Profile.AvatarUrl) ? null : item.Profile.AvatarUrl));
+
+            return Result.Success<IReadOnlyDictionary<Guid, PublicUserProfileResult>>(result);
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<IReadOnlyDictionary<Guid, PublicUserProfileResult>>(
+                new Error("UserResources.GrpcError", ex.Status.Detail));
+        }
+    }
 }

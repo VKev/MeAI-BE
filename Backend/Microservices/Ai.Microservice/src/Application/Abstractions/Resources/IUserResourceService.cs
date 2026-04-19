@@ -15,6 +15,10 @@ public interface IUserResourceService
         string? status,
         string? resourceType,
         CancellationToken cancellationToken);
+
+    Task<Result<IReadOnlyDictionary<Guid, PublicUserProfileResult>>> GetPublicUserProfilesByIdsAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken);
 }
 
 public sealed record UserResourcePresignResult(
@@ -28,3 +32,9 @@ public sealed record UserResourceCreatedResult(
     string PresignedUrl,
     string? ContentType,
     string? ResourceType);
+
+public sealed record PublicUserProfileResult(
+    Guid UserId,
+    string Username,
+    string? FullName,
+    string? AvatarUrl);
