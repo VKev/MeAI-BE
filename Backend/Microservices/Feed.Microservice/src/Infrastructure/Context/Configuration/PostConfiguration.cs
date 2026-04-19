@@ -23,7 +23,6 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.Property(e => e.MediaType).HasColumnName("media_type");
         entity.Property(e => e.LikesCount).HasColumnName("likes_count");
         entity.Property(e => e.CommentsCount).HasColumnName("comments_count");
-        entity.Property(e => e.SharesCount).HasColumnName("shares_count");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");

@@ -112,13 +112,36 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
             throw new RpcException(new Status(StatusCode.NotFound, result.Error.Description));
         }
 
-        return new GetPublicUserProfileByUsernameResponse
+        return MapProfile(result.Value);
+    }
+
+    public override async Task<GetPublicUserProfilesByIdsResponse> GetPublicUserProfilesByIds(
+        GetPublicUserProfilesByIdsRequest request,
+        ServerCallContext context)
+    {
+        var userIds = new List<Guid>();
+        foreach (var userId in request.UserIds)
         {
-            UserId = result.Value.Id.ToString(),
-            Username = result.Value.Username,
-            FullName = result.Value.FullName ?? string.Empty,
-            AvatarUrl = result.Value.AvatarPresignedUrl ?? string.Empty
-        };
+            if (!Guid.TryParse(userId, out var parsedId))
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid userId."));
+            }
+
+            userIds.Add(parsedId);
+        }
+
+        var result = await _mediator.Send(
+            new GetPublicUserProfilesByIdsQuery(userIds),
+            context.CancellationToken);
+
+        if (result.IsFailure)
+        {
+            throw new RpcException(new Status(StatusCode.Internal, result.Error.Description));
+        }
+
+        var response = new GetPublicUserProfilesByIdsResponse();
+        response.Profiles.AddRange(result.Value.Select(MapPublicUserProfile));
+        return response;
     }
 
     public override async Task<CreateResourcesFromUrlsResponse> CreateResourcesFromUrls(
@@ -184,6 +207,28 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
             ChatModel = result.Value.ChatModel ?? string.Empty,
             MediaAspectRatio = result.Value.MediaAspectRatio ?? string.Empty,
             NumberOfVariances = result.Value.NumberOfVariances ?? 0
+        };
+    }
+
+    private static GetPublicUserProfileByUsernameResponse MapProfile(Application.Users.Models.PublicUserProfileResponse profile)
+    {
+        return new GetPublicUserProfileByUsernameResponse
+        {
+            UserId = profile.Id.ToString(),
+            Username = profile.Username,
+            FullName = profile.FullName ?? string.Empty,
+            AvatarUrl = profile.AvatarPresignedUrl ?? string.Empty
+        };
+    }
+
+    private static PublicUserProfile MapPublicUserProfile(Application.Users.Models.PublicUserProfileResponse profile)
+    {
+        return new PublicUserProfile
+        {
+            UserId = profile.Id.ToString(),
+            Username = profile.Username,
+            FullName = profile.FullName ?? string.Empty,
+            AvatarUrl = profile.AvatarPresignedUrl ?? string.Empty
         };
     }
 }

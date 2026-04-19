@@ -113,6 +113,16 @@ public sealed class GetPostBuilderByIdQueryTests
                 new UserResourcePresignResult(fourthResourceId, "https://cdn.example.com/4.jpg", "image/jpeg", "image")
             ]));
 
+        userResourceService
+            .Setup(service => service.GetPublicUserProfilesByIdsAsync(
+                It.Is<IReadOnlyCollection<Guid>>(ids => ids.Count == 1 && ids.Contains(userId)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success<IReadOnlyDictionary<Guid, PublicUserProfileResult>>(
+                new Dictionary<Guid, PublicUserProfileResult>
+                {
+                    [userId] = new(userId, "creator", null, "https://cdn.example.com/avatar.jpg")
+                }));
+
         postPublicationRepository
             .Setup(repository => repository.GetByPostIdsAsync(
                 It.IsAny<IReadOnlyList<Guid>>(),

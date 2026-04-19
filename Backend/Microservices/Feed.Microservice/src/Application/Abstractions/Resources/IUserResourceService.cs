@@ -16,6 +16,10 @@ public interface IUserResourceService
     Task<Result<PublicUserProfileResult>> GetPublicUserProfileByUsernameAsync(
         string username,
         CancellationToken cancellationToken);
+
+    Task<Result<IReadOnlyDictionary<Guid, PublicUserProfileResult>>> GetPublicUserProfilesByIdsAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken);
 }
 
 public sealed record UserResourcePresignResult(

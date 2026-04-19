@@ -20,6 +20,7 @@ public sealed record CreatePostCommand(
 
 public sealed class CreatePostCommandHandler : ICommandHandler<CreatePostCommand, PostResponse>
 {
+    private const string UnknownUsername = "unknown";
     private readonly IUnitOfWork _unitOfWork;
     private readonly IUserResourceService _userResourceService;
     private readonly IAiFeedPostService _aiFeedPostService;
@@ -81,7 +82,6 @@ public sealed class CreatePostCommandHandler : ICommandHandler<CreatePostCommand
             MediaType = normalizedMediaType ?? media?.ResourceType ?? media?.ContentType,
             LikesCount = 0,
             CommentsCount = 0,
-            SharesCount = 0,
             CreatedAt = now,
             UpdatedAt = now,
             IsDeleted = false
@@ -153,6 +153,7 @@ public sealed class CreatePostCommandHandler : ICommandHandler<CreatePostCommand
             FeedPostSupport.BuildPreview(normalizedContent),
             cancellationToken);
 
-        return Result.Success(PostResponseMapping.ToResponse(post, hashtags, resources));
+        var author = new PostAuthorResponse(request.UserId, UnknownUsername, null);
+        return Result.Success(PostResponseMapping.ToResponse(post, author, hashtags, resources));
     }
 }

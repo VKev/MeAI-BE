@@ -7,6 +7,8 @@ namespace Application.Posts;
 
 public sealed class PostResponseBuilder
 {
+    private const string UnknownUsername = "unknown";
+
     private readonly IUserResourceService _userResourceService;
     private readonly IPostPublicationRepository _postPublicationRepository;
 
@@ -43,6 +45,26 @@ public sealed class PostResponseBuilder
             }
         }
 
+        var authorIds = posts
+            .Select(post => post.UserId)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        var authorsById = authorIds.ToDictionary(id => id, CreateFallbackAuthor);
+        if (authorIds.Count > 0)
+        {
+            var authorsResult = await _userResourceService.GetPublicUserProfilesByIdsAsync(authorIds, cancellationToken);
+            if (authorsResult.IsSuccess)
+            {
+                authorsById = authorIds.ToDictionary(
+                    id => id,
+                    id => authorsResult.Value.TryGetValue(id, out var author)
+                        ? author
+                        : CreateFallbackAuthor(id));
+            }
+        }
+
         var publications = await _postPublicationRepository.GetByPostIdsAsync(
             posts.Select(post => post.Id).ToList(),
             cancellationToken);
@@ -52,7 +74,7 @@ public sealed class PostResponseBuilder
             .ToDictionary(group => group.Key, group => (IReadOnlyList<PostPublication>)group.ToList());
 
         return posts
-            .Select(post => Build(post, resourcesById, publicationsByPostId))
+            .Select(post => Build(post, resourcesById, publicationsByPostId, authorsById))
             .ToList();
     }
 
@@ -65,7 +87,8 @@ public sealed class PostResponseBuilder
     private static PostResponse Build(
         Post post,
         IReadOnlyDictionary<Guid, UserResourcePresignResult> resourcesById,
-        IReadOnlyDictionary<Guid, IReadOnlyList<PostPublication>> publicationsByPostId)
+        IReadOnlyDictionary<Guid, IReadOnlyList<PostPublication>> publicationsByPostId,
+        IReadOnlyDictionary<Guid, PublicUserProfileResult> authorsById)
     {
         var media = GetResourceIds(post)
             .Where(resourcesById.ContainsKey)
@@ -96,9 +119,15 @@ public sealed class PostResponseBuilder
                 .ToList()
             : new List<PostPublicationResponse>();
 
+        var author = authorsById.TryGetValue(post.UserId, out var authorProfile)
+            ? authorProfile
+            : CreateFallbackAuthor(post.UserId);
+
         return new PostResponse(
             Id: post.Id,
             UserId: post.UserId,
+            Username: author.Username,
+            AvatarUrl: author.AvatarUrl,
             WorkspaceId: post.WorkspaceId,
             SocialMediaId: post.SocialMediaId,
             Title: post.Title,
@@ -110,6 +139,11 @@ public sealed class PostResponseBuilder
             Publications: publications,
             CreatedAt: post.CreatedAt,
             UpdatedAt: post.UpdatedAt);
+    }
+
+    private static PublicUserProfileResult CreateFallbackAuthor(Guid userId)
+    {
+        return new PublicUserProfileResult(userId, UnknownUsername, null, null);
     }
 
     private static IReadOnlyList<Guid> GetResourceIds(Post post)
