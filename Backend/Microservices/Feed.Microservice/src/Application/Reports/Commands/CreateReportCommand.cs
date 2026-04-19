@@ -26,7 +26,7 @@ public sealed class CreateReportCommandHandler : ICommandHandler<CreateReportCom
 
     public async Task<Result<ReportResponse>> Handle(CreateReportCommand request, CancellationToken cancellationToken)
     {
-        var targetType = FeedPostSupport.NormalizeOptionalText(request.TargetType);
+        var targetType = FeedModerationSupport.NormalizeTargetType(request.TargetType);
         var reason = FeedPostSupport.NormalizeOptionalText(request.Reason);
 
         if (reason is null)
@@ -34,13 +34,12 @@ public sealed class CreateReportCommandHandler : ICommandHandler<CreateReportCom
             return Result.Failure<ReportResponse>(FeedErrors.InvalidReportReason());
         }
 
-        if (!string.Equals(targetType, "Post", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(targetType, "Comment", StringComparison.OrdinalIgnoreCase))
+        if (targetType is null)
         {
             return Result.Failure<ReportResponse>(FeedErrors.InvalidReportTarget);
         }
 
-        if (string.Equals(targetType, "Post", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(targetType, "Post", StringComparison.Ordinal))
         {
             var postExists = await _unitOfWork.Repository<Post>()
                 .GetAll()
@@ -68,10 +67,11 @@ public sealed class CreateReportCommandHandler : ICommandHandler<CreateReportCom
         {
             Id = Guid.CreateVersion7(),
             ReporterId = request.ReporterId,
-            TargetType = targetType!,
+            TargetType = targetType,
             TargetId = request.TargetId,
             Reason = reason,
-            Status = "Pending",
+            Status = FeedModerationSupport.PendingStatus,
+            ActionType = FeedModerationSupport.NoAction,
             CreatedAt = now,
             UpdatedAt = now
         };

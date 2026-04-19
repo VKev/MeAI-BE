@@ -14,7 +14,7 @@ public static class CorsSetup
 
         if (allowedCorsOrigins.Length == 0)
         {
-            allowedCorsOrigins = new[] { "http://localhost:5173" };
+            allowedCorsOrigins = new[] { "http://localhost:5173", "http://localhost:3000", "http://localhost:3030" };
         }
 
         builder.Services.AddCors(options =>

@@ -74,6 +74,6 @@ public sealed class CreateCommentCommandHandler : ICommandHandler<CreateCommentC
             FeedPostSupport.BuildPreview(content),
             cancellationToken);
 
-        return Result.Success(CommentResponseMapping.ToResponse(comment));
+        return Result.Success(CommentResponseMapping.ToResponse(comment, post.UserId == request.UserId));
     }
 }

@@ -28,6 +28,9 @@ services:
       Jwt__Audience: MicroservicesApp
       Jwt__ExpirationMinutes: 60
       AutoApply__Migrations: "true"
+      Cors__AllowedOrigins__0: http://localhost:5173
+      Cors__AllowedOrigins__1: http://localhost:3030
+      Cors__AllowedOrigins__2: http://localhost:2406
       Kie__ApiKey: your-kie-api-key
       Kie__CallbackUrl: http://api-gateway:8080/api/Ai/kie/callback
     depends_on:
@@ -81,6 +84,7 @@ services:
       Cors__AllowedOrigins__0: http://localhost:5173
       Cors__AllowedOrigins__1: https://your-frontend.example.com
       Cors__AllowedOrigins__2: http://localhost:2406
+      Cors__AllowedOrigins__3: http://localhost:3030
       Google__ClientId: your-google-client-id
       TikTok__ClientKey: your-tiktok-client-key
       TikTok__ClientSecret: your-tiktok-client-secret
@@ -131,6 +135,7 @@ services:
       Cors__AllowedOrigins__0: http://localhost:5173
       Cors__AllowedOrigins__1: https://your-frontend.example.com
       Cors__AllowedOrigins__2: http://localhost:2406
+      Cors__AllowedOrigins__3: http://localhost:3030
       AutoApply__Migrations: "true"
     depends_on:
       postgres:
@@ -174,6 +179,7 @@ services:
       Cors__AllowedOrigins__0: http://localhost:5173
       Cors__AllowedOrigins__1: https://your-frontend.example.com
       Cors__AllowedOrigins__2: http://localhost:2406
+      Cors__AllowedOrigins__3: http://localhost:3030
       UserService__GrpcUrl: http://user-microservice:5004
       AiService__GrpcUrl: http://ai-microservice:5005
       AutoApply__Migrations: "true"
@@ -199,6 +205,9 @@ services:
       ENABLE_DOCS_UI: true
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      Cors__AllowedOrigins__0: http://localhost:5173
+      Cors__AllowedOrigins__1: http://localhost:3030
+      Cors__AllowedOrigins__2: http://localhost:2406
       Services__User__Host: user-microservice
       Services__User__Port: 5002
       Services__Ai__Host: ai-microservice
@@ -213,6 +222,7 @@ services:
       Jwt__ExpirationMinutes: 60
     networks:
       - app-network
+
 
   rabbit-mq:
     image: rabbitmq:3-management

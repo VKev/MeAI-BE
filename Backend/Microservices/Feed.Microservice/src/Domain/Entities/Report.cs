@@ -16,7 +16,16 @@ public sealed class Report
 
     public string Reason { get; set; } = null!;
 
-    public string Status { get; set; } = "Pending"; // "Pending", "Reviewed", "Resolved"
+    public string Status { get; set; } = "Pending";
+
+    public Guid? ReviewedByAdminId { get; set; }
+
+    [Column(TypeName = "timestamp with time zone")]
+    public DateTime? ReviewedAt { get; set; }
+
+    public string? ResolutionNote { get; set; }
+
+    public string? ActionType { get; set; }
 
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }

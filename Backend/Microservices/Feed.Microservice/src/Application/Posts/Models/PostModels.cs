@@ -22,7 +22,8 @@ public sealed record PostResponse(
     IReadOnlyList<string> Hashtags,
     DateTime? CreatedAt,
     DateTime? UpdatedAt,
-    bool IsLikedByCurrentUser);
+    bool? IsLikedByCurrentUser,
+    bool? CanDelete);
 
 internal static class PostResponseMapping
 {
@@ -30,7 +31,8 @@ internal static class PostResponseMapping
         Post post,
         IReadOnlyList<string> hashtags,
         IReadOnlyList<UserResourcePresignResult> media,
-        bool isLikedByCurrentUser = false)
+        bool? isLikedByCurrentUser = null,
+        bool? canDelete = null)
     {
         var mediaResponses = media
             .Select(item => new PostMediaResponse(
@@ -55,6 +57,7 @@ internal static class PostResponseMapping
             hashtags,
             post.CreatedAt,
             post.UpdatedAt,
-            isLikedByCurrentUser);
+            isLikedByCurrentUser,
+            canDelete);
     }
 }

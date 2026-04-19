@@ -12,7 +12,8 @@ public sealed record GetCommentRepliesQuery(
     Guid CommentId,
     DateTime? CursorCreatedAt,
     Guid? CursorId,
-    int? Limit) : IQuery<IReadOnlyList<CommentResponse>>;
+    int? Limit,
+    Guid? RequestingUserId) : IQuery<IReadOnlyList<CommentResponse>>;
 
 public sealed class GetCommentRepliesQueryHandler : IQueryHandler<GetCommentRepliesQuery, IReadOnlyList<CommentResponse>>
 {
@@ -27,14 +28,24 @@ public sealed class GetCommentRepliesQueryHandler : IQueryHandler<GetCommentRepl
     {
         var pagination = FeedPaginationSupport.Normalize(request.CursorCreatedAt, request.CursorId, request.Limit);
 
-        var parentCommentExists = await _unitOfWork.Repository<Comment>()
+        var parentComment = await _unitOfWork.Repository<Comment>()
             .GetAll()
             .AsNoTracking()
-            .AnyAsync(item => item.Id == request.CommentId && !item.IsDeleted && item.DeletedAt == null, cancellationToken);
+            .FirstOrDefaultAsync(item => item.Id == request.CommentId && !item.IsDeleted && item.DeletedAt == null, cancellationToken);
 
-        if (!parentCommentExists)
+        if (parentComment is null)
         {
             return Result.Failure<IReadOnlyList<CommentResponse>>(FeedErrors.CommentNotFound);
+        }
+
+        var post = await _unitOfWork.Repository<Post>()
+            .GetAll()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == parentComment.PostId && !item.IsDeleted && item.DeletedAt == null, cancellationToken);
+
+        if (post is null)
+        {
+            return Result.Failure<IReadOnlyList<CommentResponse>>(FeedErrors.PostNotFound);
         }
 
         var query = _unitOfWork.Repository<Comment>()
@@ -60,8 +71,12 @@ public sealed class GetCommentRepliesQueryHandler : IQueryHandler<GetCommentRepl
             .Take(pagination.Limit)
             .ToListAsync(cancellationToken);
 
+        bool? canDelete = request.RequestingUserId.HasValue
+            ? request.RequestingUserId.Value == post.UserId
+            : null;
+
         var response = comments
-            .Select(CommentResponseMapping.ToResponse)
+            .Select(comment => CommentResponseMapping.ToResponse(comment, canDelete))
             .ToList();
 
         return Result.Success<IReadOnlyList<CommentResponse>>(response);

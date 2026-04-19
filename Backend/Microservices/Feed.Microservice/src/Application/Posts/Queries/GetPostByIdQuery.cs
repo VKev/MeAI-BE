@@ -9,7 +9,7 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Posts.Queries;
 
-public sealed record GetPostByIdQuery(Guid PostId, Guid RequestingUserId) : IQuery<PostResponse>;
+public sealed record GetPostByIdQuery(Guid PostId, Guid? RequestingUserId) : IQuery<PostResponse>;
 
 public sealed class GetPostByIdQueryHandler : IQueryHandler<GetPostByIdQuery, PostResponse>
 {

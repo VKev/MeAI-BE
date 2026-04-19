@@ -1,6 +1,7 @@
 using Application.Resources.Commands;
 using Application.Resources.Queries;
 using Application.Configs.Queries;
+using Application.Users.Queries;
 using Grpc.Core;
 using MediatR;
 using SharedLibrary.Grpc.UserResources;
@@ -55,6 +56,69 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
         }));
 
         return response;
+    }
+
+    public override async Task<GetPresignedResourcesResponse> GetPublicResources(
+        GetPublicResourcesRequest request,
+        ServerCallContext context)
+    {
+        var resourceIds = new List<Guid>();
+        foreach (var resourceId in request.ResourceIds)
+        {
+            if (!Guid.TryParse(resourceId, out var parsedId))
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid resourceId."));
+            }
+
+            resourceIds.Add(parsedId);
+        }
+
+        var result = await _mediator.Send(
+            new GetPublicResourcesQuery(resourceIds),
+            context.CancellationToken);
+
+        if (result.IsFailure)
+        {
+            throw new RpcException(new Status(StatusCode.NotFound, result.Error.Description));
+        }
+
+        var response = new GetPresignedResourcesResponse();
+        response.Resources.AddRange(result.Value.Select(resource => new PresignedResource
+        {
+            ResourceId = resource.Id.ToString(),
+            PresignedUrl = resource.PresignedUrl,
+            ContentType = resource.ContentType ?? string.Empty,
+            ResourceType = resource.ResourceType ?? string.Empty
+        }));
+
+        return response;
+    }
+
+    public override async Task<GetPublicUserProfileByUsernameResponse> GetPublicUserProfileByUsername(
+        GetPublicUserProfileByUsernameRequest request,
+        ServerCallContext context)
+    {
+        if (string.IsNullOrWhiteSpace(request.Username))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Username is required."));
+        }
+
+        var result = await _mediator.Send(
+            new GetPublicUserProfileByUsernameQuery(request.Username),
+            context.CancellationToken);
+
+        if (result.IsFailure)
+        {
+            throw new RpcException(new Status(StatusCode.NotFound, result.Error.Description));
+        }
+
+        return new GetPublicUserProfileByUsernameResponse
+        {
+            UserId = result.Value.Id.ToString(),
+            Username = result.Value.Username,
+            FullName = result.Value.FullName ?? string.Empty,
+            AvatarUrl = result.Value.AvatarPresignedUrl ?? string.Empty
+        };
     }
 
     public override async Task<CreateResourcesFromUrlsResponse> CreateResourcesFromUrls(
