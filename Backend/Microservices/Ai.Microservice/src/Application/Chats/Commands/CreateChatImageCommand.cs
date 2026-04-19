@@ -18,6 +18,7 @@ public sealed record CreateChatImageCommand(
     Guid ChatSessionId,
     string Prompt,
     IReadOnlyList<Guid> ResourceIds,
+    string? Model,
     string? AspectRatio,
     string? Resolution,
     string? OutputFormat,
@@ -96,6 +97,7 @@ public sealed class CreateChatImageCommandHandler
         }
 
         var activeConfig = await TryGetActiveConfigAsync(cancellationToken);
+        var model = ResolveModel(request.Model, activeConfig?.ChatModel, "google/nano-banana-pro");
         var aspectRatio = ResolveAspectRatio(request.AspectRatio, activeConfig?.MediaAspectRatio, "1:1");
         var resolution = string.IsNullOrWhiteSpace(request.Resolution) ? "1K" : request.Resolution.Trim();
         var outputFormat = string.IsNullOrWhiteSpace(request.OutputFormat) ? "png" : request.OutputFormat.Trim();
@@ -129,6 +131,7 @@ public sealed class CreateChatImageCommandHandler
             UserId = request.UserId,
             Prompt = chat.Prompt ?? string.Empty,
             ImageUrls = imageUrls,
+            Model = model,
             AspectRatio = aspectRatio,
             Resolution = resolution,
             OutputFormat = outputFormat,
@@ -185,6 +188,21 @@ public sealed class CreateChatImageCommandHandler
         if (configuredValue.GetValueOrDefault() > 0)
         {
             return configuredValue.Value;
+        }
+
+        return fallback;
+    }
+
+    private static string ResolveModel(string? requestedValue, string? configuredValue, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedValue))
+        {
+            return requestedValue.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(configuredValue))
+        {
+            return configuredValue.Trim();
         }
 
         return fallback;

@@ -21,6 +21,8 @@ public sealed class Subscription
     [Column(TypeName = "numeric(18,2)")]
     public decimal? MeAiCoin { get; set; }
 
+    public bool IsActive { get; set; } = true;
+
     public string? StripeProductId { get; set; }
 
     public string? StripePriceId { get; set; }

@@ -10,6 +10,8 @@ public class ImageGenerationStarted
 
     public List<string>? ImageUrls { get; set; }
 
+    public string? Model { get; set; }
+
     public string AspectRatio { get; set; } = "1:1";
 
     public string Resolution { get; set; } = "1K";
