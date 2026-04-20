@@ -117,8 +117,10 @@ Frontend không nên giả định backend trả custom envelope kiểu `{ succe
 | POST | `/api/Feed/comments` | Required | Tạo root comment cho post |
 | GET | `/api/Feed/posts/{id}/comments` | Anonymous | Lấy root comments của post với cursor pagination |
 | GET | `/api/Feed/comments/{id}/replies` | Anonymous | Lấy replies của một comment với cursor pagination |
+| POST | `/api/Feed/comments/{id}/like` | Required | Like comment |
+| DELETE | `/api/Feed/comments/{id}/like` | Required | Unlike comment |
 | POST | `/api/Feed/comments/{id}/reply` | Required | Tạo reply cho comment |
-| DELETE | `/api/Feed/comments/{id}` | Required | Xóa comment/thread của chính mình |
+| DELETE | `/api/Feed/comments/{id}` | Required | Xóa comment/thread của post owner |
 | POST | `/api/Feed/follow/{userId}` | Required | Follow một user |
 | DELETE | `/api/Feed/follow/{userId}` | Required | Unfollow một user |
 | GET | `/api/Feed/followers/{userId}` | Required | Lấy danh sách followers |
@@ -194,6 +196,16 @@ interface PostLikeResponse {
 }
 ```
 
+### `CommentLikeResponse`
+
+```ts
+interface CommentLikeResponse {
+  commentId: string;
+  likesCount: number;
+  isLikedByCurrentUser: boolean;
+}
+```
+
 ### `CommentResponse`
 
 ```ts
@@ -201,15 +213,24 @@ interface CommentResponse {
   id: string;
   postId: string;
   userId: string;
+  username: string;
+  avatarUrl: string | null;
   parentCommentId: string | null;
   content: string;
   likesCount: number;
   repliesCount: number;
   createdAt: string | null;
   updatedAt: string | null;
+  isLikedByCurrentUser: boolean | null;
   canDelete: boolean | null;
 }
 ```
+
+Lưu ý:
+
+- `username` và `avatarUrl` đã được hydrate sẵn từ User service.
+- Backend resolve profile theo batch distinct `userId` trong từng page comments/replies để tránh N+1 calls.
+- `isLikedByCurrentUser` có thể là `null` khi request anonymous.
 
 ### `FollowUserResponse`
 
@@ -708,6 +729,7 @@ Xóa mềm post của chính mình.
 ### Gợi ý frontend
 
 - đây là API tạo root comment
+- response đã có `username`, `avatarUrl`, `isLikedByCurrentUser` để append trực tiếp vào cache UI
 - sau success có thể prepend comment mới hoặc invalidate query comments của post
 - đồng thời có thể tăng `commentsCount` ở post card trong cache local
 
@@ -734,6 +756,7 @@ Chỉ lấy root comments của post.
 
 - chỉ dùng cho layer root comments
 - mỗi comment có thể có nút `View replies (repliesCount)`
+- response đã có sẵn `username`, `avatarUrl`, `isLikedByCurrentUser`, `canDelete` để render item comment trực tiếp
 - không nên cố build full nested tree chỉ từ endpoint này
 
 ---
@@ -759,11 +782,46 @@ Lấy replies của một comment cụ thể.
 
 - chỉ fetch khi user expand thread hoặc bấm “xem trả lời”
 - cache riêng theo `commentId`
+- response đã có sẵn `username`, `avatarUrl`, `isLikedByCurrentUser`, `canDelete`
 - có thể giữ cache khi collapse để mở lại nhanh hơn
 
 ---
 
-## 13) POST `/api/Feed/comments/{id}/reply`
+## 13) POST `/api/Feed/comments/{id}/like`
+
+### Mục đích
+
+Like một comment.
+
+### Response
+
+- `Result<CommentLikeResponse>`
+
+### Gợi ý frontend
+
+- cập nhật optimistic `likesCount` và `isLikedByCurrentUser` nếu UX cần mượt
+- nếu backend trả `Feed.Comment.Like.Exists`, nên đồng bộ lại state local thay vì cộng tiếp
+
+---
+
+## 14) DELETE `/api/Feed/comments/{id}/like`
+
+### Mục đích
+
+Unlike một comment.
+
+### Response
+
+- `Result<CommentLikeResponse>`
+
+### Gợi ý frontend
+
+- giảm `likesCount` và set `isLikedByCurrentUser = false` trong cache comment
+- nếu backend trả `Feed.Comment.Like.NotFound`, nên coi local state đang lệch và refetch nếu cần
+
+---
+
+## 15) POST `/api/Feed/comments/{id}/reply`
 
 ### Request body
 
@@ -787,20 +845,27 @@ Lấy replies của một comment cụ thể.
 
 ---
 
-## 14) DELETE `/api/Feed/comments/{id}`
+## 16) DELETE `/api/Feed/comments/{id}`
 
 ### Mục đích
 
-Xóa comment hoặc cả thread comment thuộc quyền sở hữu của current user.
+Xóa mềm một comment thread. Tác giả của comment có thể xóa comment của chính mình; chủ post cũng có thể xóa comment trong post của họ.
+
+### Hành vi backend hiện tại
+
+- quyền xóa hợp lệ khi `comment.canDelete === true`
+- `comment.canDelete` được tính theo rule: current user là tác giả comment **hoặc** là chủ post
+- delete hiện là soft-delete cả subtree bắt đầu từ comment được chọn
+- nếu xóa root comment có replies thì toàn bộ replies con trong thread đó cũng bị xóa mềm
 
 ### Gợi ý frontend
 
-- chỉ hiển thị nút xóa khi `comment.userId === currentUser.id`
+- chỉ hiển thị nút xóa khi `comment.canDelete === true`
 - sau delete success nên invalidate root comments và replies của thread liên quan
+- nếu muốn UX an toàn hơn cho thread dài, nên confirm rõ với user rằng thao tác này có thể xóa cả replies con
 
----
 
-## 15) POST `/api/Feed/follow/{userId}`
+## 17) POST `/api/Feed/follow/{userId}`
 
 ### Mục đích
 
@@ -814,7 +879,7 @@ Follow một user.
 
 ---
 
-## 16) DELETE `/api/Feed/follow/{userId}`
+## 18) DELETE `/api/Feed/follow/{userId}`
 
 ### Mục đích
 
@@ -827,7 +892,7 @@ Unfollow một user.
 
 ---
 
-## 17) GET `/api/Feed/followers/{userId}`
+## 19) GET `/api/Feed/followers/{userId}`
 
 ### Mục đích
 
@@ -847,7 +912,7 @@ Danh sách `FollowUserResponse`, hiện chỉ có:
 
 ---
 
-## 18) GET `/api/Feed/following/{userId}`
+## 20) GET `/api/Feed/following/{userId}`
 
 ### Mục đích
 
@@ -860,7 +925,7 @@ Lấy danh sách following của một user.
 
 ---
 
-## 19) GET `/api/Feed/follow/suggestions`
+## 21) GET `/api/Feed/follow/suggestions`
 
 ### Query params
 
@@ -884,7 +949,7 @@ Trả danh sách account gợi ý follow cho current user.
 
 ---
 
-## 20) POST `/api/Feed/reports`
+## 22) POST `/api/Feed/reports`
 
 ### Request body
 
@@ -911,7 +976,7 @@ Trả danh sách account gợi ý follow cho current user.
 
 ---
 
-## 21) GET `/api/Feed/admin/reports`
+## 23) GET `/api/Feed/admin/reports`
 
 ### Quyền truy cập
 
@@ -935,7 +1000,7 @@ Yêu cầu user đã đăng nhập và thỏa policy admin.
 
 ---
 
-## 22) PATCH `/api/Feed/admin/reports/{id}`
+## 24) PATCH `/api/Feed/admin/reports/{id}`
 
 ### Request body
 
@@ -1024,6 +1089,8 @@ export const feedKeys = {
 - `Feed.Post.Like.Exists`: user đã like bài viết này rồi
 - `Feed.Post.Like.NotFound`: user chưa like bài viết này
 - `Feed.Comment.NotFound`: bình luận không tồn tại
+- `Feed.Comment.Like.Exists`: user đã like comment này rồi
+- `Feed.Comment.Like.NotFound`: user chưa like comment này
 - `Feed.Follow.Self`: không thể tự follow chính mình
 - `Feed.Follow.Exists`: đã follow user này rồi
 - `Feed.Follow.NotFound`: chưa follow user này
@@ -1063,6 +1130,6 @@ export const feedKeys = {
 ### 4. Giới hạn hiện tại
 
 - followers/following hiện chưa có pagination
-- chưa có API like comment/share/search/recommendation feed nâng cao
+- comment đã hỗ trợ like/unlike
 - feed hiện là follow-based feed
 - comment tree được load theo từng tầng, không có API trả full nested tree trong một response

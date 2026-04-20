@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Application.Common;
+using Application.Comments.Commands;
+using Application.Comments.Models;
 using Application.Follows.Models;
 using Application.Follows.Queries;
 using Application.Posts.Commands;
@@ -111,6 +113,71 @@ public sealed class FeedControllerTests
         mediator.Verify(
             item => item.Send(
                 It.Is<GetPostsByUsernameQuery>(query => query == new GetPostsByUsernameQuery("alice", null, null, 20, viewerId)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task LikeComment_Should_SendAuthenticatedUserIdAndCommentId()
+    {
+        var currentUserId = Guid.NewGuid();
+        var commentId = Guid.NewGuid();
+        var expectedResult = Result.Success(new CommentLikeResponse(commentId, 9, true));
+        var mediator = new Mock<IMediator>();
+
+        mediator
+            .Setup(item => item.Send(It.IsAny<LikeCommentCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResult);
+
+        var controller = CreateController(mediator.Object, currentUserId);
+
+        var actionResult = await controller.LikeComment(commentId, CancellationToken.None);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(expectedResult);
+        mediator.Verify(
+            item => item.Send(
+                It.Is<LikeCommentCommand>(command => command == new LikeCommentCommand(currentUserId, commentId)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task LikeComment_Should_ReturnUnauthorized_WhenUserMissing()
+    {
+        var mediator = new Mock<IMediator>();
+        var controller = CreateController(mediator.Object);
+
+        var actionResult = await controller.LikeComment(Guid.NewGuid(), CancellationToken.None);
+
+        var unauthorizedResult = actionResult.Should().BeOfType<UnauthorizedObjectResult>().Subject;
+        unauthorizedResult.Value.Should().BeEquivalentTo(new MessageResponse("Unauthorized"));
+        mediator.Verify(
+            item => item.Send(It.IsAny<LikeCommentCommand>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task UnlikeComment_Should_SendAuthenticatedUserIdAndCommentId()
+    {
+        var currentUserId = Guid.NewGuid();
+        var commentId = Guid.NewGuid();
+        var expectedResult = Result.Success(new CommentLikeResponse(commentId, 8, false));
+        var mediator = new Mock<IMediator>();
+
+        mediator
+            .Setup(item => item.Send(It.IsAny<UnlikeCommentCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResult);
+
+        var controller = CreateController(mediator.Object, currentUserId);
+
+        var actionResult = await controller.UnlikeComment(commentId, CancellationToken.None);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(expectedResult);
+        mediator.Verify(
+            item => item.Send(
+                It.Is<UnlikeCommentCommand>(command => command == new UnlikeCommentCommand(currentUserId, commentId)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -306,6 +373,29 @@ public sealed class FeedControllerTests
             DateTime.UtcNow,
             DateTime.UtcNow,
             null,
+            null);
+    }
+
+    private static CommentResponse CreateCommentResponse(
+        Guid? commentId = null,
+        Guid? postId = null,
+        Guid? userId = null,
+        Guid? parentCommentId = null,
+        string content = "comment content")
+    {
+        return new CommentResponse(
+            commentId ?? Guid.NewGuid(),
+            postId ?? Guid.NewGuid(),
+            userId ?? Guid.NewGuid(),
+            "tester",
+            "https://cdn.example.com/avatar.jpg",
+            parentCommentId,
+            content,
+            3,
+            1,
+            DateTime.UtcNow,
+            DateTime.UtcNow,
+            false,
             null);
     }
 

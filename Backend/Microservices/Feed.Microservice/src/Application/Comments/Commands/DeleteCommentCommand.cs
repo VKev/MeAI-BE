@@ -38,7 +38,7 @@ public sealed class DeleteCommentCommandHandler : ICommandHandler<DeleteCommentC
             return Result.Failure<bool>(FeedErrors.PostNotFound);
         }
 
-        if (post.UserId != request.UserId)
+        if (post.UserId != request.UserId && comment.UserId != request.UserId)
         {
             return Result.Failure<bool>(FeedErrors.Forbidden);
         }
