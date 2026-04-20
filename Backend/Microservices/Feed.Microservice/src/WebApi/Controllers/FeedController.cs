@@ -432,14 +432,19 @@ public sealed class FeedController : ApiController
     [ProducesResponseType(typeof(Result<IReadOnlyList<FollowUserResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetFollowers(Guid userId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetFollowers(
+        Guid userId,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out _))
         {
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new GetFollowersQuery(userId), cancellationToken);
+        var result = await _mediator.Send(new GetFollowersQuery(userId, cursorCreatedAt, cursorId, limit), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);
@@ -453,14 +458,19 @@ public sealed class FeedController : ApiController
     [ProducesResponseType(typeof(Result<IReadOnlyList<FollowUserResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetFollowing(Guid userId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetFollowing(
+        Guid userId,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out _))
         {
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new GetFollowingQuery(userId), cancellationToken);
+        var result = await _mediator.Send(new GetFollowingQuery(userId, cursorCreatedAt, cursorId, limit), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);
