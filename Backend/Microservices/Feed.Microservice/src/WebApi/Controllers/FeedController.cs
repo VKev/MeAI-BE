@@ -386,6 +386,26 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [HttpGet("follow/suggestions")]
+    [ProducesResponseType(typeof(Result<IReadOnlyList<FollowSuggestionResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetFollowSuggestions([FromQuery] int? limit, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var currentUserId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(new GetFollowSuggestionsQuery(currentUserId, limit), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpPost("reports")]
     [ProducesResponseType(typeof(Result<ReportResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]

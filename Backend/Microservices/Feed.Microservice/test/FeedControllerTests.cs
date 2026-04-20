@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Application.Follows.Models;
+using Application.Follows.Queries;
 using Application.Posts.Models;
 using Application.Posts.Queries;
 using Application.Profiles.Models;
@@ -112,6 +114,50 @@ public sealed class FeedControllerTests
     }
 
     [Fact]
+    public async Task GetFollowSuggestions_Should_SendAuthenticatedUserIdAndLimit()
+    {
+        IReadOnlyList<FollowSuggestionResponse> expectedSuggestions = new List<FollowSuggestionResponse>
+        {
+            CreateFollowSuggestionResponse()
+        };
+
+        var currentUserId = Guid.NewGuid();
+        var mediator = new Mock<IMediator>();
+        var expectedResult = Result.Success(expectedSuggestions);
+
+        mediator
+            .Setup(item => item.Send(It.IsAny<GetFollowSuggestionsQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResult);
+
+        var controller = CreateController(mediator.Object, currentUserId);
+
+        var actionResult = await controller.GetFollowSuggestions(12, CancellationToken.None);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(expectedResult);
+        mediator.Verify(
+            item => item.Send(
+                It.Is<GetFollowSuggestionsQuery>(query => query == new GetFollowSuggestionsQuery(currentUserId, 12)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetFollowSuggestions_Should_ReturnUnauthorized_WhenUserMissing()
+    {
+        var mediator = new Mock<IMediator>();
+        var controller = CreateController(mediator.Object);
+
+        var actionResult = await controller.GetFollowSuggestions(10, CancellationToken.None);
+
+        var unauthorizedResult = actionResult.Should().BeOfType<UnauthorizedObjectResult>().Subject;
+        unauthorizedResult.Value.Should().BeEquivalentTo(new { Message = "Unauthorized" });
+        mediator.Verify(
+            item => item.Send(It.IsAny<GetFollowSuggestionsQuery>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task GetAdminReports_Should_ForwardStatusAndTargetTypeFilters()
     {
         IReadOnlyList<ReportResponse> expectedReports = new List<ReportResponse>
@@ -205,6 +251,16 @@ public sealed class FeedControllerTests
             DateTime.UtcNow,
             null,
             null);
+    }
+
+    private static FollowSuggestionResponse CreateFollowSuggestionResponse()
+    {
+        return new FollowSuggestionResponse(
+            Guid.NewGuid(),
+            "alice",
+            "Alice Nguyen",
+            "https://cdn.example.com/alice.jpg",
+            7);
     }
 
     private static ReportResponse CreateReportResponse(Guid? reportId = null)

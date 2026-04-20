@@ -1,5 +1,6 @@
 using Application;
 using Infrastructure;
+using Infrastructure.Configuration;
 using Infrastructure.Context;
 using Scalar.AspNetCore;
 using Serilog;
@@ -25,6 +26,8 @@ var corsPolicyName = builder.AddCorsPolicy();
 builder.ConfigureSerilogLogging();
 
 builder.Services.AddSingleton<EnvironmentConfig>();
+builder.Services.Configure<FeedSeedOptions>(
+    builder.Configuration.GetSection(FeedSeedOptions.SectionName));
 builder.AddDatabase();
 
 builder.Services
@@ -33,6 +36,7 @@ builder.Services
 
 var app = builder.Build();
 app.ApplyMigrationsIfEnabled(shouldAutoApplyMigrations);
+await app.SeedFeedDemoDataAsync();
 app.MapHealthEndpoints();
 app.MapDebugEndpoints();
 

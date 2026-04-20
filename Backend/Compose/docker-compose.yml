@@ -93,6 +93,11 @@ services:
       Threads__AppSecret: your-meta-app-secret
       Threads__RedirectUri: http://api-gateway:2406/api/User/threads/callback
       AutoApply__Migrations: "true"
+      FeedSeed__Enabled: "true"
+      FeedSeed__DataRoot: /feed-seed-data
+      FeedSeed__PublicBaseUrl: http://localhost:2406
+    volumes:
+      - ./seed-data/feed:/feed-seed-data
     depends_on:
       postgres:
         condition: service_healthy
@@ -183,6 +188,11 @@ services:
       UserService__GrpcUrl: http://user-microservice:5004
       AiService__GrpcUrl: http://ai-microservice:5005
       AutoApply__Migrations: "true"
+      FeedSeed__Enabled: "true"
+      FeedSeed__DataRoot: /feed-seed-data
+      FeedSeed__PublicBaseUrl: http://localhost:2406
+    volumes:
+      - ./seed-data/feed:/feed-seed-data
     depends_on:
       postgres:
         condition: service_healthy
@@ -190,6 +200,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      user-microservice:
+        condition: service_started
+      ai-microservice:
+        condition: service_started
     networks:
       - app-network
 

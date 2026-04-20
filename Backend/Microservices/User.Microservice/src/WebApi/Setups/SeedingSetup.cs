@@ -62,6 +62,16 @@ public static class SeedingSetup
 
         try
         {
+            var feedDemoUserSeeder = scope.ServiceProvider.GetRequiredService<FeedDemoUserSeeder>();
+            await feedDemoUserSeeder.SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Failed to seed feed demo users at startup.");
+        }
+
+        try
+        {
             var context = scope.ServiceProvider.GetRequiredService<MyDbContext>();
             if (await context.Database.CanConnectAsync())
             {

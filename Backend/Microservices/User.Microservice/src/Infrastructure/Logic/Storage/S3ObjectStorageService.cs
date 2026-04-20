@@ -12,30 +12,25 @@ namespace Infrastructure.Logic.Storage;
 public sealed class S3ObjectStorageService : IObjectStorageService
 {
     private const int MaxPresignSeconds = 60 * 60 * 24 * 7;
+    private const string SeedMediaPathPrefix = "/api/User/seed-media/";
     private static readonly TimeSpan MaxPresignTtl = TimeSpan.FromSeconds(MaxPresignSeconds);
     private static readonly TimeSpan PresignCacheSkew = TimeSpan.FromSeconds(30);
-    private readonly IAmazonS3 _client;
+    private readonly IAmazonS3? _client;
     private readonly string _bucket;
     private readonly string _region;
     private readonly string? _serviceUrl;
     private readonly string? _publicBaseUrl;
     private readonly bool _forcePathStyle;
+    private readonly bool _isConfigured;
     private readonly IDatabase? _cache;
 
     public S3ObjectStorageService(
         IConfiguration configuration,
         IConnectionMultiplexer multiplexer)
     {
-        _bucket = configuration["S3:Bucket"]
-                  ?? throw new InvalidOperationException("S3:Bucket is not configured");
-
+        _bucket = configuration["S3:Bucket"] ?? string.Empty;
         var accessKey = configuration["S3:AccessKey"];
         var secretKey = configuration["S3:SecretKey"];
-
-        if (string.IsNullOrWhiteSpace(accessKey) || string.IsNullOrWhiteSpace(secretKey))
-        {
-            throw new InvalidOperationException("S3:AccessKey or S3:SecretKey is not configured");
-        }
 
         _region = configuration["S3:Region"] ?? "us-east-1";
         _serviceUrl = configuration["S3:ServiceUrl"];
@@ -43,6 +38,18 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
         var forcePathStyleConfigured = bool.TryParse(configuration["S3:ForcePathStyle"], out var fps);
         _forcePathStyle = forcePathStyleConfigured ? fps : !string.IsNullOrWhiteSpace(_serviceUrl);
+        _cache = multiplexer.GetDatabase();
+
+        _isConfigured =
+            !string.IsNullOrWhiteSpace(_bucket) &&
+            !string.IsNullOrWhiteSpace(accessKey) &&
+            !string.IsNullOrWhiteSpace(secretKey);
+
+        if (!_isConfigured)
+        {
+            _client = null;
+            return;
+        }
 
         var config = new AmazonS3Config
         {
@@ -56,13 +63,18 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         }
 
         _client = new AmazonS3Client(accessKey, secretKey, config);
-        _cache = multiplexer.GetDatabase();
     }
 
     public async Task<Result<StorageUploadResult>> UploadAsync(
         StorageUploadRequest request,
         CancellationToken cancellationToken)
     {
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<StorageUploadResult>(
+                new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
         try
         {
             var key = NormalizeKey(request.Key);
@@ -105,6 +117,16 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
     public Result<string> GetPresignedUrl(string keyOrUrl, TimeSpan? expiresIn = null)
     {
+        if (TryGetSeedMediaUrl(keyOrUrl, out var seedMediaUrl))
+        {
+            return Result.Success(seedMediaUrl);
+        }
+
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<string>(new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
         try
         {
             var key = NormalizeKey(keyOrUrl);
@@ -144,6 +166,16 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
     public async Task<Result<bool>> DeleteAsync(string keyOrUrl, CancellationToken cancellationToken)
     {
+        if (TryGetSeedMediaUrl(keyOrUrl, out _))
+        {
+            return Result.Success(true);
+        }
+
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<bool>(new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
         try
         {
             var key = NormalizeKey(keyOrUrl);
@@ -203,6 +235,25 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         catch (RedisException)
         {
         }
+    }
+
+    private static bool TryGetSeedMediaUrl(string keyOrUrl, out string seedMediaUrl)
+    {
+        if (Uri.TryCreate(keyOrUrl, UriKind.Absolute, out var absoluteUri) &&
+            absoluteUri.AbsolutePath.StartsWith(SeedMediaPathPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            seedMediaUrl = absoluteUri.ToString();
+            return true;
+        }
+
+        if (keyOrUrl.StartsWith(SeedMediaPathPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            seedMediaUrl = keyOrUrl;
+            return true;
+        }
+
+        seedMediaUrl = string.Empty;
+        return false;
     }
 
     private static TimeSpan NormalizePresignTtl(TimeSpan? expiresIn)

@@ -102,15 +102,16 @@ public sealed class CreatePostCommandHandler : ICommandHandler<CreatePostCommand
                 {
                     Id = Guid.CreateVersion7(),
                     Name = normalizedHashtag,
-                    PostCount = 0,
+                    PostCount = 1,
                     CreatedAt = now
                 };
 
                 await _unitOfWork.Repository<Hashtag>().AddAsync(existingHashtag, cancellationToken);
             }
-
-            existingHashtag.PostCount += 1;
-            _unitOfWork.Repository<Hashtag>().Update(existingHashtag);
+            else
+            {
+                existingHashtag.PostCount += 1;
+            }
 
             await _unitOfWork.Repository<PostHashtag>().AddAsync(new PostHashtag
             {
