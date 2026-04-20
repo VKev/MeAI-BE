@@ -35,6 +35,7 @@ namespace Infrastructure
             services.AddScoped<AdminUserSeeder>();
             services.AddScoped<DefaultUserSeeder>();
             services.AddScoped<SampleDataSeeder>();
+            services.AddScoped<FeedDemoUserSeeder>();
             services.AddScoped<ConfigSeeder>();
             services.AddScoped<SubscriptionSeeder>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();

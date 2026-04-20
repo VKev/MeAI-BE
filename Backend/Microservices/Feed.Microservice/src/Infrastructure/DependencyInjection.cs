@@ -5,6 +5,7 @@ using Application.Abstractions.Resources;
 using Infrastructure.Logic.Ai;
 using Infrastructure.Logic.Notifications;
 using Infrastructure.Logic.Resources;
+using Infrastructure.Logic.Seeding;
 using Infrastructure.Repositories;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
@@ -21,6 +22,7 @@ namespace Infrastructure
     {
         public static IServiceCollection AddInfrastructure(this IServiceCollection services)
         {
+            services.AddScoped<FeedDemoDataSeeder>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddGrpcClient<UserResourceService.UserResourceServiceClient>((sp, options) =>
