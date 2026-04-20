@@ -33,6 +33,7 @@ public sealed class FeedController : ApiController
     {
     }
 
+    [Tags("Profiles")]
     [HttpGet("profiles/{username}")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(Result<PublicProfileResponse>), StatusCodes.Status200OK)]
@@ -48,6 +49,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Profiles")]
     [HttpGet("profiles/{username}/posts")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(Result<IReadOnlyList<PostResponse>>), StatusCodes.Status200OK)]
@@ -72,6 +74,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Posts")]
     [HttpPost("posts")]
     [ProducesResponseType(typeof(Result<PostResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -95,6 +98,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Posts")]
     [HttpGet("posts/feed")]
     [ProducesResponseType(typeof(Result<IReadOnlyList<PostResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -121,6 +125,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Posts")]
     [HttpGet("posts/{id:guid}")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(Result<PostResponse>), StatusCodes.Status200OK)]
@@ -138,6 +143,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Posts")]
     [HttpPost("posts/{id:guid}/like")]
     [ProducesResponseType(typeof(Result<PostLikeResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -158,6 +164,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Posts")]
     [HttpDelete("posts/{id:guid}/like")]
     [ProducesResponseType(typeof(Result<PostLikeResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -178,6 +185,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Posts")]
     [HttpDelete("posts/{id:guid}")]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -198,6 +206,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Comments")]
     [HttpPost("comments")]
     [ProducesResponseType(typeof(Result<CommentResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -218,6 +227,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Comments")]
     [HttpGet("posts/{id:guid}/comments")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(Result<IReadOnlyList<CommentResponse>>), StatusCodes.Status200OK)]
@@ -242,6 +252,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Comments")]
     [HttpGet("comments/{id:guid}/replies")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(Result<IReadOnlyList<CommentResponse>>), StatusCodes.Status200OK)]
@@ -266,6 +277,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Comments")]
     [HttpDelete("comments/{id:guid}")]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -286,6 +298,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Comments")]
     [HttpPost("comments/{id:guid}/reply")]
     [ProducesResponseType(typeof(Result<CommentResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -306,6 +319,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Follows")]
     [HttpPost("follow/{userId:guid}")]
     [ProducesResponseType(typeof(Result<FollowUserResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -326,6 +340,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Follows")]
     [HttpDelete("follow/{userId:guid}")]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -346,6 +361,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Follows")]
     [HttpGet("followers/{userId:guid}")]
     [ProducesResponseType(typeof(Result<IReadOnlyList<FollowUserResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -366,6 +382,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Follows")]
     [HttpGet("following/{userId:guid}")]
     [ProducesResponseType(typeof(Result<IReadOnlyList<FollowUserResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -386,6 +403,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Follows")]
     [HttpGet("follow/suggestions")]
     [ProducesResponseType(typeof(Result<IReadOnlyList<FollowSuggestionResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -406,6 +424,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Reports")]
     [HttpPost("reports")]
     [ProducesResponseType(typeof(Result<ReportResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -429,6 +448,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Admin Reports")]
     [HttpGet("admin/reports")]
     [Authorize("ADMIN", "Admin")]
     [ProducesResponseType(typeof(Result<IReadOnlyList<ReportResponse>>), StatusCodes.Status200OK)]
@@ -453,6 +473,7 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Admin Reports")]
     [HttpPatch("admin/reports/{id:guid}")]
     [Authorize("ADMIN", "Admin")]
     [ProducesResponseType(typeof(Result<ReportResponse>), StatusCodes.Status200OK)]
