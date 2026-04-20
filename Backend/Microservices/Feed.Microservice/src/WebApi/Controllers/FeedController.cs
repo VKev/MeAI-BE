@@ -40,7 +40,9 @@ public sealed class FeedController : ApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetPublicProfileByUsername(string username, CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetPublicProfileByUsernameQuery(username), cancellationToken);
+        Guid? requestingUserId = TryGetUserId(out var userId) ? userId : null;
+
+        var result = await _mediator.Send(new GetPublicProfileByUsernameQuery(username, requestingUserId), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);

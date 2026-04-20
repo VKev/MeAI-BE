@@ -26,7 +26,7 @@ namespace test;
 public sealed class FeedControllerTests
 {
     [Fact]
-    public async Task GetPublicProfileByUsername_Should_SendUsernameQuery_AndReturnOk()
+    public async Task GetPublicProfileByUsername_Should_SendNullRequestingUser_WhenAnonymous()
     {
         var expectedProfile = new PublicProfileResponse(
             Guid.NewGuid(),
@@ -34,7 +34,8 @@ public sealed class FeedControllerTests
             "Alice Nguyen",
             "https://cdn.example.com/alice.jpg",
             10,
-            12);
+            12,
+            null);
 
         var mediator = new Mock<IMediator>();
         var expectedResult = Result.Success(expectedProfile);
@@ -51,7 +52,40 @@ public sealed class FeedControllerTests
         okResult.Value.Should().BeSameAs(expectedResult);
         mediator.Verify(
             item => item.Send(
-                It.Is<GetPublicProfileByUsernameQuery>(query => query == new GetPublicProfileByUsernameQuery("alice")),
+                It.Is<GetPublicProfileByUsernameQuery>(query => query == new GetPublicProfileByUsernameQuery("alice", null)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetPublicProfileByUsername_Should_IncludeAuthenticatedUserId_WhenAvailable()
+    {
+        var viewerId = Guid.NewGuid();
+        var expectedProfile = new PublicProfileResponse(
+            Guid.NewGuid(),
+            "alice",
+            "Alice Nguyen",
+            "https://cdn.example.com/alice.jpg",
+            10,
+            12,
+            true);
+
+        var mediator = new Mock<IMediator>();
+        var expectedResult = Result.Success(expectedProfile);
+
+        mediator
+            .Setup(item => item.Send(It.IsAny<GetPublicProfileByUsernameQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResult);
+
+        var controller = CreateController(mediator.Object, viewerId);
+
+        var actionResult = await controller.GetPublicProfileByUsername("alice", CancellationToken.None);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(expectedResult);
+        mediator.Verify(
+            item => item.Send(
+                It.Is<GetPublicProfileByUsernameQuery>(query => query == new GetPublicProfileByUsernameQuery("alice", viewerId)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

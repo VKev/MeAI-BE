@@ -41,6 +41,13 @@ Tài nguyên OpenAPI/Docs của service:
 - `GET /api/Feed/posts/{id}/comments`
 - `GET /api/Feed/comments/{id}/replies`
 
+Lưu ý: các endpoint anonymous vẫn có thể trả thêm viewer flags nếu request hiện tại có auth hợp lệ. Với `GET /api/Feed/profiles/{username}`, field `isFollowedByCurrentUser` sẽ:
+
+- là `null` khi request anonymous
+- là `true` nếu current user đang follow profile đó
+- là `true` nếu profile đang xem là chính current user
+- là `false` nếu đã đăng nhập nhưng chưa follow profile đó
+
 ### Auth-required endpoints
 
 Tất cả route còn lại yêu cầu user hợp lệ từ `ClaimTypes.NameIdentifier`.
@@ -144,9 +151,14 @@ interface PublicProfileResponse {
   avatarUrl: string | null;
   followersCount: number;
   followingCount: number;
+  isFollowedByCurrentUser: boolean | null;
 }
 ```
 
+Lưu ý:
+
+- `isFollowedByCurrentUser` có thể là `null` khi request anonymous.
+- `isFollowedByCurrentUser` sẽ là `true` khi viewer đang xem profile của chính mình.
 ### `PostMediaResponse`
 
 ```ts
@@ -489,6 +501,13 @@ export async function uploadResource(file: File, resourceType?: string) {
 
 Lấy public profile theo username để render header profile công khai.
 
+### Response nổi bật
+
+- backend trả thêm `isFollowedByCurrentUser`
+- khi anonymous, field này là `null`
+- khi đã đăng nhập và đang xem chính mình, field này luôn là `true`
+- khi đã đăng nhập và xem user khác, field này phản ánh trạng thái follow hiện tại
+
 ### Validation
 
 - `username` bắt buộc
@@ -499,6 +518,9 @@ Lấy public profile theo username để render header profile công khai.
 - dùng được cho guest page
 - nếu lỗi `Feed.User.NotFound`, render trạng thái profile không tồn tại
 - counts follower/following đã được backend tổng hợp sẵn
+- nếu viewer anonymous thì `isFollowedByCurrentUser` sẽ là `null`
+- nếu viewer đã đăng nhập thì có thể dùng trực tiếp `isFollowedByCurrentUser` để render CTA follow/unfollow mà không cần gọi thêm endpoint khác
+- khi `profile.userId === currentUser.id`, backend đã tự trả `isFollowedByCurrentUser = true`
 
 ---
 

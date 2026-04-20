@@ -6,4 +6,5 @@ public sealed record PublicProfileResponse(
     string? FullName,
     string? AvatarUrl,
     int FollowersCount,
-    int FollowingCount);
+    int FollowingCount,
+    bool? IsFollowedByCurrentUser);
