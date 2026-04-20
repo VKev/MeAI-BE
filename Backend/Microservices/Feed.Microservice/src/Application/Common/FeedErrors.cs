@@ -8,6 +8,8 @@ internal static class FeedErrors
     public static readonly Error PostAlreadyLiked = new("Feed.Post.Like.Exists", "You have already liked this post.");
     public static readonly Error PostNotLiked = new("Feed.Post.Like.NotFound", "You have not liked this post.");
     public static readonly Error CommentNotFound = new("Feed.Comment.NotFound", "The requested comment was not found.");
+    public static readonly Error CommentAlreadyLiked = new("Feed.Comment.Like.Exists", "You have already liked this comment.");
+    public static readonly Error CommentNotLiked = new("Feed.Comment.Like.NotFound", "You have not liked this comment.");
     public static readonly Error ReportNotFound = new("Feed.Report.NotFound", "The requested report was not found.");
     public static readonly Error UserNotFound = new("Feed.User.NotFound", "The requested user profile was not found.");
     public static readonly Error EmptyPost = new("Feed.Post.Empty", "A post must include content or at least one resource.");

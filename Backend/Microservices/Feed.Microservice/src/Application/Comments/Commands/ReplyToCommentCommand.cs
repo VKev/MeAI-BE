@@ -1,5 +1,6 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Notifications;
+using Application.Abstractions.Resources;
 using Application.Common;
 using Application.Comments.Models;
 using Domain.Entities;
@@ -19,13 +20,16 @@ public sealed class ReplyToCommentCommandHandler : ICommandHandler<ReplyToCommen
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IFeedNotificationService _feedNotificationService;
+    private readonly IUserResourceService _userResourceService;
 
     public ReplyToCommentCommandHandler(
         IUnitOfWork unitOfWork,
-        IFeedNotificationService feedNotificationService)
+        IFeedNotificationService feedNotificationService,
+        IUserResourceService userResourceService)
     {
         _unitOfWork = unitOfWork;
         _feedNotificationService = feedNotificationService;
+        _userResourceService = userResourceService;
     }
 
     public async Task<Result<CommentResponse>> Handle(ReplyToCommentCommand request, CancellationToken cancellationToken)
@@ -87,6 +91,11 @@ public sealed class ReplyToCommentCommandHandler : ICommandHandler<ReplyToCommen
             FeedPostSupport.BuildPreview(content),
             cancellationToken);
 
-        return Result.Success(CommentResponseMapping.ToResponse(reply, post.UserId == request.UserId));
+        return Result.Success(await FeedPostSupport.ToCommentResponseAsync(
+            _userResourceService,
+            request.UserId,
+            reply,
+            true,
+            cancellationToken));
     }
 }

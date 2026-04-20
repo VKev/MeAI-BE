@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Resources;
 using Application.Common;
 using Application.Comments.Models;
 using Domain.Entities;
@@ -18,10 +19,12 @@ public sealed record GetCommentsByPostIdQuery(
 public sealed class GetCommentsByPostIdQueryHandler : IQueryHandler<GetCommentsByPostIdQuery, IReadOnlyList<CommentResponse>>
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IUserResourceService _userResourceService;
 
-    public GetCommentsByPostIdQueryHandler(IUnitOfWork unitOfWork)
+    public GetCommentsByPostIdQueryHandler(IUnitOfWork unitOfWork, IUserResourceService userResourceService)
     {
         _unitOfWork = unitOfWork;
+        _userResourceService = userResourceService;
     }
 
     public async Task<Result<IReadOnlyList<CommentResponse>>> Handle(GetCommentsByPostIdQuery request, CancellationToken cancellationToken)
@@ -62,13 +65,15 @@ public sealed class GetCommentsByPostIdQueryHandler : IQueryHandler<GetCommentsB
             .Take(pagination.Limit)
             .ToListAsync(cancellationToken);
 
-        bool? canDelete = request.RequestingUserId.HasValue
-            ? request.RequestingUserId.Value == post.UserId
-            : null;
-
-        var response = comments
-            .Select(comment => CommentResponseMapping.ToResponse(comment, canDelete))
-            .ToList();
+        var response = await FeedPostSupport.ToCommentResponsesAsync(
+            _unitOfWork,
+            _userResourceService,
+            request.RequestingUserId,
+            comments,
+            comment => request.RequestingUserId.HasValue
+                ? comment.UserId == request.RequestingUserId.Value || post.UserId == request.RequestingUserId.Value
+                : null,
+            cancellationToken);
 
         return Result.Success<IReadOnlyList<CommentResponse>>(response);
     }

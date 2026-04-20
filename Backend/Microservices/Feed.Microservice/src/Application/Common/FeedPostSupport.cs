@@ -1,5 +1,6 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Resources;
+using Application.Comments.Models;
 using Application.Posts.Models;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -163,6 +164,134 @@ internal static partial class FeedPostSupport
             : likedPostIds.ToHashSet();
     }
 
+    public static async Task<IReadOnlySet<Guid>> LoadLikedCommentIdsByUserAsync(
+        IUnitOfWork unitOfWork,
+        Guid? requesterUserId,
+        IReadOnlyCollection<Guid> commentIds,
+        CancellationToken cancellationToken)
+    {
+        if (!requesterUserId.HasValue || requesterUserId.Value == Guid.Empty)
+        {
+            return new HashSet<Guid>();
+        }
+
+        if (commentIds.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        var ids = commentIds.Distinct().ToHashSet();
+
+        var likedCommentIds = await unitOfWork.Repository<CommentLike>()
+            .GetAll()
+            .AsNoTracking()
+            .Where(item => item.UserId == requesterUserId.Value && ids.Contains(item.CommentId))
+            .Select(item => item.CommentId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return likedCommentIds.Count == 0
+            ? new HashSet<Guid>()
+            : likedCommentIds.ToHashSet();
+    }
+
+    public static async Task<IReadOnlyDictionary<Guid, CommentAuthorResponse>> LoadCommentAuthorsByUserIdsAsync(
+        IUserResourceService userResourceService,
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken)
+    {
+        var distinctUserIds = userIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (distinctUserIds.Count == 0)
+        {
+            return new Dictionary<Guid, CommentAuthorResponse>();
+        }
+
+        var profilesResult = await userResourceService.GetPublicUserProfilesByIdsAsync(distinctUserIds, cancellationToken);
+        if (profilesResult.IsFailure)
+        {
+            return distinctUserIds.ToDictionary(id => id, CreateFallbackCommentAuthor);
+        }
+
+        return distinctUserIds.ToDictionary(
+            id => id,
+            id => profilesResult.Value.TryGetValue(id, out var profile)
+                ? new CommentAuthorResponse(profile.UserId, profile.Username, profile.AvatarUrl)
+                : CreateFallbackCommentAuthor(id));
+    }
+
+    public static async Task<IReadOnlyList<CommentResponse>> ToCommentResponsesAsync(
+        IUnitOfWork unitOfWork,
+        IUserResourceService userResourceService,
+        Guid? requesterUserId,
+        IReadOnlyList<Comment> comments,
+        Func<Comment, bool?> canDeleteFactory,
+        CancellationToken cancellationToken)
+    {
+        if (comments.Count == 0)
+        {
+            return Array.Empty<CommentResponse>();
+        }
+
+        var commentIds = comments
+            .Select(comment => comment.Id)
+            .Distinct()
+            .ToList();
+
+        var likedCommentIds = await LoadLikedCommentIdsByUserAsync(
+            unitOfWork,
+            requesterUserId,
+            commentIds,
+            cancellationToken);
+
+        var authorsByUserId = await LoadCommentAuthorsByUserIdsAsync(
+            userResourceService,
+            comments.Select(comment => comment.UserId).ToList(),
+            cancellationToken);
+
+        return comments
+            .Select(comment =>
+            {
+                bool? isLikedByCurrentUser = requesterUserId.HasValue ? likedCommentIds.Contains(comment.Id) : null;
+                var author = authorsByUserId.TryGetValue(comment.UserId, out var authorResponse)
+                    ? authorResponse
+                    : CreateFallbackCommentAuthor(comment.UserId);
+
+                return CommentResponseMapping.ToResponse(
+                    comment,
+                    author,
+                    isLikedByCurrentUser,
+                    canDeleteFactory(comment));
+            })
+            .ToList();
+    }
+
+    public static async Task<CommentResponse> ToCommentResponseAsync(
+        IUserResourceService userResourceService,
+        Guid? requesterUserId,
+        Comment comment,
+        bool? canDelete,
+        CancellationToken cancellationToken)
+    {
+        var authorsByUserId = await LoadCommentAuthorsByUserIdsAsync(
+            userResourceService,
+            new[] { comment.UserId },
+            cancellationToken);
+
+        var author = authorsByUserId.TryGetValue(comment.UserId, out var authorResponse)
+            ? authorResponse
+            : CreateFallbackCommentAuthor(comment.UserId);
+
+        return CommentResponseMapping.ToResponse(
+            comment,
+            author,
+            requesterUserId.HasValue ? false : null,
+            canDelete);
+    }
+
     public static async Task<IReadOnlyList<PostResponse>> ToPostResponsesAsync(
         IUnitOfWork unitOfWork,
         IUserResourceService userResourceService,
@@ -263,6 +392,11 @@ internal static partial class FeedPostSupport
     private static PostAuthorResponse CreateFallbackAuthor(Guid userId)
     {
         return new PostAuthorResponse(userId, UnknownUsername, null);
+    }
+
+    private static CommentAuthorResponse CreateFallbackCommentAuthor(Guid userId)
+    {
+        return new CommentAuthorResponse(userId, UnknownUsername, null);
     }
 
     [GeneratedRegex(@"(?<!\w)#[\p{L}\p{M}\p{N}_]+", RegexOptions.Compiled)]
