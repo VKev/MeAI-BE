@@ -19,3 +19,23 @@ public sealed class CreatePostCommandValidator : AbstractValidator<CreatePostCom
             .WithMessage("Resource ids must be valid GUIDs.");
     }
 }
+
+public sealed class UpdatePostCommandValidator : AbstractValidator<UpdatePostCommand>
+{
+    public UpdatePostCommandValidator()
+    {
+        RuleFor(command => command.UserId)
+            .NotEmpty();
+
+        RuleFor(command => command.PostId)
+            .NotEmpty();
+
+        RuleFor(command => command.Content)
+            .MaximumLength(5000)
+            .When(command => !string.IsNullOrWhiteSpace(command.Content));
+
+        RuleFor(command => command.ResourceIds)
+            .Must(resourceIds => resourceIds is null || resourceIds.All(id => id != Guid.Empty))
+            .WithMessage("Resource ids must be valid GUIDs.");
+    }
+}

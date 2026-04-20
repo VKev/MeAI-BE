@@ -186,6 +186,30 @@ public sealed class FeedController : ApiController
     }
 
     [Tags("Posts")]
+    [HttpPut("posts/{id:guid}")]
+    [ProducesResponseType(typeof(Result<PostResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdatePost(Guid id, [FromBody] UpdatePostRequest request, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new UpdatePostCommand(userId, id, request.Content, request.ResourceIds, request.MediaType),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [Tags("Posts")]
     [HttpDelete("posts/{id:guid}")]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -505,6 +529,8 @@ public sealed class FeedController : ApiController
 }
 
 public sealed record CreatePostRequest(string? Content, IReadOnlyCollection<Guid>? ResourceIds, string? MediaType);
+
+public sealed record UpdatePostRequest(string? Content, IReadOnlyCollection<Guid>? ResourceIds, string? MediaType);
 
 public sealed record CreateCommentRequest(Guid PostId, string Content);
 

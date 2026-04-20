@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using Application.Common;
 using Application.Follows.Models;
 using Application.Follows.Queries;
+using Application.Posts.Commands;
 using Application.Posts.Models;
 using Application.Posts.Queries;
 using Application.Profiles.Models;
@@ -212,6 +214,56 @@ public sealed class FeedControllerTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task UpdatePost_Should_SendAuthenticatedUserIdAndPayload()
+    {
+        var currentUserId = Guid.NewGuid();
+        var postId = Guid.NewGuid();
+        var request = new UpdatePostRequest(
+            "updated content #feed",
+            new[] { Guid.NewGuid() },
+            "image/jpeg");
+        var expectedPost = CreatePostResponse(postId, currentUserId, request.Content, request.MediaType);
+
+        var mediator = new Mock<IMediator>();
+        var expectedResult = Result.Success(expectedPost);
+
+        mediator
+            .Setup(item => item.Send(It.IsAny<UpdatePostCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResult);
+
+        var controller = CreateController(mediator.Object, currentUserId);
+
+        var actionResult = await controller.UpdatePost(postId, request, CancellationToken.None);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(expectedResult);
+        mediator.Verify(
+            item => item.Send(
+                It.Is<UpdatePostCommand>(command =>
+                    command == new UpdatePostCommand(currentUserId, postId, request.Content, request.ResourceIds, request.MediaType)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdatePost_Should_ReturnUnauthorized_WhenUserMissing()
+    {
+        var mediator = new Mock<IMediator>();
+        var controller = CreateController(mediator.Object);
+
+        var actionResult = await controller.UpdatePost(
+            Guid.NewGuid(),
+            new UpdatePostRequest("updated content", null, null),
+            CancellationToken.None);
+
+        var unauthorizedResult = actionResult.Should().BeOfType<UnauthorizedObjectResult>().Subject;
+        unauthorizedResult.Value.Should().BeEquivalentTo(new MessageResponse("Unauthorized"));
+        mediator.Verify(
+            item => item.Send(It.IsAny<UpdatePostCommand>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static FeedController CreateController(IMediator mediator, Guid? userId = null)
     {
         var controller = new FeedController(mediator)
@@ -233,16 +285,20 @@ public sealed class FeedControllerTests
         return controller;
     }
 
-    private static PostResponse CreatePostResponse()
+    private static PostResponse CreatePostResponse(
+        Guid? postId = null,
+        Guid? userId = null,
+        string? content = "post content",
+        string? mediaType = "image/jpeg")
     {
         return new PostResponse(
-            Guid.NewGuid(),
-            Guid.NewGuid(),
+            postId ?? Guid.NewGuid(),
+            userId ?? Guid.NewGuid(),
             "tester",
             "https://cdn.example.com/avatar.jpg",
-            "post content",
+            content,
             "https://cdn.example.com/post.jpg",
-            "image/jpeg",
+            mediaType,
             new List<PostMediaResponse>(),
             4,
             2,
