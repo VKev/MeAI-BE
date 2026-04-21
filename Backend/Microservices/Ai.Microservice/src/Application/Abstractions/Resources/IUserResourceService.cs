@@ -14,7 +14,8 @@ public interface IUserResourceService
         IReadOnlyList<string> urls,
         string? status,
         string? resourceType,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        Guid? workspaceId = null);
 
     Task<Result<IReadOnlyDictionary<Guid, PublicUserProfileResult>>> GetPublicUserProfilesByIdsAsync(
         IReadOnlyCollection<Guid> userIds,

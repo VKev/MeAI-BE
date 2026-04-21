@@ -46,11 +46,14 @@ public sealed class UpdatePostCommandHandler
             return Result.Failure<PostResponse>(PostErrors.Unauthorized);
         }
 
-        var workspaceId = NormalizeGuid(request.WorkspaceId);
-        if (workspaceId.HasValue)
+        // Treat unprovided fields (null in partial payload) as "don't change" rather than
+        // clobbering them — callers sending a partial update (e.g. content-only from the
+        // post-builder publish flow) must not wipe workspaceId, status, title, etc.
+        var requestedWorkspaceId = NormalizeGuid(request.WorkspaceId);
+        if (requestedWorkspaceId.HasValue)
         {
             var workspaceExists = await _workspaceRepository.ExistsForUserAsync(
-                workspaceId.Value,
+                requestedWorkspaceId.Value,
                 request.UserId,
                 cancellationToken);
 
@@ -58,13 +61,33 @@ public sealed class UpdatePostCommandHandler
             {
                 return Result.Failure<PostResponse>(PostErrors.WorkspaceNotFound);
             }
+
+            post.WorkspaceId = requestedWorkspaceId;
         }
 
-        post.WorkspaceId = workspaceId;
-        post.SocialMediaId = NormalizeGuid(request.SocialMediaId);
-        post.Title = NormalizeString(request.Title);
-        post.Content = request.Content;
-        post.Status = NormalizeString(request.Status);
+        var requestedSocialMediaId = NormalizeGuid(request.SocialMediaId);
+        if (requestedSocialMediaId.HasValue)
+        {
+            post.SocialMediaId = requestedSocialMediaId;
+        }
+
+        var normalizedTitle = NormalizeString(request.Title);
+        if (normalizedTitle is not null)
+        {
+            post.Title = normalizedTitle;
+        }
+
+        if (request.Content is not null)
+        {
+            post.Content = request.Content;
+        }
+
+        var normalizedStatus = NormalizeString(request.Status);
+        if (normalizedStatus is not null)
+        {
+            post.Status = normalizedStatus;
+        }
+
         post.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
 
         _postRepository.Update(post);

@@ -36,12 +36,10 @@ public sealed class DeleteResourceCommandHandler : IRequestHandler<DeleteResourc
             return Result.Failure<bool>(new Error("Resource.NotFound", "Resource not found"));
         }
 
-        var deleteResult = await _objectStorageService.DeleteAsync(resource.Link, cancellationToken);
-        if (deleteResult.IsFailure)
-        {
-            return Result.Failure<bool>(deleteResult.Error);
-        }
-
+        // Soft-delete only — keep the file in object storage so existing references
+        // from post-builder/product pages (which pin resource ids at create time) keep
+        // resolving presigned URLs. The library listing filters IsDeleted so the user
+        // sees the item removed there.
         resource.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;
         resource.IsDeleted = true;
         resource.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;

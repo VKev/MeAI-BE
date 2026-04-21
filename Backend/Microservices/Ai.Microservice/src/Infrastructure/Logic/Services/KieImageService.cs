@@ -42,29 +42,28 @@ public sealed class KieImageService : IKieImageService
             return new KieGenerateResult(false, 401, "Kie API key is not configured", null);
         }
 
-        var payload = new KieCreateTaskRequest
-        {
-            Model = request.Model ?? "google/nano-banana-pro",
-            Input = new KieInputParams
+        var model = request.Model ?? "nano-banana-pro";
+
+        // Flux Kontext uses a dedicated endpoint with a different request shape.
+        var isFluxKontext = model.StartsWith("flux-kontext-", StringComparison.OrdinalIgnoreCase);
+        var endpoint = isFluxKontext ? "/api/v1/flux/kontext/generate" : "/api/v1/jobs/createTask";
+        object payload = isFluxKontext
+            ? BuildFluxKontextPayload(model, request)
+            : new KieCreateTaskRequest
             {
-                Prompt = request.Prompt,
-                ImageInput = request.ImageInput ?? new List<string>(),
-                AspectRatio = request.AspectRatio,
-                Resolution = request.Resolution,
-                OutputFormat = request.OutputFormat,
-                NumberOfVariances = request.NumberOfVariances
-            },
-            CallBackUrl = BuildCallbackUrl(request.CorrelationId)
-        };
+                Model = model,
+                Input = BuildInputParams(model, request),
+                CallBackUrl = BuildCallbackUrl(request.CorrelationId)
+            };
 
         try
         {
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/jobs/createTask");
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
             httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
-            httpRequest.Content = JsonContent.Create(payload, options: JsonOptions);
+            httpRequest.Content = JsonContent.Create(payload, payload.GetType(), options: JsonOptions);
 
-            _logger.LogInformation("Sending image generation request to Kie API. Model: {Model}, AspectRatio: {AspectRatio}, Resolution: {Resolution}, Variances: {NumberOfVariances}",
-                payload.Model, request.AspectRatio, request.Resolution, request.NumberOfVariances);
+            _logger.LogInformation("Sending image generation request to Kie API. Model: {Model}, Endpoint: {Endpoint}, AspectRatio: {AspectRatio}, Resolution: {Resolution}",
+                model, endpoint, request.AspectRatio, request.Resolution);
 
             var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -203,32 +202,162 @@ public sealed class KieImageService : IKieImageService
         return normalized;
     }
 
+    private KieFluxKontextRequest BuildFluxKontextPayload(string model, KieGenerateRequest request)
+    {
+        // Flux Kontext editing mode: prompt + inputImage + aspectRatio.
+        // Model will crop/pad the input to match aspectRatio when supplied.
+        var inputImage = request.ImageInput is { Count: > 0 } ? request.ImageInput[0] : null;
+        var prompt = string.IsNullOrWhiteSpace(request.Prompt)
+            ? "Keep the exact same subject and composition; only adjust the framing to match the new aspect ratio."
+            : request.Prompt;
+
+        return new KieFluxKontextRequest
+        {
+            Prompt = prompt,
+            InputImage = inputImage,
+            AspectRatio = NormalizeAspectRatioForFlux(request.AspectRatio),
+            Model = model,
+            OutputFormat = "png",
+            EnableTranslation = false,
+            PromptUpsampling = false,
+            SafetyTolerance = 2,
+            CallBackUrl = BuildCallbackUrl(request.CorrelationId)
+        };
+    }
+
+    private static string NormalizeAspectRatioForFlux(string aspectRatio)
+    {
+        // Flux Kontext supports: 21:9, 16:9, 4:3, 1:1, 3:4, 9:16
+        return aspectRatio switch
+        {
+            "3:2" or "4:3" or "5:4" => "4:3",
+            "2:3" or "3:4" or "4:5" => "3:4",
+            "21:9" or "16:9" => aspectRatio,
+            "9:16" or "1:1" => aspectRatio,
+            _ => "1:1"
+        };
+    }
+
+    private static Dictionary<string, object?> BuildInputParams(string model, KieGenerateRequest request)
+    {
+        // Ideogram V3 Reframe: resizes an existing image into a different aspect ratio.
+        // Needs image_url (single string) + image_size — no prompt, no image_input.
+        // Explicit rendering_speed=TURBO for fast reframe turnaround.
+        if (string.Equals(model, "ideogram/v3-reframe", StringComparison.OrdinalIgnoreCase))
+        {
+            var sourceUrl = request.ImageInput is { Count: > 0 } ? request.ImageInput[0] : null;
+            return new Dictionary<string, object?>
+            {
+                ["image_url"] = sourceUrl,
+                ["image_size"] = MapAspectRatioToIdeogramSize(request.AspectRatio),
+                ["rendering_speed"] = "TURBO",
+                ["num_images"] = "1",
+                ["style"] = "AUTO"
+            };
+        }
+
+        var input = new Dictionary<string, object?> { ["prompt"] = request.Prompt };
+
+        if (request.ImageInput is { Count: > 0 })
+        {
+            input["image_input"] = request.ImageInput;
+        }
+
+        // Ideogram uses image_size with different value format (e.g. square, landscape_16_9)
+        if (model.StartsWith("ideogram/", StringComparison.OrdinalIgnoreCase))
+        {
+            input["image_size"] = MapAspectRatioToIdeogramSize(request.AspectRatio);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.AspectRatio))
+        {
+            input["aspect_ratio"] = NormalizeAspectRatioForModel(model, request.AspectRatio);
+        }
+
+        // nano-banana-pro specific params
+        if (model is "nano-banana-pro")
+        {
+            input["resolution"] = request.Resolution;
+            input["output_format"] = request.OutputFormat;
+            input["number_of_variances"] = request.NumberOfVariances;
+        }
+
+        // flux-2 supports resolution
+        if (model.StartsWith("flux-2/", StringComparison.OrdinalIgnoreCase))
+        {
+            input["resolution"] = request.Resolution;
+        }
+
+        return input;
+    }
+
+    private static string NormalizeAspectRatioForModel(string model, string aspectRatio)
+    {
+        // Flux 2 supports: 1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3
+        if (model.StartsWith("flux-2/", StringComparison.OrdinalIgnoreCase))
+        {
+            return aspectRatio switch
+            {
+                "5:4" or "21:9" => "16:9",
+                "4:5" => "9:16",
+                _ => aspectRatio
+            };
+        }
+
+        // Grok Imagine supports: 2:3, 3:2, 1:1, 16:9, 9:16
+        if (model.StartsWith("grok-imagine/", StringComparison.OrdinalIgnoreCase))
+        {
+            return aspectRatio switch
+            {
+                "4:3" or "5:4" or "21:9" => "3:2",
+                "3:4" or "4:5" => "2:3",
+                _ => aspectRatio
+            };
+        }
+
+        // nano-banana-pro accepts all FE ratios as-is
+        return aspectRatio;
+    }
+
+    private static string MapAspectRatioToIdeogramSize(string? aspectRatio)
+    {
+        // Ideogram only supports: square, square_hd, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9
+        // Map FE ratios to the closest supported value
+        return aspectRatio switch
+        {
+            "1:1" => "square_hd",
+            "16:9" => "landscape_16_9",
+            "9:16" => "portrait_16_9",
+            "4:3" => "landscape_4_3",
+            "3:4" => "portrait_4_3",
+            "3:2" => "landscape_4_3",   // closest landscape
+            "2:3" => "portrait_4_3",    // closest portrait
+            "5:4" => "landscape_4_3",   // closest landscape
+            "4:5" => "portrait_4_3",    // closest portrait
+            "21:9" => "landscape_16_9", // closest wide landscape
+            _ => "square_hd"
+        };
+    }
+
     #region Private API Models
 
     private sealed class KieCreateTaskRequest
     {
         public string Model { get; set; } = "nano-banana-pro";
-        public KieInputParams Input { get; set; } = null!;
+        public Dictionary<string, object?> Input { get; set; } = new();
         public string? CallBackUrl { get; set; }
     }
 
-    private sealed class KieInputParams
+    private sealed class KieFluxKontextRequest
     {
-        public string Prompt { get; set; } = null!;
-
-        [JsonPropertyName("image_input")]
-        public List<string> ImageInput { get; set; } = new();
-
-        [JsonPropertyName("aspect_ratio")]
-        public string AspectRatio { get; set; } = "1:1";
-
-        public string Resolution { get; set; } = "1K";
-
-        [JsonPropertyName("output_format")]
-        public string OutputFormat { get; set; } = "png";
-
-        [JsonPropertyName("number_of_variances")]
-        public int NumberOfVariances { get; set; } = 1;
+        public string Prompt { get; set; } = string.Empty;
+        public string? InputImage { get; set; }
+        public string? AspectRatio { get; set; }
+        public string? Model { get; set; }
+        public string? OutputFormat { get; set; }
+        public bool EnableTranslation { get; set; }
+        public bool PromptUpsampling { get; set; }
+        public int SafetyTolerance { get; set; }
+        public string? CallBackUrl { get; set; }
     }
 
     private sealed class KieApiResponse

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using SharedLibrary.Attributes;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.ImageGenerating;
 
 namespace WebApi.Controllers;
 
@@ -316,6 +317,16 @@ public sealed class ChatsController : ApiController
             return HandleFailure(Result.Failure<ChatImageResponse>(resourceIdsResult.Error));
         }
 
+        var socialTargets = request.SocialTargets?
+            .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Platform) && !string.IsNullOrWhiteSpace(t.Ratio))
+            .Select(t => new SocialTargetDto
+            {
+                Platform = t.Platform!.Trim(),
+                Type = string.IsNullOrWhiteSpace(t.Type) ? string.Empty : t.Type.Trim(),
+                Ratio = t.Ratio!.Trim()
+            })
+            .ToList();
+
         var command = new CreateChatImageCommand(
             UserId: userId,
             ChatSessionId: chatSessionId,
@@ -325,7 +336,8 @@ public sealed class ChatsController : ApiController
             AspectRatio: request.AspectRatio,
             Resolution: request.Resolution,
             OutputFormat: request.OutputFormat,
-            NumberOfVariances: request.NumberOfVariances);
+            NumberOfVariances: request.NumberOfVariances,
+            SocialTargets: socialTargets is { Count: > 0 } ? socialTargets : null);
 
         var result = await _mediator.Send(command, cancellationToken);
 
@@ -422,7 +434,13 @@ public sealed record CreateChatImageRequest(
     string? AspectRatio,
     string? Resolution,
     string? OutputFormat,
-    int? NumberOfVariances);
+    int? NumberOfVariances,
+    List<SocialTargetRequest>? SocialTargets);
+
+public sealed record SocialTargetRequest(
+    string? Platform,
+    string? Type,
+    string? Ratio);
 
 public sealed record CreateChatRequest(
     string? ChatSessionId,

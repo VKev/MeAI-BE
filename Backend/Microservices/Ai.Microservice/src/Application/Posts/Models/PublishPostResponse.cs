@@ -12,4 +12,6 @@ public sealed record PublishPostDestinationResult(
     Guid SocialMediaId,
     string SocialMediaType,
     string PageId,
-    string ExternalPostId);
+    string ExternalPostId,
+    Guid? PublicationId = null,
+    string? PublishStatus = null);

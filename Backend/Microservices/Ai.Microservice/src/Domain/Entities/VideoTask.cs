@@ -10,6 +10,8 @@ public sealed class VideoTask
 
     public Guid UserId { get; set; }
 
+    public Guid? WorkspaceId { get; set; }
+
     public Guid CorrelationId { get; set; }
 
     public string? VeoTaskId { get; set; }

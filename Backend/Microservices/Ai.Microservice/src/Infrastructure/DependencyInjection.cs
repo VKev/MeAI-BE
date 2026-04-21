@@ -129,8 +129,14 @@ namespace Infrastructure
 
                 // Image generation consumers
                 x.AddConsumer<SubmitImageTaskConsumer>();
+                x.AddConsumer<SubmitImageReframeConsumer>();
                 x.AddConsumer<ImageCompletedConsumer>();
                 x.AddConsumer<ImageFailedConsumer>();
+
+                // Publish-to-target consumer (async per-target post publishing)
+                x.AddConsumer<PublishToTargetConsumer>();
+                x.AddConsumer<UnpublishFromTargetConsumer>();
+                x.AddConsumer<UpdatePublishedTargetConsumer>();
 
                 x.AddSagaStateMachine<VideoTaskStateMachine, VideoTaskState>()
                     .RedisRepository(r =>

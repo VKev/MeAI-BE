@@ -20,14 +20,18 @@ public sealed class ImageTaskConfiguration : IEntityTypeConfiguration<ImageTask>
         entity.Property(e => e.Resolution).HasColumnName("resolution");
         entity.Property(e => e.OutputFormat).HasColumnName("output_format");
         entity.Property(e => e.Status).HasColumnName("status");
+        entity.Property(e => e.ParentCorrelationId).HasColumnName("parent_correlation_id");
+        entity.Property(e => e.SocialTargetsJson).HasColumnName("social_targets").HasColumnType("jsonb");
         entity.Property(e => e.ResultUrls).HasColumnName("result_urls").HasColumnType("jsonb");
         entity.Property(e => e.ErrorMessage).HasColumnName("error_message");
         entity.Property(e => e.ErrorCode).HasColumnName("error_code");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.CompletedAt).HasColumnName("completed_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UserId).HasColumnName("user_id");
+        entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
 
         entity.HasIndex(e => e.CorrelationId).HasDatabaseName("ix_image_tasks_correlation_id");
         entity.HasIndex(e => e.UserId).HasDatabaseName("ix_image_tasks_user_id");
+        entity.HasIndex(e => e.ParentCorrelationId).HasDatabaseName("ix_image_tasks_parent_correlation_id");
     }
 }

@@ -14,6 +14,7 @@ public sealed class ResourceConfiguration : IEntityTypeConfiguration<Resource>
 
         entity.Property(e => e.Id).HasColumnName("id");
         entity.Property(e => e.UserId).HasColumnName("user_id");
+        entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
         entity.Property(e => e.Link).HasColumnName("link").IsRequired();
         entity.Property(e => e.Status).HasColumnName("status");
         entity.Property(e => e.ResourceType).HasColumnName("type");
@@ -22,6 +23,8 @@ public sealed class ResourceConfiguration : IEntityTypeConfiguration<Resource>
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.IsDeleted).HasColumnName("is_deleted");
+
+        entity.HasIndex(e => new { e.UserId, e.WorkspaceId, e.CreatedAt }, "ix_resources_user_workspace_created_at");
 
         entity.HasOne<User>()
             .WithMany()

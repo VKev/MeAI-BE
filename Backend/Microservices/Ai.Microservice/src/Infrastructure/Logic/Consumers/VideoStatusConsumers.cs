@@ -67,7 +67,7 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
 
             // Attach results to chat BEFORE publishing notification
             // so the FE refetch gets the updated data immediately
-            await TryAttachChatResultsAsync(videoTask.UserId, message.CorrelationId, message.ResultUrls, context.CancellationToken);
+            await TryAttachChatResultsAsync(videoTask.UserId, videoTask.WorkspaceId, message.CorrelationId, message.ResultUrls, context.CancellationToken);
 
             await context.Publish(
                 NotificationRequestedEventFactory.CreateForUser(
@@ -98,6 +98,7 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
 
     private async Task TryAttachChatResultsAsync(
         Guid userId,
+        Guid? workspaceId,
         Guid correlationId,
         string? resultUrlsJson,
         CancellationToken cancellationToken)
@@ -128,7 +129,8 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
             urls,
             status: "generated",
             resourceType: "video",
-            cancellationToken);
+            cancellationToken,
+            workspaceId);
 
         if (uploadResult.IsFailure)
         {
@@ -167,6 +169,7 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
         }
 
         chat.ResultResourceIds = JsonSerializer.Serialize(resourceIds);
+        chat.Status = "Completed";
         chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -239,6 +242,8 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
                 "Video task updated to Failed. Id: {Id}",
                 videoTask.Id);
 
+            await MarkChatAsFailedAsync(message.CorrelationId, message.ErrorMessage, context.CancellationToken);
+
             await context.Publish(
                 NotificationRequestedEventFactory.CreateForUser(
                     videoTask.UserId,
@@ -264,6 +269,29 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
                 "VideoTask not found for CorrelationId: {CorrelationId}",
                 message.CorrelationId);
         }
+    }
+
+    private async Task MarkChatAsFailedAsync(Guid correlationId, string? errorMessage, CancellationToken cancellationToken)
+    {
+        var correlationText = correlationId.ToString();
+        var candidates = await _dbContext.Chats
+            .AsNoTracking()
+            .Where(c => c.Config != null && !c.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        var matched = candidates.FirstOrDefault(c =>
+            c.Config != null &&
+            c.Config.Contains(correlationText, StringComparison.OrdinalIgnoreCase));
+
+        if (matched is null) return;
+
+        var chat = await _dbContext.Chats.FirstOrDefaultAsync(c => c.Id == matched.Id, cancellationToken);
+        if (chat is null) return;
+
+        chat.Status = "Failed";
+        chat.ErrorMessage = errorMessage;
+        chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 

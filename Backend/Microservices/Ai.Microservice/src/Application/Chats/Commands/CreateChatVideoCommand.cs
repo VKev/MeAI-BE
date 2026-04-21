@@ -124,10 +124,13 @@ public sealed class CreateChatVideoCommandHandler
         await _chatRepository.AddAsync(chat, cancellationToken);
         await _chatRepository.SaveChangesAsync(cancellationToken);
 
+        var workspaceId = session.WorkspaceId == Guid.Empty ? (Guid?)null : session.WorkspaceId;
+
         var message = new VideoGenerationStarted
         {
             CorrelationId = correlationId,
             UserId = request.UserId,
+            WorkspaceId = workspaceId,
             Prompt = chat.Prompt ?? string.Empty,
             ImageUrls = imageUrls,
             Model = model,

@@ -281,8 +281,8 @@ public sealed class PostsController : ApiController
 
     [HttpPost("publish")]
     [Consumes("application/json")]
-    [ProducesResponseType(typeof(Result<PublishPostsResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(Result<PublishPostResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<PublishPostsResponse>), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(Result<PublishPostResponse>), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Publish(
@@ -311,13 +311,66 @@ public sealed class PostsController : ApiController
             return HandleFailure(result);
         }
 
+        // Publishing is now async — per-target completion is pushed via SignalR
+        // notifications (post.publish.target_completed / target_failed / batch_completed).
         if (requestResult.Value.ReturnSingleResponse)
         {
-            return Ok(Result.Success(result.Value.Posts[0]));
+            return Accepted(Result.Success(result.Value.Posts[0]));
         }
 
-        return Ok(result);
+        return Accepted(result);
     }
+
+    [HttpPost("{postId:guid}/unpublish")]
+    [ProducesResponseType(typeof(Result<UnpublishPostResponse>), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Unpublish(Guid postId, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(new UnpublishPostCommand(userId, postId), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+        return Accepted(result);
+    }
+
+    [HttpPost("{postId:guid}/update-published")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(Result<UpdatePublishedPostResponse>), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdatePublished(
+        Guid postId,
+        [FromBody] UpdatePublishedPostRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+        if (request is null || string.IsNullOrWhiteSpace(request.Content))
+        {
+            return HandleFailure(Result.Failure<UpdatePublishedPostResponse>(
+                new Error("Post.EmptyContent", "Updated content cannot be empty.")));
+        }
+
+        var result = await _mediator.Send(
+            new UpdatePublishedPostCommand(userId, postId, request.Content, request.Hashtag),
+            cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+        return Accepted(result);
+    }
+
+    public sealed record UpdatePublishedPostRequest(string Content, string? Hashtag);
 
     [HttpPost("prepare")]
     [ApiExplorerSettings(IgnoreApi = true)]

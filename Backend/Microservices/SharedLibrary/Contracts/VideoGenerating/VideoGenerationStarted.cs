@@ -6,6 +6,8 @@ public class VideoGenerationStarted
 
     public Guid UserId { get; set; }
 
+    public Guid? WorkspaceId { get; set; }
+
     public string Prompt { get; set; } = null!;
 
     public List<string>? ImageUrls { get; set; }

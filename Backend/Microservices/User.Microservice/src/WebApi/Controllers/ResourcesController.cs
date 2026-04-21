@@ -111,6 +111,34 @@ public sealed class ResourcesController : ApiController
         return Ok(result);
     }
 
+    [HttpGet("workspace/{workspaceId:guid}")]
+    [ProducesResponseType(typeof(Result<List<ResourceResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetByWorkspace(
+        Guid workspaceId,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new GetWorkspaceResourcesQuery(userId, workspaceId, cursorCreatedAt, cursorId, limit),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(Result<ResourceResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -140,6 +168,7 @@ public sealed class ResourcesController : ApiController
         [FromForm] IFormFile file,
         [FromForm] string? status,
         [FromForm] string? resourceType,
+        [FromForm] string? workspaceId,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -160,6 +189,21 @@ public sealed class ResourcesController : ApiController
             ? "application/octet-stream"
             : file.ContentType;
 
+        Guid? normalizedWorkspaceId = null;
+        if (!string.IsNullOrWhiteSpace(workspaceId))
+        {
+            if (!Guid.TryParse(workspaceId, out var parsedWorkspaceId) || parsedWorkspaceId == Guid.Empty)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Invalid workspaceId",
+                    Detail = "workspaceId must be a valid GUID."
+                });
+            }
+
+            normalizedWorkspaceId = parsedWorkspaceId;
+        }
+
         var command = new UploadResourceFileCommand(
             userId,
             file.OpenReadStream(),
@@ -167,7 +211,8 @@ public sealed class ResourcesController : ApiController
             contentType,
             file.Length,
             status,
-            resourceType);
+            resourceType,
+            normalizedWorkspaceId);
 
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)
@@ -188,6 +233,7 @@ public sealed class ResourcesController : ApiController
         [FromForm] IFormFile file,
         [FromForm] string? status,
         [FromForm] string? resourceType,
+        [FromForm] string? workspaceId,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -208,6 +254,21 @@ public sealed class ResourcesController : ApiController
             ? "application/octet-stream"
             : file.ContentType;
 
+        Guid? normalizedWorkspaceId = null;
+        if (!string.IsNullOrWhiteSpace(workspaceId))
+        {
+            if (!Guid.TryParse(workspaceId, out var parsedWorkspaceId) || parsedWorkspaceId == Guid.Empty)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Invalid workspaceId",
+                    Detail = "workspaceId must be a valid GUID."
+                });
+            }
+
+            normalizedWorkspaceId = parsedWorkspaceId;
+        }
+
         var command = new UpdateResourceFileCommand(
             id,
             userId,
@@ -216,7 +277,8 @@ public sealed class ResourcesController : ApiController
             contentType,
             file.Length,
             status,
-            resourceType);
+            resourceType,
+            normalizedWorkspaceId);
 
         var result = await _mediator.Send(command, cancellationToken);
         if (result.IsFailure)

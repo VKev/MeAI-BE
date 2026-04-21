@@ -20,6 +20,59 @@ public sealed class FacebookPublishService : IFacebookPublishService
         _httpClient = httpClientFactory.CreateClient("Facebook");
     }
 
+    public async Task<Result<bool>> DeleteAsync(
+        FacebookDeleteRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.ExternalPostId))
+        {
+            return Result.Failure<bool>(new Error("Facebook.DeleteMissingId", "Missing Facebook post id."));
+        }
+        if (string.IsNullOrWhiteSpace(request.PageAccessToken))
+        {
+            return Result.Failure<bool>(new Error("Facebook.DeleteMissingToken", "Missing Facebook page access token."));
+        }
+
+        var url = $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.ExternalPostId)}?access_token={Uri.EscapeDataString(request.PageAccessToken)}";
+        var response = await _httpClient.DeleteAsync(url, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return Result.Failure<bool>(
+                new Error("Facebook.DeleteFailed", ReadGraphApiError(body) ?? $"Delete failed with status {(int)response.StatusCode}."));
+        }
+        return Result.Success(true);
+    }
+
+    public async Task<Result<bool>> UpdateAsync(
+        FacebookUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.ExternalPostId))
+        {
+            return Result.Failure<bool>(new Error("Facebook.UpdateMissingId", "Missing Facebook post id."));
+        }
+        if (string.IsNullOrWhiteSpace(request.PageAccessToken))
+        {
+            return Result.Failure<bool>(new Error("Facebook.UpdateMissingToken", "Missing Facebook page access token."));
+        }
+
+        var url = $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.ExternalPostId)}";
+        var payload = new Dictionary<string, string>
+        {
+            ["access_token"] = request.PageAccessToken,
+            ["message"] = request.Message ?? string.Empty
+        };
+        var response = await _httpClient.PostAsync(url, new FormUrlEncodedContent(payload), cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return Result.Failure<bool>(
+                new Error("Facebook.UpdateFailed", ReadGraphApiError(body) ?? $"Update failed with status {(int)response.StatusCode}."));
+        }
+        return Result.Success(true);
+    }
+
     public async Task<Result<IReadOnlyList<FacebookPublishResult>>> PublishAsync(
         FacebookPublishRequest request,
         CancellationToken cancellationToken)
