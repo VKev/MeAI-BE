@@ -2,7 +2,7 @@ using Application.Posts.Models;
 
 namespace Application.Posts;
 
-internal static class SocialPlatformPostAnalysisFactory
+public static class SocialPlatformPostAnalysisFactory
 {
     public static SocialPlatformPostAnalysisResponse Create(SocialPlatformPostStatsResponse stats)
     {

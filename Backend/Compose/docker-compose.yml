@@ -187,6 +187,7 @@ services:
       Cors__AllowedOrigins__3: http://localhost:3030
       UserService__GrpcUrl: http://user-microservice:5004
       AiService__GrpcUrl: http://ai-microservice:5005
+      FeedService__GrpcUrl: http://feed-microservice:5008
       AutoApply__Migrations: "true"
       FeedSeed__Enabled: "true"
       FeedSeed__DataRoot: /feed-seed-data

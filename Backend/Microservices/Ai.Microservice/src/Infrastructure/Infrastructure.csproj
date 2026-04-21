@@ -40,6 +40,7 @@
 
   <ItemGroup>
     <Protobuf Include="..\..\..\SharedLibrary\Protos\user_resources.proto" GrpcServices="Client" />
+    <Protobuf Include="..\..\..\SharedLibrary\Protos\feed_analytics.proto" GrpcServices="Client" />
   </ItemGroup>
 
   <Target Name="CopyEFCoreTargetsFile" BeforeTargets="BeforeBuild">
