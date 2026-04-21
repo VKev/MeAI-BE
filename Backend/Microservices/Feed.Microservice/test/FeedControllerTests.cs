@@ -35,6 +35,7 @@ public sealed class FeedControllerTests
             "https://cdn.example.com/alice.jpg",
             10,
             12,
+            8,
             null);
 
         var mediator = new Mock<IMediator>();
@@ -68,6 +69,7 @@ public sealed class FeedControllerTests
             "https://cdn.example.com/alice.jpg",
             10,
             12,
+            8,
             true);
 
         var mediator = new Mock<IMediator>();
