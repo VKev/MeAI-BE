@@ -72,6 +72,7 @@ message CreateResourcesFromUrlsRequest {
   repeated string urls = 2;
   string status = 3;
   string resource_type = 4;
+  string workspace_id = 5;
 }
 
 message CreatedResource {

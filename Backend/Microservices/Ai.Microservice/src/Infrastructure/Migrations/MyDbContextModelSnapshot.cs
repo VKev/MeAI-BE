@@ -41,6 +41,9 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
                     b.Property<string>("Prompt")
                         .HasColumnType("text")
                         .HasColumnName("prompt");
@@ -56,6 +59,9 @@ namespace Infrastructure.Migrations
                     b.Property<Guid>("SessionId")
                         .HasColumnType("uuid")
                         .HasColumnName("session_id");
+
+                    b.Property<string>("Status")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -149,6 +155,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("output_format");
 
+                    b.Property<Guid?>("ParentCorrelationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("parent_correlation_id");
+
                     b.Property<string>("Prompt")
                         .IsRequired()
                         .HasColumnType("text")
@@ -163,6 +173,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("result_urls");
 
+                    b.Property<string>("SocialTargetsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("social_targets");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text")
@@ -172,11 +186,18 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
                     b.HasKey("Id")
                         .HasName("image_tasks_pkey");
 
                     b.HasIndex("CorrelationId")
                         .HasDatabaseName("ix_image_tasks_correlation_id");
+
+                    b.HasIndex("ParentCorrelationId")
+                        .HasDatabaseName("ix_image_tasks_parent_correlation_id");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_image_tasks_user_id");
@@ -480,7 +501,7 @@ namespace Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("ck_post_publications_external_content_id_type", "external_content_id_type IN ('post_id', 'publish_id')");
 
-                            t.HasCheckConstraint("ck_post_publications_publish_status", "publish_status IN ('processing', 'published', 'failed')");
+                            t.HasCheckConstraint("ck_post_publications_publish_status", "publish_status IN ('processing', 'published', 'unpublishing', 'failed')");
                         });
                 });
 
@@ -577,6 +598,10 @@ namespace Infrastructure.Migrations
                     b.Property<string>("VeoTaskId")
                         .HasColumnType("text")
                         .HasColumnName("veo_task_id");
+
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
 
                     b.HasKey("Id")
                         .HasName("video_tasks_pkey");

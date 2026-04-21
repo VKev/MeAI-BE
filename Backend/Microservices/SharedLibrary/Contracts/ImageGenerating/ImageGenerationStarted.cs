@@ -6,6 +6,8 @@ public class ImageGenerationStarted
 
     public Guid UserId { get; set; }
 
+    public Guid? WorkspaceId { get; set; }
+
     public string Prompt { get; set; } = null!;
 
     public List<string>? ImageUrls { get; set; }
@@ -19,6 +21,8 @@ public class ImageGenerationStarted
     public string OutputFormat { get; set; } = "png";
 
     public int NumberOfVariances { get; set; } = 1;
+
+    public List<SocialTargetDto>? SocialTargets { get; set; }
 
     public DateTime CreatedAt { get; set; }
 }

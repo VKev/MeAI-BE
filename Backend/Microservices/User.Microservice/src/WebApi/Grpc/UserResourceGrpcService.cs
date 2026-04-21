@@ -161,12 +161,26 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
         var status = string.IsNullOrWhiteSpace(request.Status) ? null : request.Status;
         var resourceType = string.IsNullOrWhiteSpace(request.ResourceType) ? null : request.ResourceType;
 
+        Guid? workspaceId = null;
+        if (!string.IsNullOrWhiteSpace(request.WorkspaceId))
+        {
+            if (!Guid.TryParse(request.WorkspaceId, out var parsedWorkspaceId))
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid workspaceId."));
+            }
+
+            if (parsedWorkspaceId != Guid.Empty)
+            {
+                workspaceId = parsedWorkspaceId;
+            }
+        }
+
         var response = new CreateResourcesFromUrlsResponse();
 
         foreach (var url in request.Urls)
         {
             var result = await _mediator.Send(
-                new UploadResourceFromUrlCommand(userId, url, status, resourceType),
+                new UploadResourceFromUrlCommand(userId, url, status, resourceType, workspaceId),
                 context.CancellationToken);
 
             if (result.IsFailure)

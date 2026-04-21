@@ -10,6 +10,8 @@ public sealed class ImageTask
 
     public Guid UserId { get; set; }
 
+    public Guid? WorkspaceId { get; set; }
+
     public Guid CorrelationId { get; set; }
 
     public string? KieTaskId { get; set; }
@@ -23,6 +25,11 @@ public sealed class ImageTask
     public string OutputFormat { get; set; } = "png";
 
     public string Status { get; set; } = "Submitted";
+
+    public Guid? ParentCorrelationId { get; set; }
+
+    [Column(TypeName = "jsonb")]
+    public string? SocialTargetsJson { get; set; }
 
     [Column(TypeName = "jsonb")]
     public string? ResultUrls { get; set; }

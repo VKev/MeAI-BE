@@ -18,7 +18,8 @@ public sealed record UpdateResourceFileCommand(
     string ContentType,
     long ContentLength,
     string? Status,
-    string? ResourceType) : IRequest<Result<ResourceResponse>>;
+    string? ResourceType,
+    Guid? WorkspaceId = null) : IRequest<Result<ResourceResponse>>;
 
 public sealed class UpdateResourceFileCommandHandler
     : IRequestHandler<UpdateResourceFileCommand, Result<ResourceResponse>>
@@ -76,6 +77,11 @@ public sealed class UpdateResourceFileCommandHandler
         if (!string.IsNullOrWhiteSpace(request.ResourceType))
         {
             resource.ResourceType = request.ResourceType.Trim();
+        }
+
+        if (request.WorkspaceId.HasValue)
+        {
+            resource.WorkspaceId = request.WorkspaceId.Value;
         }
 
         resource.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;

@@ -22,7 +22,8 @@ public sealed record CreateChatImageCommand(
     string? AspectRatio,
     string? Resolution,
     string? OutputFormat,
-    int? NumberOfVariances) : IRequest<Result<ChatImageResponse>>;
+    int? NumberOfVariances,
+    IReadOnlyList<SocialTargetDto>? SocialTargets = null) : IRequest<Result<ChatImageResponse>>;
 
 public sealed record ChatImageResponse(
     Guid ChatId,
@@ -97,7 +98,7 @@ public sealed class CreateChatImageCommandHandler
         }
 
         var activeConfig = await TryGetActiveConfigAsync(cancellationToken);
-        var model = ResolveModel(request.Model, activeConfig?.ChatModel, "google/nano-banana-pro");
+        var model = ResolveModel(request.Model, activeConfig?.ChatModel, "nano-banana-pro");
         var aspectRatio = ResolveAspectRatio(request.AspectRatio, activeConfig?.MediaAspectRatio, "1:1");
         var resolution = string.IsNullOrWhiteSpace(request.Resolution) ? "1K" : request.Resolution.Trim();
         var outputFormat = string.IsNullOrWhiteSpace(request.OutputFormat) ? "png" : request.OutputFormat.Trim();
@@ -105,12 +106,51 @@ public sealed class CreateChatImageCommandHandler
 
         var correlationId = Guid.CreateVersion7();
 
+        var socialTargets = request.SocialTargets?
+            .Where(t => !string.IsNullOrWhiteSpace(t.Platform) && !string.IsNullOrWhiteSpace(t.Ratio))
+            .Select(t => new SocialTargetDto
+            {
+                Platform = t.Platform.Trim(),
+                Type = string.IsNullOrWhiteSpace(t.Type) ? string.Empty : t.Type.Trim(),
+                Ratio = t.Ratio.Trim()
+            })
+            .ToList();
+
+        // When social targets are provided, the user's manual aspect ratio is irrelevant —
+        // derive the source ratio from the most-frequent target ratio so the source image
+        // can serve as-is for those targets and we only reframe for distinct remaining ratios.
+        // Ties break by first occurrence.
+        if (socialTargets is { Count: > 0 })
+        {
+            aspectRatio = socialTargets
+                .GroupBy(t => t.Ratio, StringComparer.OrdinalIgnoreCase)
+                .Select((g, index) => new { Ratio = g.Key, Count = g.Count(), FirstIndex = index })
+                .OrderByDescending(x => x.Count)
+                .ThenBy(x => x.FirstIndex)
+                .First()
+                .Ratio;
+        }
+
+        // Expected final tile count = source image + distinct reframe ratios (excluding source ratio).
+        var expectedResultCount = 1;
+        if (socialTargets is { Count: > 0 })
+        {
+            var distinctExtraRatios = socialTargets
+                .Select(t => t.Ratio)
+                .Where(r => !string.Equals(r, aspectRatio, StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+            expectedResultCount = 1 + distinctExtraRatios;
+        }
+
         var config = new ChatImageConfig(
             correlationId,
             aspectRatio,
             resolution,
             outputFormat,
-            numberOfVariances);
+            numberOfVariances,
+            expectedResultCount,
+            socialTargets is { Count: > 0 } ? socialTargets : null);
 
         var chat = new Chat
         {
@@ -125,10 +165,13 @@ public sealed class CreateChatImageCommandHandler
         await _chatRepository.AddAsync(chat, cancellationToken);
         await _chatRepository.SaveChangesAsync(cancellationToken);
 
+        var workspaceId = session.WorkspaceId == Guid.Empty ? (Guid?)null : session.WorkspaceId;
+
         var message = new ImageGenerationStarted
         {
             CorrelationId = correlationId,
             UserId = request.UserId,
+            WorkspaceId = workspaceId,
             Prompt = chat.Prompt ?? string.Empty,
             ImageUrls = imageUrls,
             Model = model,
@@ -136,6 +179,7 @@ public sealed class CreateChatImageCommandHandler
             Resolution = resolution,
             OutputFormat = outputFormat,
             NumberOfVariances = numberOfVariances,
+            SocialTargets = socialTargets is { Count: > 0 } ? socialTargets : null,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
@@ -170,7 +214,9 @@ public sealed class CreateChatImageCommandHandler
         string AspectRatio,
         string Resolution,
         string OutputFormat,
-        int NumberOfVariances);
+        int NumberOfVariances,
+        int ExpectedResultCount,
+        List<SocialTargetDto>? SocialTargets);
 
     private async Task<UserAiConfig?> TryGetActiveConfigAsync(CancellationToken cancellationToken)
     {

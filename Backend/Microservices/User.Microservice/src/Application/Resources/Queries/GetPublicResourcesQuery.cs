@@ -45,9 +45,12 @@ public sealed class GetPublicResourcesQueryHandler
                 new Error("Resource.Missing", "At least one valid resource is required."));
         }
 
+        // Include soft-deleted resources so public links embedded in already-published
+        // posts (product pages, published feed items, etc.) keep resolving after the
+        // owner soft-deletes the resource from their library.
         var resources = await _repository.GetAll()
             .AsNoTracking()
-            .Where(resource => uniqueIds.Contains(resource.Id) && !resource.IsDeleted)
+            .Where(resource => uniqueIds.Contains(resource.Id))
             .ToListAsync(cancellationToken);
 
         if (resources.Count != uniqueIds.Count)

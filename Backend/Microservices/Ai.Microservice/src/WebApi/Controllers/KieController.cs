@@ -240,6 +240,42 @@ public sealed class KieController : ApiController
                     new Error("Kie.InvalidCallbackPayload", "Invalid image callback payload.")));
             }
 
+            // Flux Kontext callback format: { code, msg, data: { taskId, info: { resultImageUrl } } }.
+            // Market format has data.resultJson. If Market parsing missed results, try Flux shape.
+            if (string.IsNullOrWhiteSpace(imagePayload.Data?.ResultJson) &&
+                payload.ValueKind == JsonValueKind.Object &&
+                payload.TryGetProperty("data", out var dataEl) &&
+                dataEl.ValueKind == JsonValueKind.Object &&
+                dataEl.TryGetProperty("info", out var infoEl) &&
+                infoEl.ValueKind == JsonValueKind.Object)
+            {
+                string? resultUrl = null;
+                if (infoEl.TryGetProperty("resultImageUrl", out var resUrlEl) && resUrlEl.ValueKind == JsonValueKind.String)
+                {
+                    resultUrl = resUrlEl.GetString();
+                }
+
+                if (!string.IsNullOrWhiteSpace(resultUrl))
+                {
+                    var taskId = imagePayload.Data?.TaskId;
+                    var isSuccess = imagePayload.Code == 200;
+                    var synthesizedResultJson = isSuccess
+                        ? JsonSerializer.Serialize(new { resultUrls = new[] { resultUrl } }, CallbackJsonOptions)
+                        : null;
+
+                    imagePayload = new KieCallbackPayload(
+                        imagePayload.Code,
+                        imagePayload.Msg,
+                        new KieCallbackData(
+                            taskId,
+                            isSuccess ? "success" : "fail",
+                            synthesizedResultJson,
+                            imagePayload.Data?.FailCode,
+                            imagePayload.Data?.FailMsg ?? (isSuccess ? null : imagePayload.Msg),
+                            imagePayload.Data?.CompleteTime));
+                }
+            }
+
             var result = await _mediator.Send(new HandleImageCallbackCommand(correlationId, imagePayload), cancellationToken);
             return Ok(result);
         }
@@ -252,6 +288,37 @@ public sealed class KieController : ApiController
         catch (JsonException)
         {
             videoPayload = null;
+        }
+
+        // If Veo format parsed but has no result URLs, try Market format (resultJson)
+        var hasVeoResults = videoPayload?.Data?.Info?.ResultUrls is { Count: > 0 };
+        if (videoPayload is not null && !hasVeoResults)
+        {
+            KieCallbackPayload? marketPayload = null;
+            try
+            {
+                marketPayload = JsonSerializer.Deserialize<KieCallbackPayload>(payload.GetRawText(), CallbackJsonOptions);
+            }
+            catch (JsonException) { }
+
+            if (marketPayload?.Data?.ResultJson is not null)
+            {
+                List<string>? resultUrls = null;
+                try
+                {
+                    var resultJson = JsonSerializer.Deserialize<KieResultJson>(marketPayload.Data.ResultJson, CallbackJsonOptions);
+                    resultUrls = resultJson?.ResultUrls;
+                }
+                catch (JsonException) { }
+
+                videoPayload = new VeoCallbackPayload(
+                    marketPayload.Code,
+                    marketPayload.Msg,
+                    new VeoCallbackData(
+                        marketPayload.Data.TaskId,
+                        new VeoCallbackInfo(resultUrls, null, null),
+                        null));
+            }
         }
 
         if (videoPayload is null)

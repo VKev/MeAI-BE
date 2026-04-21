@@ -253,10 +253,14 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
                     b.HasKey("Id")
                         .HasName("resources_pkey");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex(new[] { "UserId", "WorkspaceId", "CreatedAt" }, "ix_resources_user_workspace_created_at");
 
                     b.ToTable("resources", (string)null);
                 });

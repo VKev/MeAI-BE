@@ -14,3 +14,15 @@ public sealed record PostBuilderSocialMediaGroupResponse(
     string Platform,
     string? Type,
     IReadOnlyList<PostResponse> Posts);
+
+public sealed record PostBuilderSummaryResponse(
+    Guid Id,
+    Guid? WorkspaceId,
+    string? Type,
+    int PostCount,
+    int PublishedCount,
+    IReadOnlyList<string> Platforms,
+    string? ThumbnailUrl,
+    string? FirstPostSnippet,
+    DateTime? CreatedAt,
+    DateTime? UpdatedAt);

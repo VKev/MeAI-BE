@@ -13,7 +13,8 @@ public sealed record UploadResourceFromUrlCommand(
     Guid UserId,
     string Url,
     string? Status,
-    string? ResourceType) : IRequest<Result<ResourceResponse>>;
+    string? ResourceType,
+    Guid? WorkspaceId = null) : IRequest<Result<ResourceResponse>>;
 
 public sealed class UploadResourceFromUrlCommandHandler
     : IRequestHandler<UploadResourceFromUrlCommand, Result<ResourceResponse>>
@@ -63,6 +64,7 @@ public sealed class UploadResourceFromUrlCommandHandler
         {
             Id = resourceId,
             UserId = request.UserId,
+            WorkspaceId = request.WorkspaceId,
             Link = uploadResult.Value.Key,
             Status = request.Status?.Trim(),
             ResourceType = request.ResourceType?.Trim(),

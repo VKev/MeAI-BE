@@ -37,11 +37,14 @@ public sealed class GetResourcesByIdsQueryHandler
 
         var uniqueIds = request.ResourceIds.Distinct().ToList();
 
+        // Intentionally include soft-deleted resources here: post-builder and product
+        // pages pin resource ids at create time. Soft-deleting a resource should NOT
+        // break those already-attached references. The library listing query filters
+        // IsDeleted separately so the user still sees the item removed there.
         var resources = await _repository.GetAll()
             .Where(resource =>
                 resource.UserId == request.UserId &&
-                uniqueIds.Contains(resource.Id) &&
-                !resource.IsDeleted)
+                uniqueIds.Contains(resource.Id))
             .ToListAsync(cancellationToken);
 
         if (resources.Count != uniqueIds.Count)

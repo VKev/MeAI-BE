@@ -55,7 +55,8 @@ public sealed class UserResourceGrpcService : IUserResourceService
         IReadOnlyList<string> urls,
         string? status,
         string? resourceType,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? workspaceId = null)
     {
         if (urls.Count == 0)
         {
@@ -67,7 +68,8 @@ public sealed class UserResourceGrpcService : IUserResourceService
         {
             UserId = userId.ToString(),
             Status = status ?? string.Empty,
-            ResourceType = resourceType ?? string.Empty
+            ResourceType = resourceType ?? string.Empty,
+            WorkspaceId = workspaceId.HasValue ? workspaceId.Value.ToString() : string.Empty
         };
 
         request.Urls.AddRange(urls.Where(url => !string.IsNullOrWhiteSpace(url)));

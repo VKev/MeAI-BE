@@ -24,6 +24,59 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         _httpClient = httpClientFactory.CreateClient("Threads");
     }
 
+    public async Task<Result<bool>> DeleteAsync(
+        ThreadsDeleteRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.ThreadsPostId))
+        {
+            return Result.Failure<bool>(new Error("Threads.DeleteMissingId", "Missing Threads post id."));
+        }
+        if (string.IsNullOrWhiteSpace(request.AccessToken))
+        {
+            return Result.Failure<bool>(new Error("Threads.DeleteMissingToken", "Missing Threads access token."));
+        }
+
+        // Threads only exposes numeric media IDs to DELETE. Permalink URLs stored in
+        // ExternalContentId need to be stripped down to the id segment before calling the API.
+        var id = ExtractThreadsId(request.ThreadsPostId);
+        var url = $"{GraphApiBaseUrl}/{Uri.EscapeDataString(id)}?access_token={Uri.EscapeDataString(request.AccessToken)}";
+        var response = await _httpClient.DeleteAsync(url, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return Result.Failure<bool>(
+                new Error("Threads.DeleteFailed", ReadGraphApiError(body) ?? $"Threads delete failed with status {(int)response.StatusCode}."));
+        }
+        return Result.Success(true);
+    }
+
+    private static string ExtractThreadsId(string raw)
+    {
+        // If a permalink was stored, pick the last numeric path segment; otherwise return raw.
+        if (!raw.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            return raw;
+        }
+        try
+        {
+            var uri = new Uri(raw);
+            var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            for (var i = segments.Length - 1; i >= 0; i--)
+            {
+                if (long.TryParse(segments[i], out _))
+                {
+                    return segments[i];
+                }
+            }
+            return segments.Length > 0 ? segments[^1] : raw;
+        }
+        catch
+        {
+            return raw;
+        }
+    }
+
     public async Task<Result<ThreadsPublishResult>> PublishAsync(
         ThreadsPublishRequest request,
         CancellationToken cancellationToken)
@@ -78,9 +131,40 @@ public sealed class ThreadsPublishService : IThreadsPublishService
             return Result.Failure<ThreadsPublishResult>(publishResult.Error);
         }
 
+        // Threads' numeric media id is not directly usable in public URLs — the canonical
+        // format is https://www.threads.net/@{username}/post/{shortcode}. Ask the Graph API
+        // for the permalink so the FE can link out correctly.
+        var permalink = await TryFetchPermalinkAsync(publishResult.Value, request.AccessToken, cancellationToken);
+
         return Result.Success(new ThreadsPublishResult(
             request.ThreadsUserId,
-            publishResult.Value));
+            string.IsNullOrWhiteSpace(permalink) ? publishResult.Value : permalink));
+    }
+
+    private async Task<string?> TryFetchPermalinkAsync(
+        string mediaId,
+        string accessToken,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var url =
+                $"{GraphApiBaseUrl}/{Uri.EscapeDataString(mediaId)}?fields=permalink&access_token={Uri.EscapeDataString(accessToken)}";
+
+            var response = await _httpClient.GetAsync(url, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            var parsed = JsonSerializer.Deserialize<GraphApiPermalinkResponse>(body, JsonOptions);
+            return parsed?.Permalink;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task<Result<string>> CreateThreadContainerAsync(
@@ -319,6 +403,12 @@ public sealed class ThreadsPublishService : IThreadsPublishService
     {
         [JsonPropertyName("id")]
         public string? Id { get; set; }
+    }
+
+    private sealed class GraphApiPermalinkResponse
+    {
+        [JsonPropertyName("permalink")]
+        public string? Permalink { get; set; }
     }
 
     private sealed class GraphApiErrorResponse

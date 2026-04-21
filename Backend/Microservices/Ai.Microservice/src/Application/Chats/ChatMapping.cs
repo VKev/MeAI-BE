@@ -19,6 +19,8 @@ internal static class ChatMapping
             chat.ResultResourceIds,
             referenceResourceUrls,
             resultResourceUrls,
+            chat.Status,
+            chat.ErrorMessage,
             chat.CreatedAt,
             chat.UpdatedAt);
     }

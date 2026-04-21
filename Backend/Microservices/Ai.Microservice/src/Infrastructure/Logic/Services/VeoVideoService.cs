@@ -42,22 +42,43 @@ public sealed class VeoVideoService : IVeoVideoService
             return new VeoGenerateResult(false, 401, "Veo API key is not configured", null);
         }
 
-        var payload = new VeoApiRequest
+        var isVeoModel = request.Model.StartsWith("veo", StringComparison.OrdinalIgnoreCase);
+        var callbackUrl = BuildCallbackUrl(request.CorrelationId);
+
+        object payload;
+        string endpoint;
+
+        if (isVeoModel)
         {
-            Prompt = request.Prompt,
-            ImageUrls = request.ImageUrls,
-            Model = request.Model,
-            GenerationType = request.GenerationType,
-            AspectRatio = request.AspectRatio,
-            Seeds = request.Seeds,
-            EnableTranslation = request.EnableTranslation,
-            Watermark = request.Watermark,
-            CallBackUrl = BuildCallbackUrl(request.CorrelationId)
-        };
+            endpoint = "/api/v1/veo/generate";
+            payload = new VeoApiRequest
+            {
+                Prompt = request.Prompt,
+                ImageUrls = request.ImageUrls,
+                Model = request.Model,
+                GenerationType = request.GenerationType,
+                AspectRatio = NormalizeVeoAspectRatio(request.AspectRatio),
+                Seeds = request.Seeds,
+                EnableTranslation = request.EnableTranslation,
+                Watermark = request.Watermark,
+                CallBackUrl = callbackUrl
+            };
+        }
+        else
+        {
+            // Market models use the unified createTask endpoint
+            endpoint = "/api/v1/jobs/createTask";
+            var input = new Dictionary<string, object?> { ["prompt"] = request.Prompt };
+            if (!string.IsNullOrWhiteSpace(request.AspectRatio))
+                input["aspect_ratio"] = request.AspectRatio;
+            if (request.ImageUrls is { Count: > 0 })
+                input["image_url"] = request.ImageUrls[0];
+            payload = new { model = request.Model, input, callBackUrl = callbackUrl };
+        }
 
         try
         {
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/veo/generate");
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
             httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
             httpRequest.Content = JsonContent.Create(payload, options: JsonOptions);
 
@@ -319,16 +340,36 @@ public sealed class VeoVideoService : IVeoVideoService
         return normalized;
     }
 
+    private static string NormalizeVeoAspectRatio(string? aspectRatio)
+    {
+        // Veo accepts: "16:9", "9:16", "Auto" (capital A)
+        if (string.IsNullOrWhiteSpace(aspectRatio)) return "16:9";
+        return aspectRatio.Equals("auto", StringComparison.OrdinalIgnoreCase)
+            ? "Auto"
+            : aspectRatio;
+    }
+
     private sealed class VeoApiRequest
     {
         public required string Prompt { get; set; }
+
+        [JsonPropertyName("imageUrls")]
         public List<string>? ImageUrls { get; set; }
+
         public string Model { get; set; } = "veo3_fast";
+
+        [JsonPropertyName("generationType")]
         public string? GenerationType { get; set; }
+
+        [JsonPropertyName("aspect_ratio")]
         public string AspectRatio { get; set; } = "16:9";
+
         public int? Seeds { get; set; }
+
         public bool EnableTranslation { get; set; } = true;
+
         public string? Watermark { get; set; }
+
         public string? CallBackUrl { get; set; }
     }
 

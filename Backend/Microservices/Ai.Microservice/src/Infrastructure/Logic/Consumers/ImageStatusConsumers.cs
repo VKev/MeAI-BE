@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Application.Abstractions.Resources;
+using Domain.Entities;
 using Infrastructure.Context;
 using Infrastructure.Logic.Services;
 using MassTransit;
@@ -39,25 +40,33 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
         var imageTask = await _dbContext.ImageTasks
             .FirstOrDefaultAsync(t => t.CorrelationId == message.CorrelationId, context.CancellationToken);
 
-        if (imageTask is not null)
+        if (imageTask is null)
         {
-            imageTask.Status = "Completed";
-            imageTask.ResultUrls = message.ResultUrls is not null
-                ? JsonSerializer.Serialize(message.ResultUrls)
-                : null;
-            imageTask.CompletedAt = message.CompletedAt;
-            await _dbContext.SaveChangesAsync(context.CancellationToken);
+            _logger.LogWarning(
+                "ImageTask not found for CorrelationId: {CorrelationId}",
+                message.CorrelationId);
+            return;
+        }
 
-            _logger.LogInformation(
-                "Image task updated to Completed. Id: {Id}, ResultUrls Count: {Count}",
-                imageTask.Id,
-                message.ResultUrls?.Count ?? 0);
+        imageTask.Status = "Completed";
+        imageTask.ResultUrls = message.ResultUrls is not null
+            ? JsonSerializer.Serialize(message.ResultUrls)
+            : null;
+        imageTask.CompletedAt = message.CompletedAt;
+        await _dbContext.SaveChangesAsync(context.CancellationToken);
 
-            // Attach results to chat BEFORE publishing notification
-            // so the FE refetch gets the updated data immediately
-            await TryAttachChatResultsAsync(
+        _logger.LogInformation(
+            "Image task updated to Completed. Id: {Id}, ResultUrls Count: {Count}",
+            imageTask.Id,
+            message.ResultUrls?.Count ?? 0);
+
+        // Reframe tasks: append their single result to the parent chat.
+        if (imageTask.ParentCorrelationId.HasValue)
+        {
+            await TryAppendChatResultsAsync(
                 imageTask.UserId,
-                message.CorrelationId,
+                imageTask.WorkspaceId,
+                imageTask.ParentCorrelationId.Value,
                 message.ResultUrls,
                 context.CancellationToken);
 
@@ -65,11 +74,12 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
                 NotificationRequestedEventFactory.CreateForUser(
                     imageTask.UserId,
                     NotificationTypes.AiImageGenerationCompleted,
-                    "Image generation completed",
-                    "Your generated image is ready.",
+                    "Reframed image ready",
+                    "A resized variant is ready.",
                     new
                     {
-                        message.CorrelationId,
+                        parentCorrelationId = imageTask.ParentCorrelationId,
+                        correlationId = message.CorrelationId,
                         message.KieTaskId,
                         resultCount = message.ResultUrls?.Count ?? 0,
                         imageTask.Id,
@@ -78,18 +88,126 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
                     createdAt: message.CompletedAt,
                     source: NotificationSourceConstants.Creator),
                 context.CancellationToken);
+            return;
         }
-        else
+
+        // Source image: upload to S3, attach IDs to the chat, and keep the presigned URLs
+        // so reframes can use our own S3 URL (Kie temp URLs re-fed into Kie often fail).
+        var uploaded = await TryAttachChatResultsAsync(
+            imageTask.UserId,
+            imageTask.WorkspaceId,
+            message.CorrelationId,
+            message.ResultUrls,
+            context.CancellationToken);
+
+        await context.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                imageTask.UserId,
+                NotificationTypes.AiImageGenerationCompleted,
+                "Image generation completed",
+                "Your generated image is ready.",
+                new
+                {
+                    message.CorrelationId,
+                    message.KieTaskId,
+                    resultCount = message.ResultUrls?.Count ?? 0,
+                    imageTask.Id,
+                    imageTask.CompletedAt
+                },
+                createdAt: message.CompletedAt,
+                source: NotificationSourceConstants.Creator),
+            context.CancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(imageTask.SocialTargetsJson))
         {
-            _logger.LogWarning(
-                "ImageTask not found for CorrelationId: {CorrelationId}",
-                message.CorrelationId);
+            // Prefer our S3 presigned URL; fall back to Kie temp URL only if upload failed.
+            var sourceUrl = uploaded.FirstOrDefault()?.PresignedUrl
+                            ?? (message.ResultUrls is { Count: > 0 } ? message.ResultUrls[0] : null);
+
+            if (!string.IsNullOrWhiteSpace(sourceUrl))
+            {
+                await FanOutReframesAsync(imageTask, sourceUrl, context);
+            }
         }
     }
 
-    private async Task TryAttachChatResultsAsync(
+    private async Task FanOutReframesAsync(
+        ImageTask sourceTask,
+        string sourceImageUrl,
+        ConsumeContext<ImageGenerationCompleted> context)
+    {
+        List<SocialTargetDto>? targets;
+        try
+        {
+            targets = JsonSerializer.Deserialize<List<SocialTargetDto>>(sourceTask.SocialTargetsJson!);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to deserialize SocialTargets on ImageTask {Id}. CorrelationId: {CorrelationId}",
+                sourceTask.Id,
+                sourceTask.CorrelationId);
+            return;
+        }
+
+        if (targets is null || targets.Count == 0)
+        {
+            return;
+        }
+
+        var sourceRatio = (sourceTask.AspectRatio ?? string.Empty).Trim();
+        var dispatched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(sourceRatio))
+        {
+            // The source image already covers its own ratio — no reframe needed for it.
+            dispatched.Add(sourceRatio);
+        }
+
+        foreach (var target in targets)
+        {
+            var ratio = target.Ratio?.Trim();
+            if (string.IsNullOrWhiteSpace(ratio))
+            {
+                continue;
+            }
+
+            if (!dispatched.Add(ratio))
+            {
+                _logger.LogInformation(
+                    "Skipping duplicate reframe for ratio {Ratio} (already covered). ParentCorrelationId: {Parent}",
+                    ratio,
+                    sourceTask.CorrelationId);
+                continue;
+            }
+
+            var reframe = new ImageReframeRequested
+            {
+                CorrelationId = Guid.CreateVersion7(),
+                ParentCorrelationId = sourceTask.CorrelationId,
+                UserId = sourceTask.UserId,
+                WorkspaceId = sourceTask.WorkspaceId,
+                SourceImageUrl = sourceImageUrl,
+                TargetRatio = ratio,
+                SocialTarget = target,
+                CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
+            };
+
+            await context.Publish(reframe, context.CancellationToken);
+
+            _logger.LogInformation(
+                "Published reframe request. ParentCorrelationId: {Parent}, TargetRatio: {Ratio}, Platform: {Platform}/{Type}",
+                sourceTask.CorrelationId,
+                ratio,
+                target.Platform,
+                target.Type);
+        }
+    }
+
+    private async Task TryAppendChatResultsAsync(
         Guid userId,
-        Guid correlationId,
+        Guid? workspaceId,
+        Guid parentCorrelationId,
         List<string>? resultUrls,
         CancellationToken cancellationToken)
     {
@@ -103,7 +221,91 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
             resultUrls,
             status: "generated",
             resourceType: "image",
-            cancellationToken);
+            cancellationToken,
+            workspaceId);
+
+        if (uploadResult.IsFailure)
+        {
+            _logger.LogWarning(
+                "Failed to create resources for reframe CorrelationId {CorrelationId}: {Error}",
+                parentCorrelationId,
+                uploadResult.Error.Description);
+            return;
+        }
+
+        var newResourceIds = uploadResult.Value.Select(r => r.ResourceId.ToString()).ToList();
+
+        var correlationText = parentCorrelationId.ToString();
+        var candidates = await _dbContext.Chats
+            .AsNoTracking()
+            .Where(c => c.Config != null && !c.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        var matched = candidates.FirstOrDefault(c =>
+            c.Config != null &&
+            c.Config.Contains(correlationText, StringComparison.OrdinalIgnoreCase));
+
+        if (matched is null)
+        {
+            _logger.LogWarning(
+                "Parent chat not found for reframe ParentCorrelationId: {CorrelationId}",
+                parentCorrelationId);
+            return;
+        }
+
+        var chat = await _dbContext.Chats
+            .FirstOrDefaultAsync(c => c.Id == matched.Id, cancellationToken);
+
+        if (chat is null)
+        {
+            return;
+        }
+
+        var existing = new List<string>();
+        if (!string.IsNullOrWhiteSpace(chat.ResultResourceIds))
+        {
+            try
+            {
+                existing = JsonSerializer.Deserialize<List<string>>(chat.ResultResourceIds) ?? new List<string>();
+            }
+            catch (JsonException)
+            {
+                existing = new List<string>();
+            }
+        }
+
+        foreach (var id in newResourceIds)
+        {
+            if (!existing.Contains(id))
+            {
+                existing.Add(id);
+            }
+        }
+
+        chat.ResultResourceIds = JsonSerializer.Serialize(existing);
+        chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<UserResourceCreatedResult>> TryAttachChatResultsAsync(
+        Guid userId,
+        Guid? workspaceId,
+        Guid correlationId,
+        List<string>? resultUrls,
+        CancellationToken cancellationToken)
+    {
+        if (resultUrls is null || resultUrls.Count == 0)
+        {
+            return Array.Empty<UserResourceCreatedResult>();
+        }
+
+        var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
+            userId,
+            resultUrls,
+            status: "generated",
+            resourceType: "image",
+            cancellationToken,
+            workspaceId);
 
         if (uploadResult.IsFailure)
         {
@@ -111,10 +313,11 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
                 "Failed to create resources for CorrelationId {CorrelationId}: {Error}",
                 correlationId,
                 uploadResult.Error.Description);
-            return;
+            return Array.Empty<UserResourceCreatedResult>();
         }
 
-        var resourceIds = uploadResult.Value.Select(resource => resource.ResourceId.ToString()).ToList();
+        var uploaded = uploadResult.Value;
+        var resourceIds = uploaded.Select(resource => resource.ResourceId.ToString()).ToList();
 
         var correlationText = correlationId.ToString();
         var candidates = await _dbContext.Chats
@@ -129,7 +332,7 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
         if (matched is null)
         {
             _logger.LogWarning("Chat not found for CorrelationId: {CorrelationId}", correlationId);
-            return;
+            return uploaded;
         }
 
         var chat = await _dbContext.Chats
@@ -138,12 +341,15 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
         if (chat is null)
         {
             _logger.LogWarning("Chat not found for CorrelationId: {CorrelationId}", correlationId);
-            return;
+            return uploaded;
         }
 
         chat.ResultResourceIds = JsonSerializer.Serialize(resourceIds);
+        chat.Status = "Completed";
         chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return uploaded;
     }
 }
 
@@ -177,8 +383,16 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
             ? $"fallback-{message.CorrelationId:N}"
             : message.KieTaskId;
 
+        var imageTask = await _dbContext.ImageTasks
+            .FirstOrDefaultAsync(t => t.CorrelationId == message.CorrelationId, context.CancellationToken);
+
+        // Reframe tasks: do NOT fall back to a stock template — they have no prompt, a template
+        // would make no sense. Just mark the reframe as failed; the parent chat keeps its source
+        // image and the user sees one fewer variant.
+        var isReframe = imageTask?.ParentCorrelationId.HasValue == true;
+
         var isAlreadyFallbackTask = fallbackTaskId.StartsWith("fallback-", StringComparison.OrdinalIgnoreCase);
-        if (!isAlreadyFallbackTask)
+        if (!isAlreadyFallbackTask && !isReframe)
         {
             var numberOfVariances = await ResolveNumberOfVariancesAsync(message.CorrelationId, context.CancellationToken);
             var callbackSent = await _kieFallbackCallbackService.SendImageSuccessCallbackAsync(
@@ -196,9 +410,6 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
             }
         }
 
-        var imageTask = await _dbContext.ImageTasks
-            .FirstOrDefaultAsync(t => t.CorrelationId == message.CorrelationId, context.CancellationToken);
-
         if (imageTask is not null)
         {
             imageTask.Status = "Failed";
@@ -210,6 +421,34 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
             _logger.LogInformation(
                 "Image task updated to Failed. Id: {Id}",
                 imageTask.Id);
+
+            // For reframes: only publish a light "variant failed" notification so the FE
+            // refetches and drops the pending skeleton. Do NOT mark the parent chat as Failed.
+            if (isReframe)
+            {
+                await context.Publish(
+                    NotificationRequestedEventFactory.CreateForUser(
+                        imageTask.UserId,
+                        NotificationTypes.AiImageGenerationFailed,
+                        "Reframe variant failed",
+                        "One of the resized variants could not be generated.",
+                        new
+                        {
+                            parentCorrelationId = imageTask.ParentCorrelationId,
+                            correlationId = message.CorrelationId,
+                            message.KieTaskId,
+                            message.ErrorCode,
+                            message.ErrorMessage,
+                            imageTask.Id,
+                            imageTask.CompletedAt
+                        },
+                        createdAt: message.FailedAt,
+                        source: NotificationSourceConstants.Creator),
+                    context.CancellationToken);
+                return;
+            }
+
+            await MarkChatAsFailedAsync(message.CorrelationId, message.ErrorMessage, context.CancellationToken);
 
             await context.Publish(
                 NotificationRequestedEventFactory.CreateForUser(
@@ -290,5 +529,28 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
         }
 
         return 1;
+    }
+
+    private async Task MarkChatAsFailedAsync(Guid correlationId, string? errorMessage, CancellationToken cancellationToken)
+    {
+        var correlationText = correlationId.ToString();
+        var candidates = await _dbContext.Chats
+            .AsNoTracking()
+            .Where(c => c.Config != null && !c.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        var matched = candidates.FirstOrDefault(c =>
+            c.Config != null &&
+            c.Config.Contains(correlationText, StringComparison.OrdinalIgnoreCase));
+
+        if (matched is null) return;
+
+        var chat = await _dbContext.Chats.FirstOrDefaultAsync(c => c.Id == matched.Id, cancellationToken);
+        if (chat is null) return;
+
+        chat.Status = "Failed";
+        chat.ErrorMessage = errorMessage;
+        chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }

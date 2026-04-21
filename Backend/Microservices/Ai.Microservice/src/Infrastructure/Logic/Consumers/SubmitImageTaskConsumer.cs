@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Application.Abstractions.Kie;
 using Domain.Entities;
 using Infrastructure.Context;
@@ -45,12 +46,16 @@ public class SubmitImageTaskConsumer : IConsumer<ImageGenerationStarted>
         {
             Id = Guid.CreateVersion7(),
             UserId = message.UserId,
+            WorkspaceId = message.WorkspaceId,
             CorrelationId = message.CorrelationId,
             Prompt = message.Prompt,
             AspectRatio = message.AspectRatio,
             Resolution = message.Resolution,
             OutputFormat = message.OutputFormat,
             Status = "Submitted",
+            SocialTargetsJson = message.SocialTargets is { Count: > 0 }
+                ? JsonSerializer.Serialize(message.SocialTargets)
+                : null,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 

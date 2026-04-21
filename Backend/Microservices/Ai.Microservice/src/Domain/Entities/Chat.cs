@@ -21,6 +21,10 @@ public sealed class Chat
     [Column(TypeName = "json")]
     public string? ResultResourceIds { get; set; }
 
+    public string? Status { get; set; }
+
+    public string? ErrorMessage { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 

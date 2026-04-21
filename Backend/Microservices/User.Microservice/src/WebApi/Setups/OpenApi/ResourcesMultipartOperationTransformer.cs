@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
@@ -34,7 +35,8 @@ public sealed class ResourcesMultipartOperationTransformer : IOpenApiOperationTr
             {
                 ["multipart/form-data"] = new OpenApiMediaType
                 {
-                    Schema = BuildMultipartSchema()
+                    Schema = BuildMultipartSchema(isResourcesEndpoint),
+                    Example = BuildMultipartExample(isResourcesEndpoint)
                 }
             }
         };
@@ -42,28 +44,63 @@ public sealed class ResourcesMultipartOperationTransformer : IOpenApiOperationTr
         return Task.CompletedTask;
     }
 
-    private static OpenApiSchema BuildMultipartSchema()
+    private static OpenApiSchema BuildMultipartSchema(bool includeWorkspaceId)
     {
+        var properties = new Dictionary<string, IOpenApiSchema>
+        {
+            ["file"] = (IOpenApiSchema)new OpenApiSchema
+            {
+                Type = JsonSchemaType.String,
+                Format = "binary",
+                Description = "The file to upload."
+            },
+            ["status"] = (IOpenApiSchema)new OpenApiSchema
+            {
+                Type = JsonSchemaType.String,
+                Description = "Optional status tag for the resource (e.g. draft, generated).",
+                Example = "draft"
+            },
+            ["resourceType"] = (IOpenApiSchema)new OpenApiSchema
+            {
+                Type = JsonSchemaType.String,
+                Description = "Optional resource type (e.g. image, video, document).",
+                Example = "image"
+            }
+        };
+
+        if (includeWorkspaceId)
+        {
+            properties["workspaceId"] = (IOpenApiSchema)new OpenApiSchema
+            {
+                Type = JsonSchemaType.String,
+                Format = "uuid",
+                Description = "Optional workspace id to associate the resource with. Leave empty to create a global (non-workspace) resource.",
+                Example = "00000000-0000-0000-0000-000000000000"
+            };
+        }
+
         return new OpenApiSchema
         {
             Type = JsonSchemaType.Object,
-            Properties = new Dictionary<string, IOpenApiSchema>
-            {
-                ["file"] = (IOpenApiSchema)new OpenApiSchema
-                {
-                    Type = JsonSchemaType.String,
-                    Format = "binary"
-                },
-                ["status"] = (IOpenApiSchema)new OpenApiSchema
-                {
-                    Type = JsonSchemaType.String
-                },
-                ["resourceType"] = (IOpenApiSchema)new OpenApiSchema
-                {
-                    Type = JsonSchemaType.String
-                }
-            },
+            Properties = properties,
             Required = new HashSet<string> { "file" }
         };
+    }
+
+    private static JsonNode BuildMultipartExample(bool includeWorkspaceId)
+    {
+        var example = new JsonObject
+        {
+            ["file"] = "(binary file content)",
+            ["status"] = "draft",
+            ["resourceType"] = "image"
+        };
+
+        if (includeWorkspaceId)
+        {
+            example["workspaceId"] = "00000000-0000-0000-0000-000000000000";
+        }
+
+        return example;
     }
 }

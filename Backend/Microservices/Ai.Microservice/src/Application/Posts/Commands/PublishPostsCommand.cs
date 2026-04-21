@@ -1,15 +1,11 @@
-using System.Text.Json;
-using Application.Abstractions.Facebook;
-using Application.Abstractions.Instagram;
-using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
-using Application.Abstractions.Threads;
-using Application.Abstractions.TikTok;
 using Application.Posts.Models;
 using Domain.Entities;
 using Domain.Repositories;
+using MassTransit;
 using MediatR;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.Publishing;
 using SharedLibrary.Extensions;
 
 namespace Application.Posts.Commands;
@@ -31,34 +27,23 @@ public sealed class PublishPostsCommandHandler
     private const string TikTokType = "tiktok";
     private const string ThreadsType = "threads";
     private const string PostsType = "posts";
+    private const string ProcessingStatus = "processing";
 
     private readonly IPostRepository _postRepository;
     private readonly IPostPublicationRepository _postPublicationRepository;
-    private readonly IUserResourceService _userResourceService;
     private readonly IUserSocialMediaService _userSocialMediaService;
-    private readonly IFacebookPublishService _facebookPublishService;
-    private readonly IInstagramPublishService _instagramPublishService;
-    private readonly ITikTokPublishService _tikTokPublishService;
-    private readonly IThreadsPublishService _threadsPublishService;
+    private readonly IBus _bus;
 
     public PublishPostsCommandHandler(
         IPostRepository postRepository,
         IPostPublicationRepository postPublicationRepository,
-        IUserResourceService userResourceService,
         IUserSocialMediaService userSocialMediaService,
-        IFacebookPublishService facebookPublishService,
-        IInstagramPublishService instagramPublishService,
-        ITikTokPublishService tikTokPublishService,
-        IThreadsPublishService threadsPublishService)
+        IBus bus)
     {
         _postRepository = postRepository;
         _postPublicationRepository = postPublicationRepository;
-        _userResourceService = userResourceService;
         _userSocialMediaService = userSocialMediaService;
-        _facebookPublishService = facebookPublishService;
-        _instagramPublishService = instagramPublishService;
-        _tikTokPublishService = tikTokPublishService;
-        _threadsPublishService = threadsPublishService;
+        _bus = bus;
     }
 
     public async Task<Result<PublishPostsResponse>> Handle(
@@ -82,49 +67,108 @@ public sealed class PublishPostsCommandHandler
             return Result.Failure<PublishPostsResponse>(socialMediaByIdResult.Error);
         }
 
-        var preparedTargetsResult = await PrepareTargetsAsync(
-            request.UserId,
-            normalizedTargets,
-            socialMediaByIdResult.Value,
-            cancellationToken);
+        var socialMediaById = socialMediaByIdResult.Value;
+        var responses = new List<PublishPostResponse>(normalizedTargets.Count);
+        var messagesToPublish = new List<PublishToTargetRequested>();
+        var now = DateTimeExtensions.PostgreSqlUtcNow;
+        var correlationId = Guid.CreateVersion7();
 
-        if (preparedTargetsResult.IsFailure)
+        foreach (var target in normalizedTargets)
         {
-            return Result.Failure<PublishPostsResponse>(preparedTargetsResult.Error);
-        }
-
-        var publishedPosts = new List<PublishPostResponse>(preparedTargetsResult.Value.Count);
-
-        foreach (var target in preparedTargetsResult.Value)
-        {
-            var destinationResults = new List<PublishPostDestinationResult>();
-
-            foreach (var socialMedia in target.SocialMedias)
+            var post = await _postRepository.GetByIdForUpdateAsync(target.PostId, cancellationToken);
+            if (post == null || post.DeletedAt.HasValue)
             {
-                var publishResult = await PublishToSocialMediaAsync(
-                    target,
-                    socialMedia,
-                    cancellationToken);
-
-                if (publishResult.IsFailure)
-                {
-                    return Result.Failure<PublishPostsResponse>(publishResult.Error);
-                }
-
-                destinationResults.AddRange(publishResult.Value);
-                await PersistPublishResultsAsync(
-                    target.Post,
-                    publishResult.Value,
-                    cancellationToken);
+                return Result.Failure<PublishPostsResponse>(
+                    new Error("Post.NotFound", "Post not found."));
             }
 
-            publishedPosts.Add(new PublishPostResponse(
-                target.Post.Id,
-                target.Post.Status ?? "published",
+            if (post.UserId != request.UserId)
+            {
+                return Result.Failure<PublishPostsResponse>(
+                    new Error("Post.Unauthorized", "You are not authorized to publish this post."));
+            }
+
+            if (!post.WorkspaceId.HasValue)
+            {
+                return Result.Failure<PublishPostsResponse>(PostErrors.WorkspaceIdRequired);
+            }
+
+            var postType = post.Content?.PostType ?? PostsType;
+            if (!string.Equals(postType, PostsType, StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Failure<PublishPostsResponse>(
+                    new Error("Post.UnsupportedType", "Only 'posts' can be published at the moment."));
+            }
+
+            var destinationResults = new List<PublishPostDestinationResult>();
+            var placeholders = new List<PostPublication>();
+
+            foreach (var socialMediaId in target.SocialMediaIds)
+            {
+                var socialMedia = socialMediaById[socialMediaId];
+                var publicationId = Guid.CreateVersion7();
+                var placeholder = new PostPublication
+                {
+                    Id = publicationId,
+                    PostId = post.Id,
+                    WorkspaceId = post.WorkspaceId!.Value,
+                    SocialMediaId = socialMediaId,
+                    SocialMediaType = socialMedia.Type,
+                    DestinationOwnerId = socialMediaId.ToString(),
+                    ExternalContentId = $"pending:{publicationId:N}",
+                    ExternalContentIdType = string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase)
+                        ? "publish_id"
+                        : "post_id",
+                    ContentType = postType,
+                    PublishStatus = ProcessingStatus,
+                    CreatedAt = now
+                };
+
+                placeholders.Add(placeholder);
+
+                destinationResults.Add(new PublishPostDestinationResult(
+                    socialMediaId,
+                    socialMedia.Type,
+                    string.Empty,
+                    string.Empty,
+                    publicationId,
+                    ProcessingStatus));
+
+                messagesToPublish.Add(new PublishToTargetRequested
+                {
+                    CorrelationId = correlationId,
+                    UserId = request.UserId,
+                    WorkspaceId = post.WorkspaceId!.Value,
+                    PostId = post.Id,
+                    SocialMediaId = socialMediaId,
+                    PublicationId = publicationId,
+                    SocialMediaType = socialMedia.Type,
+                    IsPrivate = target.IsPrivate,
+                    AttemptNumber = 1,
+                    CreatedAt = now
+                });
+            }
+
+            await _postPublicationRepository.AddRangeAsync(placeholders, cancellationToken);
+
+            post.Status = ProcessingStatus;
+            post.UpdatedAt = now;
+            _postRepository.Update(post);
+
+            responses.Add(new PublishPostResponse(
+                post.Id,
+                ProcessingStatus,
                 destinationResults));
         }
 
-        return Result.Success(new PublishPostsResponse(publishedPosts));
+        await _postRepository.SaveChangesAsync(cancellationToken);
+
+        foreach (var message in messagesToPublish)
+        {
+            await _bus.Publish(message, cancellationToken);
+        }
+
+        return Result.Success(new PublishPostsResponse(responses));
     }
 
     private async Task<Result<IReadOnlyDictionary<Guid, UserSocialMediaResult>>> GetSocialMediaByIdAsync(
@@ -173,321 +217,6 @@ public sealed class PublishPostsCommandHandler
         }
 
         return Result.Success<IReadOnlyDictionary<Guid, UserSocialMediaResult>>(socialMediaById);
-    }
-
-    private async Task<Result<IReadOnlyList<PreparedPublishPostTarget>>> PrepareTargetsAsync(
-        Guid userId,
-        IReadOnlyList<PublishPostTargetInput> targets,
-        IReadOnlyDictionary<Guid, UserSocialMediaResult> socialMediaById,
-        CancellationToken cancellationToken)
-    {
-        var preparedTargets = new List<PreparedPublishPostTarget>(targets.Count);
-
-        foreach (var target in targets)
-        {
-            var post = await _postRepository.GetByIdForUpdateAsync(target.PostId, cancellationToken);
-            if (post == null || post.DeletedAt.HasValue)
-            {
-                return Result.Failure<IReadOnlyList<PreparedPublishPostTarget>>(
-                    new Error("Post.NotFound", "Post not found."));
-            }
-
-            if (post.UserId != userId)
-            {
-                return Result.Failure<IReadOnlyList<PreparedPublishPostTarget>>(
-                    new Error("Post.Unauthorized", "You are not authorized to publish this post."));
-            }
-
-            if (!post.WorkspaceId.HasValue)
-            {
-                return Result.Failure<IReadOnlyList<PreparedPublishPostTarget>>(PostErrors.WorkspaceIdRequired);
-            }
-
-            var postType = post.Content?.PostType ?? PostsType;
-            if (!string.Equals(postType, PostsType, StringComparison.OrdinalIgnoreCase))
-            {
-                return Result.Failure<IReadOnlyList<PreparedPublishPostTarget>>(
-                    new Error("Post.UnsupportedType", "Only 'posts' can be published at the moment."));
-            }
-
-            var socialMedias = target.SocialMediaIds
-                .Select(id => socialMediaById[id])
-                .ToList();
-
-            var resourceIds = ExtractResourceIds(post.Content);
-            var requiresResources = socialMedias.Any(item =>
-                !string.Equals(item.Type, ThreadsType, StringComparison.OrdinalIgnoreCase));
-
-            IReadOnlyList<UserResourcePresignResult> presignedResources = Array.Empty<UserResourcePresignResult>();
-
-            if (requiresResources || resourceIds.Count > 0)
-            {
-                if (resourceIds.Count == 0)
-                {
-                    return Result.Failure<IReadOnlyList<PreparedPublishPostTarget>>(
-                        new Error("Post.MissingResources", "This post has no resources to publish."));
-                }
-
-                var presignResult = await _userResourceService.GetPresignedResourcesAsync(
-                    userId,
-                    resourceIds,
-                    cancellationToken);
-
-                if (presignResult.IsFailure)
-                {
-                    return Result.Failure<IReadOnlyList<PreparedPublishPostTarget>>(presignResult.Error);
-                }
-
-                presignedResources = presignResult.Value;
-            }
-
-            preparedTargets.Add(new PreparedPublishPostTarget(
-                post,
-                socialMedias,
-                presignedResources,
-                target.IsPrivate));
-        }
-
-        return Result.Success<IReadOnlyList<PreparedPublishPostTarget>>(preparedTargets);
-    }
-
-    private async Task<Result<IReadOnlyList<PublishPostDestinationResult>>> PublishToSocialMediaAsync(
-        PreparedPublishPostTarget target,
-        UserSocialMediaResult socialMedia,
-        CancellationToken cancellationToken)
-    {
-        var caption = target.Post.Content?.Content?.Trim() ?? string.Empty;
-        using var metadata = ParseMetadata(socialMedia.MetadataJson);
-
-        if (string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase))
-        {
-            if (target.PresignedResources.Count == 0)
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                    new Error("TikTok.MissingMedia", "TikTok publishing requires at least one video."));
-            }
-
-            if (target.PresignedResources.Count > 1)
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                    new Error("TikTok.UnsupportedMedia", "TikTok publishing currently supports only one video."));
-            }
-
-            var accessToken = GetMetadataValue(metadata, "access_token");
-            var openId = GetMetadataValue(metadata, "open_id");
-
-            if (string.IsNullOrWhiteSpace(accessToken))
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                    new Error("TikTok.InvalidToken", "Access token not found in social media metadata."));
-            }
-
-            if (string.IsNullOrWhiteSpace(openId))
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                    new Error("TikTok.InvalidAccount", "TikTok open_id is missing in social media metadata."));
-            }
-
-            var resource = target.PresignedResources[0];
-            var publishResult = await _tikTokPublishService.PublishAsync(
-                new TikTokPublishRequest(
-                    AccessToken: accessToken,
-                    OpenId: openId,
-                    Caption: caption,
-                    Media: new TikTokPublishMedia(
-                        resource.PresignedUrl,
-                        resource.ContentType ?? resource.ResourceType),
-                    IsPrivate: target.IsPrivate),
-                cancellationToken);
-
-            if (publishResult.IsFailure)
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(publishResult.Error);
-            }
-
-            return Result.Success<IReadOnlyList<PublishPostDestinationResult>>(
-            [
-                new PublishPostDestinationResult(
-                    socialMedia.SocialMediaId,
-                    socialMedia.Type,
-                    publishResult.Value.OpenId,
-                    publishResult.Value.PublishId)
-            ]);
-        }
-
-        if (string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase))
-        {
-            var userAccessToken = GetMetadataValue(metadata, "user_access_token")
-                                  ?? GetMetadataValue(metadata, "access_token");
-
-            if (string.IsNullOrWhiteSpace(userAccessToken))
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                    new Error("Facebook.InvalidToken", "Access token not found in social media metadata."));
-            }
-
-            var publishResult = await _facebookPublishService.PublishAsync(
-                new FacebookPublishRequest(
-                    UserAccessToken: userAccessToken,
-                    PageId: GetMetadataValue(metadata, "page_id"),
-                    PageAccessToken: GetMetadataValue(metadata, "page_access_token"),
-                    Message: caption,
-                    Media: target.PresignedResources
-                        .Select(resource => new FacebookPublishMedia(
-                            resource.PresignedUrl,
-                            resource.ContentType ?? resource.ResourceType))
-                        .ToList()),
-                cancellationToken);
-
-            if (publishResult.IsFailure)
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(publishResult.Error);
-            }
-
-            return Result.Success<IReadOnlyList<PublishPostDestinationResult>>(
-                publishResult.Value
-                    .Select(result => new PublishPostDestinationResult(
-                        socialMedia.SocialMediaId,
-                        socialMedia.Type,
-                        result.PageId,
-                        result.PostId))
-                    .ToList());
-        }
-
-        if (string.Equals(socialMedia.Type, InstagramType, StringComparison.OrdinalIgnoreCase))
-        {
-            if (target.PresignedResources.Count != 1)
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                    new Error("Instagram.UnsupportedMedia", "Instagram publishing currently supports only one media item."));
-            }
-
-            var instagramUserId = GetMetadataValue(metadata, "instagram_business_account_id")
-                                  ?? GetMetadataValue(metadata, "user_id");
-
-            if (string.IsNullOrWhiteSpace(instagramUserId))
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                    new Error("Instagram.InvalidAccount", "Instagram business account id is missing in social media metadata."));
-            }
-
-            var instagramAccessToken = GetMetadataValue(metadata, "access_token")
-                                       ?? GetMetadataValue(metadata, "user_access_token");
-
-            if (string.IsNullOrWhiteSpace(instagramAccessToken))
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                    new Error("Instagram.InvalidToken", "Access token not found in social media metadata."));
-            }
-
-            var resource = target.PresignedResources[0];
-            var publishResult = await _instagramPublishService.PublishAsync(
-                new InstagramPublishRequest(
-                    AccessToken: instagramAccessToken,
-                    InstagramUserId: instagramUserId,
-                    Caption: caption,
-                    Media: new InstagramPublishMedia(
-                        resource.PresignedUrl,
-                        resource.ContentType ?? resource.ResourceType)),
-                cancellationToken);
-
-            if (publishResult.IsFailure)
-            {
-                return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(publishResult.Error);
-            }
-
-            return Result.Success<IReadOnlyList<PublishPostDestinationResult>>(
-            [
-                new PublishPostDestinationResult(
-                    socialMedia.SocialMediaId,
-                    socialMedia.Type,
-                    publishResult.Value.InstagramUserId,
-                    publishResult.Value.PostId)
-            ]);
-        }
-
-        if (target.PresignedResources.Count > 1)
-        {
-            return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                new Error("Threads.UnsupportedMedia", "Threads publishing currently supports one media item at a time."));
-        }
-
-        var threadsUserId = GetMetadataValue(metadata, "user_id");
-        if (string.IsNullOrWhiteSpace(threadsUserId))
-        {
-            return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                new Error("Threads.InvalidAccount", "Threads user id is missing in social media metadata."));
-        }
-
-        var threadsAccessToken = GetMetadataValue(metadata, "access_token");
-        if (string.IsNullOrWhiteSpace(threadsAccessToken))
-        {
-            return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(
-                new Error("Threads.InvalidToken", "Access token not found in social media metadata."));
-        }
-
-        ThreadsPublishMedia? media = null;
-        if (target.PresignedResources.Count == 1)
-        {
-            var resource = target.PresignedResources[0];
-            media = new ThreadsPublishMedia(
-                resource.PresignedUrl,
-                resource.ContentType ?? resource.ResourceType);
-        }
-
-        var threadsPublishResult = await _threadsPublishService.PublishAsync(
-            new ThreadsPublishRequest(
-                AccessToken: threadsAccessToken,
-                ThreadsUserId: threadsUserId,
-                Text: caption,
-                Media: media),
-            cancellationToken);
-
-        if (threadsPublishResult.IsFailure)
-        {
-            return Result.Failure<IReadOnlyList<PublishPostDestinationResult>>(threadsPublishResult.Error);
-        }
-
-        return Result.Success<IReadOnlyList<PublishPostDestinationResult>>(
-        [
-            new PublishPostDestinationResult(
-                socialMedia.SocialMediaId,
-                socialMedia.Type,
-                threadsPublishResult.Value.ThreadsUserId,
-                threadsPublishResult.Value.PostId)
-        ]);
-    }
-
-    private async Task PersistPublishResultsAsync(
-        Post post,
-        IReadOnlyList<PublishPostDestinationResult> publishResults,
-        CancellationToken cancellationToken)
-    {
-        var now = DateTimeExtensions.PostgreSqlUtcNow;
-        post.Status = "published";
-        post.UpdatedAt = now;
-
-        var publications = publishResults.Select(result => new PostPublication
-        {
-            Id = Guid.CreateVersion7(),
-            PostId = post.Id,
-            WorkspaceId = post.WorkspaceId!.Value,
-            SocialMediaId = result.SocialMediaId,
-            SocialMediaType = result.SocialMediaType,
-            DestinationOwnerId = result.PageId,
-            ExternalContentId = result.ExternalPostId,
-            ExternalContentIdType = string.Equals(result.SocialMediaType, TikTokType, StringComparison.OrdinalIgnoreCase)
-                ? "publish_id"
-                : "post_id",
-            ContentType = post.Content?.PostType ?? PostsType,
-            PublishStatus = "published",
-            PublishedAt = now,
-            CreatedAt = now
-        }).ToList();
-
-        await _postPublicationRepository.AddRangeAsync(publications, cancellationToken);
-        _postRepository.Update(post);
-        await _postRepository.SaveChangesAsync(cancellationToken);
     }
 
     private static Result<IReadOnlyList<PublishPostTargetInput>> NormalizeTargets(
@@ -553,64 +282,6 @@ public sealed class PublishPostsCommandHandler
                     item.Value.IsPrivate))
                 .ToList());
     }
-
-    private static IReadOnlyList<Guid> ExtractResourceIds(PostContent? content)
-    {
-        if (content?.ResourceList == null || content.ResourceList.Count == 0)
-        {
-            return Array.Empty<Guid>();
-        }
-
-        var ids = new List<Guid>();
-        foreach (var value in content.ResourceList)
-        {
-            if (Guid.TryParse(value, out var parsed) && parsed != Guid.Empty)
-            {
-                ids.Add(parsed);
-            }
-        }
-
-        return ids;
-    }
-
-    private static JsonDocument? ParseMetadata(string? metadataJson)
-    {
-        if (string.IsNullOrWhiteSpace(metadataJson))
-        {
-            return null;
-        }
-
-        try
-        {
-            return JsonDocument.Parse(metadataJson);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    private static string? GetMetadataValue(JsonDocument? metadata, string key)
-    {
-        if (metadata == null)
-        {
-            return null;
-        }
-
-        if (metadata.RootElement.ValueKind == JsonValueKind.Object &&
-            metadata.RootElement.TryGetProperty(key, out var element))
-        {
-            return element.GetString();
-        }
-
-        return null;
-    }
-
-    private sealed record PreparedPublishPostTarget(
-        Post Post,
-        IReadOnlyList<UserSocialMediaResult> SocialMedias,
-        IReadOnlyList<UserResourcePresignResult> PresignedResources,
-        bool? IsPrivate);
 
     private sealed class NormalizedPublishTarget
     {

@@ -7,7 +7,15 @@ public interface IThreadsPublishService
     Task<Result<ThreadsPublishResult>> PublishAsync(
         ThreadsPublishRequest request,
         CancellationToken cancellationToken);
+
+    Task<Result<bool>> DeleteAsync(
+        ThreadsDeleteRequest request,
+        CancellationToken cancellationToken);
 }
+
+public sealed record ThreadsDeleteRequest(
+    string ThreadsPostId,
+    string AccessToken);
 
 public sealed record ThreadsPublishRequest(
     string AccessToken,

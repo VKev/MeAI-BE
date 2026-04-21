@@ -26,6 +26,7 @@ public sealed class VideoTaskConfiguration : IEntityTypeConfiguration<VideoTask>
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.CompletedAt).HasColumnName("completed_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UserId).HasColumnName("user_id");
+        entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
 
         entity.HasIndex(e => e.CorrelationId).HasDatabaseName("ix_video_tasks_correlation_id");
         entity.HasIndex(e => e.UserId).HasDatabaseName("ix_video_tasks_user_id");

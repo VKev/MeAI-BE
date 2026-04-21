@@ -7,10 +7,12 @@ namespace Infrastructure.Repositories;
 
 public sealed class PostPublicationRepository : IPostPublicationRepository
 {
+    private readonly MyDbContext _dbContext;
     private readonly DbSet<PostPublication> _dbSet;
 
     public PostPublicationRepository(MyDbContext dbContext)
     {
+        _dbContext = dbContext;
         _dbSet = dbContext.Set<PostPublication>();
     }
 
@@ -33,5 +35,29 @@ public sealed class PostPublicationRepository : IPostPublicationRepository
             .OrderByDescending(publication => publication.PublishedAt)
             .ThenByDescending(publication => publication.CreatedAt)
             .ToListAsync(cancellationToken);
+    }
+
+    public Task<PostPublication?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return _dbSet.FirstOrDefaultAsync(publication => publication.Id == id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PostPublication>> GetByPostIdForUpdateAsync(
+        Guid postId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbSet
+            .Where(publication => publication.PostId == postId && !publication.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+    }
+
+    public void Update(PostPublication entity)
+    {
+        _dbSet.Update(entity);
+    }
+
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        return _dbContext.SaveChangesAsync(cancellationToken);
     }
 }

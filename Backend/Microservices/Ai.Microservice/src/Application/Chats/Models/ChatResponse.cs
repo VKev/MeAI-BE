@@ -9,5 +9,7 @@ public sealed record ChatResponse(
     string? ResultResourceIds,
     IReadOnlyList<string>? ReferenceResourceUrls,
     IReadOnlyList<string>? ResultResourceUrls,
+    string? Status,
+    string? ErrorMessage,
     DateTime? CreatedAt,
     DateTime? UpdatedAt);
