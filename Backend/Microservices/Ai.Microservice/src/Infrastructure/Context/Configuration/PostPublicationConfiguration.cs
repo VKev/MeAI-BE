@@ -17,7 +17,7 @@ public sealed class PostPublicationConfiguration : IEntityTypeConfiguration<Post
                 "external_content_id_type IN ('post_id', 'publish_id')");
             tableBuilder.HasCheckConstraint(
                 "ck_post_publications_publish_status",
-                "publish_status IN ('processing', 'published', 'failed')");
+                "publish_status IN ('processing', 'published', 'unpublishing', 'failed')");
         });
 
         entity.HasIndex(
