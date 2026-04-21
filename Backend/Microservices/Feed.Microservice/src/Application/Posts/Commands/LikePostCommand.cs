@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Notifications;
 using Application.Common;
 using Application.Posts.Models;
 using Domain.Entities;
@@ -17,10 +18,12 @@ public sealed class LikePostCommandHandler : ICommandHandler<LikePostCommand, Po
     private const string UniqueViolationSqlState = "23505";
 
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IFeedNotificationService _feedNotificationService;
 
-    public LikePostCommandHandler(IUnitOfWork unitOfWork)
+    public LikePostCommandHandler(IUnitOfWork unitOfWork, IFeedNotificationService feedNotificationService)
     {
         _unitOfWork = unitOfWork;
+        _feedNotificationService = feedNotificationService;
     }
 
     public async Task<Result<PostLikeResponse>> Handle(LikePostCommand request, CancellationToken cancellationToken)
@@ -69,6 +72,13 @@ public sealed class LikePostCommandHandler : ICommandHandler<LikePostCommand, Po
             post.LikesCount = Math.Max(0, post.LikesCount - 1);
             return Result.Failure<PostLikeResponse>(FeedErrors.PostAlreadyLiked);
         }
+
+        await _feedNotificationService.NotifyPostLikedAsync(
+            request.UserId,
+            post.UserId,
+            post.Id,
+            FeedPostSupport.BuildPreview(post.Content),
+            cancellationToken);
 
         return Result.Success(new PostLikeResponse(post.Id, post.LikesCount, true));
     }

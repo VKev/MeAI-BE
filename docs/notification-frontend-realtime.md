@@ -66,17 +66,27 @@ Factory `NotificationRequestedEventFactory.CreateForUser(...)` sẽ:
 - tự sinh `NotificationId`
 - set `RecipientUserIds = [userId]`
 - dùng `DateTime.UtcNow` nếu không truyền `createdAt`
+- mặc định `source = Creator` nếu call site không override
 
-Hiện tại hệ thống đã có nhiều call site publish từ AI microservice và User microservice cho các nhóm notification như:
-- `AiImageGenerationSubmitted`
-- `AiVideoGenerationSubmitted`
-- `AiVideoExtensionSubmitted`
-- `AiImageGenerationCompleted`
-- `AiImageGenerationFailed`
-- `AiVideoGenerationCompleted`
-- `AiVideoGenerationFailed`
-- `UserSubscriptionActivated`
-- `UserSubscriptionRenewed`
+Dưới đây là danh sách event type đang **thực sự được publish** trong code hiện tại để Notification service consume:
+
+| Event type | Source | Nơi phát hiện publish |
+| --- | --- | --- |
+| `ai.image_generation.submitted` | `Creator` | AI chat image flow |
+| `ai.image_generation.completed` | `Creator` | AI image completed consumer |
+| `ai.image_generation.failed` | `Creator` | AI image failed consumer |
+| `ai.video_generation.submitted` | `Creator` | AI chat video flow và Veo generate flow |
+| `ai.video_generation.completed` | `Creator` | AI video completed consumer |
+| `ai.video_generation.failed` | `Creator` | AI video failed consumer |
+| `ai.video_extension.submitted` | `Creator` | AI Veo extend flow |
+| `Feed.Followed` | `Social` | Feed follow notification |
+| `Feed.NewPost` | `Social` | Feed new post notification |
+| `Feed.Commented` | `Social` | Feed comment notification |
+
+Ghi chú rà soát code:
+- Các event AI đang dùng constant trong `NotificationTypes`.
+- Các event Feed hiện đang truyền string literal trực tiếp từ `FeedNotificationFactory`.
+- `user.subscription.activated` và `user.subscription.renewed` hiện vẫn được khai báo trong `NotificationTypes`, nhưng chưa tìm thấy call site nào publish chúng qua `NotificationRequestedEvent` trong code hiện tại.
 
 ---
 

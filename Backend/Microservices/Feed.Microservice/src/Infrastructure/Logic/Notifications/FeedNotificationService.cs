@@ -61,4 +61,37 @@ public sealed class FeedNotificationService : IFeedNotificationService
         var notificationEvent = _factory.CreateComment(actorUserId, postOwnerUserId, postId, commentId, preview);
         return _publishEndpoint.Publish(notificationEvent, cancellationToken);
     }
+
+    public Task NotifyPostLikedAsync(
+        Guid actorUserId,
+        Guid postOwnerUserId,
+        Guid postId,
+        string preview,
+        CancellationToken cancellationToken)
+    {
+        if (actorUserId == postOwnerUserId)
+        {
+            return Task.CompletedTask;
+        }
+
+        var notificationEvent = _factory.CreatePostLiked(actorUserId, postOwnerUserId, postId, preview);
+        return _publishEndpoint.Publish(notificationEvent, cancellationToken);
+    }
+
+    public Task NotifyCommentLikedAsync(
+        Guid actorUserId,
+        Guid commentOwnerUserId,
+        Guid postId,
+        Guid commentId,
+        string preview,
+        CancellationToken cancellationToken)
+    {
+        if (actorUserId == commentOwnerUserId)
+        {
+            return Task.CompletedTask;
+        }
+
+        var notificationEvent = _factory.CreateCommentLiked(actorUserId, commentOwnerUserId, postId, commentId, preview);
+        return _publishEndpoint.Publish(notificationEvent, cancellationToken);
+    }
 }
