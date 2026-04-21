@@ -6,6 +6,8 @@ using Application.Follows;
 using Application.Follows.Commands;
 using Application.Follows.Models;
 using Application.Follows.Queries;
+using Application.Profiles.Models;
+using Application.Profiles.Queries;
 using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Context;
@@ -236,6 +238,54 @@ public sealed class FollowQueryTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Should().Be(expectedError);
+    }
+
+    [Fact]
+    public async Task GetPublicProfileByUsername_Should_ReturnCountsIncludingPostCount()
+    {
+        await using var dbContext = CreateDbContext();
+        using var unitOfWork = new UnitOfWork(dbContext);
+
+        var targetUserId = Guid.NewGuid();
+        var followerOneId = Guid.NewGuid();
+        var followerTwoId = Guid.NewGuid();
+        var followingOneId = Guid.NewGuid();
+        var viewerId = Guid.NewGuid();
+        var now = new DateTime(2026, 4, 21, 9, 0, 0, DateTimeKind.Utc);
+
+        SeedFollow(dbContext, Guid.NewGuid(), followerOneId, targetUserId, now.AddMinutes(-1));
+        SeedFollow(dbContext, Guid.NewGuid(), followerTwoId, targetUserId, now.AddMinutes(-2));
+        SeedFollow(dbContext, Guid.NewGuid(), targetUserId, followingOneId, now.AddMinutes(-3));
+        SeedFollow(dbContext, Guid.NewGuid(), viewerId, targetUserId, now.AddMinutes(-4));
+
+        SeedPost(dbContext, targetUserId, now.AddMinutes(-5));
+        SeedPost(dbContext, targetUserId, now.AddMinutes(-6));
+        SeedDeletedPost(dbContext, targetUserId, now.AddMinutes(-7));
+        await dbContext.SaveChangesAsync();
+
+        var userResourceService = new Mock<IUserResourceService>();
+        userResourceService
+            .Setup(service => service.GetPublicUserProfileByUsernameAsync("feed-user", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PublicUserProfileResult(
+                targetUserId,
+                "feed-user",
+                "Feed User",
+                "https://cdn.example.com/feed-user.jpg")));
+
+        var handler = new GetPublicProfileByUsernameQueryHandler(unitOfWork, userResourceService.Object);
+
+        var result = await handler.Handle(new GetPublicProfileByUsernameQuery("feed-user", viewerId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(new PublicProfileResponse(
+            targetUserId,
+            "feed-user",
+            "Feed User",
+            "https://cdn.example.com/feed-user.jpg",
+            3,
+            1,
+            2,
+            true));
     }
 
     private static Mock<IUserResourceService> CreateUserResourceServiceMock(IReadOnlyDictionary<Guid, PublicUserProfileResult> profiles)

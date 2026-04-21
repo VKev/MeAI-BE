@@ -40,12 +40,18 @@ public sealed class GetPublicProfileByUsernameQueryHandler : IQueryHandler<GetPu
         var follows = _unitOfWork.Repository<Follow>()
             .GetAll()
             .AsNoTracking();
+        var posts = _unitOfWork.Repository<Post>()
+            .GetAll()
+            .AsNoTracking();
 
         var followersCount = await follows
             .CountAsync(item => item.FolloweeId == userId, cancellationToken);
 
         var followingCount = await follows
             .CountAsync(item => item.FollowerId == userId, cancellationToken);
+
+        var postCount = await posts
+            .CountAsync(item => item.UserId == userId && !item.IsDeleted && item.DeletedAt == null, cancellationToken);
 
         bool? isFollowedByCurrentUser = null;
         if (request.RequestingUserId.HasValue)
@@ -63,6 +69,7 @@ public sealed class GetPublicProfileByUsernameQueryHandler : IQueryHandler<GetPu
             profileResult.Value.AvatarUrl,
             followersCount,
             followingCount,
+            postCount,
             isFollowedByCurrentUser));
     }
 

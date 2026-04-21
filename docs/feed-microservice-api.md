@@ -151,6 +151,7 @@ interface PublicProfileResponse {
   avatarUrl: string | null;
   followersCount: number;
   followingCount: number;
+  postCount: number;
   isFollowedByCurrentUser: boolean | null;
 }
 ```
@@ -504,6 +505,7 @@ Lấy public profile theo username để render header profile công khai.
 ### Response nổi bật
 
 - backend trả thêm `isFollowedByCurrentUser`
+- backend trả sẵn `followersCount`, `followingCount`, `postCount`
 - khi anonymous, field này là `null`
 - khi đã đăng nhập và đang xem chính mình, field này luôn là `true`
 - khi đã đăng nhập và xem user khác, field này phản ánh trạng thái follow hiện tại
@@ -517,7 +519,7 @@ Lấy public profile theo username để render header profile công khai.
 
 - dùng được cho guest page
 - nếu lỗi `Feed.User.NotFound`, render trạng thái profile không tồn tại
-- counts follower/following đã được backend tổng hợp sẵn
+- counts follower/following/post đã được backend tổng hợp sẵn
 - nếu viewer anonymous thì `isFollowedByCurrentUser` sẽ là `null`
 - nếu viewer đã đăng nhập thì có thể dùng trực tiếp `isFollowedByCurrentUser` để render CTA follow/unfollow mà không cần gọi thêm endpoint khác
 - khi `profile.userId === currentUser.id`, backend đã tự trả `isFollowedByCurrentUser = true`
