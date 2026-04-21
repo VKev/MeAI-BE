@@ -19,19 +19,23 @@ public interface IFacebookPublishService
 
 public sealed record FacebookDeleteRequest(
     string ExternalPostId,
-    string PageAccessToken);
+    string PageAccessToken,
+    string? UserAccessToken = null,
+    bool IsReel = false);
 
 public sealed record FacebookUpdateRequest(
     string ExternalPostId,
     string PageAccessToken,
-    string Message);
+    string Message,
+    string? UserAccessToken = null);
 
 public sealed record FacebookPublishRequest(
     string UserAccessToken,
     string? PageId,
     string? PageAccessToken,
     string Message,
-    IReadOnlyList<FacebookPublishMedia> Media);
+    IReadOnlyList<FacebookPublishMedia> Media,
+    string? PostType = null);
 
 public sealed record FacebookPublishMedia(
     string Url,

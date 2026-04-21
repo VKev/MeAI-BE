@@ -4,10 +4,10 @@ using Microsoft.OpenApi;
 
 namespace WebApi.OpenApi;
 
-internal static class GeminiOpenApiTransformers
+internal static class AiGenerationOpenApiTransformers
 {
-    private const string PreparePath = "api/Gemini/post-prepare";
-    private const string CaptionsPath = "api/Gemini/captions";
+    private const string PreparePath = "api/AiGeneration/post-prepare";
+    private const string CaptionsPath = "api/AiGeneration/captions";
 
     private const string PrepareExample =
         """

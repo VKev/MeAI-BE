@@ -12,11 +12,11 @@ using SharedLibrary.Common.ResponseModel;
 namespace WebApi.Controllers;
 
 [ApiController]
-[Route("api/Gemini")]
+[Route("api/AiGeneration")]
 [Authorize]
-public sealed class GeminiController : ApiController
+public sealed class AiGenerationController : ApiController
 {
-    public GeminiController(IMediator mediator) : base(mediator)
+    public AiGenerationController(IMediator mediator) : base(mediator)
     {
     }
 

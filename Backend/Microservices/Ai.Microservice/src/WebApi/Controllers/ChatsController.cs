@@ -280,7 +280,7 @@ public sealed class ChatsController : ApiController
 
         if (result.IsFailure)
         {
-            return HandleFailure(result);
+            return MapBillingFailureOrDefault(result);
         }
 
         return Ok(result);
@@ -343,7 +343,7 @@ public sealed class ChatsController : ApiController
 
         if (result.IsFailure)
         {
-            return HandleFailure(result);
+            return MapBillingFailureOrDefault(result);
         }
 
         return Ok(result);
@@ -353,6 +353,27 @@ public sealed class ChatsController : ApiController
     {
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(claimValue, out userId);
+    }
+
+    // Insufficient-balance failures surface as HTTP 402 Payment Required so the FE can
+    // distinguish them from generic validation errors and show the top-up modal instead
+    // of a plain error toast. Any other failure flows through the standard HandleFailure
+    // (400 ProblemDetails with error code in `type`).
+    private IActionResult MapBillingFailureOrDefault(Result result)
+    {
+        if (string.Equals(result.Error.Code, "Billing.InsufficientFunds", StringComparison.Ordinal))
+        {
+            return StatusCode(
+                StatusCodes.Status402PaymentRequired,
+                new ProblemDetails
+                {
+                    Status = StatusCodes.Status402PaymentRequired,
+                    Type = result.Error.Code,
+                    Detail = result.Error.Description
+                });
+        }
+
+        return HandleFailure(result);
     }
 
     private static Result<List<Guid>> ParseReferenceResourceIds(List<string>? rawIds)

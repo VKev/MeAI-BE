@@ -112,12 +112,14 @@ public sealed class CompleteFacebookOAuthCommandHandler
                 new Error("User.NotFound", "User not found"));
         }
 
+        // Include soft-deleted rows so reconnecting the same external account revives the
+        // original row in place. Hard-deleting on disconnect would orphan every post that
+        // references its SocialMediaId; revive-on-reconnect keeps the history intact.
         var userFacebookAccounts = await _socialMediaRepository.GetAll()
             .Where(sm =>
                 sm.UserId == userId &&
                 sm.Type == FacebookSocialMediaType &&
-                sm.Metadata != null &&
-                !sm.IsDeleted)
+                sm.Metadata != null)
             .ToListAsync(cancellationToken);
 
         var matchedAccounts = accountCandidates.ToDictionary(
@@ -204,6 +206,13 @@ public sealed class CompleteFacebookOAuthCommandHandler
                 matchedSocialMedia.Metadata?.Dispose();
                 matchedSocialMedia.Metadata = metadata;
                 matchedSocialMedia.UpdatedAt = now;
+                // Revive if the row was soft-deleted — this is the reconnect path. Clear
+                // the tombstone so queries that filter on DeletedAt surface the row again.
+                if (matchedSocialMedia.IsDeleted)
+                {
+                    matchedSocialMedia.IsDeleted = false;
+                    matchedSocialMedia.DeletedAt = null;
+                }
                 persistedSocialMedias.Add(matchedSocialMedia);
                 continue;
             }

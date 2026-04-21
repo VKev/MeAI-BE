@@ -71,8 +71,12 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
 
         var isTikTok = string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase);
         var isFacebook = string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase);
+        // Threads must bypass the snapshot cache because PostMetricSnapshotMapper only
+        // persists numeric metrics + the post payload — CommentSamples aren't stored.
+        // Serving Threads from cache would drop the reply detail the FE needs to render.
+        var isThreads = string.Equals(socialMedia.Type, ThreadsType, StringComparison.OrdinalIgnoreCase);
 
-        if (!request.Refresh && !isTikTok && !isFacebook)
+        if (!request.Refresh && !isTikTok && !isFacebook && !isThreads)
         {
             var cachedMetric = await _postMetricSnapshotRepository.GetLatestAsync(
                 request.UserId,

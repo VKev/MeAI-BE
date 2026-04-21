@@ -39,7 +39,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddGrpc();
 builder.Services.AddOpenApi(options =>
 {
-    options.AddOperationTransformer(GeminiOpenApiTransformers.TransformAsync);
+    options.AddOperationTransformer(AiGenerationOpenApiTransformers.TransformAsync);
     options.AddOperationTransformer(PostsOpenApiTransformers.TransformAsync);
 });
 var corsPolicyName = builder.AddCorsPolicy();

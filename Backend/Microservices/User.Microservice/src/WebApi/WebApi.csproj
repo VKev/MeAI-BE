@@ -34,6 +34,7 @@
 
   <ItemGroup>
     <Protobuf Include="..\..\..\SharedLibrary\Protos\user_resources.proto" GrpcServices="Server" />
+    <Protobuf Include="..\..\..\SharedLibrary\Protos\user_billing.proto" GrpcServices="Server" />
   </ItemGroup>
 
   <ItemGroup>

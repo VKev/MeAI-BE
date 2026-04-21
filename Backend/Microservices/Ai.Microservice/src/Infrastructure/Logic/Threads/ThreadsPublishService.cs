@@ -37,18 +37,35 @@ public sealed class ThreadsPublishService : IThreadsPublishService
             return Result.Failure<bool>(new Error("Threads.DeleteMissingToken", "Missing Threads access token."));
         }
 
-        // Threads only exposes numeric media IDs to DELETE. Permalink URLs stored in
-        // ExternalContentId need to be stripped down to the id segment before calling the API.
-        var id = ExtractThreadsId(request.ThreadsPostId);
+        // ExternalContentId may be "{mediaId}|{permalink}" (current format) or raw numeric
+        // id (pre-combined-format rows). ExtractMediaIdFromStored handles both.
+        var id = ExtractMediaIdFromStored(request.ThreadsPostId);
         var url = $"{GraphApiBaseUrl}/{Uri.EscapeDataString(id)}?access_token={Uri.EscapeDataString(request.AccessToken)}";
         var response = await _httpClient.DeleteAsync(url, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
+            // Treat "not found" / "already deleted" as success — the user's intent is "make
+            // it gone" and the platform state matches that outcome. This also rescues legacy
+            // rows that stored only a shortcode URL, since DELETE with a shortcode 400s here.
+            if (LooksLikeThreadsNotFound(body))
+            {
+                return Result.Success(true);
+            }
             return Result.Failure<bool>(
-                new Error("Threads.DeleteFailed", ReadGraphApiError(body) ?? $"Threads delete failed with status {(int)response.StatusCode}."));
+                new Error("Threads.DeleteFailed", ReadGraphApiError(body) ?? $"Threads delete failed with status {(int)response.StatusCode}: {body}"));
         }
         return Result.Success(true);
+    }
+
+    private static bool LooksLikeThreadsNotFound(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return false;
+        var lower = body.ToLowerInvariant();
+        return lower.Contains("does not exist") ||
+               lower.Contains("cannot be loaded") ||
+               lower.Contains("unsupported delete") ||
+               lower.Contains("unknown path components");
     }
 
     private static string ExtractThreadsId(string raw)
@@ -133,12 +150,33 @@ public sealed class ThreadsPublishService : IThreadsPublishService
 
         // Threads' numeric media id is not directly usable in public URLs — the canonical
         // format is https://www.threads.net/@{username}/post/{shortcode}. Ask the Graph API
-        // for the permalink so the FE can link out correctly.
+        // for the permalink so the FE can link out correctly. We encode both the numeric id
+        // AND the permalink into PostId as "{mediaId}|{permalink}" — the numeric id is
+        // required by DELETE/UPDATE, and the permalink is what the FE shows as "View on
+        // Threads". Callers that need only the id split on '|'.
         var permalink = await TryFetchPermalinkAsync(publishResult.Value, request.AccessToken, cancellationToken);
+        var combined = string.IsNullOrWhiteSpace(permalink)
+            ? publishResult.Value
+            : $"{publishResult.Value}|{permalink}";
 
-        return Result.Success(new ThreadsPublishResult(
-            request.ThreadsUserId,
-            string.IsNullOrWhiteSpace(permalink) ? publishResult.Value : permalink));
+        return Result.Success(new ThreadsPublishResult(request.ThreadsUserId, combined));
+    }
+
+    private static string ExtractMediaIdFromStored(string storedExternalId)
+    {
+        // stored format (current): "{numericId}|{permalink}"
+        // legacy (older rows): raw numeric id OR raw permalink URL
+        if (string.IsNullOrWhiteSpace(storedExternalId)) return storedExternalId;
+        var pipe = storedExternalId.IndexOf('|');
+        if (pipe > 0)
+        {
+            return storedExternalId[..pipe];
+        }
+        // Fallback for legacy URL-only rows: pull the last non-empty path segment. This used
+        // to return the shortcode (which DELETE doesn't accept) — now at least DELETE will
+        // return a clean "not found" and the consumer's 400-tolerant logic will treat it
+        // as success so the user isn't stuck.
+        return ExtractThreadsId(storedExternalId);
     }
 
     private async Task<string?> TryFetchPermalinkAsync(

@@ -17,5 +17,15 @@ public static class SeedingSetup
         {
             app.Logger.LogError(ex, "Failed to seed AI sample data at startup.");
         }
+
+        try
+        {
+            var pricingSeeder = scope.ServiceProvider.GetRequiredService<CoinPricingSeeder>();
+            await pricingSeeder.SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Failed to seed coin pricing catalog at startup.");
+        }
     }
 }

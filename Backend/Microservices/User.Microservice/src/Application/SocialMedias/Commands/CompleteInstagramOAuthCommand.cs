@@ -110,12 +110,14 @@ public sealed class CompleteInstagramOAuthCommandHandler
 
         var resolvedEmail = user?.Email;
 
+        // Include soft-deleted rows so reconnecting revives the original row in place
+        // instead of creating a duplicate — keeps the SocialMediaId stable for every
+        // post/publication that was ever published to this account.
         var userInstagramAccounts = await _socialMediaRepository.GetAll()
             .Where(sm =>
                 sm.UserId == userId &&
                 sm.Type == InstagramSocialMediaType &&
-                sm.Metadata != null &&
-                !sm.IsDeleted)
+                sm.Metadata != null)
             .ToListAsync(cancellationToken);
 
         var instagramAccountId = !string.IsNullOrWhiteSpace(profileResult.Value.InstagramAccountId)
@@ -177,6 +179,13 @@ public sealed class CompleteInstagramOAuthCommandHandler
             matchedSocialMedia.Metadata?.Dispose();
             matchedSocialMedia.Metadata = metadata;
             matchedSocialMedia.UpdatedAt = now;
+            // Revive if soft-deleted — reconnect path. Clears the tombstone so the
+            // account shows up in the user's connected list again.
+            if (matchedSocialMedia.IsDeleted)
+            {
+                matchedSocialMedia.IsDeleted = false;
+                matchedSocialMedia.DeletedAt = null;
+            }
             socialMedia = matchedSocialMedia;
         }
         else

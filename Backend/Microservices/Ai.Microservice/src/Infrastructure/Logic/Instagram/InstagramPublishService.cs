@@ -83,6 +83,17 @@ public sealed class InstagramPublishService : IInstagramPublishService
 
         var mediaType = mediaTypeResult.Value;
 
+        // Reels must be videos. If the user queued an image in the Instagram reel bucket,
+        // reject loudly so they get a clear error instead of a silently-demoted regular post.
+        var wantsReel = !string.IsNullOrWhiteSpace(request.PostType) &&
+                        string.Equals(request.PostType, "reels", StringComparison.OrdinalIgnoreCase);
+        if (wantsReel && mediaType != MediaType.Video)
+        {
+            return Result.Failure<InstagramPublishResult>(
+                new Error("Instagram.ReelRequiresVideo",
+                    "Instagram Reels require a video — images are not supported."));
+        }
+
         var creationResult = await CreateMediaContainerAsync(
             request.InstagramUserId,
             request.AccessToken,

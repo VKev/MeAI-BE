@@ -114,6 +114,60 @@ namespace Infrastructure.Migrations
                     b.ToTable("chat_sessions", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.CoinPricingCatalogEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("action_type");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("unit");
+
+                    b.Property<decimal>("UnitCostCoins")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("unit_cost_coins");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("Variant")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("variant");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActionType", "Model", "Variant", "IsActive")
+                        .HasDatabaseName("ix_coin_pricing_catalog_lookup");
+
+                    b.ToTable("coin_pricing_catalog", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.ImageTask", b =>
                 {
                     b.Property<Guid>("Id")

@@ -32,6 +32,8 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<Transaction> Transactions { get; set; }
 
+    public virtual DbSet<CoinTransaction> CoinTransactions { get; set; }
+
     public virtual DbSet<User> Users { get; set; }
 
     public virtual DbSet<UserRole> UserRoles { get; set; }

@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+option csharp_namespace = "SharedLibrary.Grpc.UserBilling";
+
+package user.billing;
+
+service UserBillingService {
+  rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse);
+  rpc DebitCoins (DebitCoinsRequest) returns (DebitCoinsResponse);
+  rpc RefundCoins (RefundCoinsRequest) returns (RefundCoinsResponse);
+}
+
+message GetBalanceRequest {
+  string user_id = 1;
+}
+
+message GetBalanceResponse {
+  // Stringified decimal — gRPC has no native decimal type.
+  string balance = 1;
+}
+
+message DebitCoinsRequest {
+  string user_id = 1;
+  // Positive amount to deduct (stringified decimal).
+  string amount = 2;
+  string reason = 3;
+  string reference_type = 4;
+  string reference_id = 5;
+}
+
+message DebitCoinsResponse {
+  bool success = 1;
+  string new_balance = 2;
+  // Populated when success=false. "insufficient_funds" is the canonical code the FE uses
+  // to show the top-up modal.
+  string error_code = 3;
+  string error_message = 4;
+}
+
+message RefundCoinsRequest {
+  string user_id = 1;
+  string amount = 2;
+  string reason = 3;
+  string reference_type = 4;
+  // The ReferenceId of the debit we're refunding — used for dedupe.
+  string reference_id = 5;
+}
+
+message RefundCoinsResponse {
+  bool success = 1;
+  string new_balance = 2;
+  // True when the refund was already applied (idempotent noop) — caller can treat as success.
+  bool already_applied = 3;
+  string error_code = 4;
+  string error_message = 5;
+}

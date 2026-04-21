@@ -42,7 +42,12 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
                         ?? throw new InvalidOperationException("Threads:AppSecret is not configured");
         _redirectUri = configuration["Threads:RedirectUri"]
                        ?? throw new InvalidOperationException("Threads:RedirectUri is not configured");
-        _scopes = configuration["Threads:Scopes"] ?? "threads_basic,threads_content_publish,threads_manage_insights";
+        // threads_read_replies is required for GET on /conversation and /replies (reading
+        // comment detail in published-post analytics). threads_manage_replies covers the
+        // write side (hide/unhide/respond/moderate) — kept for future reply moderation.
+        // Without threads_read_replies Meta returns "Application does not have permission
+        // for this action" (500) on the conversation endpoint.
+        _scopes = configuration["Threads:Scopes"] ?? "threads_basic,threads_content_publish,threads_manage_insights,threads_read_replies,threads_manage_replies";
         _authorizationBaseUrl = configuration["Threads:AuthorizationBaseUrl"] ?? DefaultAuthorizationBaseUrl;
         _httpClient = httpClientFactory.CreateClient("Threads");
     }

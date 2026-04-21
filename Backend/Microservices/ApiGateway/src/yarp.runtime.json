@@ -82,17 +82,17 @@
         ]
       },
       {
-        "RouteId": "ai-gemini-root",
+        "RouteId": "ai-generation-root",
         "ClusterId": "ai",
         "Match": {
-          "Path": "/api/Gemini"
+          "Path": "/api/AiGeneration"
         }
       },
       {
-        "RouteId": "ai-gemini-catchall",
+        "RouteId": "ai-generation-catchall",
         "ClusterId": "ai",
         "Match": {
-          "Path": "/api/Gemini/{**catch-all}"
+          "Path": "/api/AiGeneration/{**catch-all}"
         }
       }
     ],
