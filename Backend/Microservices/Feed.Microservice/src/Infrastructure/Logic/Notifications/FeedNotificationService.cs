@@ -28,8 +28,8 @@ public sealed class FeedNotificationService : IFeedNotificationService
             return;
         }
 
-        var username = await ResolveUsernameAsync(actorUserId, cancellationToken);
-        var notificationEvent = _factory.CreateFollowed(actorUserId, username, targetUserId);
+        var actorIdentity = await ResolveActorIdentityAsync(actorUserId, cancellationToken);
+        var notificationEvent = _factory.CreateFollowed(actorUserId, actorIdentity.Username, actorIdentity.AvatarUrl, targetUserId);
         await _publishEndpoint.Publish(notificationEvent, cancellationToken);
     }
 
@@ -45,11 +45,18 @@ public sealed class FeedNotificationService : IFeedNotificationService
             .Distinct()
             .ToList();
 
-        var username = await ResolveUsernameAsync(authorUserId, cancellationToken);
+        var actorIdentity = await ResolveActorIdentityAsync(authorUserId, cancellationToken);
 
         foreach (var recipientUserId in recipients)
         {
-            var notificationEvent = _factory.CreateNewPost(authorUserId, username, recipientUserId, postId, preview);
+            var notificationEvent = _factory.CreateNewPost(
+                authorUserId,
+                actorIdentity.Username,
+                actorIdentity.FullName,
+                actorIdentity.AvatarUrl,
+                recipientUserId,
+                postId,
+                preview);
             await _publishEndpoint.Publish(notificationEvent, cancellationToken);
         }
     }
@@ -67,8 +74,15 @@ public sealed class FeedNotificationService : IFeedNotificationService
             return;
         }
 
-        var username = await ResolveUsernameAsync(actorUserId, cancellationToken);
-        var notificationEvent = _factory.CreateComment(actorUserId, username, postOwnerUserId, postId, commentId, preview);
+        var actorIdentity = await ResolveActorIdentityAsync(actorUserId, cancellationToken);
+        var notificationEvent = _factory.CreateComment(
+            actorUserId,
+            actorIdentity.Username,
+            actorIdentity.AvatarUrl,
+            postOwnerUserId,
+            postId,
+            commentId,
+            preview);
         await _publishEndpoint.Publish(notificationEvent, cancellationToken);
     }
 
@@ -84,8 +98,14 @@ public sealed class FeedNotificationService : IFeedNotificationService
             return;
         }
 
-        var username = await ResolveUsernameAsync(actorUserId, cancellationToken);
-        var notificationEvent = _factory.CreatePostLiked(actorUserId, username, postOwnerUserId, postId, preview);
+        var actorIdentity = await ResolveActorIdentityAsync(actorUserId, cancellationToken);
+        var notificationEvent = _factory.CreatePostLiked(
+            actorUserId,
+            actorIdentity.Username,
+            actorIdentity.AvatarUrl,
+            postOwnerUserId,
+            postId,
+            preview);
         await _publishEndpoint.Publish(notificationEvent, cancellationToken);
     }
 
@@ -102,22 +122,34 @@ public sealed class FeedNotificationService : IFeedNotificationService
             return;
         }
 
-        var username = await ResolveUsernameAsync(actorUserId, cancellationToken);
-        var notificationEvent = _factory.CreateCommentLiked(actorUserId, username, commentOwnerUserId, postId, commentId, preview);
+        var actorIdentity = await ResolveActorIdentityAsync(actorUserId, cancellationToken);
+        var notificationEvent = _factory.CreateCommentLiked(
+            actorUserId,
+            actorIdentity.Username,
+            actorIdentity.AvatarUrl,
+            commentOwnerUserId,
+            postId,
+            commentId,
+            preview);
         await _publishEndpoint.Publish(notificationEvent, cancellationToken);
     }
 
-    private async Task<string> ResolveUsernameAsync(Guid actorUserId, CancellationToken cancellationToken)
+    private async Task<ActorNotificationIdentity> ResolveActorIdentityAsync(Guid actorUserId, CancellationToken cancellationToken)
     {
+        var fallbackValue = actorUserId.ToString();
         var profileResult = await _userResourceService.GetPublicUserProfilesByIdsAsync([actorUserId], cancellationToken);
         if (profileResult.IsSuccess
-            && profileResult.Value.TryGetValue(actorUserId, out var profile)
-            && !string.IsNullOrWhiteSpace(profile.Username))
+            && profileResult.Value.TryGetValue(actorUserId, out var profile))
         {
-            return profile.Username;
+            var username = string.IsNullOrWhiteSpace(profile.Username) ? fallbackValue : profile.Username;
+            var fullName = string.IsNullOrWhiteSpace(profile.FullName) ? username : profile.FullName;
+            var avatarUrl = string.IsNullOrWhiteSpace(profile.AvatarUrl) ? null : profile.AvatarUrl;
+            return new ActorNotificationIdentity(username, fullName, avatarUrl);
         }
 
-        return actorUserId.ToString();
+        return new ActorNotificationIdentity(fallbackValue, fallbackValue, null);
     }
+
+    private sealed record ActorNotificationIdentity(string Username, string FullName, string? AvatarUrl);
 }
 
