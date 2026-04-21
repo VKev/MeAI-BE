@@ -9,7 +9,7 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Profiles.Queries;
 
-public sealed record GetPublicProfileByUsernameQuery(string Username) : IQuery<PublicProfileResponse>;
+public sealed record GetPublicProfileByUsernameQuery(string Username, Guid? RequestingUserId) : IQuery<PublicProfileResponse>;
 
 public sealed class GetPublicProfileByUsernameQueryHandler : IQueryHandler<GetPublicProfileByUsernameQuery, PublicProfileResponse>
 {
@@ -37,15 +37,30 @@ public sealed class GetPublicProfileByUsernameQueryHandler : IQueryHandler<GetPu
         }
 
         var userId = profileResult.Value.UserId;
-        var followersCount = await _unitOfWork.Repository<Follow>()
+        var follows = _unitOfWork.Repository<Follow>()
             .GetAll()
-            .AsNoTracking()
+            .AsNoTracking();
+        var posts = _unitOfWork.Repository<Post>()
+            .GetAll()
+            .AsNoTracking();
+
+        var followersCount = await follows
             .CountAsync(item => item.FolloweeId == userId, cancellationToken);
 
-        var followingCount = await _unitOfWork.Repository<Follow>()
-            .GetAll()
-            .AsNoTracking()
+        var followingCount = await follows
             .CountAsync(item => item.FollowerId == userId, cancellationToken);
+
+        var postCount = await posts
+            .CountAsync(item => item.UserId == userId && !item.IsDeleted && item.DeletedAt == null, cancellationToken);
+
+        bool? isFollowedByCurrentUser = null;
+        if (request.RequestingUserId.HasValue)
+        {
+            isFollowedByCurrentUser = request.RequestingUserId.Value == userId || await follows
+                .AnyAsync(
+                    item => item.FollowerId == request.RequestingUserId.Value && item.FolloweeId == userId,
+                    cancellationToken);
+        }
 
         return Result.Success(new PublicProfileResponse(
             userId,
@@ -53,7 +68,9 @@ public sealed class GetPublicProfileByUsernameQueryHandler : IQueryHandler<GetPu
             profileResult.Value.FullName,
             profileResult.Value.AvatarUrl,
             followersCount,
-            followingCount));
+            followingCount,
+            postCount,
+            isFollowedByCurrentUser));
     }
 
     private static Error MapUserProfileError(Error error)

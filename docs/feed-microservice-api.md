@@ -41,6 +41,13 @@ Tài nguyên OpenAPI/Docs của service:
 - `GET /api/Feed/posts/{id}/comments`
 - `GET /api/Feed/comments/{id}/replies`
 
+Lưu ý: các endpoint anonymous vẫn có thể trả thêm viewer flags nếu request hiện tại có auth hợp lệ. Với `GET /api/Feed/profiles/{username}`, field `isFollowedByCurrentUser` sẽ:
+
+- là `null` khi request anonymous
+- là `true` nếu current user đang follow profile đó
+- là `true` nếu profile đang xem là chính current user
+- là `false` nếu đã đăng nhập nhưng chưa follow profile đó
+
 ### Auth-required endpoints
 
 Tất cả route còn lại yêu cầu user hợp lệ từ `ClaimTypes.NameIdentifier`.
@@ -144,9 +151,15 @@ interface PublicProfileResponse {
   avatarUrl: string | null;
   followersCount: number;
   followingCount: number;
+  postCount: number;
+  isFollowedByCurrentUser: boolean | null;
 }
 ```
 
+Lưu ý:
+
+- `isFollowedByCurrentUser` có thể là `null` khi request anonymous.
+- `isFollowedByCurrentUser` sẽ là `true` khi viewer đang xem profile của chính mình.
 ### `PostMediaResponse`
 
 ```ts
@@ -236,7 +249,12 @@ Lưu ý:
 
 ```ts
 interface FollowUserResponse {
+  followId: string;
   userId: string;
+  username: string;
+  fullName: string | null;
+  avatarUrl: string | null;
+  postCount: number;
   followedAt: string | null;
 }
 ```
@@ -316,6 +334,8 @@ Các list dùng cursor pagination trong Feed hiện tại:
 - `GET /api/Feed/posts/feed`
 - `GET /api/Feed/posts/{id}/comments`
 - `GET /api/Feed/comments/{id}/replies`
+- `GET /api/Feed/followers/{userId}`
+- `GET /api/Feed/following/{userId}`
 
 ### Query params
 
@@ -331,7 +351,9 @@ Các list dùng cursor pagination trong Feed hiện tại:
 
 ### Cursor strategy cho frontend
 
-Frontend cần lấy cursor từ item cuối cùng của page hiện tại:
+Frontend cần lấy cursor từ item cuối cùng của page hiện tại.
+
+Với các response có `id` + `createdAt` như post/comment:
 
 ```ts
 function getNextCursor<T extends { id: string; createdAt: string | null }>(items: T[]) {
@@ -341,6 +363,20 @@ function getNextCursor<T extends { id: string; createdAt: string | null }>(items
   return {
     cursorCreatedAt: last.createdAt,
     cursorId: last.id,
+  };
+}
+```
+
+Với followers/following, dùng `followId` + `followedAt`:
+
+```ts
+function getNextFollowCursor(items: FollowUserResponse[]) {
+  const last = items[items.length - 1];
+  if (!last?.followedAt || !last?.followId) return undefined;
+
+  return {
+    cursorCreatedAt: last.followedAt,
+    cursorId: last.followId,
   };
 }
 ```
@@ -466,6 +502,14 @@ export async function uploadResource(file: File, resourceType?: string) {
 
 Lấy public profile theo username để render header profile công khai.
 
+### Response nổi bật
+
+- backend trả thêm `isFollowedByCurrentUser`
+- backend trả sẵn `followersCount`, `followingCount`, `postCount`
+- khi anonymous, field này là `null`
+- khi đã đăng nhập và đang xem chính mình, field này luôn là `true`
+- khi đã đăng nhập và xem user khác, field này phản ánh trạng thái follow hiện tại
+
 ### Validation
 
 - `username` bắt buộc
@@ -475,7 +519,10 @@ Lấy public profile theo username để render header profile công khai.
 
 - dùng được cho guest page
 - nếu lỗi `Feed.User.NotFound`, render trạng thái profile không tồn tại
-- counts follower/following đã được backend tổng hợp sẵn
+- counts follower/following/post đã được backend tổng hợp sẵn
+- nếu viewer anonymous thì `isFollowedByCurrentUser` sẽ là `null`
+- nếu viewer đã đăng nhập thì có thể dùng trực tiếp `isFollowedByCurrentUser` để render CTA follow/unfollow mà không cần gọi thêm endpoint khác
+- khi `profile.userId === currentUser.id`, backend đã tự trả `isFollowedByCurrentUser = true`
 
 ---
 
@@ -874,6 +921,7 @@ Follow một user.
 ### Gợi ý frontend
 
 - cập nhật local state của profile header nếu cần
+- response success đã trả đầy đủ `followId`, `userId`, `username`, `fullName`, `avatarUrl`, `postCount`, `followedAt`
 - invalidate follow suggestions nếu UI đang hiển thị
 - backend có thể trả `Feed.Follow.Self` hoặc `Feed.Follow.Exists`
 
@@ -896,19 +944,54 @@ Unfollow một user.
 
 ### Mục đích
 
-Lấy danh sách followers của một user.
+Lấy danh sách followers của một user với cursor pagination để hỗ trợ infinite query.
+
+### Query params
+
+- `cursorCreatedAt`
+- `cursorId`
+- `limit`
+
+### Validation
+
+- `userId` bắt buộc
+- `cursorCreatedAt` và `cursorId` phải đi cùng nhau
+- `limit` được normalize/clamp ở backend trong khoảng `1..100`, mặc định `50`
 
 ### Response shape
 
-Danh sách `FollowUserResponse`, hiện chỉ có:
+Danh sách `FollowUserResponse` với đầy đủ:
 
+- `followId`
 - `userId`
+- `username`
+- `fullName`
+- `avatarUrl`
+- `postCount`
 - `followedAt`
 
 ### Gợi ý frontend
 
-- nếu cần render username/avatar/fullName, frontend phải resolve profile từ nguồn khác
-- endpoint hiện chưa có pagination
+- không cần resolve thêm profile từ nguồn khác
+- dùng `followId` + `followedAt` từ item cuối page để gọi page tiếp theo
+- phù hợp cho `useInfiniteQuery`
+
+```ts
+useInfiniteQuery({
+  queryKey: ['feed', 'followers', userId, { limit: 20 }],
+  initialPageParam: { limit: 20 },
+  queryFn: ({ pageParam }) => getFollowers(userId, pageParam),
+  getNextPageParam: (lastPage) => {
+    const items = lastPage.value;
+    if (!items.length) return undefined;
+
+    return {
+      ...getNextFollowCursor(items),
+      limit: 20,
+    };
+  },
+});
+```
 
 ---
 
@@ -916,12 +999,37 @@ Danh sách `FollowUserResponse`, hiện chỉ có:
 
 ### Mục đích
 
-Lấy danh sách following của một user.
+Lấy danh sách following của một user với cursor pagination để hỗ trợ infinite query.
+
+### Query params
+
+- `cursorCreatedAt`
+- `cursorId`
+- `limit`
+
+### Validation
+
+- `userId` bắt buộc
+- `cursorCreatedAt` và `cursorId` phải đi cùng nhau
+- `limit` được normalize/clamp ở backend trong khoảng `1..100`, mặc định `50`
+
+### Response shape
+
+Danh sách `FollowUserResponse` với cùng contract như followers:
+
+- `followId`
+- `userId`
+- `username`
+- `fullName`
+- `avatarUrl`
+- `postCount`
+- `followedAt`
 
 ### Gợi ý frontend
 
-- cùng lưu ý như followers
-- endpoint hiện chưa có pagination
+- không cần resolve thêm profile từ nguồn khác
+- dùng cùng helper `getNextFollowCursor(items)` như followers
+- rất phù hợp cho tab following dạng infinite scroll
 
 ---
 
@@ -1072,8 +1180,8 @@ export const feedKeys = {
   detail: (postId: string) => ['feed', 'detail', postId] as const,
   postComments: (postId: string) => ['feed', 'comments', postId] as const,
   commentReplies: (commentId: string) => ['feed', 'replies', commentId] as const,
-  followers: (userId: string) => ['feed', 'followers', userId] as const,
-  following: (userId: string) => ['feed', 'following', userId] as const,
+  followers: (userId: string, limit: number) => ['feed', 'followers', userId, { limit }] as const,
+  following: (userId: string, limit: number) => ['feed', 'following', userId, { limit }] as const,
   followSuggestions: (limit: number) => ['feed', 'follow-suggestions', { limit }] as const,
   adminReports: (filters: { status?: string; targetType?: string }) => ['feed', 'admin-reports', filters] as const,
 };
@@ -1129,7 +1237,7 @@ export const feedKeys = {
 
 ### 4. Giới hạn hiện tại
 
-- followers/following hiện chưa có pagination
+- followers/following đã hỗ trợ cursor pagination theo `followedAt desc`, `followId desc`
 - comment đã hỗ trợ like/unlike
 - feed hiện là follow-based feed
 - comment tree được load theo từng tầng, không có API trả full nested tree trong một response

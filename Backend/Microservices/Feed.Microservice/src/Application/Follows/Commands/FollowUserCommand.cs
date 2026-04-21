@@ -1,6 +1,8 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Notifications;
+using Application.Abstractions.Resources;
 using Application.Common;
+using Application.Follows;
 using Application.Follows.Models;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -18,13 +20,16 @@ public sealed class FollowUserCommandHandler : ICommandHandler<FollowUserCommand
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IFeedNotificationService _feedNotificationService;
+    private readonly IUserResourceService _userResourceService;
 
     public FollowUserCommandHandler(
         IUnitOfWork unitOfWork,
-        IFeedNotificationService feedNotificationService)
+        IFeedNotificationService feedNotificationService,
+        IUserResourceService userResourceService)
     {
         _unitOfWork = unitOfWork;
         _feedNotificationService = feedNotificationService;
+        _userResourceService = userResourceService;
     }
 
     public async Task<Result<FollowUserResponse>> Handle(FollowUserCommand request, CancellationToken cancellationToken)
@@ -55,6 +60,20 @@ public sealed class FollowUserCommandHandler : ICommandHandler<FollowUserCommand
         await _unitOfWork.Repository<Follow>().AddAsync(follow, cancellationToken);
         await _feedNotificationService.NotifyFollowedAsync(request.FollowerId, request.FolloweeId, cancellationToken);
 
-        return Result.Success(new FollowUserResponse(follow.FolloweeId, follow.CreatedAt));
+        var responseResult = await FollowSupport.BuildFollowResponsesAsync(
+            _unitOfWork,
+            _userResourceService,
+            new[] { new FollowCandidate(follow.Id, follow.FolloweeId, follow.CreatedAt) },
+            cancellationToken);
+
+        if (responseResult.IsFailure)
+        {
+            return Result.Failure<FollowUserResponse>(responseResult.Error);
+        }
+
+        var followResponse = responseResult.Value.FirstOrDefault();
+        return followResponse is null
+            ? Result.Failure<FollowUserResponse>(FeedErrors.UserNotFound)
+            : Result.Success(followResponse);
     }
 }

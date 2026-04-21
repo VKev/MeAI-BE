@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Application.Common;
 using Application.Comments.Commands;
 using Application.Comments.Models;
+using Application.Follows.Commands;
 using Application.Follows.Models;
 using Application.Follows.Queries;
 using Application.Posts.Commands;
@@ -25,7 +26,7 @@ namespace test;
 public sealed class FeedControllerTests
 {
     [Fact]
-    public async Task GetPublicProfileByUsername_Should_SendUsernameQuery_AndReturnOk()
+    public async Task GetPublicProfileByUsername_Should_SendNullRequestingUser_WhenAnonymous()
     {
         var expectedProfile = new PublicProfileResponse(
             Guid.NewGuid(),
@@ -33,7 +34,9 @@ public sealed class FeedControllerTests
             "Alice Nguyen",
             "https://cdn.example.com/alice.jpg",
             10,
-            12);
+            12,
+            8,
+            null);
 
         var mediator = new Mock<IMediator>();
         var expectedResult = Result.Success(expectedProfile);
@@ -50,7 +53,41 @@ public sealed class FeedControllerTests
         okResult.Value.Should().BeSameAs(expectedResult);
         mediator.Verify(
             item => item.Send(
-                It.Is<GetPublicProfileByUsernameQuery>(query => query == new GetPublicProfileByUsernameQuery("alice")),
+                It.Is<GetPublicProfileByUsernameQuery>(query => query == new GetPublicProfileByUsernameQuery("alice", null)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetPublicProfileByUsername_Should_IncludeAuthenticatedUserId_WhenAvailable()
+    {
+        var viewerId = Guid.NewGuid();
+        var expectedProfile = new PublicProfileResponse(
+            Guid.NewGuid(),
+            "alice",
+            "Alice Nguyen",
+            "https://cdn.example.com/alice.jpg",
+            10,
+            12,
+            8,
+            true);
+
+        var mediator = new Mock<IMediator>();
+        var expectedResult = Result.Success(expectedProfile);
+
+        mediator
+            .Setup(item => item.Send(It.IsAny<GetPublicProfileByUsernameQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResult);
+
+        var controller = CreateController(mediator.Object, viewerId);
+
+        var actionResult = await controller.GetPublicProfileByUsername("alice", CancellationToken.None);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(expectedResult);
+        mediator.Verify(
+            item => item.Send(
+                It.Is<GetPublicProfileByUsernameQuery>(query => query == new GetPublicProfileByUsernameQuery("alice", viewerId)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -180,6 +217,126 @@ public sealed class FeedControllerTests
                 It.Is<UnlikeCommentCommand>(command => command == new UnlikeCommentCommand(currentUserId, commentId)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task Follow_Should_SendAuthenticatedUserIdAndTargetUserId()
+    {
+        var currentUserId = Guid.NewGuid();
+        var targetUserId = Guid.NewGuid();
+        var expectedResponse = CreateFollowUserResponse(targetUserId);
+        var mediator = new Mock<IMediator>();
+        var expectedResult = Result.Success(expectedResponse);
+
+        mediator
+            .Setup(item => item.Send(It.IsAny<FollowUserCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResult);
+
+        var controller = CreateController(mediator.Object, currentUserId);
+
+        var actionResult = await controller.Follow(targetUserId, CancellationToken.None);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(expectedResult);
+        mediator.Verify(
+            item => item.Send(
+                It.Is<FollowUserCommand>(command => command == new FollowUserCommand(currentUserId, targetUserId)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetFollowers_Should_ForwardCursorPaginationArguments()
+    {
+        IReadOnlyList<FollowUserResponse> expectedFollowers = new List<FollowUserResponse>
+        {
+            CreateFollowUserResponse()
+        };
+
+        var currentUserId = Guid.NewGuid();
+        var targetUserId = Guid.NewGuid();
+        var cursorCreatedAt = new DateTime(2026, 4, 20, 10, 0, 0, DateTimeKind.Utc);
+        var cursorId = Guid.NewGuid();
+        var mediator = new Mock<IMediator>();
+        var expectedResult = Result.Success(expectedFollowers);
+
+        mediator
+            .Setup(item => item.Send(It.IsAny<GetFollowersQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResult);
+
+        var controller = CreateController(mediator.Object, currentUserId);
+
+        var actionResult = await controller.GetFollowers(targetUserId, cursorCreatedAt, cursorId, 15, CancellationToken.None);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(expectedResult);
+        mediator.Verify(
+            item => item.Send(
+                It.Is<GetFollowersQuery>(query => query == new GetFollowersQuery(targetUserId, cursorCreatedAt, cursorId, 15)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetFollowing_Should_ForwardCursorPaginationArguments()
+    {
+        IReadOnlyList<FollowUserResponse> expectedFollowing = new List<FollowUserResponse>
+        {
+            CreateFollowUserResponse()
+        };
+
+        var currentUserId = Guid.NewGuid();
+        var targetUserId = Guid.NewGuid();
+        var cursorCreatedAt = new DateTime(2026, 4, 20, 11, 0, 0, DateTimeKind.Utc);
+        var cursorId = Guid.NewGuid();
+        var mediator = new Mock<IMediator>();
+        var expectedResult = Result.Success(expectedFollowing);
+
+        mediator
+            .Setup(item => item.Send(It.IsAny<GetFollowingQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResult);
+
+        var controller = CreateController(mediator.Object, currentUserId);
+
+        var actionResult = await controller.GetFollowing(targetUserId, cursorCreatedAt, cursorId, 25, CancellationToken.None);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(expectedResult);
+        mediator.Verify(
+            item => item.Send(
+                It.Is<GetFollowingQuery>(query => query == new GetFollowingQuery(targetUserId, cursorCreatedAt, cursorId, 25)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetFollowers_Should_ReturnUnauthorized_WhenUserMissing()
+    {
+        var mediator = new Mock<IMediator>();
+        var controller = CreateController(mediator.Object);
+
+        var actionResult = await controller.GetFollowers(Guid.NewGuid(), null, null, 20, CancellationToken.None);
+
+        var unauthorizedResult = actionResult.Should().BeOfType<UnauthorizedObjectResult>().Subject;
+        unauthorizedResult.Value.Should().BeEquivalentTo(new MessageResponse("Unauthorized"));
+        mediator.Verify(
+            item => item.Send(It.IsAny<GetFollowersQuery>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetFollowing_Should_ReturnUnauthorized_WhenUserMissing()
+    {
+        var mediator = new Mock<IMediator>();
+        var controller = CreateController(mediator.Object);
+
+        var actionResult = await controller.GetFollowing(Guid.NewGuid(), null, null, 20, CancellationToken.None);
+
+        var unauthorizedResult = actionResult.Should().BeOfType<UnauthorizedObjectResult>().Subject;
+        unauthorizedResult.Value.Should().BeEquivalentTo(new MessageResponse("Unauthorized"));
+        mediator.Verify(
+            item => item.Send(It.IsAny<GetFollowingQuery>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -397,6 +554,20 @@ public sealed class FeedControllerTests
             DateTime.UtcNow,
             false,
             null);
+    }
+
+    private static FollowUserResponse CreateFollowUserResponse(Guid? userId = null)
+    {
+        var resolvedUserId = userId ?? Guid.NewGuid();
+
+        return new FollowUserResponse(
+            Guid.NewGuid(),
+            resolvedUserId,
+            $"user-{resolvedUserId:N}"[..12],
+            "Display Name",
+            "https://cdn.example.com/follow.jpg",
+            4,
+            DateTime.UtcNow);
     }
 
     private static FollowSuggestionResponse CreateFollowSuggestionResponse()
