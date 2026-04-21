@@ -2,6 +2,7 @@ using Application.Abstractions;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Kie;
 using Application.Abstractions.Facebook;
+using Application.Abstractions.Feed;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Instagram;
 using Application.Abstractions.Resources;
@@ -14,6 +15,7 @@ using Domain.Repositories;
 using Infrastructure.Logic.Consumers;
 using Infrastructure.Logic.Configs;
 using Infrastructure.Logic.Facebook;
+using Infrastructure.Logic.Feed;
 using Infrastructure.Logic.Gemini;
 using Infrastructure.Logic.Instagram;
 using Infrastructure.Logic.Threads;
@@ -30,6 +32,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SharedLibrary.Authentication;
 using SharedLibrary.Configs;
+using SharedLibrary.Grpc.FeedAnalytics;
 using SharedLibrary.Grpc.UserResources;
 using StackExchange.Redis;
 
@@ -89,6 +92,16 @@ namespace Infrastructure
                 options.Address = new Uri(grpcUrl);
             });
             services.AddScoped<IUserWorkspaceService, UserWorkspaceGrpcService>();
+
+            services.AddGrpcClient<FeedAnalyticsService.FeedAnalyticsServiceClient>((sp, options) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var grpcUrl = configuration["FeedService:GrpcUrl"]
+                              ?? configuration["FeedService__GrpcUrl"]
+                              ?? "http://feed-microservice:5008";
+                options.Address = new Uri(grpcUrl);
+            });
+            services.AddScoped<IFeedAnalyticsService, FeedAnalyticsGrpcClient>();
 
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
             services.AddScoped<IImageTaskRepository, ImageTaskRepository>();

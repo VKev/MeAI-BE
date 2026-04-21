@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+option csharp_namespace = "SharedLibrary.Grpc.FeedAnalytics";
+
+package feedanalytics;
+
+service FeedAnalyticsService {
+  rpc GetDashboardSummary (GetFeedDashboardSummaryRequest) returns (GetFeedDashboardSummaryResponse);
+  rpc GetPostAnalytics (GetFeedPostAnalyticsRequest) returns (GetFeedPostAnalyticsResponse);
+}
+
+message FeedAnalyticsProfile {
+  string user_id = 1;
+  string username = 2;
+  string full_name = 3;
+  string avatar_url = 4;
+  int64 followers_count = 5;
+  int64 following_count = 6;
+  int64 media_count = 7;
+}
+
+message FeedAnalyticsStats {
+  int64 likes = 1;
+  int64 top_level_comments = 2;
+  int64 replies = 3;
+  int64 total_discussion = 4;
+  int64 total_interactions = 5;
+  int64 media_count = 6;
+  int64 hashtag_count = 7;
+}
+
+message FeedDashboardPost {
+  string post_id = 1;
+  string user_id = 2;
+  string content = 3;
+  string media_url = 4;
+  string media_type = 5;
+  repeated string hashtags = 6;
+  string created_at = 7;
+  string updated_at = 8;
+  FeedAnalyticsStats stats = 9;
+}
+
+message FeedCommentSample {
+  string comment_id = 1;
+  string post_id = 2;
+  string user_id = 3;
+  string username = 4;
+  string avatar_url = 5;
+  string content = 6;
+  int64 likes_count = 7;
+  int64 replies_count = 8;
+  string created_at = 9;
+  string updated_at = 10;
+}
+
+message GetFeedDashboardSummaryRequest {
+  string requester_user_id = 1;
+  string username = 2;
+  int32 post_limit = 3;
+}
+
+message GetFeedDashboardSummaryResponse {
+  FeedAnalyticsProfile profile = 1;
+  int32 fetched_post_count = 2;
+  bool has_more_posts = 3;
+  string latest_published_post_id = 4;
+  string latest_published_at = 5;
+  FeedAnalyticsStats aggregated_stats = 6;
+  repeated FeedDashboardPost posts = 7;
+}
+
+message GetFeedPostAnalyticsRequest {
+  string requester_user_id = 1;
+  string post_id = 2;
+  int32 comment_sample_limit = 3;
+}
+
+message GetFeedPostAnalyticsResponse {
+  FeedAnalyticsProfile profile = 1;
+  FeedDashboardPost post = 2;
+  repeated FeedCommentSample comment_samples = 3;
+}

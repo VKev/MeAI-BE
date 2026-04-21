@@ -2,9 +2,11 @@ using Application;
 using Infrastructure;
 using Infrastructure.Configuration;
 using Infrastructure.Context;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Scalar.AspNetCore;
 using Serilog;
 using SharedLibrary.Configs;
+using WebApi.Grpc;
 using WebApi.Middleware;
 using WebApi.Setups;
 
@@ -13,9 +15,22 @@ AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport
 var builder = WebApplication.CreateBuilder(args);
 var shouldAutoApplyMigrations = builder.ConfigureAutoMigrations();
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(5007, listenOptions =>
+    {
+        listenOptions.Protocols = HttpProtocols.Http1;
+    });
+    options.ListenAnyIP(5008, listenOptions =>
+    {
+        listenOptions.Protocols = HttpProtocols.Http2;
+    });
+});
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddAuthorization();
+builder.Services.AddGrpc();
 builder.Services.AddOpenApi(options =>
 {
 
@@ -66,6 +81,7 @@ app.MapScalarApiReference("docs", opts =>
     opts.WithTitle("Feed API");
 });
 
+app.MapGrpcService<FeedAnalyticsGrpcService>();
 app.MapControllers();
 
 app.Run();
