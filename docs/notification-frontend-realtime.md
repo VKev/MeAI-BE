@@ -82,6 +82,8 @@ Dưới đây là danh sách event type đang **thực sự được publish** t
 | `Feed.Followed` | `Social` | Feed follow notification |
 | `Feed.NewPost` | `Social` | Feed new post notification |
 | `Feed.Commented` | `Social` | Feed comment notification |
+| `Feed.PostLiked` | `Social` | Feed post like notification |
+| `Feed.CommentLiked` | `Social` | Feed comment like notification |
 
 Ghi chú rà soát code:
 - Các event AI đang dùng constant trong `NotificationTypes`.

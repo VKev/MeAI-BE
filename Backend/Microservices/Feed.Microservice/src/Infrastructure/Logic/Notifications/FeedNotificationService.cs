@@ -1,4 +1,5 @@
 using Application.Abstractions.Notifications;
+using Application.Abstractions.Resources;
 using MassTransit;
 using SharedLibrary.Contracts.Notifications;
 
@@ -8,22 +9,28 @@ public sealed class FeedNotificationService : IFeedNotificationService
 {
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly FeedNotificationFactory _factory;
+    private readonly IUserResourceService _userResourceService;
 
-    public FeedNotificationService(IPublishEndpoint publishEndpoint, FeedNotificationFactory factory)
+    public FeedNotificationService(
+        IPublishEndpoint publishEndpoint,
+        FeedNotificationFactory factory,
+        IUserResourceService userResourceService)
     {
         _publishEndpoint = publishEndpoint;
         _factory = factory;
+        _userResourceService = userResourceService;
     }
 
-    public Task NotifyFollowedAsync(Guid actorUserId, Guid targetUserId, CancellationToken cancellationToken)
+    public async Task NotifyFollowedAsync(Guid actorUserId, Guid targetUserId, CancellationToken cancellationToken)
     {
         if (actorUserId == targetUserId)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var notificationEvent = _factory.CreateFollowed(actorUserId, targetUserId);
-        return _publishEndpoint.Publish(notificationEvent, cancellationToken);
+        var username = await ResolveUsernameAsync(actorUserId, cancellationToken);
+        var notificationEvent = _factory.CreateFollowed(actorUserId, username, targetUserId);
+        await _publishEndpoint.Publish(notificationEvent, cancellationToken);
     }
 
     public async Task NotifyNewPostAsync(
@@ -38,14 +45,16 @@ public sealed class FeedNotificationService : IFeedNotificationService
             .Distinct()
             .ToList();
 
+        var username = await ResolveUsernameAsync(authorUserId, cancellationToken);
+
         foreach (var recipientUserId in recipients)
         {
-            var notificationEvent = _factory.CreateNewPost(authorUserId, recipientUserId, postId, preview);
+            var notificationEvent = _factory.CreateNewPost(authorUserId, username, recipientUserId, postId, preview);
             await _publishEndpoint.Publish(notificationEvent, cancellationToken);
         }
     }
 
-    public Task NotifyCommentAsync(
+    public async Task NotifyCommentAsync(
         Guid actorUserId,
         Guid postOwnerUserId,
         Guid postId,
@@ -55,14 +64,15 @@ public sealed class FeedNotificationService : IFeedNotificationService
     {
         if (actorUserId == postOwnerUserId)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var notificationEvent = _factory.CreateComment(actorUserId, postOwnerUserId, postId, commentId, preview);
-        return _publishEndpoint.Publish(notificationEvent, cancellationToken);
+        var username = await ResolveUsernameAsync(actorUserId, cancellationToken);
+        var notificationEvent = _factory.CreateComment(actorUserId, username, postOwnerUserId, postId, commentId, preview);
+        await _publishEndpoint.Publish(notificationEvent, cancellationToken);
     }
 
-    public Task NotifyPostLikedAsync(
+    public async Task NotifyPostLikedAsync(
         Guid actorUserId,
         Guid postOwnerUserId,
         Guid postId,
@@ -71,14 +81,15 @@ public sealed class FeedNotificationService : IFeedNotificationService
     {
         if (actorUserId == postOwnerUserId)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var notificationEvent = _factory.CreatePostLiked(actorUserId, postOwnerUserId, postId, preview);
-        return _publishEndpoint.Publish(notificationEvent, cancellationToken);
+        var username = await ResolveUsernameAsync(actorUserId, cancellationToken);
+        var notificationEvent = _factory.CreatePostLiked(actorUserId, username, postOwnerUserId, postId, preview);
+        await _publishEndpoint.Publish(notificationEvent, cancellationToken);
     }
 
-    public Task NotifyCommentLikedAsync(
+    public async Task NotifyCommentLikedAsync(
         Guid actorUserId,
         Guid commentOwnerUserId,
         Guid postId,
@@ -88,10 +99,25 @@ public sealed class FeedNotificationService : IFeedNotificationService
     {
         if (actorUserId == commentOwnerUserId)
         {
-            return Task.CompletedTask;
+            return;
         }
 
-        var notificationEvent = _factory.CreateCommentLiked(actorUserId, commentOwnerUserId, postId, commentId, preview);
-        return _publishEndpoint.Publish(notificationEvent, cancellationToken);
+        var username = await ResolveUsernameAsync(actorUserId, cancellationToken);
+        var notificationEvent = _factory.CreateCommentLiked(actorUserId, username, commentOwnerUserId, postId, commentId, preview);
+        await _publishEndpoint.Publish(notificationEvent, cancellationToken);
+    }
+
+    private async Task<string> ResolveUsernameAsync(Guid actorUserId, CancellationToken cancellationToken)
+    {
+        var profileResult = await _userResourceService.GetPublicUserProfilesByIdsAsync([actorUserId], cancellationToken);
+        if (profileResult.IsSuccess
+            && profileResult.Value.TryGetValue(actorUserId, out var profile)
+            && !string.IsNullOrWhiteSpace(profile.Username))
+        {
+            return profile.Username;
+        }
+
+        return actorUserId.ToString();
     }
 }
+
