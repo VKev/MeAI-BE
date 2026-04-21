@@ -4,16 +4,17 @@ namespace Infrastructure.Logic.Notifications;
 
 public sealed class FeedNotificationFactory
 {
-    public NotificationRequestedEvent CreateFollowed(Guid actorUserId, Guid targetUserId)
+    public NotificationRequestedEvent CreateFollowed(Guid actorUserId, string username, Guid targetUserId)
     {
         return NotificationRequestedEventFactory.CreateForUser(
             targetUserId,
             "Feed.Followed",
             "You have a new follower",
-            "Another MeAI creator started following you.",
+            "${username} started following you.",
             new
             {
-                actorUserId
+                actorUserId,
+                username
             },
             actorUserId,
             DateTime.UtcNow,
@@ -22,6 +23,7 @@ public sealed class FeedNotificationFactory
 
     public NotificationRequestedEvent CreateNewPost(
         Guid authorUserId,
+        string username,
         Guid recipientUserId,
         Guid postId,
         string? preview)
@@ -29,11 +31,12 @@ public sealed class FeedNotificationFactory
         return NotificationRequestedEventFactory.CreateForUser(
             recipientUserId,
             "Feed.NewPost",
-            "A followed creator posted",
-            "A creator you follow just published a new post.",
+            "${username} has just posted",
+            "${username} shared a new post.",
             new
             {
                 authorUserId,
+                username,
                 postId,
                 preview
             },
@@ -44,6 +47,7 @@ public sealed class FeedNotificationFactory
 
     public NotificationRequestedEvent CreateComment(
         Guid actorUserId,
+        string username,
         Guid postOwnerUserId,
         Guid postId,
         Guid commentId,
@@ -53,10 +57,11 @@ public sealed class FeedNotificationFactory
             postOwnerUserId,
             "Feed.Commented",
             "New comment on your post",
-            "Someone commented on your MeAI feed post.",
+            "${username} left a comment on your post.",
             new
             {
                 actorUserId,
+                username,
                 postId,
                 commentId,
                 preview
@@ -68,6 +73,7 @@ public sealed class FeedNotificationFactory
 
     public NotificationRequestedEvent CreatePostLiked(
         Guid actorUserId,
+        string username,
         Guid postOwnerUserId,
         Guid postId,
         string preview)
@@ -75,11 +81,12 @@ public sealed class FeedNotificationFactory
         return NotificationRequestedEventFactory.CreateForUser(
             postOwnerUserId,
             "Feed.PostLiked",
-            "Someone liked your post",
-            "Your MeAI feed post received a new like.",
+            "New interaction on your post",
+            "${username} interacted with your post.",
             new
             {
                 actorUserId,
+                username,
                 postId,
                 preview
             },
@@ -90,6 +97,7 @@ public sealed class FeedNotificationFactory
 
     public NotificationRequestedEvent CreateCommentLiked(
         Guid actorUserId,
+        string username,
         Guid commentOwnerUserId,
         Guid postId,
         Guid commentId,
@@ -98,11 +106,12 @@ public sealed class FeedNotificationFactory
         return NotificationRequestedEventFactory.CreateForUser(
             commentOwnerUserId,
             "Feed.CommentLiked",
-            "Someone liked your comment",
-            "Your MeAI feed comment received a new like.",
+            "New interaction on your comment",
+            "${username} interacted with your comment.",
             new
             {
                 actorUserId,
+                username,
                 postId,
                 commentId,
                 preview
