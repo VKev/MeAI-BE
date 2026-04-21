@@ -65,4 +65,50 @@ public sealed class FeedNotificationFactory
             DateTime.UtcNow,
             NotificationSourceConstants.Social);
     }
+
+    public NotificationRequestedEvent CreatePostLiked(
+        Guid actorUserId,
+        Guid postOwnerUserId,
+        Guid postId,
+        string preview)
+    {
+        return NotificationRequestedEventFactory.CreateForUser(
+            postOwnerUserId,
+            "Feed.PostLiked",
+            "Someone liked your post",
+            "Your MeAI feed post received a new like.",
+            new
+            {
+                actorUserId,
+                postId,
+                preview
+            },
+            actorUserId,
+            DateTime.UtcNow,
+            NotificationSourceConstants.Social);
+    }
+
+    public NotificationRequestedEvent CreateCommentLiked(
+        Guid actorUserId,
+        Guid commentOwnerUserId,
+        Guid postId,
+        Guid commentId,
+        string preview)
+    {
+        return NotificationRequestedEventFactory.CreateForUser(
+            commentOwnerUserId,
+            "Feed.CommentLiked",
+            "Someone liked your comment",
+            "Your MeAI feed comment received a new like.",
+            new
+            {
+                actorUserId,
+                postId,
+                commentId,
+                preview
+            },
+            actorUserId,
+            DateTime.UtcNow,
+            NotificationSourceConstants.Social);
+    }
 }

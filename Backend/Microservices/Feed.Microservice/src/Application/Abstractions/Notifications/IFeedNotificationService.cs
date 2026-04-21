@@ -18,4 +18,19 @@ public interface IFeedNotificationService
         Guid commentId,
         string preview,
         CancellationToken cancellationToken);
+
+    Task NotifyPostLikedAsync(
+        Guid actorUserId,
+        Guid postOwnerUserId,
+        Guid postId,
+        string preview,
+        CancellationToken cancellationToken);
+
+    Task NotifyCommentLikedAsync(
+        Guid actorUserId,
+        Guid commentOwnerUserId,
+        Guid postId,
+        Guid commentId,
+        string preview,
+        CancellationToken cancellationToken);
 }
