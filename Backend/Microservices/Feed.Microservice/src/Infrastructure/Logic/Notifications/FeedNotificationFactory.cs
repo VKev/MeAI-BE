@@ -4,17 +4,22 @@ namespace Infrastructure.Logic.Notifications;
 
 public sealed class FeedNotificationFactory
 {
-    public NotificationRequestedEvent CreateFollowed(Guid actorUserId, string username, Guid targetUserId)
+    public NotificationRequestedEvent CreateFollowed(
+        Guid actorUserId,
+        string username,
+        string? avatarUrl,
+        Guid targetUserId)
     {
         return NotificationRequestedEventFactory.CreateForUser(
             targetUserId,
             "Feed.Followed",
             "You have a new follower",
-            "${username} started following you.",
+            $"{username} started following you.",
             new
             {
                 actorUserId,
-                username
+                username,
+                avatarUrl
             },
             actorUserId,
             DateTime.UtcNow,
@@ -24,6 +29,8 @@ public sealed class FeedNotificationFactory
     public NotificationRequestedEvent CreateNewPost(
         Guid authorUserId,
         string username,
+        string fullName,
+        string? avatarUrl,
         Guid recipientUserId,
         Guid postId,
         string? preview)
@@ -31,12 +38,13 @@ public sealed class FeedNotificationFactory
         return NotificationRequestedEventFactory.CreateForUser(
             recipientUserId,
             "Feed.NewPost",
-            "${username} has just posted",
-            "${username} shared a new post.",
+            $"{fullName} has just posted",
+            $"{username} shared a new post.",
             new
             {
                 authorUserId,
                 username,
+                avatarUrl,
                 postId,
                 preview
             },
@@ -48,6 +56,7 @@ public sealed class FeedNotificationFactory
     public NotificationRequestedEvent CreateComment(
         Guid actorUserId,
         string username,
+        string? avatarUrl,
         Guid postOwnerUserId,
         Guid postId,
         Guid commentId,
@@ -57,11 +66,12 @@ public sealed class FeedNotificationFactory
             postOwnerUserId,
             "Feed.Commented",
             "New comment on your post",
-            "${username} left a comment on your post.",
+            $"{username} left a comment on your post.",
             new
             {
                 actorUserId,
                 username,
+                avatarUrl,
                 postId,
                 commentId,
                 preview
@@ -74,6 +84,7 @@ public sealed class FeedNotificationFactory
     public NotificationRequestedEvent CreatePostLiked(
         Guid actorUserId,
         string username,
+        string? avatarUrl,
         Guid postOwnerUserId,
         Guid postId,
         string preview)
@@ -82,11 +93,12 @@ public sealed class FeedNotificationFactory
             postOwnerUserId,
             "Feed.PostLiked",
             "New interaction on your post",
-            "${username} interacted with your post.",
+            $"{username} interacted with your post.",
             new
             {
                 actorUserId,
                 username,
+                avatarUrl,
                 postId,
                 preview
             },
@@ -98,6 +110,7 @@ public sealed class FeedNotificationFactory
     public NotificationRequestedEvent CreateCommentLiked(
         Guid actorUserId,
         string username,
+        string? avatarUrl,
         Guid commentOwnerUserId,
         Guid postId,
         Guid commentId,
@@ -107,11 +120,12 @@ public sealed class FeedNotificationFactory
             commentOwnerUserId,
             "Feed.CommentLiked",
             "New interaction on your comment",
-            "${username} interacted with your comment.",
+            $"{username} interacted with your comment.",
             new
             {
                 actorUserId,
                 username,
+                avatarUrl,
                 postId,
                 commentId,
                 preview
