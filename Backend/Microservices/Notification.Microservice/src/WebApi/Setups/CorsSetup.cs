@@ -17,12 +17,26 @@ public static class CorsSetup
             allowedCorsOrigins = new[] { "http://localhost:5173", "http://localhost:3030" };
         }
 
+        // `*` sentinel → echo the request's Origin header back via SetIsOriginAllowed.
+        // Required for AllowCredentials to work across arbitrary origins; browsers reject
+        // a literal `Access-Control-Allow-Origin: *` when credentials are allowed.
+        var allowAnyOrigin = allowedCorsOrigins.Any(o =>
+            string.Equals(o, "*", StringComparison.Ordinal));
+
         builder.Services.AddCors(options =>
         {
             options.AddPolicy(CorsPolicyName, policy =>
             {
+                if (allowAnyOrigin)
+                {
+                    policy.SetIsOriginAllowed(_ => true);
+                }
+                else
+                {
+                    policy.WithOrigins(allowedCorsOrigins);
+                }
+
                 policy
-                    .WithOrigins(allowedCorsOrigins)
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();
