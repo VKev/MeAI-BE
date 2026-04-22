@@ -89,12 +89,13 @@ public sealed class CompleteThreadsOAuthCommandHandler
                 profile?.Id, profile?.Username, profile?.Name, profile?.ThreadsProfilePictureUrl != null, profile?.ThreadsBiography);
         }
 
+        // Include soft-deleted rows so reconnecting revives the original row in place
+        // instead of creating a duplicate — preserves SocialMediaId for historical posts.
         var userThreadsAccounts = await _socialMediaRepository.GetAll()
             .Where(sm =>
                 sm.UserId == userId &&
                 sm.Type == "threads" &&
-                sm.Metadata != null &&
-                !sm.IsDeleted)
+                sm.Metadata != null)
             .ToListAsync(cancellationToken);
 
         var threadsAccountId = !string.IsNullOrWhiteSpace(tokenResponse.UserId)
@@ -145,6 +146,12 @@ public sealed class CompleteThreadsOAuthCommandHandler
             matchedSocialMedia.Metadata?.Dispose();
             matchedSocialMedia.Metadata = metadata;
             matchedSocialMedia.UpdatedAt = now;
+            // Revive if soft-deleted — reconnect path.
+            if (matchedSocialMedia.IsDeleted)
+            {
+                matchedSocialMedia.IsDeleted = false;
+                matchedSocialMedia.DeletedAt = null;
+            }
             socialMedia = matchedSocialMedia;
         }
         else

@@ -1,6 +1,8 @@
 using System.Text.Json;
+using Application.Abstractions.Billing;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Resources;
+using Application.Billing;
 using Application.ChatSessions;
 using Domain.Entities;
 using Domain.Repositories;
@@ -35,6 +37,8 @@ public sealed class CreateChatVideoCommandHandler
     private readonly IChatSessionRepository _chatSessionRepository;
     private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
+    private readonly ICoinPricingService _pricingService;
+    private readonly IBillingClient _billingClient;
     private readonly IBus _bus;
 
     public CreateChatVideoCommandHandler(
@@ -42,12 +46,16 @@ public sealed class CreateChatVideoCommandHandler
         IChatSessionRepository chatSessionRepository,
         IUserConfigService userConfigService,
         IUserResourceService userResourceService,
+        ICoinPricingService pricingService,
+        IBillingClient billingClient,
         IBus bus)
     {
         _chatRepository = chatRepository;
         _chatSessionRepository = chatSessionRepository;
         _userConfigService = userConfigService;
         _userResourceService = userResourceService;
+        _pricingService = pricingService;
+        _billingClient = billingClient;
         _bus = bus;
     }
 
@@ -103,6 +111,33 @@ public sealed class CreateChatVideoCommandHandler
 
         var correlationId = Guid.CreateVersion7();
 
+        // Quote + charge coins BEFORE we persist the chat / enqueue the Kie Veo job.
+        // Video generation is expensive — veo3_fast 8s = 90 coins, veo3 quality = 540
+        // per the seeded catalog. Insufficient → bubble for FE top-up modal.
+        var videoQuoteResult = await _pricingService.GetCostAsync(
+            CoinActionTypes.VideoGeneration,
+            model,
+            variant: null,
+            quantity: 1,
+            cancellationToken);
+        if (videoQuoteResult.IsFailure)
+        {
+            return Result.Failure<ChatVideoResponse>(videoQuoteResult.Error);
+        }
+
+        var chatId = Guid.CreateVersion7();
+        var debitResult = await _billingClient.DebitAsync(
+            request.UserId,
+            videoQuoteResult.Value.TotalCoins,
+            CoinDebitReasons.VideoGenerationDebit,
+            CoinReferenceTypes.ChatVideo,
+            chatId.ToString(),
+            cancellationToken);
+        if (debitResult.IsFailure)
+        {
+            return Result.Failure<ChatVideoResponse>(debitResult.Error);
+        }
+
         var config = new ChatVideoConfig(
             correlationId,
             model,
@@ -113,7 +148,7 @@ public sealed class CreateChatVideoCommandHandler
 
         var chat = new Chat
         {
-            Id = Guid.CreateVersion7(),
+            Id = chatId,
             SessionId = request.ChatSessionId,
             Prompt = request.Prompt.Trim(),
             Config = JsonSerializer.Serialize(config),

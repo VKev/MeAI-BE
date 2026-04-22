@@ -80,11 +80,14 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
         Error? lastError = null;
         var success = false;
 
+        var isReel = !string.IsNullOrWhiteSpace(publication.ContentType) &&
+                     string.Equals(publication.ContentType, "reels", StringComparison.OrdinalIgnoreCase);
+
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             try
             {
-                var deleteResult = await CallPlatformDeleteAsync(message.SocialMediaType, metadata, message.ExternalContentId, ct);
+                var deleteResult = await CallPlatformDeleteAsync(message.SocialMediaType, metadata, message.ExternalContentId, isReel, ct);
                 if (deleteResult.IsSuccess)
                 {
                     success = true;
@@ -113,8 +116,11 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
 
         if (success)
         {
+            // Soft-delete is enough to hide this row from every read path — don't touch
+            // PublishStatus here. "draft" isn't in the check constraint, and since DeletedAt
+            // is set the stored status value is no longer meaningful.
             publication.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;
-            publication.PublishStatus = DraftStatus;
+            publication.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
             _postPublicationRepository.Update(publication);
             await _postPublicationRepository.SaveChangesAsync(ct);
 
@@ -147,18 +153,19 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
     }
 
     private async Task<Result<bool>> CallPlatformDeleteAsync(
-        string type, JsonDocument? metadata, string externalId, CancellationToken ct)
+        string type, JsonDocument? metadata, string externalId, bool isReel, CancellationToken ct)
     {
         if (string.Equals(type, FacebookType, StringComparison.OrdinalIgnoreCase))
         {
-            var pageToken = GetMetadataValue(metadata, "page_access_token")
+            var pageToken = GetMetadataValue(metadata, "page_access_token");
+            var userToken = GetMetadataValue(metadata, "user_access_token")
                             ?? GetMetadataValue(metadata, "access_token");
-            if (string.IsNullOrWhiteSpace(pageToken))
+            if (string.IsNullOrWhiteSpace(pageToken) && string.IsNullOrWhiteSpace(userToken))
             {
-                return Result.Failure<bool>(new Error("Facebook.DeleteMissingToken", "Missing page access token."));
+                return Result.Failure<bool>(new Error("Facebook.DeleteMissingToken", "Missing Facebook access token."));
             }
             return await _facebookPublishService.DeleteAsync(
-                new FacebookDeleteRequest(externalId, pageToken), ct);
+                new FacebookDeleteRequest(externalId, pageToken ?? string.Empty, userToken, IsReel: isReel), ct);
         }
 
         if (string.Equals(type, InstagramType, StringComparison.OrdinalIgnoreCase))
@@ -252,6 +259,41 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
         _postRepository.Update(post);
         await _postRepository.SaveChangesAsync(ct);
 
+        // Include per-destination target list so the FE can render platform icons + avatars,
+        // one chip PER PAGE on Facebook multi-page rather than collapsing them under a single
+        // socialMediaId. `publications` from GetByPostIdForUpdateAsync skips soft-deleted rows,
+        // so we re-fetch including deleted to build the full success/failure picture.
+        var allPublications = await _postPublicationRepository.GetAllByPostIdIncludingDeletedAsync(message.PostId, ct);
+        var successTargets = allPublications
+            .Where(p => p.DeletedAt.HasValue)
+            .GroupBy(p => new { p.SocialMediaId, p.DestinationOwnerId })
+            .Select(g =>
+            {
+                var first = g.First();
+                return new
+                {
+                    socialMediaId = first.SocialMediaId,
+                    socialMediaType = first.SocialMediaType,
+                    destinationOwnerId = first.DestinationOwnerId,
+                    status = DraftStatus
+                };
+            });
+        var failedTargets = allPublications
+            .Where(p => !p.DeletedAt.HasValue)
+            .GroupBy(p => new { p.SocialMediaId, p.DestinationOwnerId })
+            .Select(g =>
+            {
+                var first = g.First();
+                return new
+                {
+                    socialMediaId = first.SocialMediaId,
+                    socialMediaType = first.SocialMediaType,
+                    destinationOwnerId = first.DestinationOwnerId,
+                    status = FailedStatus
+                };
+            });
+        var targets = successTargets.Concat(failedTargets).ToList();
+
         await context.Publish(
             NotificationRequestedEventFactory.CreateForUser(
                 message.UserId,
@@ -264,7 +306,8 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
                 {
                     message.CorrelationId,
                     message.PostId,
-                    finalStatus
+                    finalStatus,
+                    targets
                 },
                 source: NotificationSourceConstants.Creator),
             ct);

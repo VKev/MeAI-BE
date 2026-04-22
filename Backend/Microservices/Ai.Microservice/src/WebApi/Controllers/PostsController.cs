@@ -265,7 +265,9 @@ public sealed class PostsController : ApiController
             SocialMediaId: request.SocialMediaId,
             Title: request.Title,
             Content: request.Content,
-            Status: request.Status);
+            Status: request.Status,
+            PostBuilderId: request.PostBuilderId,
+            Platform: request.Platform);
 
         var result = await _mediator.Send(command, cancellationToken);
 
@@ -801,7 +803,9 @@ public sealed record CreatePostRequest(
     Guid? SocialMediaId,
     string? Title,
     PostContent? Content,
-    string? Status);
+    string? Status,
+    Guid? PostBuilderId = null,
+    string? Platform = null);
 
 public sealed record UpdatePostRequest(
     Guid? WorkspaceId,

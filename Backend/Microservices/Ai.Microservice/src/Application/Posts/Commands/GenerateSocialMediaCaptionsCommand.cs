@@ -1,6 +1,8 @@
+using Application.Abstractions.Billing;
 using Application.Abstractions.Resources;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Gemini;
+using Application.Billing;
 using Application.Posts.Models;
 using Domain.Entities;
 using Domain.Repositories;
@@ -26,21 +28,32 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
     private const int DefaultCaptionCount = 3;
     private const int MaxCaptionCount = 6;
 
+    // Caption generation bills via Kie's GPT-5.4 Responses API. Resolved at runtime from
+    // the active config's ChatModel (falls back to gpt-5-4). Matches what KieCaptionService
+    // ends up calling, so debit/refund charge the price the user actually gets.
+    private const string DefaultCaptionModel = "gpt-5-4";
+
     private readonly IPostRepository _postRepository;
     private readonly IUserResourceService _userResourceService;
     private readonly IUserConfigService _userConfigService;
     private readonly IGeminiCaptionService _geminiCaptionService;
+    private readonly ICoinPricingService _pricingService;
+    private readonly IBillingClient _billingClient;
 
     public GenerateSocialMediaCaptionsCommandHandler(
         IPostRepository postRepository,
         IUserResourceService userResourceService,
         IUserConfigService userConfigService,
-        IGeminiCaptionService geminiCaptionService)
+        IGeminiCaptionService geminiCaptionService,
+        ICoinPricingService pricingService,
+        IBillingClient billingClient)
     {
         _postRepository = postRepository;
         _userResourceService = userResourceService;
         _userConfigService = userConfigService;
         _geminiCaptionService = geminiCaptionService;
+        _pricingService = pricingService;
+        _billingClient = billingClient;
     }
 
     public async Task<Result<GenerateSocialMediaCaptionsResponse>> Handle(
@@ -96,6 +109,35 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
             MaxCaptionCount);
         var languageHint = ResolveLanguageHint(request.Language);
 
+        // Price = (unit cost) × (number of social platforms in this request). Deduct the
+        // whole batch up-front so the user sees an immediate debit; refund everything if
+        // any single platform's caption call fails (same "full refund on failure" policy
+        // we use for image/video generation).
+        var billingModel = preferredModel ?? DefaultCaptionModel;
+        var quoteResult = await _pricingService.GetCostAsync(
+            CoinActionTypes.CaptionGeneration,
+            billingModel,
+            variant: null,
+            quantity: normalizedPlatformsResult.Value.Count,
+            cancellationToken);
+        if (quoteResult.IsFailure)
+        {
+            return Result.Failure<GenerateSocialMediaCaptionsResponse>(quoteResult.Error);
+        }
+
+        var batchReferenceId = Guid.CreateVersion7().ToString();
+        var debitResult = await _billingClient.DebitAsync(
+            request.UserId,
+            quoteResult.Value.TotalCoins,
+            CoinDebitReasons.CaptionGenerationDebit,
+            CoinReferenceTypes.CaptionBatch,
+            batchReferenceId,
+            cancellationToken);
+        if (debitResult.IsFailure)
+        {
+            return Result.Failure<GenerateSocialMediaCaptionsResponse>(debitResult.Error);
+        }
+
         var responses = new List<SocialMediaCaptionsByPostResponse>(normalizedPlatformsResult.Value.Count);
 
         foreach (var socialMedia in normalizedPlatformsResult.Value)
@@ -114,6 +156,10 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
                         : resource.ContentType.Trim()))
                 .ToList();
 
+            // Thread the post type (posts / reels) through so the caption generator can
+            // tailor tone + length — reels want a short hook, feed posts can be longer.
+            var postType = GeminiDraftPostHelper.NormalizePostType(postsById[socialMedia.PostId].Content?.PostType);
+
             var geminiResult = await _geminiCaptionService.GenerateSocialMediaCaptionsAsync(
                 new GeminiSocialMediaCaptionRequest(
                     geminiResources,
@@ -123,11 +169,22 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
                     captionCount,
                     languageHint,
                     request.Instruction,
-                    preferredModel),
+                    preferredModel,
+                    postType),
                 cancellationToken);
 
             if (geminiResult.IsFailure)
             {
+                // Refund the whole batch on any failure — user pays per full successful
+                // batch or not at all. Refund is idempotent on (reason, refType, refId)
+                // so a retry won't double-credit.
+                await _billingClient.RefundAsync(
+                    request.UserId,
+                    quoteResult.Value.TotalCoins,
+                    CoinDebitReasons.CaptionGenerationRefund,
+                    CoinReferenceTypes.CaptionBatch,
+                    batchReferenceId,
+                    cancellationToken);
                 return Result.Failure<GenerateSocialMediaCaptionsResponse>(geminiResult.Error);
             }
 

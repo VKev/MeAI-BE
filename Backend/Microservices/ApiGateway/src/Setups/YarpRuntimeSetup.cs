@@ -170,8 +170,8 @@ internal static class YarpRuntimeSetup
 
         if (addedServices.Contains("Ai"))
         {
-            AddRouteEntry("ai-gemini-root", "/api/Gemini", "ai");
-            AddRouteEntry("ai-gemini-catchall", "/api/Gemini/{**catch-all}", "ai");
+            AddRouteEntry("ai-generation-root", "/api/AiGeneration", "ai");
+            AddRouteEntry("ai-generation-catchall", "/api/AiGeneration/{**catch-all}", "ai");
         }
 
         var envVars = configuration.AsEnumerable().Where(kv => !string.IsNullOrWhiteSpace(kv.Value));

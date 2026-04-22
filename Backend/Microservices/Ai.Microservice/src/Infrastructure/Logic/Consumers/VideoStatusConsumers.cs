@@ -1,5 +1,8 @@
 using System.Text.Json;
+using Application.Abstractions.Billing;
 using Application.Abstractions.Resources;
+using Application.Billing;
+using Domain.Entities;
 using Infrastructure.Context;
 using Infrastructure.Logic.Services;
 using MassTransit;
@@ -179,15 +182,21 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
 {
     private readonly IAiFallbackTemplateService _fallbackTemplateService;
     private readonly MyDbContext _dbContext;
+    private readonly IBillingClient _billingClient;
+    private readonly ICoinPricingService _pricingService;
     private readonly ILogger<VideoFailedConsumer> _logger;
 
     public VideoFailedConsumer(
         IAiFallbackTemplateService fallbackTemplateService,
         MyDbContext dbContext,
+        IBillingClient billingClient,
+        ICoinPricingService pricingService,
         ILogger<VideoFailedConsumer> logger)
     {
         _fallbackTemplateService = fallbackTemplateService;
         _dbContext = dbContext;
+        _billingClient = billingClient;
+        _pricingService = pricingService;
         _logger = logger;
     }
 
@@ -292,6 +301,76 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
         chat.ErrorMessage = errorMessage;
         chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var userId = await _dbContext.ChatSessions
+            .AsNoTracking()
+            .Where(s => s.Id == chat.SessionId)
+            .Select(s => (Guid?)s.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (userId is null) return;
+
+        await TryRefundChatAsync(chat, userId.Value, cancellationToken);
+    }
+
+    private async Task TryRefundChatAsync(Chat chat, Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var model = ParseVideoModel(chat.Config);
+            var quote = await _pricingService.GetCostAsync(
+                CoinActionTypes.VideoGeneration,
+                model,
+                variant: null,
+                quantity: 1,
+                cancellationToken);
+            if (quote.IsFailure)
+            {
+                _logger.LogWarning(
+                    "Refund skipped for video chat {ChatId}: pricing lookup failed ({Code}).",
+                    chat.Id, quote.Error.Code);
+                return;
+            }
+
+            var refund = await _billingClient.RefundAsync(
+                userId,
+                quote.Value.TotalCoins,
+                CoinDebitReasons.VideoGenerationRefund,
+                CoinReferenceTypes.ChatVideo,
+                chat.Id.ToString(),
+                cancellationToken);
+            if (refund.IsFailure)
+            {
+                _logger.LogWarning(
+                    "Refund failed for video chat {ChatId}: {Code} {Message}",
+                    chat.Id, refund.Error.Code, refund.Error.Description);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error refunding video chat {ChatId}", chat.Id);
+        }
+    }
+
+    private static string ParseVideoModel(string? configJson)
+    {
+        var model = "veo3_fast";
+        if (string.IsNullOrWhiteSpace(configJson)) return model;
+
+        try
+        {
+            var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(configJson);
+            if (raw is null) return model;
+
+            if ((raw.TryGetValue("Model", out var el) || raw.TryGetValue("model", out el))
+                && el.ValueKind == JsonValueKind.String)
+            {
+                var name = el.GetString();
+                if (!string.IsNullOrWhiteSpace(name)) model = name;
+            }
+        }
+        catch (JsonException) { /* keep default */ }
+
+        return model;
     }
 }
 

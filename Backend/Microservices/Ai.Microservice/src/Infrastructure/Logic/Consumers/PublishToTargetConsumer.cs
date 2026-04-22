@@ -349,6 +349,27 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         _postRepository.Update(post);
         await _postRepository.SaveChangesAsync(cancellationToken);
 
+        // Emit one target per destination owner so the FE can render per-page identity on
+        // Facebook (fan-out to multiple pages) while still collapsing to a single row for
+        // single-destination platforms like TikTok/Threads. The FE maps destinationOwnerId
+        // back to the specific SocialMedia row for that page to resolve avatar + page name.
+        var targets = publications
+            .Where(p => !p.DeletedAt.HasValue)
+            .GroupBy(p => new { p.SocialMediaId, p.DestinationOwnerId })
+            .Select(g =>
+            {
+                var first = g.First();
+                var anyPub = g.Any(x => string.Equals(x.PublishStatus, PublishedStatus, StringComparison.OrdinalIgnoreCase));
+                return new
+                {
+                    socialMediaId = first.SocialMediaId,
+                    socialMediaType = first.SocialMediaType,
+                    destinationOwnerId = first.DestinationOwnerId,
+                    status = anyPub ? PublishedStatus : FailedStatus
+                };
+            })
+            .ToList();
+
         await context.Publish(
             NotificationRequestedEventFactory.CreateForUser(
                 message.UserId,
@@ -361,7 +382,8 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                 {
                     message.CorrelationId,
                     message.PostId,
-                    finalStatus
+                    finalStatus,
+                    targets
                 },
                 createdAt: now,
                 source: NotificationSourceConstants.Creator),
@@ -454,7 +476,8 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                         .Select(resource => new FacebookPublishMedia(
                             resource.PresignedUrl,
                             resource.ContentType ?? resource.ResourceType))
-                        .ToList()),
+                        .ToList(),
+                    PostType: post.Content?.PostType),
                 cancellationToken);
 
             if (publishResult.IsFailure)
@@ -502,7 +525,8 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                     Caption: caption,
                     Media: new InstagramPublishMedia(
                         resource.PresignedUrl,
-                        resource.ContentType ?? resource.ResourceType)),
+                        resource.ContentType ?? resource.ResourceType),
+                    PostType: post.Content?.PostType),
                 cancellationToken);
 
             if (publishResult.IsFailure)

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Abstractions.Threads;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
 
 namespace Infrastructure.Logic.Threads;
@@ -12,9 +13,15 @@ public sealed class ThreadsContentService : IThreadsContentService
         "id,media_product_type,media_type,media_url,gif_url,permalink,username,text,timestamp,shortcode,thumbnail_url,is_quote_post,has_replies,alt_text,link_attachment_url,topic_tag,profile_picture_url";
     private const string InsightsMetrics = "views,likes,replies,reposts,quotes,shares";
     private const string AccountFields = "id,username,name,threads_biography,threads_profile_picture_url,followers_count";
-    private const string ReplyFields = "id,text,username,timestamp,like_count,reply_count,permalink";
+    // `/conversation` returns the root post + nested replies as a flat list. Meta's
+    // Threads API 500s when unavailable fields are requested (is_reply, root_post
+    // depend on tier/permissions), so we stick to the universally-supported core.
+    // The root post is dropped by comparing item.Id to the queried post id instead
+    // of relying on is_reply.
+    private const string ConversationFields = "id,text,username,timestamp,permalink";
 
     private readonly HttpClient _httpClient;
+    private readonly ILogger<ThreadsContentService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -23,9 +30,10 @@ public sealed class ThreadsContentService : IThreadsContentService
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
-    public ThreadsContentService(IHttpClientFactory httpClientFactory)
+    public ThreadsContentService(IHttpClientFactory httpClientFactory, ILogger<ThreadsContentService> logger)
     {
         _httpClient = httpClientFactory.CreateClient("Threads");
+        _logger = logger;
     }
 
     public async Task<Result<ThreadsPostPageResult>> GetPostsAsync(
@@ -184,17 +192,29 @@ public sealed class ThreadsContentService : IThreadsContentService
         }
 
         var limit = NormalizeReplyLimit(request.Limit);
+        // Meta's `/replies` endpoint is user-scoped (GET /me/replies) and returns 500
+        // when queried with a post id — the correct endpoint for fetching replies TO
+        // a specific post is `/{threadId}/conversation`. Conversation returns the root
+        // post plus all nested replies; we filter via is_reply below to drop the root.
         var url =
-            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.PostId)}/replies?fields={Uri.EscapeDataString(ReplyFields)}&limit={limit}&access_token={Uri.EscapeDataString(request.AccessToken)}";
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.PostId)}/conversation?fields={Uri.EscapeDataString(ConversationFields)}&limit={limit}&access_token={Uri.EscapeDataString(request.AccessToken)}";
 
         var response = await SendGetAsync<ThreadsRepliesApiResponse>(url, cancellationToken, allowFailure: true);
         if (response.IsFailure)
         {
+            _logger.LogWarning(
+                "Threads conversation fetch failed for post {PostId}: {Error}",
+                request.PostId,
+                response.Error.Description);
             return Result.Success<IReadOnlyList<ThreadsReplyItem>>(Array.Empty<ThreadsReplyItem>());
         }
 
         var replies = (response.Value.Data ?? Array.Empty<ThreadsReplyDto>())
             .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+            // Drop the root post — conversation API returns it as the first element
+            // with its own id. Compare ids directly since is_reply isn't always in
+            // the response.
+            .Where(item => !string.Equals(item.Id, request.PostId, StringComparison.Ordinal))
             .Select(item => new ThreadsReplyItem(
                 Id: item.Id!,
                 Text: item.Text,
@@ -220,13 +240,18 @@ public sealed class ThreadsContentService : IThreadsContentService
 
             if (!response.IsSuccessStatusCode)
             {
+                // Surface Meta's actual error body (trimmed) in both success paths so
+                // we can diagnose 500s like "unsupported get request" vs "permission
+                // denied" without having to rebuild with extra logging each time.
+                var graphError = ReadGraphApiError(body)
+                                  ?? $"Threads API request failed with status code {(int)response.StatusCode}.";
+
                 if (allowFailure)
                 {
-                    return Result.Failure<TResponse>(new Error("Threads.ApiWarning", "Optional Threads endpoint is unavailable."));
+                    return Result.Failure<TResponse>(new Error("Threads.ApiWarning", graphError));
                 }
 
-                return Result.Failure<TResponse>(
-                    new Error("Threads.ApiError", ReadGraphApiError(body) ?? $"Threads API request failed with status code {(int)response.StatusCode}."));
+                return Result.Failure<TResponse>(new Error("Threads.ApiError", graphError));
             }
 
             var parsed = JsonSerializer.Deserialize<TResponse>(body, JsonOptions);
@@ -458,6 +483,11 @@ public sealed class ThreadsContentService : IThreadsContentService
 
         [JsonPropertyName("permalink")]
         public string? Permalink { get; set; }
+
+        // Present on `/conversation` items — true for replies, false for the root post
+        // that initiated the thread. Null when the token/version doesn't populate it.
+        [JsonPropertyName("is_reply")]
+        public bool? IsReply { get; set; }
     }
 
     private sealed class ThreadsInsightMetricDto

@@ -94,10 +94,30 @@ public sealed class PublishPostsCommandHandler
             }
 
             var postType = post.Content?.PostType ?? PostsType;
-            if (!string.Equals(postType, PostsType, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(postType, PostsType, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(postType, "reels", StringComparison.OrdinalIgnoreCase))
             {
                 return Result.Failure<PublishPostsResponse>(
-                    new Error("Post.UnsupportedType", "Only 'posts' can be published at the moment."));
+                    new Error("Post.UnsupportedType", "Only 'posts' and 'reels' can be published at the moment."));
+            }
+
+            // Clean up stale FAILED publications from previous attempts on this post before
+            // creating the new placeholders. Without this, the batch_completed notification
+            // groups by (SocialMediaId, DestinationOwnerId) and mixes old failed rows
+            // (destinationOwnerId = socialMediaId string) with the new successful rows
+            // (destinationOwnerId = real pageId) — producing 2× the chip count when a
+            // prior attempt failed (e.g. MixedMedia rejection).
+            var existingPublications = await _postPublicationRepository
+                .GetByPostIdForUpdateAsync(post.Id, cancellationToken);
+            foreach (var stale in existingPublications)
+            {
+                if (stale.DeletedAt.HasValue) continue;
+                if (string.Equals(stale.PublishStatus, "failed", StringComparison.OrdinalIgnoreCase))
+                {
+                    stale.DeletedAt = now;
+                    stale.UpdatedAt = now;
+                    _postPublicationRepository.Update(stale);
+                }
             }
 
             var destinationResults = new List<PublishPostDestinationResult>();

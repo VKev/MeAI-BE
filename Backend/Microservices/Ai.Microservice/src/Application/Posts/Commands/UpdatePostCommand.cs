@@ -90,6 +90,30 @@ public sealed class UpdatePostCommandHandler
 
         post.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
 
+        // Consolidate any sibling duplicates that share this post's (PostBuilder, Platform,
+        // post_type) bucket. Legacy rows from pre-dedup releases get soft-deleted on the
+        // first edit so GetPostBuilder stops surfacing them.
+        if (post.PostBuilderId.HasValue)
+        {
+            var normalizedPlatform = NormalizePlatform(post.Platform);
+            var normalizedPostType = NormalizePostType(post.Content?.PostType);
+            var siblings = await _postRepository.GetTrackedByPostBuilderIdAsync(
+                post.PostBuilderId.Value,
+                cancellationToken);
+
+            var now = DateTimeExtensions.PostgreSqlUtcNow;
+            foreach (var sibling in siblings)
+            {
+                if (sibling.Id == post.Id) continue;
+                if (sibling.UserId != post.UserId) continue;
+                if (NormalizePlatform(sibling.Platform) != normalizedPlatform) continue;
+                if (NormalizePostType(sibling.Content?.PostType) != normalizedPostType) continue;
+
+                sibling.DeletedAt = now;
+                sibling.UpdatedAt = now;
+            }
+        }
+
         _postRepository.Update(post);
         await _postRepository.SaveChangesAsync(cancellationToken);
 
@@ -105,5 +129,24 @@ public sealed class UpdatePostCommandHandler
     private static Guid? NormalizeGuid(Guid? value)
     {
         return value == Guid.Empty ? null : value;
+    }
+
+    private static string NormalizePlatform(string? value)
+    {
+        var v = (value ?? string.Empty).Trim().ToLowerInvariant();
+        return v switch
+        {
+            "thread" => "threads",
+            "ig" => "instagram",
+            "fb" => "facebook",
+            _ => v
+        };
+    }
+
+    private static string NormalizePostType(string? value)
+    {
+        var v = (value ?? string.Empty).Trim().ToLowerInvariant();
+        if (v == "reel" || v == "reels" || v == "video") return "reels";
+        return "posts";
     }
 }

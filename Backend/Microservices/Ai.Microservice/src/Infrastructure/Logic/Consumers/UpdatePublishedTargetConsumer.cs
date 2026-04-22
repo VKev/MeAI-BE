@@ -64,15 +64,16 @@ public sealed class UpdatePublishedTargetConsumer : IConsumer<UpdatePublishedTar
 
         if (string.Equals(message.SocialMediaType, FacebookType, StringComparison.OrdinalIgnoreCase))
         {
-            var pageToken = GetMetadataValue(metadata, "page_access_token")
+            var pageToken = GetMetadataValue(metadata, "page_access_token");
+            var userToken = GetMetadataValue(metadata, "user_access_token")
                             ?? GetMetadataValue(metadata, "access_token");
-            if (string.IsNullOrWhiteSpace(pageToken))
+            if (string.IsNullOrWhiteSpace(pageToken) && string.IsNullOrWhiteSpace(userToken))
             {
-                await PublishFailureAsync(context, message, "Facebook.UpdateMissingToken", "Missing page access token.");
+                await PublishFailureAsync(context, message, "Facebook.UpdateMissingToken", "Missing Facebook access token.");
                 return;
             }
             result = await _facebookPublishService.UpdateAsync(
-                new FacebookUpdateRequest(message.ExternalContentId, pageToken, message.NewCaption), ct);
+                new FacebookUpdateRequest(message.ExternalContentId, pageToken ?? string.Empty, message.NewCaption, userToken), ct);
         }
         else if (string.Equals(message.SocialMediaType, InstagramType, StringComparison.OrdinalIgnoreCase) ||
                  string.Equals(message.SocialMediaType, ThreadsType, StringComparison.OrdinalIgnoreCase) ||

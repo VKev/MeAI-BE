@@ -1,6 +1,8 @@
 using System.Text.Json;
+using Application.Abstractions.Billing;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Resources;
+using Application.Billing;
 using Application.ChatSessions;
 using Domain.Entities;
 using Domain.Repositories;
@@ -36,6 +38,8 @@ public sealed class CreateChatImageCommandHandler
     private readonly IChatSessionRepository _chatSessionRepository;
     private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
+    private readonly ICoinPricingService _pricingService;
+    private readonly IBillingClient _billingClient;
     private readonly IBus _bus;
 
     public CreateChatImageCommandHandler(
@@ -43,12 +47,16 @@ public sealed class CreateChatImageCommandHandler
         IChatSessionRepository chatSessionRepository,
         IUserConfigService userConfigService,
         IUserResourceService userResourceService,
+        ICoinPricingService pricingService,
+        IBillingClient billingClient,
         IBus bus)
     {
         _chatRepository = chatRepository;
         _chatSessionRepository = chatSessionRepository;
         _userConfigService = userConfigService;
         _userResourceService = userResourceService;
+        _pricingService = pricingService;
+        _billingClient = billingClient;
         _bus = bus;
     }
 
@@ -143,6 +151,35 @@ public sealed class CreateChatImageCommandHandler
             expectedResultCount = 1 + distinctExtraRatios;
         }
 
+        // Quote + charge coins BEFORE we persist the chat / enqueue the Kie job. Cost scales
+        // with expectedResultCount (source image + distinct reframe ratios). If the user is
+        // short we bubble Billing.InsufficientFunds up so the FE can pop the top-up modal.
+        var quoteResult = await _pricingService.GetCostAsync(
+            CoinActionTypes.ImageGeneration,
+            model,
+            resolution,
+            Math.Max(1, expectedResultCount),
+            cancellationToken);
+        if (quoteResult.IsFailure)
+        {
+            return Result.Failure<ChatImageResponse>(quoteResult.Error);
+        }
+
+        var totalCost = quoteResult.Value.TotalCoins;
+        var chatId = Guid.CreateVersion7();
+
+        var debitResult = await _billingClient.DebitAsync(
+            request.UserId,
+            totalCost,
+            CoinDebitReasons.ImageGenerationDebit,
+            CoinReferenceTypes.ChatImage,
+            chatId.ToString(),
+            cancellationToken);
+        if (debitResult.IsFailure)
+        {
+            return Result.Failure<ChatImageResponse>(debitResult.Error);
+        }
+
         var config = new ChatImageConfig(
             correlationId,
             aspectRatio,
@@ -154,7 +191,7 @@ public sealed class CreateChatImageCommandHandler
 
         var chat = new Chat
         {
-            Id = Guid.CreateVersion7(),
+            Id = chatId,
             SessionId = request.ChatSessionId,
             Prompt = request.Prompt.Trim(),
             Config = JsonSerializer.Serialize(config),

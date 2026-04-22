@@ -51,6 +51,16 @@ public sealed class PostPublicationRepository : IPostPublicationRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PostPublication>> GetAllByPostIdIncludingDeletedAsync(
+        Guid postId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbSet
+            .AsNoTracking()
+            .Where(publication => publication.PostId == postId)
+            .ToListAsync(cancellationToken);
+    }
+
     public void Update(PostPublication entity)
     {
         _dbSet.Update(entity);

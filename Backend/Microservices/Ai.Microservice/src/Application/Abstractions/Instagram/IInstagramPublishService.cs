@@ -21,7 +21,8 @@ public sealed record InstagramPublishRequest(
     string AccessToken,
     string InstagramUserId,
     string Caption,
-    InstagramPublishMedia Media);
+    InstagramPublishMedia Media,
+    string? PostType = null);
 
 public sealed record InstagramPublishMedia(
     string Url,

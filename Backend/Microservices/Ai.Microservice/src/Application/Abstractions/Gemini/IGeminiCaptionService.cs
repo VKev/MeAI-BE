@@ -36,7 +36,10 @@ public sealed record GeminiSocialMediaCaptionRequest(
     int CaptionCount,
     string? LanguageHint,
     string? Instruction,
-    string? PreferredModel = null);
+    string? PreferredModel = null,
+    // "posts" | "reels" — lets the caption generator pick reel-appropriate tone/length
+    // (short hook, CTA to watch vs. long-form evergreen for feed posts).
+    string? PostType = null);
 
 public sealed record GeminiInlineCaptionResource(
     string MimeType,

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Application.Posts.Commands;
 using Application.Posts.Models;
 using Application.Posts.Queries;
 using MediatR;
@@ -96,9 +97,37 @@ public sealed class PostBuildersController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("{postBuilderId:guid}/resources")]
+    [ProducesResponseType(typeof(Result<PostBuilderResourcesResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> AddResources(
+        Guid postBuilderId,
+        [FromBody] AddPostBuilderResourcesRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new AddPostBuilderResourcesCommand(postBuilderId, userId, request.ResourceIds ?? Array.Empty<Guid>()),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(claimValue, out userId);
     }
 }
+
+public sealed record AddPostBuilderResourcesRequest(IReadOnlyList<Guid>? ResourceIds);

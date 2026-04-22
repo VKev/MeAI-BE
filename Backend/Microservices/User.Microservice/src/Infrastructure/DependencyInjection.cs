@@ -1,3 +1,4 @@
+using Application.Abstractions.Billing;
 using Application.Abstractions.Data;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Instagram;
@@ -40,6 +41,7 @@ namespace Infrastructure
             services.AddScoped<SubscriptionSeeder>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddScoped<IEmailRepository, EmailRepository>();
+            services.AddScoped<IBillingService, Logic.Services.BillingService>();
             services.AddSingleton<IStripePaymentService, StripePaymentService>();
             services.AddHttpClient("TikTok");
             services.AddScoped<ITikTokOAuthService, TikTokOAuthService>();

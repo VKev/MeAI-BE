@@ -8,6 +8,7 @@ public interface IPostPublicationRepository
     Task<IReadOnlyList<PostPublication>> GetByPostIdsAsync(IReadOnlyList<Guid> postIds, CancellationToken cancellationToken);
     Task<PostPublication?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<PostPublication>> GetByPostIdForUpdateAsync(Guid postId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PostPublication>> GetAllByPostIdIncludingDeletedAsync(Guid postId, CancellationToken cancellationToken);
     void Update(PostPublication entity);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

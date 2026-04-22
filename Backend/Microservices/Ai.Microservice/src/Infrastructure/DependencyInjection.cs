@@ -42,15 +42,21 @@ namespace Infrastructure
     {
         public static IServiceCollection AddInfrastructure(this IServiceCollection services)
         {
+            services.AddMemoryCache();
             services.AddHttpClient<IVeoVideoService, VeoVideoService>();
             services.AddHttpClient<IKieImageService, KieImageService>();
             services.AddHttpClient<IKieFallbackCallbackService, KieFallbackCallbackService>();
             services.AddSingleton<IAiFallbackTemplateService, AiFallbackTemplateService>();
             services.AddHttpClient("Gemini");
+            services.AddHttpClient("KieChat");
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");
             services.AddHttpClient("TikTok");
-            services.AddScoped<IGeminiCaptionService, GeminiCaptionService>();
+            // Caption generation runs through Kie's GPT-5.4 Responses API. GeminiCaptionService
+            // stays registered as a concrete class for future fallback / A-B; the interface
+            // binding points at the Kie-backed implementation.
+            services.AddScoped<IGeminiCaptionService, Infrastructure.Logic.Kie.KieCaptionService>();
+            services.AddScoped<GeminiCaptionService>();
             services.AddScoped<IFacebookContentService, FacebookContentService>();
             services.AddScoped<IGeminiContentModerationService, GeminiContentModerationService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
@@ -93,6 +99,16 @@ namespace Infrastructure
             });
             services.AddScoped<IUserWorkspaceService, UserWorkspaceGrpcService>();
 
+            services.AddGrpcClient<SharedLibrary.Grpc.UserBilling.UserBillingService.UserBillingServiceClient>((sp, options) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var grpcUrl = configuration["UserService:GrpcUrl"]
+                              ?? configuration["UserService__GrpcUrl"]
+                              ?? "http://user-microservice:5004";
+                options.Address = new Uri(grpcUrl);
+            });
+            services.AddScoped<Application.Abstractions.Billing.IBillingClient, Infrastructure.Logic.Billing.BillingGrpcClient>();
+
             services.AddGrpcClient<FeedAnalyticsService.FeedAnalyticsServiceClient>((sp, options) =>
             {
                 var configuration = sp.GetRequiredService<IConfiguration>();
@@ -109,10 +125,13 @@ namespace Infrastructure
             services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();
             services.AddScoped<SampleDataSeeder>();
+            services.AddScoped<CoinPricingSeeder>();
+            services.AddScoped<Application.Billing.ICoinPricingService, Infrastructure.Logic.Billing.CoinPricingService>();
             services.AddScoped<IPostBuilderRepository, PostBuilderRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
             services.AddScoped<IPostPublicationRepository, PostPublicationRepository>();
             services.AddScoped<IPostMetricSnapshotRepository, PostMetricSnapshotRepository>();
+            services.AddScoped<ICoinPricingRepository, CoinPricingRepository>();
             services.AddScoped<PostResponseBuilder>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
 

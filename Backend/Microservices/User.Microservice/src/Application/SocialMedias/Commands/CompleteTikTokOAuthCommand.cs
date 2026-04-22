@@ -107,11 +107,12 @@ public sealed class CompleteTikTokOAuthCommandHandler
         }));
 
         var userTikTokAccounts = await _socialMediaRepository.GetAll()
+            // Include soft-deleted rows so reconnecting revives the original row in place
+            // instead of creating a duplicate — preserves SocialMediaId for historical posts.
             .Where(sm =>
                 sm.UserId == userId &&
                 sm.Type == "tiktok" &&
-                sm.Metadata != null &&
-                !sm.IsDeleted)
+                sm.Metadata != null)
             .ToListAsync(cancellationToken);
 
         var existingSocialMedia = userTikTokAccounts.FirstOrDefault(sm =>
@@ -142,6 +143,12 @@ public sealed class CompleteTikTokOAuthCommandHandler
             existingSocialMedia.Metadata?.Dispose();
             existingSocialMedia.Metadata = metadata;
             existingSocialMedia.UpdatedAt = now;
+            // Revive if soft-deleted — reconnect path.
+            if (existingSocialMedia.IsDeleted)
+            {
+                existingSocialMedia.IsDeleted = false;
+                existingSocialMedia.DeletedAt = null;
+            }
             socialMedia = existingSocialMedia;
         }
         else

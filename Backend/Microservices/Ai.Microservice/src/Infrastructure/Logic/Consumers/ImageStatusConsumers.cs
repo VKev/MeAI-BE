@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Application.Abstractions.Billing;
 using Application.Abstractions.Resources;
+using Application.Billing;
 using Domain.Entities;
 using Infrastructure.Context;
 using Infrastructure.Logic.Services;
@@ -357,15 +359,21 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
 {
     private readonly IKieFallbackCallbackService _kieFallbackCallbackService;
     private readonly MyDbContext _dbContext;
+    private readonly IBillingClient _billingClient;
+    private readonly ICoinPricingService _pricingService;
     private readonly ILogger<ImageFailedConsumer> _logger;
 
     public ImageFailedConsumer(
         IKieFallbackCallbackService kieFallbackCallbackService,
         MyDbContext dbContext,
+        IBillingClient billingClient,
+        ICoinPricingService pricingService,
         ILogger<ImageFailedConsumer> logger)
     {
         _kieFallbackCallbackService = kieFallbackCallbackService;
         _dbContext = dbContext;
+        _billingClient = billingClient;
+        _pricingService = pricingService;
         _logger = logger;
     }
 
@@ -545,12 +553,101 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
 
         if (matched is null) return;
 
-        var chat = await _dbContext.Chats.FirstOrDefaultAsync(c => c.Id == matched.Id, cancellationToken);
+        var chat = await _dbContext.Chats
+            .FirstOrDefaultAsync(c => c.Id == matched.Id, cancellationToken);
         if (chat is null) return;
 
         chat.Status = "Failed";
         chat.ErrorMessage = errorMessage;
         chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Look up the owning user via the chat session — Chat doesn't carry UserId directly.
+        var userId = await _dbContext.ChatSessions
+            .AsNoTracking()
+            .Where(s => s.Id == chat.SessionId)
+            .Select(s => (Guid?)s.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (userId is null) return;
+
+        // Full refund: re-quote the original charge from the chat's stored config so the
+        // refund amount always matches the debit even if the catalog price has since been
+        // edited by an admin. Idempotent via (reason, referenceId=chatId).
+        await TryRefundChatAsync(chat, userId.Value, cancellationToken);
+    }
+
+    private async Task TryRefundChatAsync(Chat chat, Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var (model, resolution, expectedResultCount) = ParseImageConfig(chat.Config);
+
+            var quote = await _pricingService.GetCostAsync(
+                CoinActionTypes.ImageGeneration,
+                model,
+                resolution,
+                Math.Max(1, expectedResultCount),
+                cancellationToken);
+            if (quote.IsFailure)
+            {
+                _logger.LogWarning(
+                    "Refund skipped for chat {ChatId}: pricing lookup failed ({Code}).",
+                    chat.Id, quote.Error.Code);
+                return;
+            }
+
+            var refund = await _billingClient.RefundAsync(
+                userId,
+                quote.Value.TotalCoins,
+                CoinDebitReasons.ImageGenerationRefund,
+                CoinReferenceTypes.ChatImage,
+                chat.Id.ToString(),
+                cancellationToken);
+            if (refund.IsFailure)
+            {
+                _logger.LogWarning(
+                    "Refund failed for chat {ChatId}: {Code} {Message}",
+                    chat.Id, refund.Error.Code, refund.Error.Description);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error refunding chat {ChatId}", chat.Id);
+        }
+    }
+
+    private static (string Model, string? Resolution, int ExpectedResultCount) ParseImageConfig(string? configJson)
+    {
+        // Defaults match CreateChatImageCommand's ResolveModel fallbacks.
+        var model = "nano-banana-pro";
+        string? resolution = "1K";
+        var expected = 1;
+        if (string.IsNullOrWhiteSpace(configJson)) return (model, resolution, expected);
+
+        try
+        {
+            var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(configJson);
+            if (raw is null) return (model, resolution, expected);
+
+            if (raw.TryGetValue("Resolution", out var resEl) || raw.TryGetValue("resolution", out resEl))
+            {
+                if (resEl.ValueKind == JsonValueKind.String)
+                {
+                    resolution = resEl.GetString();
+                }
+            }
+
+            if (raw.TryGetValue("ExpectedResultCount", out var countEl) ||
+                raw.TryGetValue("expectedResultCount", out countEl))
+            {
+                if (countEl.ValueKind == JsonValueKind.Number && countEl.TryGetInt32(out var n) && n > 0)
+                {
+                    expected = n;
+                }
+            }
+        }
+        catch (JsonException) { /* keep defaults */ }
+
+        return (model, resolution, expected);
     }
 }

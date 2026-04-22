@@ -1,6 +1,9 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Abstractions.Facebook;
+using Microsoft.Extensions.Caching.Memory;
 using SharedLibrary.Common.ResponseModel;
 
 namespace Infrastructure.Logic.Facebook;
@@ -8,16 +11,31 @@ namespace Infrastructure.Logic.Facebook;
 public sealed class FacebookPublishService : IFacebookPublishService
 {
     private const string GraphApiBaseUrl = "https://graph.facebook.com/v25.0";
+    // Cache /me/accounts results briefly to avoid burning the FB app rate limit during
+    // rapid publish/unpublish/delete bursts. 60s is short enough that a newly-added page
+    // shows up quickly; long enough to collapse the token-resolution calls a single
+    // publish flow makes across multiple targets.
+    private static readonly TimeSpan PageListCacheTtl = TimeSpan.FromSeconds(60);
     private readonly HttpClient _httpClient;
+    private readonly IMemoryCache _memoryCache;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public FacebookPublishService(IHttpClientFactory httpClientFactory)
+    public FacebookPublishService(IHttpClientFactory httpClientFactory, IMemoryCache memoryCache)
     {
         _httpClient = httpClientFactory.CreateClient("Facebook");
+        _memoryCache = memoryCache;
+    }
+
+    private static string BuildPageCacheKey(string userAccessToken)
+    {
+        // Hash the token so it never lands in logs / dumps if the memory cache is inspected.
+        using var sha = SHA256.Create();
+        var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(userAccessToken));
+        return $"fb:pages:{Convert.ToHexString(hash)}";
     }
 
     public async Task<Result<bool>> DeleteAsync(
@@ -28,18 +46,46 @@ public sealed class FacebookPublishService : IFacebookPublishService
         {
             return Result.Failure<bool>(new Error("Facebook.DeleteMissingId", "Missing Facebook post id."));
         }
-        if (string.IsNullOrWhiteSpace(request.PageAccessToken))
+
+        // Facebook publish fans out to every page the user token has access to, so a post
+        // may live on a DIFFERENT page than the SocialMedia row we're unpublishing from.
+        // Resolve the correct page token by parsing `pageId_postId` and matching via
+        // `/me/accounts` when the caller's page token doesn't match the owning page.
+        var tokenResult = await ResolvePageTokenForPostAsync(
+            request.ExternalPostId, request.PageAccessToken, request.UserAccessToken, cancellationToken);
+
+        if (tokenResult.IsFailure)
         {
-            return Result.Failure<bool>(new Error("Facebook.DeleteMissingToken", "Missing Facebook page access token."));
+            return Result.Failure<bool>(tokenResult.Error);
         }
 
-        var url = $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.ExternalPostId)}?access_token={Uri.EscapeDataString(request.PageAccessToken)}";
+        // Facebook Reels are videos. The Graph API accepts DELETE on `{pageId}_{videoId}` with
+        // a 200 {success:true} response but DOESN'T actually remove the reel — you must DELETE
+        // the bare `{videoId}`. We still parse the pageId prefix for token resolution above,
+        // so here we strip it before hitting the API.
+        var deleteId = request.ExternalPostId;
+        if (request.IsReel)
+        {
+            var underscoreIdx = request.ExternalPostId.IndexOf('_');
+            if (underscoreIdx > 0)
+            {
+                deleteId = request.ExternalPostId[(underscoreIdx + 1)..];
+            }
+        }
+
+        var url = $"{GraphApiBaseUrl}/{Uri.EscapeDataString(deleteId)}?access_token={Uri.EscapeDataString(tokenResult.Value)}";
         var response = await _httpClient.DeleteAsync(url, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
+            // Treat "post not found" (already deleted, or stale external id) as success —
+            // the user's intent is "make it gone" and the platform state already matches.
+            if ((int)response.StatusCode == 400 && LooksLikeNotFound(body))
+            {
+                return Result.Success(true);
+            }
             return Result.Failure<bool>(
-                new Error("Facebook.DeleteFailed", ReadGraphApiError(body) ?? $"Delete failed with status {(int)response.StatusCode}."));
+                new Error("Facebook.DeleteFailed", ReadGraphApiError(body) ?? $"Delete failed with status {(int)response.StatusCode}: {body}"));
         }
         return Result.Success(true);
     }
@@ -52,15 +98,19 @@ public sealed class FacebookPublishService : IFacebookPublishService
         {
             return Result.Failure<bool>(new Error("Facebook.UpdateMissingId", "Missing Facebook post id."));
         }
-        if (string.IsNullOrWhiteSpace(request.PageAccessToken))
+
+        var tokenResult = await ResolvePageTokenForPostAsync(
+            request.ExternalPostId, request.PageAccessToken, request.UserAccessToken, cancellationToken);
+
+        if (tokenResult.IsFailure)
         {
-            return Result.Failure<bool>(new Error("Facebook.UpdateMissingToken", "Missing Facebook page access token."));
+            return Result.Failure<bool>(tokenResult.Error);
         }
 
         var url = $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.ExternalPostId)}";
         var payload = new Dictionary<string, string>
         {
-            ["access_token"] = request.PageAccessToken,
+            ["access_token"] = tokenResult.Value,
             ["message"] = request.Message ?? string.Empty
         };
         var response = await _httpClient.PostAsync(url, new FormUrlEncodedContent(payload), cancellationToken);
@@ -68,9 +118,56 @@ public sealed class FacebookPublishService : IFacebookPublishService
         if (!response.IsSuccessStatusCode)
         {
             return Result.Failure<bool>(
-                new Error("Facebook.UpdateFailed", ReadGraphApiError(body) ?? $"Update failed with status {(int)response.StatusCode}."));
+                new Error("Facebook.UpdateFailed", ReadGraphApiError(body) ?? $"Update failed with status {(int)response.StatusCode}: {body}"));
         }
         return Result.Success(true);
+    }
+
+    private async Task<Result<string>> ResolvePageTokenForPostAsync(
+        string externalPostId,
+        string? hintedPageAccessToken,
+        string? userAccessToken,
+        CancellationToken cancellationToken)
+    {
+        // externalPostId format: {pageId}_{postId}. If we can extract the page id AND we have a
+        // user token, we can look up the correct page token from `/me/accounts`. That way
+        // a SocialMedia row whose page_access_token belongs to page A can still moderate a
+        // post that actually lives on page B (since publish fans out to every linked page).
+        var underscore = externalPostId.IndexOf('_');
+        var pageId = underscore > 0 ? externalPostId[..underscore] : null;
+
+        if (!string.IsNullOrWhiteSpace(pageId) && !string.IsNullOrWhiteSpace(userAccessToken))
+        {
+            var pages = await FetchPagesAsync(userAccessToken, cancellationToken);
+            if (pages.IsSuccess)
+            {
+                var match = pages.Value.FirstOrDefault(p => p.PageId == pageId);
+                if (match is not null && !string.IsNullOrWhiteSpace(match.PageAccessToken))
+                {
+                    return Result.Success(match.PageAccessToken);
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(hintedPageAccessToken))
+        {
+            return Result.Success(hintedPageAccessToken);
+        }
+
+        return Result.Failure<string>(
+            new Error("Facebook.NoPageToken", "Could not resolve a Facebook page access token for this post."));
+    }
+
+    private static bool LooksLikeNotFound(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return false;
+        var lower = body.ToLowerInvariant();
+        return lower.Contains("does not exist") ||
+               lower.Contains("cannot be loaded") ||
+               lower.Contains("unknown path components") ||
+               lower.Contains("no node") ||
+               lower.Contains("\"code\":803") ||
+               lower.Contains("\"code\":100");
     }
 
     public async Task<Result<IReadOnlyList<FacebookPublishResult>>> PublishAsync(
@@ -94,6 +191,27 @@ public sealed class FacebookPublishService : IFacebookPublishService
 
         var (videos, images, invalidMedia) = SplitMedia(request.Media);
 
+        var wantsReel = !string.IsNullOrWhiteSpace(request.PostType) &&
+                        string.Equals(request.PostType, "reels", StringComparison.OrdinalIgnoreCase);
+
+        // Reels must be exactly one video. Reject images-for-reel loudly so the user gets a
+        // clear error instead of silently falling through to the regular /photos feed path.
+        if (wantsReel)
+        {
+            if (videos.Count == 0)
+            {
+                return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
+                    new Error("Facebook.ReelRequiresVideo",
+                        "Facebook Reels require a single video — images are not supported."));
+            }
+            if (videos.Count > 1 || images.Count > 0)
+            {
+                return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
+                    new Error("Facebook.ReelSingleVideo",
+                        "Facebook Reels only support a single video."));
+            }
+        }
+
         if (invalidMedia.Count > 0)
         {
             return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
@@ -114,15 +232,25 @@ public sealed class FacebookPublishService : IFacebookPublishService
 
         if (videos.Count == 1)
         {
+            var isReel = !string.IsNullOrWhiteSpace(request.PostType) &&
+                         string.Equals(request.PostType, "reels", StringComparison.OrdinalIgnoreCase);
+
             var results = new List<FacebookPublishResult>();
             foreach (var page in pages)
             {
-                var publishResult = await PublishVideoAsync(
-                    page.PageId,
-                    page.PageAccessToken,
-                    request.Message,
-                    videos[0],
-                    cancellationToken);
+                var publishResult = isReel
+                    ? await PublishReelAsync(
+                        page.PageId,
+                        page.PageAccessToken,
+                        request.Message,
+                        videos[0],
+                        cancellationToken)
+                    : await PublishVideoAsync(
+                        page.PageId,
+                        page.PageAccessToken,
+                        request.Message,
+                        videos[0],
+                        cancellationToken);
 
                 if (publishResult.IsFailure)
                 {
@@ -221,6 +349,95 @@ public sealed class FacebookPublishService : IFacebookPublishService
         return Result.Success(new FacebookPublishResult(pageId, parsed.Id));
     }
 
+    // Facebook Reels use a 3-phase resumable upload:
+    //   1. POST /{page_id}/video_reels?upload_phase=start         -> returns video_id + upload_url
+    //   2. POST {upload_url} with header file_url={presigned}     -> FB hosted-file fetch
+    //   3. POST /{page_id}/video_reels?upload_phase=finish&...    -> publishes the reel
+    private async Task<Result<FacebookPublishResult>> PublishReelAsync(
+        string pageId,
+        string pageAccessToken,
+        string message,
+        FacebookPublishMedia video,
+        CancellationToken cancellationToken)
+    {
+        // Phase 1: start
+        var startPayload = new Dictionary<string, string>
+        {
+            ["upload_phase"] = "start",
+            ["access_token"] = pageAccessToken
+        };
+
+        var startResponse = await _httpClient.PostAsync(
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(pageId)}/video_reels",
+            new FormUrlEncodedContent(startPayload),
+            cancellationToken);
+
+        var startBody = await startResponse.Content.ReadAsStringAsync(cancellationToken);
+        if (!startResponse.IsSuccessStatusCode)
+        {
+            return Result.Failure<FacebookPublishResult>(
+                new Error("Facebook.ReelStartFailed", ReadGraphApiError(startBody) ?? "Failed to start Facebook Reel upload."));
+        }
+
+        var startParsed = JsonSerializer.Deserialize<ReelStartResponse>(startBody, JsonOptions);
+        if (string.IsNullOrWhiteSpace(startParsed?.VideoId) || string.IsNullOrWhiteSpace(startParsed?.UploadUrl))
+        {
+            return Result.Failure<FacebookPublishResult>(
+                new Error("Facebook.ReelStartFailed", "Facebook did not return a reel upload url."));
+        }
+
+        // Phase 2: hosted-file upload. FB fetches the presigned URL itself.
+        using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, startParsed.UploadUrl);
+        uploadRequest.Headers.TryAddWithoutValidation("Authorization", $"OAuth {pageAccessToken}");
+        uploadRequest.Headers.TryAddWithoutValidation("file_url", video.Url);
+        uploadRequest.Content = new ByteArrayContent(Array.Empty<byte>());
+
+        var uploadResponse = await _httpClient.SendAsync(uploadRequest, cancellationToken);
+        var uploadBody = await uploadResponse.Content.ReadAsStringAsync(cancellationToken);
+        if (!uploadResponse.IsSuccessStatusCode)
+        {
+            return Result.Failure<FacebookPublishResult>(
+                new Error("Facebook.ReelUploadFailed", ReadGraphApiError(uploadBody) ?? $"Reel upload failed with status {(int)uploadResponse.StatusCode}: {uploadBody}"));
+        }
+
+        // Phase 3: finish / publish
+        var finishPayload = new Dictionary<string, string>
+        {
+            ["upload_phase"] = "finish",
+            ["video_id"] = startParsed.VideoId,
+            ["video_state"] = "PUBLISHED",
+            ["description"] = message ?? string.Empty,
+            ["access_token"] = pageAccessToken
+        };
+
+        var finishResponse = await _httpClient.PostAsync(
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(pageId)}/video_reels",
+            new FormUrlEncodedContent(finishPayload),
+            cancellationToken);
+
+        var finishBody = await finishResponse.Content.ReadAsStringAsync(cancellationToken);
+        if (!finishResponse.IsSuccessStatusCode)
+        {
+            return Result.Failure<FacebookPublishResult>(
+                new Error("Facebook.ReelPublishFailed", ReadGraphApiError(finishBody) ?? "Failed to publish Facebook Reel."));
+        }
+
+        // External id format for reels follows the same {pageId}_{postId} convention used by
+        // regular posts — the "postId" here is the video_id, and it's what DELETE/UPDATE use
+        // when re-resolving the owning page via /me/accounts.
+        var externalId = $"{pageId}_{startParsed.VideoId}";
+        return Result.Success(new FacebookPublishResult(pageId, externalId));
+    }
+
+    private sealed class ReelStartResponse
+    {
+        [JsonPropertyName("video_id")]
+        public string? VideoId { get; set; }
+
+        [JsonPropertyName("upload_url")]
+        public string? UploadUrl { get; set; }
+    }
+
     private async Task<Result<string>> UploadPhotoAsync(
         string pageId,
         string pageAccessToken,
@@ -302,6 +519,17 @@ public sealed class FacebookPublishService : IFacebookPublishService
         FacebookPublishRequest request,
         CancellationToken cancellationToken)
     {
+        // When the SocialMedia row represents a SPECIFIC page (PageId + PageAccessToken are
+        // both set), publish ONLY to that page. Fan-out via /me/accounts was causing the
+        // same post to land on every page the user token could see — and if the user had
+        // linked N per-page SocialMedia rows, each select-and-publish multiplied the result
+        // by N (e.g. 2 linked pages × 2 /me/accounts pages = 4 publications per post).
+        if (!string.IsNullOrWhiteSpace(request.PageId) && !string.IsNullOrWhiteSpace(request.PageAccessToken))
+        {
+            return Result.Success<IReadOnlyList<PageAccessInfo>>(
+                new[] { new PageAccessInfo(request.PageId!, request.PageAccessToken!) });
+        }
+
         if (string.IsNullOrWhiteSpace(request.UserAccessToken))
         {
             return Result.Failure<IReadOnlyList<PageAccessInfo>>(
@@ -321,6 +549,15 @@ public sealed class FacebookPublishService : IFacebookPublishService
         string userAccessToken,
         CancellationToken cancellationToken)
     {
+        // Coalesce repeated lookups per user token within the TTL window. Each publish /
+        // unpublish / delete flow used to hit /me/accounts once per target; with this
+        // cache, a 3-target batch calls FB once instead of three times.
+        var cacheKey = BuildPageCacheKey(userAccessToken);
+        if (_memoryCache.TryGetValue<IReadOnlyList<PageAccessInfo>>(cacheKey, out var cached) && cached is not null)
+        {
+            return Result.Success(cached);
+        }
+
         var url = $"{GraphApiBaseUrl}/me/accounts?fields=id,name,access_token&access_token={Uri.EscapeDataString(userAccessToken)}";
         var response = await _httpClient.GetAsync(url, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -343,6 +580,7 @@ public sealed class FacebookPublishService : IFacebookPublishService
                 new Error("Facebook.PageNotFound", "No Facebook pages were found for this account."));
         }
 
+        _memoryCache.Set<IReadOnlyList<PageAccessInfo>>(cacheKey, pages, PageListCacheTtl);
         return Result.Success<IReadOnlyList<PageAccessInfo>>(pages);
     }
 

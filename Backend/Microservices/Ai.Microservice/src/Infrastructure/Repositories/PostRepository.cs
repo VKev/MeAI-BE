@@ -67,6 +67,15 @@ public sealed class PostRepository : IPostRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<List<Post>> GetTrackedByPostBuilderIdAsync(
+        Guid postBuilderId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbSet
+            .Where(p => p.PostBuilderId == postBuilderId && p.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Post>> GetByUserIdAndWorkspaceIdAsync(
         Guid userId,
         Guid workspaceId,
