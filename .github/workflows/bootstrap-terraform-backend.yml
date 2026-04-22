@@ -120,7 +120,7 @@ jobs:
           TF_VAR_region: ${{ env.AWS_REGION }}
           TF_VAR_project_name: ${{ env.PROJECT_NAME }}
         run: |
-          terraform apply -input=false -auto-approve tfplan
+          terraform apply -parallelism=2 -input=false -auto-approve tfplan
 
       - name: Show outputs
         working-directory: Terraform/bootstrap

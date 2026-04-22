@@ -228,7 +228,7 @@ jobs:
           TF_VAR_cloudflare_zone_id: ${{ env.CLOUDFLARE_ZONE_ID }}
           TF_VAR_aws_region: ${{ env.AWS_REGION }}
         run: |
-          terraform apply -input=false -auto-approve tfplan
+          terraform apply -parallelism=2 -input=false -auto-approve tfplan
 
       - name: Show Outputs
         if: inputs.action == 'apply'
