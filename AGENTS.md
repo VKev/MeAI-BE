@@ -158,3 +158,8 @@ Backend/Microservices/<Service>.Microservice/
 - Cross-layer dependencies that violate Clean Architecture rules.
 - Storing secrets in tracked files or logs.
 - Changing Build/obj or Build/bin conventions unless you update all projects and EF tooling.
+
+## Platform analytics quirks
+- `GetSocialMediaPlatformPostAnalyticsQuery` has a snapshot-cache path (`post_metric_snapshots`) that only persists numeric metrics + `PostPayloadJson` — it does NOT persist `CommentSamples`. Facebook, TikTok, and Threads all bypass this cache because they need fresh reply detail; Instagram still uses it. If you add a new platform that returns comment samples, either add it to the cache-bypass list or extend `SocialPlatformPostMetricSnapshotMapper` to serialize comments too.
+- Threads `/{id}/replies` is user-scoped (it's the `GET /me/replies` endpoint) and 500s when queried with a post id. Use `/{id}/conversation` for fetching replies to a specific post, then filter out the root by comparing `item.Id` to the queried post id. Avoid requesting the `is_reply` / `root_post` fields — Meta 500s on tokens without the tier/permissions for them.
+- Threads reply endpoints require the `threads_read_replies` OAuth scope (read) and/or `threads_manage_replies` (write). Users must re-run the OAuth flow for scope changes to stick — existing access tokens are immutable.
