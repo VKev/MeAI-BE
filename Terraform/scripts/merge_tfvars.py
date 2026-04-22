@@ -12,6 +12,8 @@ _HEREDOC_PATTERN = re.compile(
 
 def deep_merge(into: dict, src: dict) -> None:
     for key, value in src.items():
+        if str(key).startswith("__"):
+            continue
         if key in into and isinstance(into[key], dict) and isinstance(value, dict):
             deep_merge(into[key], value)
         else:

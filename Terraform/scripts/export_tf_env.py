@@ -67,7 +67,9 @@ def main() -> None:
         REPO_ROOT / "Terraform" / "00-all.auto.tfvars.json",
         REPO_ROOT / "Terraform" / "00-all.auto.tfvars",
         REPO_ROOT / "Terraform" / "common.auto.tfvars",
+        REPO_ROOT / "terraform-var" / "common.auto.tfvars",
         REPO_ROOT / "terraform-vars" / "common.auto.tfvars",
+        REPO_ROOT / "Terraform-vars" / "common.auto.tfvars",
     ]
 
     merged: Dict[str, Any] = {}

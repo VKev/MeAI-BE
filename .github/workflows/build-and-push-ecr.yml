@@ -11,8 +11,9 @@ on:
 
 # Top-level env falls back to repo vars if env vars are absent.
 env:
-  AWS_REGION: ""
-  PROJECT_NAME: ""
+  AWS_REGION: ${{ vars.AWS_REGION || '' }}
+  PROJECT_NAME: ${{ vars.PROJECT_NAME || '' }}
+  ECR_REPO_NAME: ${{ vars.ECR_REPO_NAME || '' }}
 
 permissions:
   contents: read
@@ -73,17 +74,83 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Merge tfvars for build settings
+        working-directory: Terraform
+        env:
+          SECRETS_JSON: ${{ toJson(secrets) }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          cp ../terraform-var/*.auto.tfvars . 2>/dev/null || true
+          cp ../terraform-vars/*.auto.tfvars . 2>/dev/null || true
+          cp ../Terraform-vars/*.auto.tfvars . 2>/dev/null || true
+
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+          echo "$SECRETS_JSON" \
+            | jq -r 'to_entries[] | select(.key | startswith("TERRAFORM_VARS_")) | .key' \
+            | while read -r key; do
+                suffix=${key#TERRAFORM_VARS_}
+                norm=$(echo "$suffix" \
+                  | tr '[:upper:]' '[:lower:]' \
+                  | sed 's/^\s\+//;s/\s\+$//' \
+                  | tr ' /\\' '___' )
+                value=$(jq -r --arg k "$key" '.[$k]' <<< "$SECRETS_JSON")
+                if echo "$value" | jq -e . >/dev/null 2>&1; then
+                  case "$norm" in
+                    *.auto.tfvars.json|*.tfvars.json) filename="$norm";;
+                    *.auto.tfvars|*.tfvars)           filename="$norm.json";;
+                    *)                                 filename="$norm.auto.tfvars.json";;
+                  esac
+                else
+                  case "$norm" in
+                    *.auto.tfvars|*.tfvars)           filename="$norm";;
+                    *.auto.tfvars.json|*.tfvars.json) filename="${norm%.json}";;
+                    *)                                 filename="$norm.auto.tfvars";;
+                  esac
+                fi
+                printf '%s' "$value" > "$filename"
+              done
+
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y python3-pip >/dev/null
+          python3 -m pip install --user python-hcl2 >/dev/null
+          export PATH="$HOME/.local/bin:$PATH"
+          python3 scripts/merge_tfvars.py
+
+          for f in *.auto.tfvars *.auto.tfvars.json; do
+            [ "$f" = "00-all.auto.tfvars.json" ] && continue || true
+            rm -f "$f" || true
+          done
+
       - name: Load project/region from Terraform vars
         run: python Terraform/scripts/export_tf_env.py >> "$GITHUB_ENV"
         env:
           TF_ENV_FALLBACK_PROJECT: ${{ env.PROJECT_NAME }}
           TF_ENV_FALLBACK_REGION: ${{ env.AWS_REGION }}
 
-      - name: Derive ECR repo name from project/env
+      - name: Derive ECR repo name from Terraform vars
         run: |
           REPO="${{ env.ECR_REPO_NAME }}"
           if [ -z "$REPO" ] || [ "$REPO" = "default" ]; then
-            REPO="${PROJECT_NAME:-default}-${{ inputs.environment }}-ecr"
+            if [ -f Terraform/00-all.auto.tfvars.json ]; then
+              REPO_FROM_TFVARS=$(jq -r '
+                def repo_name:
+                  if type == "string" and test("/") then split("/")[-1] else empty end;
+                [
+                  try (.services.user.ecs_container_image_repository_url | repo_name) catch empty,
+                  try (.services.apigateway.ecs_container_image_repository_url | repo_name) catch empty,
+                  try (.services.ai.ecs_container_image_repository_url | repo_name) catch empty,
+                  try (.k8s_microservices_manifest | capture("image:\\s+[^\\s/]+/(?<repo>[^\\s:]+):(Ai\\.Microservice|User\\.Microservice|ApiGateway|Notification\\.Microservice|Feed\\.Microservice)-latest").repo) catch empty
+                ] | map(select(. != "" and . != "null")) | .[0] // ""
+              ' Terraform/00-all.auto.tfvars.json)
+            else
+              REPO_FROM_TFVARS=""
+            fi
+            REPO="${REPO_FROM_TFVARS:-${PROJECT_NAME:-default}-${{ inputs.environment }}-ecr}"
           fi
           echo "ECR_REPO_NAME=$REPO" >> "$GITHUB_ENV"
 
