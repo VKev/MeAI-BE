@@ -107,9 +107,25 @@ jobs:
 
       - name: Create ECR repository if it doesn't exist
         run: |
+          # This step runs in every parallel matrix leg (Ai/ApiGateway/Feed/Notification/User).
+          # They all target the same shared repo — so on a cold account they race:
+          # all 5 describe see "not found", one wins create, the other 4 see
+          # RepositoryAlreadyExistsException and fail the step. Treat "already exists"
+          # as success — the post-condition (repo exists) is what we actually care about.
           REPO_NAME="${{ env.ECR_REPO_NAME }}"
-          aws ecr describe-repositories --repository-names "$REPO_NAME" --region "${{ env.AWS_REGION }}" \
-          || aws ecr create-repository --repository-name "$REPO_NAME" --region "${{ env.AWS_REGION }}"
+          REGION="${{ env.AWS_REGION }}"
+          if aws ecr describe-repositories --repository-names "$REPO_NAME" --region "$REGION" >/dev/null 2>&1; then
+            echo "Repository $REPO_NAME already exists."
+          else
+            CREATE_OUTPUT=$(aws ecr create-repository --repository-name "$REPO_NAME" --region "$REGION" 2>&1) || {
+              if echo "$CREATE_OUTPUT" | grep -q "RepositoryAlreadyExistsException"; then
+                echo "Repository $REPO_NAME created by a concurrent matrix leg — continuing."
+              else
+                echo "$CREATE_OUTPUT" >&2
+                exit 1
+              fi
+            }
+          fi
           echo "REPO_NAME=$REPO_NAME" >> "$GITHUB_ENV"
 
       - name: Detect Dockerfile path
