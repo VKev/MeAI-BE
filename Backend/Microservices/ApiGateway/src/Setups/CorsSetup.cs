@@ -19,6 +19,12 @@ internal static class CorsSetup
             allowedCorsOrigins = new[] { "http://localhost:5173", "http://localhost:3030" };
         }
 
+        // `*` sentinel in the origins list → allow any origin. Still uses
+        // SetIsOriginAllowed rather than AllowAnyOrigin so AllowCredentials stays
+        // compatible with the browser's `ACAO: *` + credentials rejection.
+        var allowAnyOrigin = allowedCorsOrigins.Any(origin =>
+            string.Equals(origin, "*", StringComparison.Ordinal));
+
         bool allowAnyLoopback = allowedCorsOrigins.Any(origin =>
         {
             if (Uri.TryCreate(origin, UriKind.Absolute, out var uri))
@@ -42,6 +48,11 @@ internal static class CorsSetup
                 policy
                     .SetIsOriginAllowed(origin =>
                     {
+                        if (allowAnyOrigin)
+                        {
+                            return true;
+                        }
+
                         if (explicitExternalOrigins.Contains(origin))
                         {
                             return true;

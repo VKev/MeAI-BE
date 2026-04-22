@@ -17,12 +17,27 @@ public static class CorsSetup
             allowedCorsOrigins = new[] { "http://localhost:5173", "http://localhost:3030" };
         }
 
+        // `*` as the first (or only) configured origin is treated as a wildcard
+        // sentinel — the policy echoes the request's own Origin header back in
+        // Access-Control-Allow-Origin, which is required for AllowCredentials to
+        // work across arbitrary origins (browsers reject `ACAO: *` + credentials).
+        var allowAnyOrigin = allowedCorsOrigins.Any(o =>
+            string.Equals(o, "*", StringComparison.Ordinal));
+
         builder.Services.AddCors(options =>
         {
             options.AddPolicy(CorsPolicyName, policy =>
             {
+                if (allowAnyOrigin)
+                {
+                    policy.SetIsOriginAllowed(_ => true);
+                }
+                else
+                {
+                    policy.WithOrigins(allowedCorsOrigins);
+                }
+
                 policy
-                    .WithOrigins(allowedCorsOrigins)
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();
