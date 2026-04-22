@@ -1,6 +1,13 @@
 import json
 import glob
 import os
+import re
+
+
+_HEREDOC_PATTERN = re.compile(
+    r'^<<-?([A-Za-z_][A-Za-z0-9_]*)\n(.*)\n\1$',
+    re.DOTALL,
+)
 
 
 def deep_merge(into: dict, src: dict) -> None:
@@ -12,21 +19,34 @@ def deep_merge(into: dict, src: dict) -> None:
 
 
 def _strip_hcl_quotes(value):
-    """Strip literal surrounding double quotes that `python-hcl2` embeds in parsed
-    string values. `region = "us-east-1"` comes back from hcl2.load() as the Python
-    string `'"us-east-1"'` (with quote chars inside the value) on current library
-    versions; if we pass that through, downstream consumers (export_tf_env.py →
-    $GITHUB_ENV → aws-actions/configure-aws-credentials) see `"us-east-1"` with
-    quotes included and reject it as an invalid region.
+    """Clean up string values that `python-hcl2` mangles on parse.
 
-    HCL string values never legitimately start AND end with literal `"`, since `"`
-    is the delimiter in HCL syntax — so stripping one matched outer pair here is
-    safe. Recurses into lists/dicts so nested values (e.g. rds.user.password) are
-    cleaned too.
+    Two distinct bugs to undo:
+
+    1. Literal surrounding double quotes on every string: `region = "us-east-1"`
+       parses to the Python string `'"us-east-1"'` (with the `"` chars inside the
+       value). If passed through, $GITHUB_ENV emits `AWS_REGION="us-east-1"` and
+       aws-actions/configure-aws-credentials rejects it as an invalid region.
+
+    2. Heredoc delimiters left in the string body: `manifest = <<-EOT\n...\nEOT`
+       parses to `'"<<-EOT\\n...\\nEOT"'`. Terraform's kubectl_file_documents then
+       tries to YAML-parse the value, hits `<<-EOT` on line 1, fails at line 2 with
+       "mapping values are not allowed in this context".
+
+    Stripping both is safe: HCL string literals never legitimately start AND end
+    with `"` (it's the delimiter), and heredocs are only ever structural syntax.
+    Recurses into lists/dicts so nested values are cleaned too.
     """
     if isinstance(value, str):
+        # Outer quote pair → strip first.
         if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
-            return value[1:-1]
+            value = value[1:-1]
+        # Heredoc markers → strip the `<<-TAG\n` header and `\nTAG` footer; keep
+        # the body. `<<-` and `<<` both match; the closing tag is captured by
+        # backreference so mismatched EOT/END/HEREDOC can't accidentally trigger.
+        heredoc = _HEREDOC_PATTERN.match(value)
+        if heredoc:
+            value = heredoc.group(2)
         return value
     if isinstance(value, list):
         return [_strip_hcl_quotes(v) for v in value]
