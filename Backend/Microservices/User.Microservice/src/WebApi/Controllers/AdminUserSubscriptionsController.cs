@@ -70,7 +70,7 @@ public sealed class AdminUserSubscriptionsController : ApiController
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new UpdateUserSubscriptionStatusCommand(userSubscriptionId, request.Status),
+            new UpdateUserSubscriptionStatusCommand(userSubscriptionId, request.Status, request.Reason),
             cancellationToken);
 
         if (result.IsFailure)
@@ -82,4 +82,4 @@ public sealed class AdminUserSubscriptionsController : ApiController
     }
 }
 
-public sealed record UpdateUserSubscriptionStatusRequest(string Status);
+public sealed record UpdateUserSubscriptionStatusRequest(string Status, string Reason);
