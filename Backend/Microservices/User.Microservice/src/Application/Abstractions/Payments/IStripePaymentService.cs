@@ -44,6 +44,14 @@ public interface IStripePaymentService
         string stripeSubscriptionId,
         IDictionary<string, string> metadata,
         CancellationToken cancellationToken = default);
+
+    Task<StripeAutoRenewUpdateResult> SetSubscriptionAutoRenewAsync(
+        string stripeSubscriptionId,
+        string? stripeScheduleId,
+        bool enabled,
+        IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default);
+
 }
 
 public sealed record StripeRecurringSubscriptionResult(
@@ -84,3 +92,9 @@ public sealed record StripeCheckoutStatusResult(
     string? ProviderReferenceId,
     string? PaymentIntentId,
     string? StripeSubscriptionId);
+
+public sealed record StripeAutoRenewUpdateResult(
+    string StripeSubscriptionId,
+    string Status,
+    string? StripeScheduleId,
+    DateTime? CurrentPeriodEnd);

@@ -22,4 +22,6 @@ public sealed record AdminUserSubscriptionResponse(
     DateTime? UpdatedAt,
     DateTime? DeletedAt,
     string? StripeSubscriptionId,
-    string? StripeScheduleId);
+    string? StripeScheduleId,
+    bool IsAutoRenewEnabled,
+    string AutoRenewStatus);

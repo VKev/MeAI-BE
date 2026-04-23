@@ -316,6 +316,50 @@ public sealed class StripePaymentService : IStripePaymentService
             cancellationToken: cancellationToken);
     }
 
+    public async Task<StripeAutoRenewUpdateResult> SetSubscriptionAutoRenewAsync(
+        string stripeSubscriptionId,
+        string? stripeScheduleId,
+        bool enabled,
+        IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default)
+    {
+        var subscription = await GetSubscriptionWithInvoiceAsync(stripeSubscriptionId, cancellationToken);
+        var attachedScheduleId = string.IsNullOrWhiteSpace(stripeScheduleId)
+            ? subscription.ScheduleId
+            : stripeScheduleId;
+
+        if (!enabled && !string.IsNullOrWhiteSpace(attachedScheduleId))
+        {
+            await _subscriptionScheduleService.ReleaseAsync(
+                attachedScheduleId,
+                new SubscriptionScheduleReleaseOptions(),
+                cancellationToken: cancellationToken);
+
+            subscription = await GetSubscriptionWithInvoiceAsync(stripeSubscriptionId, cancellationToken);
+        }
+
+        var mergedMetadata = new Dictionary<string, string>(subscription.Metadata ?? new Dictionary<string, string>());
+        foreach (var item in metadata)
+        {
+            mergedMetadata[item.Key] = item.Value;
+        }
+
+        var updatedSubscription = await _subscriptionService.UpdateAsync(
+            stripeSubscriptionId,
+            new SubscriptionUpdateOptions
+            {
+                CancelAtPeriodEnd = !enabled,
+                Metadata = mergedMetadata.Count == 0 ? null : mergedMetadata
+            },
+            cancellationToken: cancellationToken);
+
+        return new StripeAutoRenewUpdateResult(
+            updatedSubscription.Id,
+            updatedSubscription.Status,
+            updatedSubscription.ScheduleId,
+            updatedSubscription.CurrentPeriodEnd);
+    }
+
     private async Task<Price?> TryGetPriceAsync(string? stripePriceId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(stripePriceId))

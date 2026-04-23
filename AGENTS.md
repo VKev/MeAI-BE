@@ -100,9 +100,11 @@ Backend/Microservices/<Service>.Microservice/
 ## Subscription/billing invariants
 - Subscription plan delete is a soft delete: set plan `IsActive=false`, `IsDeleted=true`, `DeletedAt`, and keep the row readable so existing user subscription history can still display the old plan name/price.
 - Deleting an active plan should mark current active user subscriptions for that plan as `non_renewable`; do not hard-delete or expire them immediately. They remain current until `EndDate` and should display `displayStatus: "No recurring"`.
-- `CurrentUserSubscriptionResponse` includes `displayStatus`; FE should prefer it for labels instead of deriving user-facing text from raw `status`.
+- `CurrentUserSubscriptionResponse` and admin user-subscription responses include `displayStatus`, `isAutoRenewEnabled`, and `autoRenewStatus`; FE should prefer these for labels/state instead of deriving user-facing text from raw `status`.
+- Users control their own current subscription auto-renew only with `POST /api/User/subscriptions/current/auto-renew` and body `{ "enabled": true|false }`. Disabling sets the current user subscription to `non_renewable`, keeps access until `EndDate`, cancels local scheduled changes, and sets Stripe `cancel_at_period_end=true` when Stripe recurring state exists. Enabling requires an active, non-deleted plan and a Stripe recurring subscription, then sets Stripe `cancel_at_period_end=false` and returns status `Active`.
 - Admin user-subscription APIs live under `/api/User/admin/user-subscriptions` and edit the user's subscription status only, not the subscription plan catalog row.
 - Admin user-subscription status updates use `POST /api/User/admin/user-subscriptions/{userSubscriptionId}/status` with body `{ "status": "...", "reason": "..." }`; `reason` is required, may contain HTML for email rendering, and the command publishes a `user.subscription.status_changed` notification plus a best-effort email to the affected user. The in-app notification `message` must stay plain text; preserve raw HTML in payload fields such as `reasonHtml`.
+- Admin user-subscription auto-renew updates use `POST /api/User/admin/user-subscriptions/{userSubscriptionId}/auto-renew` with body `{ "enabled": true|false, "reason": "..." }`; `reason` is required, may contain HTML for email rendering, and the command publishes a `user.subscription.auto_renew_changed` notification plus a best-effort email to the affected user.
 
 ## API testing & temp files
 - Use `curl` for manual API endpoint testing (use `curl.exe` in Windows shells when needed).

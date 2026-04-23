@@ -10,4 +10,6 @@ public sealed record CurrentUserSubscriptionResponse(
     string DisplayStatus,
     bool IsCurrent,
     bool IsActive,
-    bool IsScheduled);
+    bool IsScheduled,
+    bool IsAutoRenewEnabled,
+    string AutoRenewStatus);

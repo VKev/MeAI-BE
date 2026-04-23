@@ -53,6 +53,11 @@ public sealed class GetMySubscriptionsQueryHandler
         if (state.Current != null)
         {
             subscriptions.TryGetValue(state.Current.SubscriptionId, out var currentPlan);
+            var autoRenewStatus = SubscriptionHelpers.ResolveAutoRenewStatus(
+                state.Current,
+                currentPlan,
+                isScheduled: false);
+
             response.Add(new CurrentUserSubscriptionResponse(
                 state.Current.Id,
                 state.Current.SubscriptionId,
@@ -63,12 +68,19 @@ public sealed class GetMySubscriptionsQueryHandler
                 SubscriptionHelpers.ResolveDisplayStatus(state.Current.Status, currentPlan),
                 true,
                 true,
-                false));
+                false,
+                autoRenewStatus == SubscriptionHelpers.AutoRenewEnabled,
+                autoRenewStatus));
         }
 
         if (state.Scheduled != null)
         {
             subscriptions.TryGetValue(state.Scheduled.SubscriptionId, out var scheduledPlan);
+            var autoRenewStatus = SubscriptionHelpers.ResolveAutoRenewStatus(
+                state.Scheduled,
+                scheduledPlan,
+                isScheduled: true);
+
             response.Add(new CurrentUserSubscriptionResponse(
                 state.Scheduled.Id,
                 state.Scheduled.SubscriptionId,
@@ -79,7 +91,9 @@ public sealed class GetMySubscriptionsQueryHandler
                 SubscriptionHelpers.ResolveDisplayStatus(state.Scheduled.Status, scheduledPlan),
                 false,
                 false,
-                true));
+                true,
+                autoRenewStatus == SubscriptionHelpers.AutoRenewEnabled,
+                autoRenewStatus));
         }
 
         return Result.Success(response);
