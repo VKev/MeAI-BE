@@ -59,6 +59,18 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "tf_state_sse" {
   }
 }
 
+resource "aws_s3_bucket_cors_configuration" "tf_state_app_downloads" {
+  bucket = aws_s3_bucket.tf_state.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = var.app_cors_allowed_origins
+    expose_headers  = ["ETag", "Content-Length", "Content-Type"]
+    max_age_seconds = 3600
+  }
+}
+
 # Allow CloudFront to write logs to this bucket
 resource "aws_s3_bucket_policy" "tf_state_cloudfront_logs" {
   bucket = aws_s3_bucket.tf_state.id
