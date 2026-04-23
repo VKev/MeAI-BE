@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Subscriptions.Helpers;
 using Application.Subscriptions.Models;
 using Application.Subscriptions.Services;
 using Domain.Entities;
@@ -39,7 +40,7 @@ public sealed class GetCurrentUserSubscriptionQueryHandler
         var subscription = await _subscriptionRepository.GetAll()
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                item => item.Id == state.Current.SubscriptionId && !item.IsDeleted,
+                item => item.Id == state.Current.SubscriptionId,
                 cancellationToken);
 
         var currentSubscription = new CurrentUserSubscriptionResponse(
@@ -49,6 +50,7 @@ public sealed class GetCurrentUserSubscriptionQueryHandler
             state.Current.ActiveDate,
             state.Current.EndDate,
             state.Current.Status,
+            SubscriptionHelpers.ResolveDisplayStatus(state.Current.Status, subscription),
             true,
             true,
             false);

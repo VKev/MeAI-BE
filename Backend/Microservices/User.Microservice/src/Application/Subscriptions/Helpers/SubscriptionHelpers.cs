@@ -38,4 +38,31 @@ internal static class SubscriptionHelpers
 
         return updated;
     }
+
+    public static string ResolveDisplayStatus(string? status, Subscription? subscription)
+    {
+        if (string.Equals(status, "non_renewable", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(status, "non-renewable", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(status, "nonrenewable", StringComparison.OrdinalIgnoreCase))
+        {
+            return "No recurring";
+        }
+
+        if (subscription?.IsDeleted == true)
+        {
+            return "Plan deleted - no recurring";
+        }
+
+        if (subscription?.IsActive == false)
+        {
+            return "Plan inactive - no recurring";
+        }
+
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "Active";
+        }
+
+        return status.Trim();
+    }
 }
