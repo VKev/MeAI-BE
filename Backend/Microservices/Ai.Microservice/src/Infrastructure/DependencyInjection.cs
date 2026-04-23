@@ -1,4 +1,6 @@
 using Application.Abstractions;
+using Application.Abstractions.Agents;
+using Application.Abstractions.Automation;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Kie;
 using Application.Abstractions.Facebook;
@@ -11,8 +13,11 @@ using Application.Abstractions.Workspaces;
 using Application.Abstractions.TikTok;
 using Application.Abstractions.Threads;
 using Application.Posts;
+using Application.PublishingSchedules;
 using Domain.Repositories;
 using Infrastructure.Logic.Consumers;
+using Infrastructure.Logic.Agents;
+using Infrastructure.Logic.Automation;
 using Infrastructure.Logic.Configs;
 using Infrastructure.Logic.Facebook;
 using Infrastructure.Logic.Feed;
@@ -52,13 +57,17 @@ namespace Infrastructure
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");
             services.AddHttpClient("TikTok");
+            services.AddHttpClient("n8n");
             // Caption generation runs through Kie's GPT-5.4 Responses API. GeminiCaptionService
             // stays registered as a concrete class for future fallback / A-B; the interface
             // binding points at the Kie-backed implementation.
             services.AddScoped<IGeminiCaptionService, Infrastructure.Logic.Kie.KieCaptionService>();
             services.AddScoped<GeminiCaptionService>();
+            services.AddScoped<IN8nWorkflowClient, N8nWorkflowClient>();
+            services.AddScoped<IAgenticRuntimeContentService, AgenticRuntimeContentService>();
             services.AddScoped<IFacebookContentService, FacebookContentService>();
             services.AddScoped<IGeminiContentModerationService, GeminiContentModerationService>();
+            services.AddScoped<IAgentChatService, GeminiAgentChatService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
             services.AddScoped<IInstagramPublishService, InstagramPublishService>();
             services.AddScoped<IInstagramContentService, InstagramContentService>();
@@ -129,10 +138,12 @@ namespace Infrastructure
             services.AddScoped<Application.Billing.ICoinPricingService, Infrastructure.Logic.Billing.CoinPricingService>();
             services.AddScoped<IPostBuilderRepository, PostBuilderRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
+            services.AddScoped<IPublishingScheduleRepository, PublishingScheduleRepository>();
             services.AddScoped<IPostPublicationRepository, PostPublicationRepository>();
             services.AddScoped<IPostMetricSnapshotRepository, PostMetricSnapshotRepository>();
             services.AddScoped<ICoinPricingRepository, CoinPricingRepository>();
             services.AddScoped<PostResponseBuilder>();
+            services.AddScoped<PublishingScheduleResponseBuilder>();
             services.AddScoped<ScheduledPostDispatchService>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddHostedService<ScheduledPostPublishingWorker>();

@@ -47,4 +47,36 @@ public sealed class UserWorkspaceGrpcService : UserWorkspaceService.UserWorkspac
             UpdatedAt = result.Value.UpdatedAt?.ToString("O") ?? string.Empty
         };
     }
+
+    public override async Task<GetWorkspacesByUserResponse> GetWorkspacesByUser(
+        GetWorkspacesByUserRequest request,
+        ServerCallContext context)
+    {
+        if (!Guid.TryParse(request.UserId, out var userId))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid userId."));
+        }
+
+        var result = await _mediator.Send(
+            new GetWorkspacesQuery(userId, null, null, 100),
+            context.CancellationToken);
+
+        if (result.IsFailure)
+        {
+            throw new RpcException(new Status(StatusCode.NotFound, result.Error.Description));
+        }
+
+        var response = new GetWorkspacesByUserResponse();
+        response.Workspaces.AddRange(result.Value.Select(workspace => new WorkspaceSummaryRecord
+        {
+            WorkspaceId = workspace.Id.ToString(),
+            Name = workspace.Name,
+            Type = workspace.Type ?? string.Empty,
+            Description = workspace.Description ?? string.Empty,
+            CreatedAt = workspace.CreatedAt?.ToString("O") ?? string.Empty,
+            UpdatedAt = workspace.UpdatedAt?.ToString("O") ?? string.Empty
+        }));
+
+        return response;
+    }
 }

@@ -50,6 +50,36 @@ public sealed class UserWorkspaceGrpcService : IUserWorkspaceService
         }
     }
 
+    public async Task<Result<IReadOnlyList<UserWorkspaceResult>>> GetWorkspacesAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var request = new GetWorkspacesByUserRequest
+        {
+            UserId = userId.ToString()
+        };
+
+        try
+        {
+            var response = await _client.GetWorkspacesByUserAsync(request, cancellationToken: cancellationToken);
+            var result = response.Workspaces.Select(item => new UserWorkspaceResult(
+                Guid.Parse(item.WorkspaceId),
+                item.Name,
+                string.IsNullOrWhiteSpace(item.Type) ? null : item.Type,
+                string.IsNullOrWhiteSpace(item.Description) ? null : item.Description,
+                TryParseDateTime(item.CreatedAt),
+                TryParseDateTime(item.UpdatedAt)))
+                .ToList();
+
+            return Result.Success<IReadOnlyList<UserWorkspaceResult>>(result);
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<IReadOnlyList<UserWorkspaceResult>>(
+                new Error("UserWorkspace.GrpcError", ex.Status.Detail));
+        }
+    }
+
     private static DateTime? TryParseDateTime(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))

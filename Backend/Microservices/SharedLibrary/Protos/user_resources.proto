@@ -15,10 +15,13 @@ service UserResourceService {
 
 service UserSocialMediaService {
   rpc GetSocialMediasByIds (GetSocialMediasByIdsRequest) returns (GetSocialMediasByIdsResponse);
+  rpc GetSocialMediasByUser (GetSocialMediasByUserRequest) returns (GetSocialMediasByUserResponse);
+  rpc GetWorkspaceSocialMedias (GetWorkspaceSocialMediasRequest) returns (GetSocialMediasByUserResponse);
 }
 
 service UserWorkspaceService {
   rpc GetWorkspaceById (GetWorkspaceByIdRequest) returns (GetWorkspaceByIdResponse);
+  rpc GetWorkspacesByUser (GetWorkspacesByUserRequest) returns (GetWorkspacesByUserResponse);
 }
 
 message GetPresignedResourcesRequest {
@@ -112,6 +115,32 @@ message GetSocialMediasByIdsResponse {
   repeated SocialMediaRecord social_medias = 1;
 }
 
+message GetSocialMediasByUserRequest {
+  string user_id = 1;
+  string platform = 2;
+}
+
+message GetWorkspaceSocialMediasRequest {
+  string user_id = 1;
+  string workspace_id = 2;
+}
+
+message SocialMediaSummaryRecord {
+  string social_media_id = 1;
+  string type = 2;
+  string username = 3;
+  string display_name = 4;
+  string profile_picture_url = 5;
+  string page_id = 6;
+  string page_name = 7;
+  string created_at = 8;
+  string updated_at = 9;
+}
+
+message GetSocialMediasByUserResponse {
+  repeated SocialMediaSummaryRecord social_medias = 1;
+}
+
 message GetWorkspaceByIdRequest {
   string user_id = 1;
   string workspace_id = 2;
@@ -124,4 +153,21 @@ message GetWorkspaceByIdResponse {
   string description = 4;
   string created_at = 5;
   string updated_at = 6;
+}
+
+message GetWorkspacesByUserRequest {
+  string user_id = 1;
+}
+
+message WorkspaceSummaryRecord {
+  string workspace_id = 1;
+  string name = 2;
+  string type = 3;
+  string description = 4;
+  string created_at = 5;
+  string updated_at = 6;
+}
+
+message GetWorkspacesByUserResponse {
+  repeated WorkspaceSummaryRecord workspaces = 1;
 }

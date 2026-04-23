@@ -22,9 +22,10 @@ public sealed class PublishPostsCommandTests
         var facebookId = Guid.NewGuid();
         var threadsId = Guid.NewGuid();
         var instagramId = Guid.NewGuid();
+        var scheduleGroupId = Guid.NewGuid();
 
         var firstPost = CreatePost(firstPostId, userId, workspaceId);
-        firstPost.ScheduleGroupId = Guid.NewGuid();
+        firstPost.ScheduleGroupId = scheduleGroupId;
         firstPost.ScheduledAtUtc = DateTime.UtcNow.AddHours(1);
         firstPost.ScheduledSocialMediaIds = [facebookId, threadsId];
 
@@ -112,15 +113,18 @@ public sealed class PublishPostsCommandTests
         publishedMessages.Should().Contain(message =>
             message.PostId == firstPostId &&
             message.SocialMediaId == facebookId &&
-            message.IsPrivate == true);
+            message.IsPrivate == true &&
+            message.PublishingScheduleId == scheduleGroupId);
         publishedMessages.Should().Contain(message =>
             message.PostId == firstPostId &&
             message.SocialMediaId == threadsId &&
-            message.IsPrivate == true);
+            message.IsPrivate == true &&
+            message.PublishingScheduleId == scheduleGroupId);
         publishedMessages.Should().Contain(message =>
             message.PostId == secondPostId &&
             message.SocialMediaId == instagramId &&
-            message.IsPrivate == null);
+            message.IsPrivate == null &&
+            message.PublishingScheduleId == null);
     }
 
     [Fact]

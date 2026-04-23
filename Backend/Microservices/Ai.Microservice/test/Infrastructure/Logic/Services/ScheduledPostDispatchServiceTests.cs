@@ -1,4 +1,6 @@
 using Application.Posts.Commands;
+using Application.PublishingSchedules;
+using Domain.Entities;
 using Application.Posts.Models;
 using Domain.Repositories;
 using FluentAssertions;
@@ -18,6 +20,7 @@ public sealed class ScheduledPostDispatchServiceTests
         var postId = Guid.NewGuid();
         var userId = Guid.NewGuid();
         var socialMediaId = Guid.NewGuid();
+        var scheduleId = Guid.NewGuid();
 
         var postRepository = new Mock<IPostRepository>();
         postRepository
@@ -27,8 +30,31 @@ public sealed class ScheduledPostDispatchServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
-                new ScheduledPostDispatchCandidate(postId, userId, [socialMediaId], true)
+                new ScheduledPostDispatchCandidate(postId, userId, [socialMediaId], true, scheduleId)
             ]);
+
+        var scheduleRepository = new Mock<IPublishingScheduleRepository>();
+        scheduleRepository
+            .Setup(repository => repository.GetByIdForUpdateAsync(scheduleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PublishingSchedule
+            {
+                Id = scheduleId,
+                Items =
+                [
+                    new PublishingScheduleItem
+                    {
+                        Id = Guid.NewGuid(),
+                        ScheduleId = scheduleId,
+                        ItemId = postId,
+                        ItemType = PublishingScheduleState.ItemTypePost
+                    }
+                ]
+            });
+        scheduleRepository
+            .Setup(repository => repository.Update(It.IsAny<PublishingSchedule>()));
+        scheduleRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
 
         var mediator = new Mock<IMediator>();
         mediator
@@ -39,12 +65,14 @@ public sealed class ScheduledPostDispatchServiceTests
                     command.Targets[0].PostId == postId &&
                     command.Targets[0].SocialMediaIds.Count == 1 &&
                     command.Targets[0].SocialMediaIds[0] == socialMediaId &&
-                    command.Targets[0].IsPrivate == true),
+                    command.Targets[0].IsPrivate == true &&
+                    command.Targets[0].PublishingScheduleId == scheduleId),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new PublishPostsResponse([])));
 
         var service = new ScheduledPostDispatchService(
             postRepository.Object,
+            scheduleRepository.Object,
             mediator.Object,
             Mock.Of<ILogger<ScheduledPostDispatchService>>());
 
@@ -59,6 +87,7 @@ public sealed class ScheduledPostDispatchServiceTests
     {
         var postId = Guid.NewGuid();
         var userId = Guid.NewGuid();
+        var scheduleId = Guid.NewGuid();
 
         var postRepository = new Mock<IPostRepository>();
         postRepository
@@ -68,8 +97,31 @@ public sealed class ScheduledPostDispatchServiceTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(
             [
-                new ScheduledPostDispatchCandidate(postId, userId, [Guid.NewGuid()], null)
+                new ScheduledPostDispatchCandidate(postId, userId, [Guid.NewGuid()], null, scheduleId)
             ]);
+
+        var scheduleRepository = new Mock<IPublishingScheduleRepository>();
+        scheduleRepository
+            .Setup(repository => repository.GetByIdForUpdateAsync(scheduleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PublishingSchedule
+            {
+                Id = scheduleId,
+                Items =
+                [
+                    new PublishingScheduleItem
+                    {
+                        Id = Guid.NewGuid(),
+                        ScheduleId = scheduleId,
+                        ItemId = postId,
+                        ItemType = PublishingScheduleState.ItemTypePost
+                    }
+                ]
+            });
+        scheduleRepository
+            .Setup(repository => repository.Update(It.IsAny<PublishingSchedule>()));
+        scheduleRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
 
         var mediator = new Mock<IMediator>();
         mediator
@@ -81,6 +133,7 @@ public sealed class ScheduledPostDispatchServiceTests
 
         var service = new ScheduledPostDispatchService(
             postRepository.Object,
+            scheduleRepository.Object,
             mediator.Object,
             Mock.Of<ILogger<ScheduledPostDispatchService>>());
 

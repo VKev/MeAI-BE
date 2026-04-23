@@ -17,7 +17,8 @@ public sealed record PublishPostsCommand(
 public sealed record PublishPostTargetInput(
     Guid PostId,
     IReadOnlyList<Guid> SocialMediaIds,
-    bool? IsPrivate = null);
+    bool? IsPrivate = null,
+    Guid? PublishingScheduleId = null);
 
 public sealed class PublishPostsCommandHandler
     : IRequestHandler<PublishPostsCommand, Result<PublishPostsResponse>>
@@ -162,6 +163,7 @@ public sealed class PublishPostsCommandHandler
                     PostId = post.Id,
                     SocialMediaId = socialMediaId,
                     PublicationId = publicationId,
+                    PublishingScheduleId = target.PublishingScheduleId ?? post.ScheduleGroupId,
                     SocialMediaType = socialMedia.Type,
                     IsPrivate = target.IsPrivate,
                     AttemptNumber = 1,
@@ -279,14 +281,28 @@ public sealed class PublishPostsCommandHandler
                     new Error("Post.PublishPrivacyConflict", "Conflicting isPrivate values were provided for the same post."));
             }
 
+            if (normalizedByPostId.TryGetValue(target.PostId, out existing) &&
+                existing.PublishingScheduleId.HasValue &&
+                target.PublishingScheduleId.HasValue &&
+                existing.PublishingScheduleId.Value != target.PublishingScheduleId.Value)
+            {
+                return Result.Failure<IReadOnlyList<PublishPostTargetInput>>(
+                    new Error("Post.PublishScheduleConflict", "Conflicting publishingScheduleId values were provided for the same post."));
+            }
+
             if (!normalizedByPostId.TryGetValue(target.PostId, out existing))
             {
-                existing = new NormalizedPublishTarget(target.IsPrivate);
+                existing = new NormalizedPublishTarget(target.IsPrivate, target.PublishingScheduleId);
                 normalizedByPostId[target.PostId] = existing;
             }
             else if (!existing.IsPrivate.HasValue && target.IsPrivate.HasValue)
             {
                 existing.IsPrivate = target.IsPrivate.Value;
+            }
+
+            if (!existing.PublishingScheduleId.HasValue && target.PublishingScheduleId.HasValue)
+            {
+                existing.PublishingScheduleId = target.PublishingScheduleId.Value;
             }
 
             foreach (var socialMediaId in socialMediaIds)
@@ -300,20 +316,24 @@ public sealed class PublishPostsCommandHandler
                 .Select(item => new PublishPostTargetInput(
                     item.Key,
                     item.Value.SocialMediaIds.ToList(),
-                    item.Value.IsPrivate))
+                    item.Value.IsPrivate,
+                    item.Value.PublishingScheduleId))
                 .ToList());
     }
 
     private sealed class NormalizedPublishTarget
     {
-        public NormalizedPublishTarget(bool? isPrivate)
+        public NormalizedPublishTarget(bool? isPrivate, Guid? publishingScheduleId)
         {
             IsPrivate = isPrivate;
+            PublishingScheduleId = publishingScheduleId;
         }
 
         public HashSet<Guid> SocialMediaIds { get; } = [];
 
         public bool? IsPrivate { get; set; }
+
+        public Guid? PublishingScheduleId { get; set; }
     }
 
     private static void ClearSchedule(Post post)

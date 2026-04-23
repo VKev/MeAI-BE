@@ -49,6 +49,30 @@ public sealed class PostRepository : IPostRepository
         return await _dbSet.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Post>> GetByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return Array.Empty<Post>();
+        }
+
+        return await _dbSet.AsNoTracking()
+            .Where(post => ids.Contains(post.Id) && post.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<Post>> GetByIdsForUpdateAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await _dbSet
+            .Where(post => ids.Contains(post.Id) && post.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Post>> GetByUserIdAsync(
         Guid userId,
         DateTime? cursorCreatedAt,
@@ -140,7 +164,8 @@ public sealed class PostRepository : IPostRepository
                         id,
                         user_id,
                         scheduled_social_media_ids,
-                        scheduled_is_private
+                        scheduled_is_private,
+                        schedule_group_id
                     FROM posts
                     WHERE deleted_at IS NULL
                       AND workspace_id IS NOT NULL
@@ -168,7 +193,8 @@ public sealed class PostRepository : IPostRepository
                     due.id,
                     due.user_id,
                     due.scheduled_social_media_ids,
-                    due.scheduled_is_private;
+                    due.scheduled_is_private,
+                    due.schedule_group_id;
                 """;
 
             command.Parameters.Add(new NpgsqlParameter("scheduled_status", NpgsqlDbType.Text) { Value = ScheduledStatus });
@@ -185,7 +211,8 @@ public sealed class PostRepository : IPostRepository
                     reader.GetGuid(0),
                     reader.GetGuid(1),
                     reader.GetFieldValue<Guid[]>(2),
-                    reader.IsDBNull(3) ? null : reader.GetBoolean(3)));
+                    reader.IsDBNull(3) ? null : reader.GetBoolean(3),
+                    reader.IsDBNull(4) ? null : reader.GetGuid(4)));
             }
 
             return claimed;

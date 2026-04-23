@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Instagram;
+using Application.PublishingSchedules;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
 using Application.Abstractions.Threads;
@@ -29,6 +30,7 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
     private const int MaxAttempts = 3;
 
     private readonly IPostRepository _postRepository;
+    private readonly IPublishingScheduleRepository _publishingScheduleRepository;
     private readonly IPostPublicationRepository _postPublicationRepository;
     private readonly IUserResourceService _userResourceService;
     private readonly IUserSocialMediaService _userSocialMediaService;
@@ -40,6 +42,7 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
 
     public PublishToTargetConsumer(
         IPostRepository postRepository,
+        IPublishingScheduleRepository publishingScheduleRepository,
         IPostPublicationRepository postPublicationRepository,
         IUserResourceService userResourceService,
         IUserSocialMediaService userSocialMediaService,
@@ -50,6 +53,7 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         ILogger<PublishToTargetConsumer> logger)
     {
         _postRepository = postRepository;
+        _publishingScheduleRepository = publishingScheduleRepository;
         _postPublicationRepository = postPublicationRepository;
         _userResourceService = userResourceService;
         _userSocialMediaService = userSocialMediaService;
@@ -118,7 +122,7 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         var resourceIds = ExtractResourceIds(post.Content);
         IReadOnlyList<UserResourcePresignResult> presignedResources = Array.Empty<UserResourcePresignResult>();
 
-        var requiresResources = !string.Equals(socialMedia.Type, ThreadsType, StringComparison.OrdinalIgnoreCase);
+        var requiresResources = RequiresResources(socialMedia.Type, post.Content?.PostType);
         if (requiresResources || resourceIds.Count > 0)
         {
             if (resourceIds.Count == 0)
@@ -349,6 +353,15 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         _postRepository.Update(post);
         await _postRepository.SaveChangesAsync(cancellationToken);
 
+        if (message.PublishingScheduleId.HasValue)
+        {
+            await UpdatePublishingScheduleAsync(
+                message.PublishingScheduleId.Value,
+                post.Id,
+                finalStatus,
+                cancellationToken);
+        }
+
         // Emit one target per destination owner so the FE can render per-page identity on
         // Facebook (fan-out to multiple pages) while still collapsing to a single row for
         // single-destination platforms like TikTok/Threads. The FE maps destinationOwnerId
@@ -393,6 +406,65 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
             "Post batch finalized. PostId: {PostId}, Status: {Status}",
             post.Id,
             finalStatus);
+    }
+
+    private async Task UpdatePublishingScheduleAsync(
+        Guid scheduleId,
+        Guid postId,
+        string finalStatus,
+        CancellationToken cancellationToken)
+    {
+        var schedule = await _publishingScheduleRepository.GetByIdForUpdateAsync(scheduleId, cancellationToken);
+        if (schedule is null || schedule.DeletedAt.HasValue)
+        {
+            return;
+        }
+
+        var now = DateTimeExtensions.PostgreSqlUtcNow;
+        schedule.LastExecutionAt = now;
+        schedule.UpdatedAt = now;
+        schedule.ErrorCode = null;
+
+        var item = schedule.Items.FirstOrDefault(existing =>
+            !existing.DeletedAt.HasValue &&
+            existing.ItemId == postId &&
+            string.Equals(existing.ItemType, PublishingScheduleState.ItemTypePost, StringComparison.OrdinalIgnoreCase));
+
+        if (item is not null)
+        {
+            item.Status = string.Equals(finalStatus, PublishedStatus, StringComparison.OrdinalIgnoreCase)
+                ? PublishingScheduleState.ItemStatusPublished
+                : PublishingScheduleState.ItemStatusFailed;
+            item.ErrorMessage = string.Equals(finalStatus, PublishedStatus, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : "Post publishing failed.";
+            item.LastExecutionAt = now;
+            item.UpdatedAt = now;
+        }
+
+        var activeItems = schedule.Items.Where(existing => !existing.DeletedAt.HasValue).ToList();
+        if (activeItems.Count > 0 && activeItems.All(existing =>
+                string.Equals(existing.Status, PublishingScheduleState.ItemStatusPublished, StringComparison.OrdinalIgnoreCase)))
+        {
+            schedule.Status = PublishingScheduleState.StatusCompleted;
+            schedule.ErrorMessage = null;
+        }
+        else if (activeItems.Any(existing =>
+                     string.Equals(existing.Status, PublishingScheduleState.ItemStatusPublishing, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(existing.Status, PublishingScheduleState.ItemStatusScheduled, StringComparison.OrdinalIgnoreCase)))
+        {
+            schedule.Status = PublishingScheduleState.StatusPublishing;
+        }
+        else if (activeItems.Any(existing =>
+                     string.Equals(existing.Status, PublishingScheduleState.ItemStatusFailed, StringComparison.OrdinalIgnoreCase)))
+        {
+            schedule.Status = PublishingScheduleState.StatusFailed;
+            schedule.ErrorCode = "PublishingSchedule.ItemFailed";
+            schedule.ErrorMessage = "One or more schedule items failed to publish.";
+        }
+
+        _publishingScheduleRepository.Update(schedule);
+        await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<Result<IReadOnlyList<(string PageId, string ExternalId)>>> PublishToSocialMediaAsync(
@@ -619,6 +691,22 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         {
             return null;
         }
+    }
+
+    private static bool RequiresResources(string? platform, string? postType)
+    {
+        if (string.Equals(platform, ThreadsType, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.Equals(platform, FacebookType, StringComparison.OrdinalIgnoreCase))
+        {
+            var normalizedPostType = (postType ?? string.Empty).Trim().ToLowerInvariant();
+            return normalizedPostType is "reel" or "reels" or "video";
+        }
+
+        return true;
     }
 
     private static string? GetMetadataValue(JsonDocument? metadata, string key)
