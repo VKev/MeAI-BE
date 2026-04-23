@@ -957,7 +957,8 @@ Khi phase 2 hoàn thành, backend phải có tối thiểu:
   - `Backend/Compose/n8n-local/workflows/meai-web-search.json`;
 - đã thêm hướng dẫn import/cấu hình workflow tại:
   - `Backend/Compose/n8n-local/README.md`;
-- đã thêm cấu hình compose cho `Ai.Microservice` và `n8n` để local stack có thể truyền `N8n__*` options và `BRAVE_SEARCH_API_KEY`.
+- đã thêm cấu hình compose cho `Ai.Microservice` và `n8n` để local stack có thể truyền `N8n__*` options và `BRAVE_SEARCH_API_KEY`;
+- đã chuyển `n8n` local/prod-like compose sang auto-import workflow JSON qua service `n8n-import` trước khi `n8n` start, thay vì chỉ mount file.
 
 ### Chưa nằm trong phase 3
 

@@ -299,10 +299,29 @@ services:
       timeout: 5s
       retries: 5
 
+  n8n-import:
+    image: n8nio/n8n:latest
+    container_name: n8n-import
+    restart: "no"
+    command:
+      - import:workflow
+      - --separate
+      - --input=/workspace/n8n-local/workflows
+    environment:
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: true
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n-local:/workspace/n8n-local:ro
+    networks:
+      - app-network
+
   n8n:
     image: n8nio/n8n:latest
     container_name: n8n
     restart: unless-stopped
+    depends_on:
+      n8n-import:
+        condition: service_completed_successfully
     environment:
       N8N_HOST: 0.0.0.0
       N8N_PORT: 5678
