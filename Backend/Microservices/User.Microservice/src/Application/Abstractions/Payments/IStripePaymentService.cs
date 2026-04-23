@@ -2,6 +2,12 @@ namespace Application.Abstractions.Payments;
 
 public interface IStripePaymentService
 {
+    Task<StripeCustomerResult> CreateCustomerAsync(
+        string? customerEmail,
+        string? customerName,
+        IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default);
+
     Task<StripeCatalogPriceResult> EnsureRecurringPriceAsync(
         string? stripeProductId,
         string? stripePriceId,
@@ -12,6 +18,7 @@ public interface IStripePaymentService
 
     Task<StripeRecurringSubscriptionResult> CreateSubscriptionAsync(
         string stripePriceId,
+        string? stripeCustomerId,
         string? customerEmail,
         string? customerName,
         IDictionary<string, string> metadata,
@@ -52,10 +59,28 @@ public interface IStripePaymentService
         IDictionary<string, string> metadata,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<StripeCardResult>> GetCustomerCardsAsync(
+        string stripeCustomerId,
+        string? stripeSubscriptionId,
+        CancellationToken cancellationToken = default);
+
+    Task<StripeCardSetupIntentResult> CreateCardSetupIntentAsync(
+        string stripeCustomerId,
+        IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default);
+
+    Task<StripeCardResult> SetDefaultCardAsync(
+        string stripeCustomerId,
+        string paymentMethodId,
+        IEnumerable<string> stripeSubscriptionIds,
+        CancellationToken cancellationToken = default);
 }
+
+public sealed record StripeCustomerResult(string StripeCustomerId);
 
 public sealed record StripeRecurringSubscriptionResult(
     string StripeSubscriptionId,
+    string StripeCustomerId,
     string Status,
     string? PaymentIntentId,
     string? ClientSecret,
@@ -77,6 +102,7 @@ public sealed record StripeScheduledChangeResult(
 
 public sealed record StripeSubscriptionSnapshotResult(
     string StripeSubscriptionId,
+    string StripeCustomerId,
     string Status,
     string? LatestInvoiceId,
     string? ClientSecret,
@@ -98,3 +124,20 @@ public sealed record StripeAutoRenewUpdateResult(
     string Status,
     string? StripeScheduleId,
     DateTime? CurrentPeriodEnd);
+
+public sealed record StripeCardResult(
+    string PaymentMethodId,
+    string? Brand,
+    string? Last4,
+    long? ExpMonth,
+    long? ExpYear,
+    string? Funding,
+    string? Country,
+    string? CardholderName,
+    bool IsDefault,
+    bool IsExpired);
+
+public sealed record StripeCardSetupIntentResult(
+    string SetupIntentId,
+    string ClientSecret,
+    string StripeCustomerId);

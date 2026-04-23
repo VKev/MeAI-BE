@@ -28,6 +28,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         entity.Property(e => e.Birthday).HasColumnName("birthday").HasColumnType("date");
         entity.Property(e => e.PhoneNumber).HasColumnName("phone_number");
         entity.Property(e => e.Provider).HasColumnName("provider");
+        entity.Property(e => e.StripeCustomerId).HasColumnName("stripe_customer_id");
         entity.Property(e => e.AvatarResourceId).HasColumnName("avatar_resource_id");
         entity.Property(e => e.Address).HasColumnName("address");
         entity.Property(e => e.MeAiCoin)
