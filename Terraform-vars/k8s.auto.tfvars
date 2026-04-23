@@ -379,6 +379,8 @@ spec:
               value: "Asia/Ho_Chi_Minh"
             - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
               value: "true"
+            - name: N8N_BLOCK_ENV_ACCESS_IN_NODE
+              value: "false"
             - name: N8N_DIAGNOSTICS_ENABLED
               value: "false"
             - name: N8N_VERSION_NOTIFICATIONS_ENABLED
@@ -397,6 +399,8 @@ spec:
               value: "http://localhost:5678/n8n/"
             - name: VUE_APP_URL_BASE_API
               value: "http://localhost:5678/n8n/"
+            - name: BRAVE_SEARCH_API_KEY
+              value: "change-me"
           resources:
             requests:
               cpu: 150m

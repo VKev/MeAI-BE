@@ -15,4 +15,8 @@ public sealed class N8nOptions
     public string RuntimeCallbackPath { get; set; } = "/api/Ai/internal/agent-schedules/runtime-result";
 
     public string InternalCallbackToken { get; set; } = "change-me";
+
+    public int WebSearchTimeoutSeconds { get; set; } = 6;
+
+    public int RegisterTimeoutSeconds { get; set; } = 6;
 }

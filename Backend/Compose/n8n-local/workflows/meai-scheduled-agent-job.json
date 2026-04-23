@@ -37,7 +37,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $json;\nconst search = body.search ?? {};\nconst callback = body.callback ?? {};\nconst query = String(search.queryTemplate ?? '').trim();\nif (!query) {\n  throw new Error('search.queryTemplate is required');\n}\nif (!body.executeAtUtc) {\n  throw new Error('executeAtUtc is required');\n}\nif (!callback.url || !callback.token) {\n  throw new Error('callback.url and callback.token are required');\n}\nreturn [{ json: {\n  ...body,\n  search: {\n    queryTemplate: query,\n    country: search.country ?? null,\n    searchLang: search.searchLang ?? null,\n    count: Number(search.count ?? 5),\n    freshness: search.freshness ?? null\n  },\n  callback\n} }];"
+        "jsCode": "const input = $json;\nconst payload = input.body ?? input;\nconst body = typeof payload === 'string' ? JSON.parse(payload) : payload;\nconst search = body.search ?? {};\nconst callback = body.callback ?? {};\nconst query = String(search.queryTemplate ?? '').trim();\nif (!query) {\n  throw new Error('search.queryTemplate is required');\n}\nif (!body.executeAtUtc) {\n  throw new Error('executeAtUtc is required');\n}\nif (!callback.url || !callback.token) {\n  throw new Error('callback.url and callback.token are required');\n}\nconst requestedCount = Number(search.count ?? 5);\nconst count = Number.isFinite(requestedCount) && requestedCount > 0\n  ? Math.min(Math.trunc(requestedCount), 20)\n  : 5;\nconst queryParts = [];\nconst appendQuery = (name, value, transform = (text) => text) => {\n  const text = String(value ?? '').trim();\n  if (!text || ['null', 'undefined'].includes(text.toLowerCase())) {\n    return;\n  }\n  queryParts.push(`${name}=${encodeURIComponent(transform(text))}`);\n};\nappendQuery('q', query);\nappendQuery('count', count);\nappendQuery('country', search.country, (text) => text.toUpperCase());\nappendQuery('search_lang', search.searchLang, (text) => text.toLowerCase());\nappendQuery('freshness', search.freshness);\nconst braveSearchUrl = `https://api.search.brave.com/res/v1/web/search?${queryParts.join('&')}`;\nreturn [{ json: {\n  ...body,\n  search: {\n    queryTemplate: query,\n    country: search.country ?? null,\n    searchLang: search.searchLang ?? null,\n    count,\n    freshness: search.freshness ?? null,\n    braveSearchUrl\n  },\n  callback\n} }];"
       },
       "id": "prepare-job-context",
       "name": "Prepare Job Context",
@@ -65,32 +65,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.search.brave.com/res/v1/web/search",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "q",
-              "value": "={{$json.search.queryTemplate}}"
-            },
-            {
-              "name": "count",
-              "value": "={{String($json.search.count ?? 5)}}"
-            },
-            {
-              "name": "country",
-              "value": "={{$json.search.country || ''}}"
-            },
-            {
-              "name": "search_lang",
-              "value": "={{$json.search.searchLang || ''}}"
-            },
-            {
-              "name": "freshness",
-              "value": "={{$json.search.freshness || ''}}"
-            }
-          ]
-        },
+        "url": "={{$json.search.braveSearchUrl}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

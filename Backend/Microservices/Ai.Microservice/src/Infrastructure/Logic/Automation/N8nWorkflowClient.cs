@@ -3,6 +3,7 @@ using System.Text.Json;
 using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Automation;
 using Infrastructure.Configs;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedLibrary.Common.ResponseModel;
 
@@ -18,15 +19,18 @@ public sealed class N8nWorkflowClient : IN8nWorkflowClient
     private readonly HttpClient _httpClient;
     private readonly N8nOptions _options;
     private readonly IApiCredentialProvider _credentialProvider;
+    private readonly ILogger<N8nWorkflowClient> _logger;
 
     public N8nWorkflowClient(
         IHttpClientFactory httpClientFactory,
         IOptions<N8nOptions> options,
-        IApiCredentialProvider credentialProvider)
+        IApiCredentialProvider credentialProvider,
+        ILogger<N8nWorkflowClient> logger)
     {
         _httpClient = httpClientFactory.CreateClient("n8n");
         _options = options.Value;
         _credentialProvider = credentialProvider;
+        _logger = logger;
     }
 
     public async Task<Result<N8nScheduledAgentJobAck>> RegisterScheduledAgentJobAsync(
@@ -56,23 +60,42 @@ public sealed class N8nWorkflowClient : IN8nWorkflowClient
             }
         };
 
-        var response = await _httpClient.PostAsJsonAsync(
-            BuildUrl(_options.ScheduledAgentJobPath),
-            payload,
-            JsonOptions,
-            cancellationToken);
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        using var requestCts = CreateTimeoutTokenSource(_options.RegisterTimeoutSeconds, cancellationToken);
+        try
         {
-            return Result.Failure<N8nScheduledAgentJobAck>(
-                new Error("N8n.RegisterFailed", $"n8n scheduled agent job registration failed with status {(int)response.StatusCode}: {body}"));
-        }
+            var response = await _httpClient.PostAsJsonAsync(
+                BuildUrl(_options.ScheduledAgentJobPath),
+                payload,
+                JsonOptions,
+                requestCts.Token);
 
-        var parsed = TryDeserialize<N8nAckPayload>(body);
-        return Result.Success(new N8nScheduledAgentJobAck(
-            parsed?.ExecutionId,
-            parsed?.AcceptedAtUtc ?? DateTime.UtcNow));
+            var body = await response.Content.ReadAsStringAsync(requestCts.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                return Result.Failure<N8nScheduledAgentJobAck>(
+                    new Error("N8n.RegisterFailed", $"n8n scheduled agent job registration failed with status {(int)response.StatusCode}: {body}"));
+            }
+
+            var parsed = TryDeserialize<N8nAckPayload>(body);
+            return Result.Success(new N8nScheduledAgentJobAck(
+                parsed?.ExecutionId,
+                parsed?.AcceptedAtUtc ?? DateTime.UtcNow));
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "n8n scheduled job registration timed out after {TimeoutSeconds}s. BaseUrl: {BaseUrl}",
+                _options.RegisterTimeoutSeconds,
+                _options.BaseUrl);
+            return Result.Failure<N8nScheduledAgentJobAck>(
+                new Error("N8n.RegisterTimeout", $"n8n scheduled agent job registration timed out after {_options.RegisterTimeoutSeconds} seconds."));
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "n8n scheduled job registration failed to reach {BaseUrl}", _options.BaseUrl);
+            return Result.Failure<N8nScheduledAgentJobAck>(
+                new Error("N8n.Unreachable", $"n8n is unreachable at {_options.BaseUrl}. {ex.Message}"));
+        }
     }
 
     public async Task<Result<N8nWebSearchResponse>> WebSearchAsync(
@@ -90,35 +113,54 @@ public sealed class N8nWorkflowClient : IN8nWorkflowClient
             executeAtUtc = request.ExecuteAtUtc
         };
 
-        var response = await _httpClient.PostAsJsonAsync(
-            BuildUrl(_options.WebSearchPath),
-            payload,
-            JsonOptions,
-            cancellationToken);
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        using var requestCts = CreateTimeoutTokenSource(_options.WebSearchTimeoutSeconds, cancellationToken);
+        try
         {
-            return Result.Failure<N8nWebSearchResponse>(
-                new Error("N8n.WebSearchFailed", $"n8n web search failed with status {(int)response.StatusCode}: {body}"));
-        }
+            var response = await _httpClient.PostAsJsonAsync(
+                BuildUrl(_options.WebSearchPath),
+                payload,
+                JsonOptions,
+                requestCts.Token);
 
-        var parsed = TryDeserialize<N8nWebSearchPayload>(body);
-        if (parsed is null)
+            var body = await response.Content.ReadAsStringAsync(requestCts.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                return Result.Failure<N8nWebSearchResponse>(
+                    new Error("N8n.WebSearchFailed", $"n8n web search failed with status {(int)response.StatusCode}: {body}"));
+            }
+
+            var parsed = TryDeserialize<N8nWebSearchPayload>(body);
+            if (parsed is null)
+            {
+                return Result.Failure<N8nWebSearchResponse>(
+                    new Error("N8n.WebSearchInvalidResponse", "n8n web search response could not be parsed."));
+            }
+
+            return Result.Success(new N8nWebSearchResponse(
+                parsed.Query ?? request.QueryTemplate,
+                parsed.RetrievedAtUtc ?? DateTime.UtcNow,
+                parsed.Results?.Select(item => new N8nWebSearchResultItem(
+                    item.Title,
+                    item.Url,
+                    item.Description,
+                    item.Source)).ToList() ?? [],
+                parsed.LlmContext));
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            _logger.LogWarning(
+                "n8n web search timed out after {TimeoutSeconds}s. BaseUrl: {BaseUrl}",
+                _options.WebSearchTimeoutSeconds,
+                _options.BaseUrl);
             return Result.Failure<N8nWebSearchResponse>(
-                new Error("N8n.WebSearchInvalidResponse", "n8n web search response could not be parsed."));
+                new Error("N8n.WebSearchTimeout", $"n8n web search timed out after {_options.WebSearchTimeoutSeconds} seconds."));
         }
-
-        return Result.Success(new N8nWebSearchResponse(
-            parsed.Query ?? request.QueryTemplate,
-            parsed.RetrievedAtUtc ?? DateTime.UtcNow,
-            parsed.Results?.Select(item => new N8nWebSearchResultItem(
-                item.Title,
-                item.Url,
-                item.Description,
-                item.Source)).ToList() ?? [],
-            parsed.LlmContext));
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "n8n web search failed to reach {BaseUrl}", _options.BaseUrl);
+            return Result.Failure<N8nWebSearchResponse>(
+                new Error("N8n.Unreachable", $"n8n is unreachable at {_options.BaseUrl}. {ex.Message}"));
+        }
     }
 
     private string BuildRuntimeCallbackUrl()
@@ -146,6 +188,14 @@ public sealed class N8nWorkflowClient : IN8nWorkflowClient
         {
             return default;
         }
+    }
+
+    private static CancellationTokenSource CreateTimeoutTokenSource(int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        var safeTimeout = Math.Max(1, timeoutSeconds);
+        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linkedCts.CancelAfter(TimeSpan.FromSeconds(safeTimeout));
+        return linkedCts;
     }
 
     private sealed class N8nAckPayload

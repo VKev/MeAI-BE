@@ -540,7 +540,7 @@ Các node:
 
 Lưu ý:
 
-- do repo đang expose `n8n` dưới prefix `/n8n/`, public webhook path thực tế thường sẽ là `/n8n/webhook/meai/scheduled-agent-job`;
+- do repo đang expose `n8n` dưới prefix `/n8n/`, public webhook path thực tế thường sẽ là `/n8n/webhook-test/meai/scheduled-agent-job`;
 - không để response của webhook chờ đến khi `Wait` hoàn thành.
 
 Payload vào workflow A:
@@ -958,7 +958,8 @@ Khi phase 2 hoàn thành, backend phải có tối thiểu:
 - đã thêm hướng dẫn import/cấu hình workflow tại:
   - `Backend/Compose/n8n-local/README.md`;
 - đã thêm cấu hình compose cho `Ai.Microservice` và `n8n` để local stack có thể truyền `N8n__*` options và `BRAVE_SEARCH_API_KEY`;
-- đã chuyển `n8n` local/prod-like compose sang auto-import workflow JSON qua service `n8n-import` trước khi `n8n` start, thay vì chỉ mount file.
+- đã chuyển `n8n` local/prod-like compose sang auto-import workflow JSON qua service `n8n-import`, rồi auto-activate workflow bằng CLI trước khi `n8n` start;
+- lý do cần bước activate riêng: `n8n import:workflow` có thể import workflow về trạng thái inactive dù JSON có `active: true`; nếu không activate lại, production webhook `/webhook/...` sẽ trả `404`.
 
 ## Hướng dẫn FE tích hợp API
 
@@ -1262,6 +1263,7 @@ Sau phase 3, repo đã có đủ backend foundation cho toàn bộ trục này:
 - `n8n` workflow artifacts để chờ đến giờ rồi lấy dữ liệu web;
 - callback runtime về `Ai.Microservice`;
 - publish pipeline đủ để chạy use case text-only Facebook post.
+- khi `n8n` hoặc web search không reachable, `Ai.Microservice` hiện fail-fast bằng timeout ngắn và trả error code rõ (`N8n.Unreachable`, `N8n.WebSearchTimeout`, `N8n.RegisterTimeout`) thay vì treo request quá lâu.
 
 Phần còn lại chủ yếu là hardening và productization:
 

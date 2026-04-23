@@ -315,12 +315,48 @@ services:
     networks:
       - app-network
 
+  n8n-activate-scheduled-agent-job:
+    image: n8nio/n8n:latest
+    container_name: n8n-activate-scheduled-agent-job
+    restart: "no"
+    command:
+      - update:workflow
+      - --id=meai-scheduled-agent-job
+      - --active=true
+    environment:
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: true
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      n8n-import:
+        condition: service_completed_successfully
+    networks:
+      - app-network
+
+  n8n-activate-web-search:
+    image: n8nio/n8n:latest
+    container_name: n8n-activate-web-search
+    restart: "no"
+    command:
+      - update:workflow
+      - --id=meai-web-search
+      - --active=true
+    environment:
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: true
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      n8n-activate-scheduled-agent-job:
+        condition: service_completed_successfully
+    networks:
+      - app-network
+
   n8n:
     image: n8nio/n8n:latest
     container_name: n8n
     restart: unless-stopped
     depends_on:
-      n8n-import:
+      n8n-activate-web-search:
         condition: service_completed_successfully
     environment:
       N8N_HOST: 0.0.0.0
@@ -331,6 +367,7 @@ services:
       GENERIC_TIMEZONE: Asia/Ho_Chi_Minh
       TZ: Asia/Ho_Chi_Minh
       N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: true
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: false
       N8N_DIAGNOSTICS_ENABLED: false
       N8N_VERSION_NOTIFICATIONS_ENABLED: false
       N8N_TEMPLATES_ENABLED: false

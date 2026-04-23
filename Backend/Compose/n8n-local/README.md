@@ -16,7 +16,7 @@ Thư mục này chứa 2 workflow phục vụ `FR-U8`:
 ## Cách dùng local
 
 1. Chạy stack compose có `n8n`.
-2. `docker compose` sẽ chạy service `n8n-import` để import toàn bộ file JSON trong `workflows/` trước khi `n8n` start.
+2. `docker compose` sẽ chạy service `n8n-import` để import toàn bộ file JSON trong `workflows/`, sau đó chạy các service activate workflow trước khi `n8n` start.
 3. Mở `http://localhost:5678/n8n/` để kiểm tra chúng đã xuất hiện.
 4. Đảm bảo `Ai.Microservice` và `n8n` dùng cùng callback token.
 5. Nếu bạn thay đổi file JSON workflow, hãy rerun `n8n-import` hoặc recreate stack để import lại.
@@ -106,5 +106,6 @@ Response body:
 
 - Các workflow này cố tình giữ `Ai.Microservice` là source of truth.
 - `n8n` chỉ orchestration + web fetching, không publish social trực tiếp.
-- Compose hiện dùng service `n8n-import` với lệnh `import:workflow --separate --input=/workspace/n8n-local/workflows` để auto-import workflow trước khi `n8n` start.
+- Compose hiện dùng service `n8n-import` với lệnh `import:workflow --separate --input=/workspace/n8n-local/workflows` rồi chạy `update:workflow --active=true` cho từng workflow trước khi `n8n` start.
+- Lý do cần bước activate riêng: `n8n import:workflow` trên CLI có thể tự đưa workflow về inactive dù JSON có `active: true`; nếu không activate lại, production webhook `/webhook/...` sẽ trả `404`.
 - Nếu import workflow mà `n8n` version khác nhau làm lệch một vài node option nhỏ, hãy giữ nguyên shape và contract của payload ở trên.
