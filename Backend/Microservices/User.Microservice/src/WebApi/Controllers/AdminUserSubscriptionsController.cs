@@ -80,6 +80,28 @@ public sealed class AdminUserSubscriptionsController : ApiController
 
         return Ok(result);
     }
+
+    [HttpPost("{userSubscriptionId:guid}/auto-renew")]
+    [ProducesResponseType(typeof(Result<AdminUserSubscriptionResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetAutoRenew(
+        Guid userSubscriptionId,
+        [FromBody] SetAdminUserSubscriptionAutoRenewRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new SetAdminUserSubscriptionAutoRenewCommand(userSubscriptionId, request.Enabled, request.Reason),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
 }
 
 public sealed record UpdateUserSubscriptionStatusRequest(string Status, string Reason);
+
+public sealed record SetAdminUserSubscriptionAutoRenewRequest(bool Enabled, string Reason);

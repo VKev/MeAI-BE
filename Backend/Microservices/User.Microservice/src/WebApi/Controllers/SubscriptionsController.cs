@@ -80,6 +80,32 @@ public sealed class SubscriptionsController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("current/auto-renew")]
+    [Authorize]
+    [ProducesResponseType(typeof(Result<CurrentUserSubscriptionResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SetAutoRenew(
+        [FromBody] SetSubscriptionAutoRenewRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new SetSubscriptionAutoRenewCommand(userId, request.Enabled),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpPost("{subscriptionId:guid}/purchase")]
     [Authorize]
     [ProducesResponseType(typeof(Result<PurchaseSubscriptionResponse>), StatusCodes.Status200OK)]
@@ -172,6 +198,8 @@ public sealed record PatchSubscriptionRequest(
     SubscriptionLimits? Limits);
 
 public sealed record PurchaseSubscriptionRequest(string? PaymentMethodId, bool Renew);
+
+public sealed record SetSubscriptionAutoRenewRequest(bool Enabled);
 
 public sealed record ConfirmStripePurchaseRequest(
     string? PaymentIntentId,

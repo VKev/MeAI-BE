@@ -151,6 +151,12 @@ public sealed class GetAdminUserSubscriptionsQueryHandler
         Subscription? subscription,
         Transaction? payment)
     {
+        var isScheduled = SubscriptionHelpers.IsScheduledStatus(userSubscription.Status);
+        var autoRenewStatus = SubscriptionHelpers.ResolveAutoRenewStatus(
+            userSubscription,
+            subscription,
+            isScheduled);
+
         return new AdminUserSubscriptionResponse(
             userSubscription.Id,
             userSubscription.UserId,
@@ -173,6 +179,8 @@ public sealed class GetAdminUserSubscriptionsQueryHandler
             userSubscription.UpdatedAt,
             userSubscription.DeletedAt,
             userSubscription.StripeSubscriptionId,
-            userSubscription.StripeScheduleId);
+            userSubscription.StripeScheduleId,
+            autoRenewStatus == SubscriptionHelpers.AutoRenewEnabled,
+            autoRenewStatus);
     }
 }

@@ -15,6 +15,7 @@ public static class NotificationTypes
     public const string UserSubscriptionActivated = "user.subscription.activated";
     public const string UserSubscriptionRenewed = "user.subscription.renewed";
     public const string UserSubscriptionStatusChanged = "user.subscription.status_changed";
+    public const string UserSubscriptionAutoRenewChanged = "user.subscription.auto_renew_changed";
 
     public const string PostPublishTargetSubmitted = "post.publish.target_submitted";
     public const string PostPublishTargetCompleted = "post.publish.target_completed";
