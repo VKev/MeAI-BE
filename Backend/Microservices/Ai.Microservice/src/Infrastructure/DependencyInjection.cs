@@ -1,5 +1,6 @@
 using Application.Abstractions;
 using Application.Abstractions.Agents;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Automation;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Kie;
@@ -18,6 +19,7 @@ using Domain.Repositories;
 using Infrastructure.Logic.Consumers;
 using Infrastructure.Logic.Agents;
 using Infrastructure.Logic.Automation;
+using Infrastructure.Logic.ApiCredentials;
 using Infrastructure.Logic.Configs;
 using Infrastructure.Logic.Facebook;
 using Infrastructure.Logic.Feed;
@@ -48,6 +50,9 @@ namespace Infrastructure
         public static IServiceCollection AddInfrastructure(this IServiceCollection services)
         {
             services.AddMemoryCache();
+            services.AddSingleton<ApiCredentialCryptoService>();
+            services.AddSingleton<IApiCredentialProvider, ApiCredentialProvider>();
+            services.AddScoped<ApiCredentialSyncSeeder>();
             services.AddHttpClient<IVeoVideoService, VeoVideoService>();
             services.AddHttpClient<IKieImageService, KieImageService>();
             services.AddHttpClient<IKieFallbackCallbackService, KieFallbackCallbackService>();

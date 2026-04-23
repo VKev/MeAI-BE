@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Meta;
 using Microsoft.Extensions.Configuration;
@@ -19,31 +20,29 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
     private const string ProfileFields = "id,name,email,picture.type(large)";
     private const string PageFields = "id,name,access_token,fan_count,followers_count,posts.limit(0).summary(true)";
 
-    private readonly string _appId;
-    private readonly string _appSecret;
     private readonly string _redirectUri;
     private readonly string _scopes;
     private readonly HttpClient _httpClient;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    public FacebookOAuthService(IConfiguration configuration, IHttpClientFactory httpClientFactory)
+    public FacebookOAuthService(
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory,
+        IApiCredentialProvider credentialProvider)
     {
-        _appId = configuration["Facebook:AppId"]
-                 ?? throw new InvalidOperationException("Facebook:AppId is not configured");
-        _appSecret = configuration["Facebook:AppSecret"]
-                     ?? throw new InvalidOperationException("Facebook:AppSecret is not configured");
         _redirectUri = configuration["Facebook:RedirectUri"]
                        ?? throw new InvalidOperationException("Facebook:RedirectUri is not configured");
         var configuredScopes = configuration["Facebook:Scopes"];
         _scopes = string.IsNullOrWhiteSpace(configuredScopes)
             ? DefaultScopes
             : configuredScopes;
-
         _httpClient = httpClientFactory.CreateClient("Facebook");
+        _credentialProvider = credentialProvider;
     }
 
     public (string AuthorizationUrl, string State) GenerateAuthorizationUrl(Guid userId, string? scopes)
@@ -54,9 +53,10 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
 
         var state = BuildState(userId);
 
+        var appId = _credentialProvider.GetRequiredValue("Facebook", "AppId");
         var queryParams = new Dictionary<string, string>
         {
-            ["client_id"] = _appId,
+            ["client_id"] = appId,
             ["redirect_uri"] = _redirectUri,
             ["response_type"] = "code",
             ["state"] = state,
@@ -75,8 +75,10 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
     {
         try
         {
+            var appId = _credentialProvider.GetRequiredValue("Facebook", "AppId");
+            var appSecret = _credentialProvider.GetRequiredValue("Facebook", "AppSecret");
             var url =
-                $"{OAuthTokenEndpoint}?client_id={Uri.EscapeDataString(_appId)}&redirect_uri={Uri.EscapeDataString(_redirectUri)}&client_secret={Uri.EscapeDataString(_appSecret)}&code={Uri.EscapeDataString(code)}";
+                $"{OAuthTokenEndpoint}?client_id={Uri.EscapeDataString(appId)}&redirect_uri={Uri.EscapeDataString(_redirectUri)}&client_secret={Uri.EscapeDataString(appSecret)}&code={Uri.EscapeDataString(code)}";
 
             using var response = await _httpClient.GetAsync(url, cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -115,8 +117,10 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
     {
         try
         {
+            var appId = _credentialProvider.GetRequiredValue("Facebook", "AppId");
+            var appSecret = _credentialProvider.GetRequiredValue("Facebook", "AppSecret");
             var url =
-                $"{GraphApiBaseUrl}/debug_token?input_token={Uri.EscapeDataString(accessToken)}&access_token={_appId}|{_appSecret}";
+                $"{GraphApiBaseUrl}/debug_token?input_token={Uri.EscapeDataString(accessToken)}&access_token={appId}|{appSecret}";
 
             using var response = await _httpClient.GetAsync(url, cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -137,7 +141,7 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
             }
 
             if (!string.IsNullOrWhiteSpace(debugToken.AppId) &&
-                !string.Equals(debugToken.AppId, _appId, StringComparison.Ordinal))
+                !string.Equals(debugToken.AppId, appId, StringComparison.Ordinal))
             {
                 return Result.Failure<MetaDebugToken>(
                     new Error("Facebook.InvalidToken", "Invalid Facebook access token"));

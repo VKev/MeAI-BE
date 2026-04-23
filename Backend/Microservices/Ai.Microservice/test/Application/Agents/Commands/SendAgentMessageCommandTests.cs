@@ -105,7 +105,7 @@ public sealed class SendAgentMessageCommandTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new AgentChatCompletionResult(
                 "Scheduled. I will prepare the slot.",
-                "gemini-2.0-flash",
+                "gemini-3.1-flash-lite-preview",
                 ["get_user_workspaces", "get_linked_social_accounts"])));
 
         var handler = new SendAgentMessageCommandHandler(
@@ -127,14 +127,14 @@ public sealed class SendAgentMessageCommandTests
 
         var assistantMetadata = AgentMessageConfigSerializer.Parse(storedChats[1].Config);
         assistantMetadata.Role.Should().Be("assistant");
-        assistantMetadata.Model.Should().Be("gemini-2.0-flash");
+        assistantMetadata.Model.Should().Be("gemini-3.1-flash-lite-preview");
         assistantMetadata.ToolNames.Should().BeEquivalentTo(["get_user_workspaces", "get_linked_social_accounts"]);
 
         result.Value.SessionId.Should().Be(session.Id);
         result.Value.UserMessage.Role.Should().Be("user");
         result.Value.UserMessage.Content.Should().Be("Schedule a post for 5pm");
         result.Value.AssistantMessage.Role.Should().Be("assistant");
-        result.Value.AssistantMessage.Model.Should().Be("gemini-2.0-flash");
+        result.Value.AssistantMessage.Model.Should().Be("gemini-3.1-flash-lite-preview");
         result.Value.AssistantMessage.ToolNames.Should().BeEquivalentTo(["get_user_workspaces", "get_linked_social_accounts"]);
 
         session.UpdatedAt.Should().NotBeNull();

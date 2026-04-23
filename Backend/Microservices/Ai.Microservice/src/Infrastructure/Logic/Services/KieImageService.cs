@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Kie;
 using Infrastructure.Configs;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,7 @@ public sealed class KieImageService : IKieImageService
     private readonly HttpClient _httpClient;
     private readonly VeoOptions _options;
     private readonly ILogger<KieImageService> _logger;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -23,10 +25,12 @@ public sealed class KieImageService : IKieImageService
     public KieImageService(
         HttpClient httpClient,
         IOptions<VeoOptions> options,
+        IApiCredentialProvider credentialProvider,
         ILogger<KieImageService> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
+        _credentialProvider = credentialProvider;
         _logger = logger;
 
         _httpClient.BaseAddress = new Uri(_options.BaseUrl);
@@ -36,7 +40,8 @@ public sealed class KieImageService : IKieImageService
         KieGenerateRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        var apiKey = _credentialProvider.GetOptionalValue("Kie", "ApiKey");
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("Kie API key is not configured");
             return new KieGenerateResult(false, 401, "Kie API key is not configured", null);
@@ -59,7 +64,7 @@ public sealed class KieImageService : IKieImageService
         try
         {
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
+            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
             httpRequest.Content = JsonContent.Create(payload, payload.GetType(), options: JsonOptions);
 
             _logger.LogInformation("Sending image generation request to Kie API. Model: {Model}, Endpoint: {Endpoint}, AspectRatio: {AspectRatio}, Resolution: {Resolution}",
@@ -103,7 +108,8 @@ public sealed class KieImageService : IKieImageService
         string taskId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        var apiKey = _credentialProvider.GetOptionalValue("Kie", "ApiKey");
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("Kie API key is not configured");
             return new KieRecordInfoResult(false, 401, "Kie API key is not configured", null);
@@ -112,7 +118,7 @@ public sealed class KieImageService : IKieImageService
         try
         {
             using var httpRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/jobs/recordInfo?taskId={Uri.EscapeDataString(taskId)}");
-            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
+            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
             _logger.LogInformation("Querying image details for task {TaskId}", taskId);
 

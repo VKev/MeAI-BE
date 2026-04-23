@@ -16,6 +16,8 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<Config> Configs { get; set; }
 
+    public virtual DbSet<ApiCredential> ApiCredentials { get; set; }
+
     public virtual DbSet<EmailTemplate> EmailTemplates { get; set; }
 
     public virtual DbSet<EmailTemplateContent> EmailTemplateContents { get; set; }

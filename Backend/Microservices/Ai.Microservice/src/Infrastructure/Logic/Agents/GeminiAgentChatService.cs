@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using Application.Abstractions.Agents;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Automation;
 using Application.Abstractions.Configs;
 using Application.Abstractions.SocialMedias;
@@ -22,14 +23,13 @@ namespace Infrastructure.Logic.Agents;
 
 public sealed class GeminiAgentChatService : IAgentChatService
 {
-    private const string DefaultModel = "gemini-2.0-flash";
+    private const string DefaultModel = "gemini-3.1-flash-lite-preview";
     private const int MaxHistoryMessages = 20;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false
     };
 
-    private readonly Client _client;
     private readonly IConfiguration _configuration;
     private readonly IUserConfigService _userConfigService;
     private readonly IUserWorkspaceService _userWorkspaceService;
@@ -41,9 +41,11 @@ public sealed class GeminiAgentChatService : IAgentChatService
     private readonly IN8nWorkflowClient _n8nWorkflowClient;
     private readonly IMediator _mediator;
     private readonly ILogger<GeminiAgentChatService> _logger;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     public GeminiAgentChatService(
         IConfiguration configuration,
+        IApiCredentialProvider credentialProvider,
         IUserConfigService userConfigService,
         IUserWorkspaceService userWorkspaceService,
         IUserSocialMediaService userSocialMediaService,
@@ -56,6 +58,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
         ILogger<GeminiAgentChatService> logger)
     {
         _configuration = configuration;
+        _credentialProvider = credentialProvider;
         _userConfigService = userConfigService;
         _userWorkspaceService = userWorkspaceService;
         _userSocialMediaService = userSocialMediaService;
@@ -66,11 +69,6 @@ public sealed class GeminiAgentChatService : IAgentChatService
         _n8nWorkflowClient = n8nWorkflowClient;
         _mediator = mediator;
         _logger = logger;
-
-        var apiKey = configuration["Gemini:ApiKey"] ?? configuration["Gemini__ApiKey"];
-        _client = string.IsNullOrWhiteSpace(apiKey)
-            ? new Client()
-            : new Client(apiKey: apiKey);
     }
 
     public async Task<Result<AgentChatCompletionResult>> GenerateReplyAsync(
@@ -90,7 +88,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
             _n8nWorkflowClient,
             _mediator);
 
-        var chatClient = _client
+        var chatClient = CreateClient()
             .AsIChatClient(model)
             .AsBuilder()
             .UseFunctionInvocation()
@@ -238,6 +236,14 @@ public sealed class GeminiAgentChatService : IAgentChatService
 
              Current chat session workspace id: {workspaceId}
              """;
+    }
+
+    private Client CreateClient()
+    {
+        var apiKey = _credentialProvider.GetOptionalValue("Gemini", "ApiKey");
+        return string.IsNullOrWhiteSpace(apiKey)
+            ? new Client()
+            : new Client(apiKey: apiKey);
     }
 
     private sealed class AgentToolbox

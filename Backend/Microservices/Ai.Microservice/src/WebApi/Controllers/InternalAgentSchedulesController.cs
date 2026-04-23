@@ -1,10 +1,10 @@
 using Application.Abstractions.Automation;
+using Application.Abstractions.ApiCredentials;
 using Application.PublishingSchedules;
 using Application.PublishingSchedules.Commands;
 using Microsoft.AspNetCore.Authorization;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 
@@ -15,13 +15,13 @@ namespace WebApi.Controllers;
 [AllowAnonymous]
 public sealed class InternalAgentSchedulesController : ApiController
 {
-    private readonly IConfiguration _configuration;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     public InternalAgentSchedulesController(
         IMediator mediator,
-        IConfiguration configuration) : base(mediator)
+        IApiCredentialProvider credentialProvider) : base(mediator)
     {
-        _configuration = configuration;
+        _credentialProvider = credentialProvider;
     }
 
     [HttpPost("runtime-result")]
@@ -64,8 +64,7 @@ public sealed class InternalAgentSchedulesController : ApiController
 
     private bool IsAuthorized(string? authorizationHeader)
     {
-        var configuredToken = _configuration["N8n:InternalCallbackToken"]
-                              ?? _configuration["N8n__InternalCallbackToken"];
+        var configuredToken = _credentialProvider.GetOptionalValue("N8n", "InternalCallbackToken");
         if (string.IsNullOrWhiteSpace(configuredToken))
         {
             return false;

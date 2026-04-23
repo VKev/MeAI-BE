@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Automation;
 using Application.Abstractions.Configs;
 using Google.GenAI;
@@ -11,27 +12,24 @@ namespace Infrastructure.Logic.Automation;
 
 public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
 {
-    private const string DefaultModel = "gemini-2.0-flash";
+    private const string DefaultModel = "gemini-3.1-flash-lite-preview";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private readonly Client _client;
     private readonly IConfiguration _configuration;
     private readonly IUserConfigService _userConfigService;
     private readonly ILogger<AgenticRuntimeContentService> _logger;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     public AgenticRuntimeContentService(
         IConfiguration configuration,
+        IApiCredentialProvider credentialProvider,
         IUserConfigService userConfigService,
         ILogger<AgenticRuntimeContentService> logger)
     {
         _configuration = configuration;
+        _credentialProvider = credentialProvider;
         _userConfigService = userConfigService;
         _logger = logger;
-
-        var apiKey = configuration["Gemini:ApiKey"] ?? configuration["Gemini__ApiKey"];
-        _client = string.IsNullOrWhiteSpace(apiKey)
-            ? new Client()
-            : new Client(apiKey: apiKey);
     }
 
     public async Task<Result<AgenticRuntimePostDraft>> GeneratePostDraftAsync(
@@ -41,7 +39,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         try
         {
             var model = await ResolveModelAsync(cancellationToken);
-            var chatClient = _client
+            var chatClient = CreateClient()
                 .AsIChatClient(model)
                 .AsBuilder()
                 .Build();
@@ -164,6 +162,14 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             string.IsNullOrWhiteSpace(content) ? request.Search.Query : content,
             null,
             "posts");
+    }
+
+    private Client CreateClient()
+    {
+        var apiKey = _credentialProvider.GetOptionalValue("Gemini", "ApiKey");
+        return string.IsNullOrWhiteSpace(apiKey)
+            ? new Client()
+            : new Client(apiKey: apiKey);
     }
 
     private sealed class AgenticRuntimePostDraftPayload

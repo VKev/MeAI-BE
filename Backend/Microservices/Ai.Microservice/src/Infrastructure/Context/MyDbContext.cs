@@ -18,6 +18,8 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<ChatSession> ChatSessions { get; set; }
 
+    public virtual DbSet<ApiCredential> ApiCredentials { get; set; }
+
     public virtual DbSet<PublishingSchedule> PublishingSchedules { get; set; }
 
     public virtual DbSet<PublishingScheduleItem> PublishingScheduleItems { get; set; }

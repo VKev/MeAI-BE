@@ -92,7 +92,7 @@ public sealed class GetAgentSessionMessagesQueryTests
                 Prompt = "Assistant reply",
                 Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(
                     Role: "assistant",
-                    Model: "gemini-2.0-flash",
+                    Model: "gemini-3.1-flash-lite-preview",
                     ToolNames: ["get_posts"])),
                 CreatedAt = createdAt.AddMinutes(1)
             },
@@ -156,7 +156,7 @@ public sealed class GetAgentSessionMessagesQueryTests
         messages[1].ToolNames.Should().BeEmpty();
 
         messages[2].Role.Should().Be("assistant");
-        messages[2].Model.Should().Be("gemini-2.0-flash");
+        messages[2].Model.Should().Be("gemini-3.1-flash-lite-preview");
         messages[2].ToolNames.Should().BeEquivalentTo(["get_posts"]);
 
         chatSessionRepository.VerifyAll();

@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Automation;
 using Infrastructure.Configs;
 using Microsoft.Extensions.Options;
@@ -16,11 +17,16 @@ public sealed class N8nWorkflowClient : IN8nWorkflowClient
 
     private readonly HttpClient _httpClient;
     private readonly N8nOptions _options;
+    private readonly IApiCredentialProvider _credentialProvider;
 
-    public N8nWorkflowClient(IHttpClientFactory httpClientFactory, IOptions<N8nOptions> options)
+    public N8nWorkflowClient(
+        IHttpClientFactory httpClientFactory,
+        IOptions<N8nOptions> options,
+        IApiCredentialProvider credentialProvider)
     {
         _httpClient = httpClientFactory.CreateClient("n8n");
         _options = options.Value;
+        _credentialProvider = credentialProvider;
     }
 
     public async Task<Result<N8nScheduledAgentJobAck>> RegisterScheduledAgentJobAsync(
@@ -46,7 +52,7 @@ public sealed class N8nWorkflowClient : IN8nWorkflowClient
             callback = new
             {
                 url = BuildRuntimeCallbackUrl(),
-                token = _options.InternalCallbackToken
+                token = _credentialProvider.GetRequiredValue("N8n", "InternalCallbackToken")
             }
         };
 

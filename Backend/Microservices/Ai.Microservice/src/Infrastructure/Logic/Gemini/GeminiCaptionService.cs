@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Gemini;
 using Microsoft.Extensions.Configuration;
 using SharedLibrary.Common.ResponseModel;
@@ -13,10 +14,10 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
     private const string DefaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
     private const string DefaultModel = "gemini-3-flash-preview";
 
-    private readonly string _apiKey;
     private readonly string _baseUrl;
     private readonly string _defaultModel;
     private readonly HttpClient _httpClient;
+    private readonly IApiCredentialProvider _credentialProvider;
     private static readonly Regex HashtagSplitRegex = new(@"[\s,]+", RegexOptions.Compiled);
     private static readonly char[] SentenceTrimCharacters = [' ', '.', ',', ';', ':', '!', '?', '-', '"', '\''];
     private static readonly string[] TransientFailureMarkers =
@@ -45,13 +46,15 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
         PropertyNameCaseInsensitive = true
     };
 
-    public GeminiCaptionService(IConfiguration configuration, IHttpClientFactory httpClientFactory)
+    public GeminiCaptionService(
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory,
+        IApiCredentialProvider credentialProvider)
     {
-        _apiKey = configuration["Gemini:ApiKey"]
-                  ?? throw new InvalidOperationException("Gemini:ApiKey is not configured");
         _baseUrl = configuration["Gemini:BaseUrl"] ?? DefaultBaseUrl;
         _defaultModel = configuration["Gemini:Model"] ?? DefaultModel;
         _httpClient = httpClientFactory.CreateClient("Gemini");
+        _credentialProvider = credentialProvider;
     }
 
     public async Task<Result<string>> GenerateCaptionAsync(
@@ -544,7 +547,8 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
             ? _defaultModel
             : preferredModel.Trim();
 
-        return $"{_baseUrl.TrimEnd('/')}/models/{model}:generateContent?key={Uri.EscapeDataString(_apiKey)}";
+        var apiKey = _credentialProvider.GetRequiredValue("Gemini", "ApiKey");
+        return $"{_baseUrl.TrimEnd('/')}/models/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}";
     }
 
     private async Task<Result<string>> SendGenerateContentRequestAsync(
