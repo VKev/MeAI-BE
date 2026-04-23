@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Subscriptions.Helpers;
 using Application.Subscriptions.Models;
 using Application.Subscriptions.Services;
 using Domain.Entities;
@@ -44,7 +45,7 @@ public sealed class GetMySubscriptionsQueryHandler
 
         var subscriptions = await _subscriptionRepository.GetAll()
             .AsNoTracking()
-            .Where(item => subscriptionIds.Contains(item.Id) && !item.IsDeleted)
+            .Where(item => subscriptionIds.Contains(item.Id))
             .ToDictionaryAsync(item => item.Id, cancellationToken);
 
         var response = new List<CurrentUserSubscriptionResponse>();
@@ -59,6 +60,7 @@ public sealed class GetMySubscriptionsQueryHandler
                 state.Current.ActiveDate,
                 state.Current.EndDate,
                 state.Current.Status,
+                SubscriptionHelpers.ResolveDisplayStatus(state.Current.Status, currentPlan),
                 true,
                 true,
                 false));
@@ -74,6 +76,7 @@ public sealed class GetMySubscriptionsQueryHandler
                 state.Scheduled.ActiveDate,
                 state.Scheduled.EndDate,
                 state.Scheduled.Status,
+                SubscriptionHelpers.ResolveDisplayStatus(state.Scheduled.Status, scheduledPlan),
                 false,
                 false,
                 true));

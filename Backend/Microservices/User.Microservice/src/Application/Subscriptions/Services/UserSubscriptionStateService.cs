@@ -103,7 +103,10 @@ public sealed class UserSubscriptionStateService : IUserSubscriptionStateService
 
     private static bool IsActiveStatus(string? status) =>
         string.IsNullOrWhiteSpace(status) ||
-        string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase);
+        string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "non_renewable", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "non-renewable", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(status, "nonrenewable", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsScheduledStatus(string? status) =>
         string.Equals(status, "Scheduled", StringComparison.OrdinalIgnoreCase);

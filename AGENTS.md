@@ -111,6 +111,11 @@ Backend/Microservices/<Service>.Microservice/
 - Runtime config is written to `yarp.runtime.json` in the gateway content root.
 - Gateway docs UI is toggled in code by `ENABLE_DOCS_UI`; keep compose/env naming aligned with `Backend/Microservices/ApiGateway/src/Program.cs` when editing that behavior.
 
+## Scalar/OpenAPI docs
+- Scalar UI is generated from each service's ASP.NET OpenAPI document (`app.MapOpenApi()` + `app.MapScalarApiReference("docs", ...)`) and aggregated by the API Gateway.
+- When adding or changing API endpoints, keep Scalar accurate: add `[ProducesResponseType]` for success, validation/business failures, and unauthorized responses; use request/response DTO records that reflect the actual JSON contract; and keep route names, auth attributes, and HTTP verbs aligned with the controller behavior.
+- If an endpoint needs custom request-body or schema behavior, add an OpenAPI transformer under `WebApi/Setups/OpenApi` and register it in `Program.cs`, following the existing Resources multipart transformer pattern.
+
 ## Docker & Compose
 - `Backend/Compose/docker-compose.yml`: dev stack with placeholders; includes n8n + nginx.
 - `Backend/Compose/docker-compose-production.yml`: prod-like stack; includes Mailpit; treat as sensitive.
