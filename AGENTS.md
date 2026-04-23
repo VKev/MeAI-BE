@@ -2,7 +2,7 @@
 
 ## Project overview
 - .NET 10 microservices template with Clean Architecture per service.
-- Services: User, Ai, API Gateway; shared code in SharedLibrary.
+- Services: User, Ai, Feed, Notification, API Gateway; shared code in SharedLibrary.
 - Infra: Docker Compose for local, Terraform for AWS (ECS/EC2 or EKS), optional CloudFront/Cloudflare.
 
 ## Repository layout (top-level)
@@ -13,6 +13,8 @@ Backend/
   Microservices/
     Microservices.sln
     Ai.Microservice/
+    Feed.Microservice/
+    Notification.Microservice/
     User.Microservice/
     ApiGateway/
     SharedLibrary/
@@ -77,9 +79,16 @@ Backend/Microservices/<Service>.Microservice/
 - Build/test: `dotnet build` / `dotnet test` from repo root.
 - Run a service: `dotnet run --project Backend/Microservices/User.Microservice/src/WebApi/WebApi.csproj`.
 - Compose (dev): `docker compose -f Backend/Compose/docker-compose.yml up -d --build`.
-- Default ports (dev compose): API Gateway 8080 (host 2406), User 5002, Ai 5001, Postgres 5432, Redis 6379, RabbitMQ 5672/15672, n8n 5678 (via nginx).
-- User WebApi also binds gRPC on 5004 in code; compose does not publish 5004 to the host by default.
+- Default ports (dev/prod compose): API Gateway 8080 (host 2406), User HTTP 5002 + gRPC 5004, Ai HTTP 5001 + gRPC 5005, Notification HTTP 5006, Feed HTTP 5007 + gRPC 5008, Postgres 5432, Redis 6379, RabbitMQ 5672/15672, n8n 5678 (via nginx in dev compose).
+- Service gRPC ports are internal unless explicitly published by compose/k8s/Terraform.
 - Mailpit 1025/8025 is exposed by `Backend/Compose/docker-compose-production.yml`, not by the dev compose file.
+
+## Current service map
+- User owns auth, profile, resources/S3 presigned URLs, subscriptions/billing, social media OAuth/account metadata, workspaces, admin users/subscriptions/transactions/config, and gRPC services consumed by Ai/Feed.
+- Ai owns chats/chat sessions, AI generation, Kie/Veo callbacks, post builders/posts, async publish/unpublish/update consumers, and gRPC calls to User/Feed.
+- Feed owns public feed, profiles, posts, comments, follows, reports, analytics snapshots, demo feed seed data, and gRPC analytics consumed by Ai.
+- Notification owns notification APIs and SignalR hub `/hubs/notifications`; the gateway also exposes `/api/Notification/hubs/notifications` with the `/api/Notification` prefix removed.
+- API Gateway dynamically maps `/api/User`, `/api/Ai`, `/api/AiGeneration`, `/api/Notification`, `/api/Feed`, and any extra `Services__{Service}__Host/Port` or `{PREFIX}_MICROSERVICE_HOST/PORT` entries.
 
 ## Frontend/API response contract
 - Preserve the existing FE-facing response shape and status code for any endpoint you touch. Do not rename, remove, reorder semantics, or wrap top-level JSON fields on existing routes unless the frontend contract is being updated in the same change.
@@ -88,11 +97,20 @@ Backend/Microservices/<Service>.Microservice/
 - Unauthorized responses must keep the current single-message contract already used by that endpoint/service (`MessageResponse` or the existing anonymous `{ message: "Unauthorized" }` shape after JSON serialization). Do not introduce ad hoc wrappers such as `{ success, data }` or `{ error: ... }` on existing endpoints.
 - When changing controllers, commands, queries, DTOs, or OpenAPI annotations, inspect the current controller response types and keep the frontend contract backward-compatible by default.
 
+## Subscription/billing invariants
+- Subscription plan delete is a soft delete: set plan `IsActive=false`, `IsDeleted=true`, `DeletedAt`, and keep the row readable so existing user subscription history can still display the old plan name/price.
+- Deleting an active plan should mark current active user subscriptions for that plan as `non_renewable`; do not hard-delete or expire them immediately. They remain current until `EndDate` and should display `displayStatus: "No recurring"`.
+- `CurrentUserSubscriptionResponse` includes `displayStatus`; FE should prefer it for labels instead of deriving user-facing text from raw `status`.
+- Admin user-subscription APIs live under `/api/User/admin/user-subscriptions` and edit the user's subscription status only, not the subscription plan catalog row.
+- Admin user-subscription status updates use `POST /api/User/admin/user-subscriptions/{userSubscriptionId}/status` with body `{ "status": "...", "reason": "..." }`; `reason` is required, may contain HTML for email rendering, and the command publishes a `user.subscription.status_changed` notification plus a best-effort email to the affected user. The in-app notification `message` must stay plain text; preserve raw HTML in payload fields such as `reasonHtml`.
+
 ## API testing & temp files
 - Use `curl` for manual API endpoint testing (use `curl.exe` in Windows shells when needed).
 - Test through the API Gateway host/port unless you intentionally need direct service access.
 - For auth flows, use cookie jar flags (`-c` and `-b`) or bearer tokens explicitly.
 - If temporary files are needed for requests (for example JSON payloads), create them only under `<repo-root>/.temp/`.
+- In PowerShell, prefer JSON body files over inline `--data-raw` strings because quote handling can corrupt JSON before it reaches `curl.exe`. Write the payload to `.temp/<case>.json` and send it with `curl.exe --data-binary "@.temp/<case>.json" -H "Content-Type: application/json"`.
+- When reporting curl test results, include the request method, URL, request body, HTTP status, and response body for each case. Mask passwords, bearer tokens, refresh tokens, API keys, and other secrets.
 - Remove temporary test artifacts from `.temp/` after use and do not commit sensitive test data.
 - For APIs that require third-party callbacks/webhooks, use `ngrok` to expose the gateway (typically `http://localhost:2406`).
 - If `ngrok` is already running, reuse the existing tunnel and fetch its current URL before starting a new tunnel.
@@ -109,7 +127,9 @@ Backend/Microservices/<Service>.Microservice/
 - Extra services can be added via `Services__{Service}__Host` and `Services__{Service}__Port` (or `{PREFIX}_MICROSERVICE_HOST/PORT`).
 - OpenAPI aggregation pulls `/openapi/v1.json` from each service.
 - Runtime config is written to `yarp.runtime.json` in the gateway content root.
-- Gateway docs UI is toggled in code by `ENABLE_DOCS_UI`; keep compose/env naming aligned with `Backend/Microservices/ApiGateway/src/Program.cs` when editing that behavior.
+- Gateway docs UI is configured by `ENABLE_DOCS_UI`; current code maps the aggregated Scalar UI at `/scalar`.
+- Service-local Scalar UIs are mapped at `/docs` for each service.
+- Keep compose/env naming aligned with `Backend/Microservices/ApiGateway/src/Program.cs` when editing gateway docs behavior.
 
 ## Scalar/OpenAPI docs
 - Scalar UI is generated from each service's ASP.NET OpenAPI document (`app.MapOpenApi()` + `app.MapScalarApiReference("docs", ...)`) and aggregated by the API Gateway.
@@ -121,6 +141,8 @@ Backend/Microservices/<Service>.Microservice/
 - `Backend/Compose/docker-compose-production.yml`: prod-like stack; includes Mailpit; treat as sensitive.
 - Compose service names use kebab-case (e.g., `ai-microservice`, `user-microservice`, `api-gateway`).
 - Postgres init: `Backend/Compose/postgres/init.sql` creates `aidb` and `userdb`.
+- Production compose enables `AutoApply__Migrations` and seed data. Running or restarting it can modify runtime state files under `Backend/Compose/seed-data/feed/runtime/*.state.json`; treat those as generated local test artifacts unless the task is specifically about seed state.
+- The production user service S3 config currently points at the Terraform backend/app-download bucket. If changing storage behavior, keep Terraform S3 CORS, compose `S3__*`, and FE download behavior aligned.
 
 ## Kubernetes
 - Manifests in `Backend/Kubernetes/manifests/*.yaml` (Deployments, Services, PVCs, Secrets).
