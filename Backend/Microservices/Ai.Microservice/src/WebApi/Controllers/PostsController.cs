@@ -312,6 +312,40 @@ public sealed class PostsController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("{postId:guid}/schedule")]
+    [ProducesResponseType(typeof(Result<PostResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Schedule(
+        Guid postId,
+        [FromBody] SchedulePostRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new SchedulePostCommand(
+                postId,
+                userId,
+                new PostScheduleInput(
+                    request.ScheduleGroupId,
+                    request.ScheduledAtUtc,
+                    request.Timezone,
+                    request.SocialMediaIds,
+                    request.IsPrivate)),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpDelete("{postId:guid}")]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -813,6 +847,13 @@ public sealed record UpdatePostRequest(
     string? Title,
     PostContent? Content,
     string? Status);
+
+public sealed record SchedulePostRequest(
+    Guid? ScheduleGroupId,
+    DateTime ScheduledAtUtc,
+    string? Timezone,
+    IReadOnlyList<Guid>? SocialMediaIds,
+    bool? IsPrivate);
 
 sealed record PublishPostsRequestPayload(
     IReadOnlyList<PublishPostTargetInput> Targets,

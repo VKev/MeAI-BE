@@ -26,4 +26,9 @@ public interface IPostRepository
     // Tracked (not AsNoTracking) so the caller can mutate+save — used by CreatePostCommand
     // to consolidate duplicate rows into a single row per (PostBuilder, Platform, post_type).
     Task<List<Post>> GetTrackedByPostBuilderIdAsync(Guid postBuilderId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ScheduledPostDispatchCandidate>> ClaimDueScheduledPostsAsync(
+        DateTime dueBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken);
+    Task MarkScheduledDispatchFailedAsync(Guid postId, CancellationToken cancellationToken);
 }

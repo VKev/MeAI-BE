@@ -133,7 +133,9 @@ namespace Infrastructure
             services.AddScoped<IPostMetricSnapshotRepository, PostMetricSnapshotRepository>();
             services.AddScoped<ICoinPricingRepository, CoinPricingRepository>();
             services.AddScoped<PostResponseBuilder>();
+            services.AddScoped<ScheduledPostDispatchService>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
+            services.AddHostedService<ScheduledPostPublishingWorker>();
 
             services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Application.AssemblyReference).Assembly));
 

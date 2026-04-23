@@ -2,11 +2,19 @@ using Domain.Entities;
 using Domain.Repositories;
 using Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using NpgsqlTypes;
+using SharedLibrary.Extensions;
+using System.Data;
 
 namespace Infrastructure.Repositories;
 
 public sealed class PostRepository : IPostRepository
 {
+    private const string ScheduledStatus = "scheduled";
+    private const string ProcessingStatus = "processing";
+    private const string FailedStatus = "failed";
+
     private readonly MyDbContext _dbContext;
     private readonly DbSet<Post> _dbSet;
 
@@ -103,5 +111,101 @@ public sealed class PostRepository : IPostRepository
             .ThenByDescending(p => p.Id)
             .Take(limit)
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ScheduledPostDispatchCandidate>> ClaimDueScheduledPostsAsync(
+        DateTime dueBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        if (limit <= 0)
+        {
+            return Array.Empty<ScheduledPostDispatchCandidate>();
+        }
+
+        var connection = (NpgsqlConnection)_dbContext.Database.GetDbConnection();
+        var shouldCloseConnection = connection.State != ConnectionState.Open;
+        if (shouldCloseConnection)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                WITH due AS (
+                    SELECT
+                        id,
+                        user_id,
+                        scheduled_social_media_ids,
+                        scheduled_is_private
+                    FROM posts
+                    WHERE deleted_at IS NULL
+                      AND workspace_id IS NOT NULL
+                      AND status = @scheduled_status
+                      AND schedule_group_id IS NOT NULL
+                      AND scheduled_at_utc IS NOT NULL
+                      AND scheduled_at_utc <= @due_before_utc
+                      AND scheduled_social_media_ids IS NOT NULL
+                      AND cardinality(scheduled_social_media_ids) > 0
+                    ORDER BY scheduled_at_utc, id
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT @limit
+                )
+                UPDATE posts AS post
+                SET status = @processing_status,
+                    updated_at = @updated_at,
+                    schedule_group_id = NULL,
+                    scheduled_social_media_ids = ARRAY[]::uuid[],
+                    scheduled_is_private = NULL,
+                    schedule_timezone = NULL,
+                    scheduled_at_utc = NULL
+                FROM due
+                WHERE post.id = due.id
+                RETURNING
+                    due.id,
+                    due.user_id,
+                    due.scheduled_social_media_ids,
+                    due.scheduled_is_private;
+                """;
+
+            command.Parameters.Add(new NpgsqlParameter("scheduled_status", NpgsqlDbType.Text) { Value = ScheduledStatus });
+            command.Parameters.Add(new NpgsqlParameter("processing_status", NpgsqlDbType.Text) { Value = ProcessingStatus });
+            command.Parameters.Add(new NpgsqlParameter("due_before_utc", NpgsqlDbType.TimestampTz) { Value = dueBeforeUtc });
+            command.Parameters.Add(new NpgsqlParameter("updated_at", NpgsqlDbType.TimestampTz) { Value = DateTimeExtensions.PostgreSqlUtcNow });
+            command.Parameters.Add(new NpgsqlParameter("limit", NpgsqlDbType.Integer) { Value = limit });
+
+            var claimed = new List<ScheduledPostDispatchCandidate>();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                claimed.Add(new ScheduledPostDispatchCandidate(
+                    reader.GetGuid(0),
+                    reader.GetGuid(1),
+                    reader.GetFieldValue<Guid[]>(2),
+                    reader.IsDBNull(3) ? null : reader.GetBoolean(3)));
+            }
+
+            return claimed;
+        }
+        finally
+        {
+            if (shouldCloseConnection)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    public Task MarkScheduledDispatchFailedAsync(Guid postId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeExtensions.PostgreSqlUtcNow;
+        return _dbSet
+            .Where(post => post.Id == postId && post.DeletedAt == null)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(post => post.Status, FailedStatus)
+                .SetProperty(post => post.UpdatedAt, now), cancellationToken);
     }
 }

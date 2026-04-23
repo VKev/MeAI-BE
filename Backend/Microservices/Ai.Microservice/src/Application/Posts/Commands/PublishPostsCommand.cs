@@ -171,6 +171,7 @@ public sealed class PublishPostsCommandHandler
 
             await _postPublicationRepository.AddRangeAsync(placeholders, cancellationToken);
 
+            ClearSchedule(post);
             post.Status = ProcessingStatus;
             post.UpdatedAt = now;
             _postRepository.Update(post);
@@ -313,5 +314,14 @@ public sealed class PublishPostsCommandHandler
         public HashSet<Guid> SocialMediaIds { get; } = [];
 
         public bool? IsPrivate { get; set; }
+    }
+
+    private static void ClearSchedule(Post post)
+    {
+        post.ScheduleGroupId = null;
+        post.ScheduledSocialMediaIds = Array.Empty<Guid>();
+        post.ScheduledIsPrivate = null;
+        post.ScheduleTimezone = null;
+        post.ScheduledAtUtc = null;
     }
 }

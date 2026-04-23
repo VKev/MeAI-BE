@@ -88,6 +88,11 @@ public sealed class UpdatePostCommandHandler
             post.Status = normalizedStatus;
         }
 
+        if (post.ScheduleGroupId.HasValue && post.ScheduledAtUtc.HasValue)
+        {
+            post.Status = "scheduled";
+        }
+
         post.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
 
         // Consolidate any sibling duplicates that share this post's (PostBuilder, Platform,

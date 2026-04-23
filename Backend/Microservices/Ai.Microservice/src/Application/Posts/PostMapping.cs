@@ -19,6 +19,14 @@ internal static class PostMapping
             Title: post.Title,
             Content: post.Content,
             Status: post.Status,
+            Schedule: post.ScheduleGroupId.HasValue && post.ScheduledAtUtc.HasValue
+                ? new PostScheduleResponse(
+                    post.ScheduleGroupId.Value,
+                    post.ScheduledAtUtc.Value,
+                    post.ScheduleTimezone,
+                    post.ScheduledSocialMediaIds,
+                    post.ScheduledIsPrivate)
+                : null,
             IsPublished: false,
             Media: Array.Empty<PostMediaResponse>(),
             Publications: Array.Empty<PostPublicationResponse>(),

@@ -19,6 +19,7 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
             .IsDescending(false, false, true);
 
         entity.HasIndex(e => e.WorkspaceId, "ix_posts_workspace_id");
+        entity.HasIndex(e => new { e.Status, e.ScheduledAtUtc }, "ix_posts_status_scheduled_at_utc");
 
         entity.Property(e => e.Id).HasColumnName("id");
         entity.Property(e => e.PostBuilderId).HasColumnName("post_builder_id");
@@ -27,6 +28,13 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.Property(e => e.SocialMediaId).HasColumnName("social_media_id");
         entity.Property(e => e.Platform).HasColumnName("platform");
         entity.Property(e => e.Title).HasColumnName("title");
+        entity.Property(e => e.ScheduleGroupId).HasColumnName("schedule_group_id");
+        entity.Property(e => e.ScheduledSocialMediaIds)
+            .HasColumnName("scheduled_social_media_ids")
+            .HasColumnType("uuid[]");
+        entity.Property(e => e.ScheduledIsPrivate).HasColumnName("scheduled_is_private");
+        entity.Property(e => e.ScheduleTimezone).HasColumnName("schedule_timezone");
+        entity.Property(e => e.ScheduledAtUtc).HasColumnName("scheduled_at_utc").HasColumnType("timestamp with time zone");
 
         var contentJsonOptions = new JsonSerializerOptions();
         var contentComparer = new ValueComparer<PostContent?>(
