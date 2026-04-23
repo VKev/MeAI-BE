@@ -960,6 +960,284 @@ Khi phase 2 hoàn thành, backend phải có tối thiểu:
 - đã thêm cấu hình compose cho `Ai.Microservice` và `n8n` để local stack có thể truyền `N8n__*` options và `BRAVE_SEARCH_API_KEY`;
 - đã chuyển `n8n` local/prod-like compose sang auto-import workflow JSON qua service `n8n-import` trước khi `n8n` start, thay vì chỉ mount file.
 
+## Hướng dẫn FE tích hợp API
+
+### Trạng thái backend hiện tại
+
+Ở thời điểm hiện tại:
+
+- `fixed_content scheduling` đã hoạt động ở mức API và execution runtime;
+- auto-dispatch tới publish pipeline đã hoạt động;
+- `agentic scheduling` đã có API và runtime foundation;
+- kết quả publish thực tế còn phụ thuộc platform account, token, media hợp lệ và external provider.
+
+Frontend nên coi đây là 2 flow khác nhau:
+
+- `fixed_content`: user chọn post có sẵn rồi schedule;
+- `agentic`: user nhập yêu cầu để hệ thống tới giờ mới đi lấy dữ liệu và tạo runtime post.
+
+### API FE cần dùng
+
+#### 1. Tạo post trước khi schedule
+
+- `POST /api/Ai/posts`
+- mục đích:
+  - tạo post draft trước;
+  - lưu caption, media, post type;
+  - sau đó mới đưa `postId` vào schedule.
+
+Payload tối thiểu:
+
+```json
+{
+  "workspaceId": "<workspaceId>",
+  "title": "Test scheduled post",
+  "content": {
+    "content": "Caption",
+    "hashtag": "#tag",
+    "resourceList": ["<resourceId>"],
+    "postType": "posts"
+  },
+  "status": "draft",
+  "platform": "facebook"
+}
+```
+
+Lưu ý FE:
+
+- với TikTok, resource phải là đúng `1` video;
+- với TikTok, không nên để `postType` rỗng;
+- với Facebook text-only post, `resourceList` có thể rỗng;
+- `post.status = draft` ở đây chỉ có nghĩa là bài viết chưa publish.
+
+#### 2. Tạo fixed-content schedule
+
+- `POST /api/Ai/schedules`
+- dùng khi user đã chọn sẵn một hoặc nhiều post để đăng vào thời điểm cố định.
+
+Payload mẫu:
+
+```json
+{
+  "workspaceId": "<workspaceId>",
+  "name": "Daily publish",
+  "mode": "fixed_content",
+  "executeAtUtc": "2026-04-23T15:30:00Z",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "isPrivate": false,
+  "items": [
+    {
+      "itemType": "post",
+      "itemId": "<postId>",
+      "sortOrder": 1,
+      "executionBehavior": "publish_all"
+    }
+  ],
+  "targets": [
+    {
+      "socialMediaId": "<socialMediaId>",
+      "isPrimary": true
+    }
+  ]
+}
+```
+
+FE nên lưu các field quan trọng từ response:
+
+- `scheduleId`
+- `status`
+- `items[].status`
+- `targets[]`
+- `errorCode`
+- `errorMessage`
+
+#### 3. Tạo agentic schedule
+
+- `POST /api/Ai/schedules`
+- dùng khi user không chọn post có sẵn mà muốn hệ thống tới giờ mới search/generate nội dung.
+
+Payload mẫu:
+
+```json
+{
+  "workspaceId": "<workspaceId>",
+  "name": "Lottery runtime",
+  "mode": "agentic",
+  "executeAtUtc": "2026-04-23T16:00:00Z",
+  "timezone": "Asia/Ho_Chi_Minh",
+  "isPrivate": false,
+  "platformPreference": "facebook",
+  "agentPrompt": "Vào đúng giờ hãy tra kết quả xổ số miền bắc hôm nay rồi đăng lên Facebook.",
+  "search": {
+    "queryTemplate": "kết quả xổ số miền bắc hôm nay",
+    "count": 5,
+    "country": "VN",
+    "searchLanguage": "vi",
+    "freshness": "pd"
+  },
+  "targets": [
+    {
+      "socialMediaId": "<socialMediaId>",
+      "isPrimary": true
+    }
+  ]
+}
+```
+
+Lưu ý FE:
+
+- `agentic` schedule không cần `items` tại thời điểm tạo;
+- runtime post sẽ được backend tạo sau khi callback từ `n8n` thành công;
+- FE không nên tự tạo placeholder post cho flow này trừ khi product muốn có UI preview riêng.
+
+#### 4. Đọc danh sách schedule
+
+- `GET /api/Ai/schedules`
+- query hỗ trợ:
+  - `workspaceId`
+  - `status`
+  - `limit`
+
+Mục đích FE:
+
+- render danh sách lịch đăng;
+- filter theo workspace;
+- poll để cập nhật runtime status gần thời điểm publish.
+
+#### 5. Đọc chi tiết một schedule
+
+- `GET /api/Ai/schedules/{scheduleId}`
+
+Mục đích FE:
+
+- xem chi tiết item, target, error;
+- hiển thị timeline/trạng thái runtime;
+- nếu fail thì lấy `errorCode` và `errorMessage` để hiển thị cho user.
+
+#### 6. Update / Cancel / Activate
+
+- `PUT /api/Ai/schedules/{scheduleId}`
+- `POST /api/Ai/schedules/{scheduleId}/cancel`
+- `POST /api/Ai/schedules/{scheduleId}/activate`
+
+FE nên dùng:
+
+- `cancel` khi user muốn dừng lịch còn chưa chạy xong;
+- `activate` khi user muốn bật lại lịch đã cancel hoặc draft-like flow hợp lệ;
+- `update` khi sửa giờ, target, prompt hoặc item list.
+
+#### 7. Chat trực tiếp với Gemini
+
+- tạo chat session:
+  - `POST /api/Ai/chat-sessions`
+- gửi message cho agent:
+  - `POST /api/Ai/agent/sessions/{sessionId}/messages`
+- đọc transcript:
+  - `GET /api/Ai/agent/sessions/{sessionId}/messages`
+
+FE có thể dùng flow này khi muốn cho user nói tự nhiên thay vì điền form schedule thủ công.
+
+### State machine FE nên hiểu
+
+#### Schedule status
+
+FE nên map trạng thái như sau:
+
+- `scheduled`
+  - lịch đã được tạo và đang chờ tới giờ chạy.
+- `waiting_for_execution`
+  - áp dụng chủ yếu cho `agentic`; job đã đăng ký với `n8n`.
+- `executing`
+  - backend đang xử lý runtime logic.
+- `publishing`
+  - đã đi vào publish pipeline.
+- `completed`
+  - tất cả item đã publish thành công.
+- `failed`
+  - có lỗi trong runtime hoặc publish.
+- `needs_user_action`
+  - thiếu token/account/scope hoặc cần user xử lý thủ công.
+- `cancelled`
+  - user đã hủy lịch.
+
+#### Item status
+
+- `scheduled`
+- `publishing`
+- `published`
+- `failed`
+- `cancelled`
+
+FE nên ưu tiên hiển thị `item.status` và `schedule.status` cùng lúc, vì:
+
+- một schedule có thể fail do chỉ một item fail;
+- response hiện tại đã chứa per-item error bậc cơ bản.
+
+### Hướng dẫn FE xử lý theo thời gian
+
+#### Với fixed-content schedule
+
+1. user tạo hoặc chọn post draft
+2. user chọn target social account
+3. FE gọi `POST /api/Ai/schedules`
+4. FE redirect sang màn hình detail hoặc refresh list
+5. gần thời điểm chạy, FE poll `GET /api/Ai/schedules/{id}`
+6. khi status đổi sang `completed` hoặc `failed`, FE dừng poll
+
+#### Với agentic schedule
+
+1. user chọn workspace, target, giờ chạy
+2. user nhập prompt business
+3. FE gọi `POST /api/Ai/schedules` với `mode = agentic`
+4. FE đợi trạng thái `waiting_for_execution`
+5. gần thời điểm chạy, FE poll `GET /api/Ai/schedules/{id}`
+6. backend tự:
+   - gọi `n8n`
+   - search web
+   - generate runtime post
+   - publish
+7. FE hiển thị `completed` hoặc `failed`
+
+### Hướng dẫn FE xử lý lỗi
+
+Các trường cần đọc:
+
+- `schedule.errorCode`
+- `schedule.errorMessage`
+- `items[].errorMessage`
+
+Các tình huống FE cần giải thích rõ cho user:
+
+- `failed` vì token social hết hạn;
+- `failed` vì media không đúng với platform;
+- `failed` vì provider reject request;
+- `needs_user_action` vì account bị unlink hoặc thiếu scope.
+
+Với TikTok, FE nên validate trước khi cho schedule:
+
+- phải có đúng `1` video resource;
+- không dùng text-only post;
+- không dùng nhiều media;
+- nên đặt `postType` rõ ràng cho video post.
+
+### Khuyến nghị UX cho frontend
+
+- khi tạo schedule thành công, luôn lưu `scheduleId` để chuyển sang màn detail;
+- ở list view, hiển thị tối thiểu:
+  - `name`
+  - `mode`
+  - `executeAtUtc`
+  - `status`
+  - target platform
+- ở detail view, hiển thị thêm:
+  - item list
+  - target list
+  - error message
+  - `lastExecutionAt`
+- với `agentic`, hiển thị thêm:
+  - `agentPrompt`
+  - search summary nếu có trong `executionContextJson`
+
 ### Chưa nằm trong phase 3
 
 - chưa support `video` runtime item cho `agentic` schedule;
