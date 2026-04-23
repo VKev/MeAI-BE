@@ -25,6 +25,8 @@ public sealed class User
 
     public string? Provider { get; set; }
 
+    public string? StripeCustomerId { get; set; }
+
     public Guid? AvatarResourceId { get; set; }
 
     public string? Address { get; set; }
