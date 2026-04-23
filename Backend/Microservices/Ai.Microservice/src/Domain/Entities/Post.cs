@@ -25,6 +25,18 @@ public sealed class Post
 
     public string? Status { get; set; }
 
+    public Guid? ScheduleGroupId { get; set; }
+
+    [Column(TypeName = "uuid[]")]
+    public Guid[] ScheduledSocialMediaIds { get; set; } = Array.Empty<Guid>();
+
+    public bool? ScheduledIsPrivate { get; set; }
+
+    public string? ScheduleTimezone { get; set; }
+
+    [Column(TypeName = "timestamp with time zone")]
+    public DateTime? ScheduledAtUtc { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 
