@@ -1,0 +1,27 @@
+namespace Application.Subscriptions.Models;
+
+public sealed record AdminUserSubscriptionResponse(
+    Guid UserSubscriptionId,
+    Guid UserId,
+    string? Username,
+    string? Email,
+    Guid SubscriptionId,
+    string? SubscriptionName,
+    decimal? PricePaid,
+    float? SubscriptionPrice,
+    int DurationMonths,
+    decimal? MeAiCoin,
+    string? Status,
+    string DisplayStatus,
+    bool SubscriptionPlanIsActive,
+    bool SubscriptionPlanIsDeleted,
+    DateTime? ActiveDate,
+    DateTime? EndDate,
+    bool IsDeleted,
+    DateTime? CreatedAt,
+    DateTime? UpdatedAt,
+    DateTime? DeletedAt,
+    string? StripeSubscriptionId,
+    string? StripeScheduleId,
+    bool IsAutoRenewEnabled,
+    string AutoRenewStatus);

@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Subscriptions.Helpers;
 using Application.Subscriptions.Models;
 using Application.Subscriptions.Services;
 using Domain.Entities;
@@ -44,7 +45,7 @@ public sealed class GetMySubscriptionsQueryHandler
 
         var subscriptions = await _subscriptionRepository.GetAll()
             .AsNoTracking()
-            .Where(item => subscriptionIds.Contains(item.Id) && !item.IsDeleted)
+            .Where(item => subscriptionIds.Contains(item.Id))
             .ToDictionaryAsync(item => item.Id, cancellationToken);
 
         var response = new List<CurrentUserSubscriptionResponse>();
@@ -52,6 +53,11 @@ public sealed class GetMySubscriptionsQueryHandler
         if (state.Current != null)
         {
             subscriptions.TryGetValue(state.Current.SubscriptionId, out var currentPlan);
+            var autoRenewStatus = SubscriptionHelpers.ResolveAutoRenewStatus(
+                state.Current,
+                currentPlan,
+                isScheduled: false);
+
             response.Add(new CurrentUserSubscriptionResponse(
                 state.Current.Id,
                 state.Current.SubscriptionId,
@@ -59,14 +65,22 @@ public sealed class GetMySubscriptionsQueryHandler
                 state.Current.ActiveDate,
                 state.Current.EndDate,
                 state.Current.Status,
+                SubscriptionHelpers.ResolveDisplayStatus(state.Current.Status, currentPlan),
                 true,
                 true,
-                false));
+                false,
+                autoRenewStatus == SubscriptionHelpers.AutoRenewEnabled,
+                autoRenewStatus));
         }
 
         if (state.Scheduled != null)
         {
             subscriptions.TryGetValue(state.Scheduled.SubscriptionId, out var scheduledPlan);
+            var autoRenewStatus = SubscriptionHelpers.ResolveAutoRenewStatus(
+                state.Scheduled,
+                scheduledPlan,
+                isScheduled: true);
+
             response.Add(new CurrentUserSubscriptionResponse(
                 state.Scheduled.Id,
                 state.Scheduled.SubscriptionId,
@@ -74,9 +88,12 @@ public sealed class GetMySubscriptionsQueryHandler
                 state.Scheduled.ActiveDate,
                 state.Scheduled.EndDate,
                 state.Scheduled.Status,
+                SubscriptionHelpers.ResolveDisplayStatus(state.Scheduled.Status, scheduledPlan),
                 false,
                 false,
-                true));
+                true,
+                autoRenewStatus == SubscriptionHelpers.AutoRenewEnabled,
+                autoRenewStatus));
         }
 
         return Result.Success(response);

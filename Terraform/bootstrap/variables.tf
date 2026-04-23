@@ -20,3 +20,15 @@ variable "cloudfront_distribution_arn" {
   type        = string
   default     = null
 }
+
+variable "app_cors_allowed_origins" {
+  description = "Origins allowed to read presigned S3 objects from the app."
+  type        = list(string)
+  default = [
+    "http://localhost:3000",
+    "http://localhost:3030",
+    "http://localhost:2406",
+    "http://localhost:5173",
+    "https://meai-fe.vkev.me",
+  ]
+}

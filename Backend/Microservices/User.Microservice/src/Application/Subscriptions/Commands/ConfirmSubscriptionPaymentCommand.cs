@@ -142,6 +142,12 @@ public sealed class ConfirmSubscriptionPaymentCommandHandler
             stripeSnapshot = await _stripePaymentService.GetSubscriptionSnapshotAsync(
                 request.StripeSubscriptionId,
                 cancellationToken);
+
+            await StoreStripeCustomerIdAsync(
+                request.UserId,
+                stripeSnapshot.StripeCustomerId,
+                now,
+                cancellationToken);
         }
 
         if (isRecurringRenewal)
@@ -264,6 +270,28 @@ public sealed class ConfirmSubscriptionPaymentCommandHandler
             false,
             userSubscription.Id,
             userSubscription.ActiveDate);
+    }
+
+    private async Task StoreStripeCustomerIdAsync(
+        Guid userId,
+        string? stripeCustomerId,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(stripeCustomerId))
+        {
+            return;
+        }
+
+        var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user == null || user.IsDeleted || !string.IsNullOrWhiteSpace(user.StripeCustomerId))
+        {
+            return;
+        }
+
+        user.StripeCustomerId = stripeCustomerId;
+        user.UpdatedAt = now;
+        _userRepository.Update(user);
     }
 
     private async Task<ConfirmSubscriptionPaymentResponse> ApplyUpgradeAsync(

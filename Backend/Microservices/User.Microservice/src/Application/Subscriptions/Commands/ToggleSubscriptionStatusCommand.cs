@@ -49,7 +49,7 @@ public sealed class ToggleSubscriptionStatusCommandHandler
                 .Where(us =>
                     us.SubscriptionId == request.Id &&
                     !us.IsDeleted &&
-                    us.Status == "active")
+                    (us.Status == null || us.Status.ToLower() == "active"))
                 .ToListAsync(cancellationToken);
 
             foreach (var userSub in activeUserSubscriptions)

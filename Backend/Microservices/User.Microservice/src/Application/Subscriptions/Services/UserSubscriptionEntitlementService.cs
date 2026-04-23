@@ -37,7 +37,7 @@ public sealed class UserSubscriptionEntitlementService : IUserSubscriptionEntitl
         var currentPlan = await _subscriptionRepository.GetAll()
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                item => item.Id == state.Current.SubscriptionId && !item.IsDeleted,
+                item => item.Id == state.Current.SubscriptionId,
                 cancellationToken);
 
         return new UserSubscriptionEntitlement(state.Current, currentPlan);

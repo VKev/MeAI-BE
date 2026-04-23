@@ -114,7 +114,6 @@ public sealed class PurchaseSubscriptionCommandHandler
         }
 
         var user = await _userRepository.GetAll()
-            .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == request.UserId && !item.IsDeleted, cancellationToken);
 
         if (user == null)
@@ -152,6 +151,7 @@ public sealed class PurchaseSubscriptionCommandHandler
             {
                 stripeResult = await _stripePaymentService.CreateSubscriptionAsync(
                     targetCatalog.StripePriceId,
+                    user.StripeCustomerId,
                     user.Email,
                     user.FullName ?? user.Username,
                     metadata,
@@ -162,6 +162,14 @@ public sealed class PurchaseSubscriptionCommandHandler
         {
             return Result.Failure<PurchaseSubscriptionResponse>(
                 new Error("Stripe.PaymentFailed", ex.Message));
+        }
+
+        if (string.IsNullOrWhiteSpace(user.StripeCustomerId) &&
+            !string.IsNullOrWhiteSpace(stripeResult.StripeCustomerId))
+        {
+            user.StripeCustomerId = stripeResult.StripeCustomerId;
+            user.UpdatedAt = now;
+            _userRepository.Update(user);
         }
 
         var transaction = new Transaction
