@@ -33,6 +33,12 @@ services:
       Cors__AllowedOrigins__2: http://localhost:2406
       Kie__ApiKey: your-kie-api-key
       Kie__CallbackUrl: http://api-gateway:8080/api/Ai/kie/callback
+      N8n__BaseUrl: http://nginx:5678/n8n
+      N8n__ScheduledAgentJobPath: /webhook/meai/scheduled-agent-job
+      N8n__WebSearchPath: /webhook/meai/web-search
+      N8n__CallbackBaseUrl: http://api-gateway:8080
+      N8n__RuntimeCallbackPath: /api/Ai/internal/agent-schedules/runtime-result
+      N8n__InternalCallbackToken: local-agent-schedule-callback-token
     depends_on:
       postgres:
         condition: service_healthy
@@ -315,10 +321,12 @@ services:
       N8N_EDITOR_BASE_URL: http://localhost:5678/n8n/
       WEBHOOK_URL: http://localhost:5678/n8n/
       VUE_APP_URL_BASE_API: http://localhost:5678/n8n/
+      BRAVE_SEARCH_API_KEY: change-me
     expose:
       - "5678"
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./n8n-local:/workspace/n8n-local:ro
     networks:
       - app-network
 

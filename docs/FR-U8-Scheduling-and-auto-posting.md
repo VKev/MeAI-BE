@@ -833,7 +833,7 @@ Các field như `access_token`, `page_access_token`, refresh token, app secret:
 
 ### Trạng thái tại ngày 2026-04-23
 
-`Phase 1` và `Phase 2` đã được implement ở mức backend foundation + fixed-content scheduling aggregate.
+`Phase 1`, `Phase 2` và `Phase 3` đã được implement ở mức backend foundation + fixed-content scheduling + agentic runtime integration foundation.
 
 ### Đã hoàn thành trong phase 1
 
@@ -923,27 +923,73 @@ Khi phase 2 hoàn thành, backend phải có tối thiểu:
 - chưa có integration `n8n` runtime cho `web_search`;
 - chưa có callback execution flow cho live-content schedule.
 
+### Đã hoàn thành trong phase 3
+
+- đã thêm mode `agentic` vào `PublishingSchedule`;
+- đã thêm command handlers cho:
+  - `CreateAgenticPublishingScheduleCommand`;
+  - `UpdateAgenticPublishingScheduleCommand`;
+  - `HandleAgentScheduleRuntimeResultCommand`;
+- đã thêm `ExecutionContextJson` serializer/parser để giữ:
+  - `n8n job id`;
+  - `n8n execution id`;
+  - `last processed callback job id`;
+  - `runtime post id`;
+  - search payload gần nhất;
+- đã thêm `IN8nWorkflowClient` và implementation gọi:
+  - webhook đăng ký job đợi tới giờ;
+  - webhook `web_search`;
+- đã thêm internal callback endpoint:
+  - `POST /api/Ai/internal/agent-schedules/runtime-result`;
+- đã thêm runtime content generation service để Gemini tạo caption/post draft từ search result;
+- đã nối callback runtime về flow:
+  - tạo `Post` nội bộ;
+  - gắn vào `PublishingSchedule` như runtime item;
+  - gọi `PublishPostsCommand`;
+- đã mở rộng Gemini tool catalog để agent có thể:
+  - `get_schedules`;
+  - `get_schedule`;
+  - `create_schedule`;
+  - `web_search`;
+- đã nới publish pipeline để hỗ trợ `text-only Facebook post`, phục vụ use case kiểu "đến giờ tra cứu dữ liệu rồi đăng status Facebook";
+- đã thêm `n8n` workflow artifacts trong repo tại:
+  - `Backend/Compose/n8n-local/workflows/meai-scheduled-agent-job.json`;
+  - `Backend/Compose/n8n-local/workflows/meai-web-search.json`;
+- đã thêm hướng dẫn import/cấu hình workflow tại:
+  - `Backend/Compose/n8n-local/README.md`;
+- đã thêm cấu hình compose cho `Ai.Microservice` và `n8n` để local stack có thể truyền `N8n__*` options và `BRAVE_SEARCH_API_KEY`.
+
+### Chưa nằm trong phase 3
+
+- chưa support `video` runtime item cho `agentic` schedule;
+- chưa có retry/pause/resume first-class cho `agentic` schedule ngoài trạng thái nền tảng;
+- chưa có notification flow cho `needs_user_action`;
+- chưa có end-to-end integration test chạy thật qua `n8n` container + Brave Search sandbox;
+- chưa có policy layer sâu hơn cho việc chọn default social account khi user prompt mơ hồ.
+
 ## Kết luận thiết kế
 
-Để đáp ứng đúng mong muốn đã nêu, `FR-U8` phải được hiểu là sự kết hợp của 3 năng lực:
+Để đáp ứng đúng mong muốn đã nêu, `FR-U8` được triển khai như sự kết hợp của 3 năng lực:
 
 1. `Scheduling domain` để lưu ý định đăng bài một cách first-class.
 2. `Gemini agent` để nói chuyện trực tiếp với user, hỏi ngược và gọi tools.
 3. `n8n + Brave Search` để thực thi các runtime web-grounded jobs đúng thời điểm.
 
-Phần đã có trong repo hiện nay là nền tốt cho:
+Sau phase 3, repo đã có đủ backend foundation cho toàn bộ trục này:
 
-- single-post scheduling;
-- auto dispatch;
-- publish pipeline.
+- `fixed_content scheduling` bằng aggregate riêng;
+- `agentic schedule` có callback runtime;
+- Gemini tool calling để đọc ngữ cảnh, tạo schedule và gọi `web_search`;
+- `n8n` workflow artifacts để chờ đến giờ rồi lấy dữ liệu web;
+- callback runtime về `Ai.Microservice`;
+- publish pipeline đủ để chạy use case text-only Facebook post.
 
-Nhưng để hoàn thành `FR-U8.2` và đặc biệt là `FR-U8.3`, phải bổ sung:
+Phần còn lại chủ yếu là hardening và productization:
 
-- schedule aggregate riêng;
-- agentic tool catalog;
-- chat orchestration bằng Gemini;
-- `n8n` workflow chờ đến giờ rồi mới chạy `web_search`;
-- callback runtime về `Ai.Microservice`.
+- `video`/multi-format runtime generation;
+- retry, pause/resume, notifications;
+- rule/policy tốt hơn cho account resolution;
+- e2e deployment/test thực chiến với `n8n` và Brave Search secret thật.
 
 ## Tài liệu tham chiếu đã xác minh
 
