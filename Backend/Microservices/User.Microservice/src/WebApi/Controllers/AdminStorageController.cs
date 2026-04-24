@@ -1,6 +1,5 @@
 using Application.Configs.Commands;
-using Application.Configs.Models;
-using Application.Configs.Queries;
+using Application.Resources.Commands;
 using Application.Resources.Models;
 using Application.Resources.Queries;
 using Application.Subscriptions.Commands;
@@ -24,12 +23,12 @@ public sealed class AdminStorageController : ApiController
     {
     }
 
-    [HttpGet("settings")]
-    [ProducesResponseType(typeof(Result<ConfigResponse>), StatusCodes.Status200OK)]
+    [HttpGet("settings/free-tier")]
+    [ProducesResponseType(typeof(Result<StorageSettingsResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> GetSettings(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetFreeTierSettings(CancellationToken cancellationToken)
     {
-        var result = await _mediator.Send(new GetConfigQuery(), cancellationToken);
+        var result = await _mediator.Send(new GetStorageSettingsQuery(), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);
@@ -39,7 +38,7 @@ public sealed class AdminStorageController : ApiController
     }
 
     [HttpPut("settings/free-tier")]
-    [ProducesResponseType(typeof(Result<ConfigResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<StorageSettingsResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateFreeTier(
         [FromBody] UpdateFreeStorageQuotaRequest request,
@@ -47,6 +46,39 @@ public sealed class AdminStorageController : ApiController
     {
         var result = await _mediator.Send(
             new UpdateFreeStorageQuotaCommand(request.FreeStorageQuotaBytes),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("settings/system")]
+    [ProducesResponseType(typeof(Result<SystemStorageSettingsResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetSystemSettings(CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(new GetSystemStorageSettingsQuery(), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPut("settings/system")]
+    [ProducesResponseType(typeof(Result<SystemStorageSettingsResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateSystemSettings(
+        [FromBody] UpdateSystemStorageQuotaRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new UpdateSystemStorageQuotaCommand(request.SystemStorageQuotaBytes),
             cancellationToken);
 
         if (result.IsFailure)
@@ -136,9 +168,30 @@ public sealed class AdminStorageController : ApiController
 
         return Ok(result);
     }
+
+    [HttpGet("usage/users/{userId:guid}")]
+    [ProducesResponseType(typeof(Result<AdminStorageUsageResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetUserUsageDetail(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new GetAdminStorageUsageQuery(userId, null, false),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
 }
 
 public sealed record UpdateFreeStorageQuotaRequest(long FreeStorageQuotaBytes);
+
+public sealed record UpdateSystemStorageQuotaRequest(long? SystemStorageQuotaBytes);
 
 public sealed record UpdateStoragePlanRequest(
     long? StorageQuotaBytes,

@@ -55,6 +55,21 @@ public sealed class StorageUsageService : IStorageUsageService
                 new Error("Resource.StorageQuotaExceeded", "Storage quota exceeded."));
         }
 
+        var systemQuotaBytes = await GetSystemStorageQuotaBytesAsync(cancellationToken);
+        if (systemQuotaBytes.HasValue)
+        {
+            var systemUsedBytes = await _resourceRepository.GetAll()
+                .AsNoTracking()
+                .Where(resource => !resource.IsDeleted)
+                .SumAsync(resource => resource.SizeBytes ?? 0L, cancellationToken);
+
+            if (systemUsedBytes + requestedBytes > systemQuotaBytes.Value)
+            {
+                return Result.Failure<StorageUsageResponse>(
+                    new Error("Resource.SystemStorageQuotaExceeded", "System storage quota exceeded."));
+            }
+        }
+
         return Result.Success(usage);
     }
 
@@ -99,5 +114,16 @@ public sealed class StorageUsageService : IStorageUsageService
             .FirstOrDefaultAsync(cancellationToken);
 
         return config?.FreeStorageQuotaBytes ?? UserSubscriptionEntitlement.DefaultFreeStorageQuotaBytes;
+    }
+
+    private async Task<long?> GetSystemStorageQuotaBytesAsync(CancellationToken cancellationToken)
+    {
+        var config = await _configRepository.GetAll()
+            .AsNoTracking()
+            .Where(item => !item.IsDeleted)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return config?.SystemStorageQuotaBytes;
     }
 }

@@ -13,6 +13,7 @@ internal static class ConfigMapping
             config.MediaAspectRatio,
             config.NumberOfVariances,
             config.FreeStorageQuotaBytes,
+            config.SystemStorageQuotaBytes,
             config.CreatedAt ?? DateTimeExtensions.PostgreSqlUtcNow,
             config.UpdatedAt);
 }

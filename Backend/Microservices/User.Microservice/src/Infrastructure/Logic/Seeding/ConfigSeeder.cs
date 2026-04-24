@@ -46,6 +46,7 @@ public sealed class ConfigSeeder
             MediaAspectRatio = Normalize(_options.MediaAspectRatio) ?? "1:1",
             NumberOfVariances = _options.NumberOfVariances,
             FreeStorageQuotaBytes = 100L * 1024L * 1024L,
+            SystemStorageQuotaBytes = null,
             CreatedAt = now,
             UpdatedAt = now,
             IsDeleted = false

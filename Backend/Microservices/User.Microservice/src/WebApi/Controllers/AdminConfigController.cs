@@ -60,4 +60,5 @@ public sealed record UpdateConfigRequest(
     string? ChatModel,
     string? MediaAspectRatio,
     int? NumberOfVariances,
-    long? FreeStorageQuotaBytes);
+    long? FreeStorageQuotaBytes,
+    long? SystemStorageQuotaBytes);

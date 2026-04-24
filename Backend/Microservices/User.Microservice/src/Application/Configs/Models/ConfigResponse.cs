@@ -6,5 +6,6 @@ public sealed record ConfigResponse(
     string? MediaAspectRatio,
     int? NumberOfVariances,
     long? FreeStorageQuotaBytes,
+    long? SystemStorageQuotaBytes,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

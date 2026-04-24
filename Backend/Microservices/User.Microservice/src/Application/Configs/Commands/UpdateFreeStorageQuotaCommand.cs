@@ -1,5 +1,6 @@
 using Application.Abstractions.Data;
-using Application.Configs.Models;
+using Application.Resources.Models;
+using Application.Subscriptions.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -9,10 +10,10 @@ using SharedLibrary.Extensions;
 
 namespace Application.Configs.Commands;
 
-public sealed record UpdateFreeStorageQuotaCommand(long FreeStorageQuotaBytes) : IRequest<Result<ConfigResponse>>;
+public sealed record UpdateFreeStorageQuotaCommand(long FreeStorageQuotaBytes) : IRequest<Result<StorageSettingsResponse>>;
 
 public sealed class UpdateFreeStorageQuotaCommandHandler
-    : IRequestHandler<UpdateFreeStorageQuotaCommand, Result<ConfigResponse>>
+    : IRequestHandler<UpdateFreeStorageQuotaCommand, Result<StorageSettingsResponse>>
 {
     private readonly IRepository<Config> _repository;
 
@@ -21,13 +22,13 @@ public sealed class UpdateFreeStorageQuotaCommandHandler
         _repository = unitOfWork.Repository<Config>();
     }
 
-    public async Task<Result<ConfigResponse>> Handle(
+    public async Task<Result<StorageSettingsResponse>> Handle(
         UpdateFreeStorageQuotaCommand request,
         CancellationToken cancellationToken)
     {
         if (request.FreeStorageQuotaBytes < 0)
         {
-            return Result.Failure<ConfigResponse>(
+            return Result.Failure<StorageSettingsResponse>(
                 new Error("Config.InvalidFreeStorageQuota", "Free storage quota must be greater than or equal to 0."));
         }
 
@@ -53,6 +54,9 @@ public sealed class UpdateFreeStorageQuotaCommandHandler
         config.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         _repository.Update(config);
 
-        return Result.Success(ConfigMapping.ToResponse(config));
+        return Result.Success(new StorageSettingsResponse(
+            config.FreeStorageQuotaBytes ?? UserSubscriptionEntitlement.DefaultFreeStorageQuotaBytes,
+            Math.Round((config.FreeStorageQuotaBytes ?? UserSubscriptionEntitlement.DefaultFreeStorageQuotaBytes) / 1024m / 1024m, 2),
+            config.UpdatedAt));
     }
 }

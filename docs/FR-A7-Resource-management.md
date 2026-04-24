@@ -149,6 +149,131 @@ Quy ước:
 - Free tier default do admin cấu hình trong system config; seed mặc định là `100 MB` (`104857600` bytes).
 - Admin chỉnh plan thì user đang dùng plan đó lấy quota mới ngay vì runtime đọc DB plan.
 
+## Nơi setup và initial values
+
+FR-A7 có 3 cấp storage setting khác nhau. Không dùng lẫn các cấp này:
+
+| Cấp setting | Dùng cho ai | Admin API | DB/source |
+|---|---|---|---|
+| Free tier storage | User không có active subscription | `GET/PUT /api/User/admin/storage/settings/free-tier` | `configs.free_storage_quota_bytes` |
+| Subscription plan storage | User có active subscription plan | `PATCH /api/User/admin/storage/plans/{subscriptionId}` hoặc `PATCH /api/User/admin/subscriptions/{subscriptionId}` | `subscriptions.limits.storage_quota_bytes` |
+| System total storage | Tổng capacity toàn hệ thống | `GET/PUT /api/User/admin/storage/settings/system` | `configs.system_storage_quota_bytes` |
+
+### Initial free tier storage
+
+Giá trị mặc định hiện tại: `100 MB = 104857600` bytes.
+
+Nơi khởi tạo:
+
+- Entity default/migration config: `Backend/Microservices/User.Microservice/src/Infrastructure/Context/Configuration/ConfigConfiguration.cs`
+- Seed config lần đầu: `Backend/Microservices/User.Microservice/src/Infrastructure/Logic/Seeding/ConfigSeeder.cs`
+- Runtime fallback nếu DB chưa có config: `Backend/Microservices/User.Microservice/src/Application/Subscriptions/Services/IUserSubscriptionEntitlementService.cs`
+- Migration đã tạo cột: `Backend/Microservices/User.Microservice/src/Infrastructure/Migrations/20260424052729_AddStorageQuotaManagement.cs`
+
+Cách đổi initial cho môi trường mới/chưa seed DB:
+
+1. Đổi `HasDefaultValue(104857600L)` trong `ConfigConfiguration.cs`.
+2. Đổi `FreeStorageQuotaBytes = 100L * 1024L * 1024L` trong `ConfigSeeder.cs`.
+3. Đổi `DefaultFreeStorageQuotaBytes` trong `IUserSubscriptionEntitlementService.cs` để fallback runtime khớp seed.
+4. Tạo migration mới nếu DB schema default cần đổi.
+
+Cách đổi khi DB đã chạy:
+
+```http
+PUT /api/User/admin/storage/settings/free-tier
+Content-Type: application/json
+
+{
+  "freeStorageQuotaBytes": 209715200
+}
+```
+
+Sau khi gọi API, free users dùng quota mới ngay trong lần upload tiếp theo. Không cần restart service.
+
+### Initial subscription storage
+
+Subscription plan storage nằm trong JSONB `subscriptions.limits`, không nằm trong `configs`.
+
+Nơi khởi tạo plan seed:
+
+- `Backend/Microservices/User.Microservice/src/Infrastructure/Logic/Seeding/SubscriptionSeeder.cs`
+
+Giá trị seed hiện tại cho các plan mặc định:
+
+```csharp
+StorageQuotaBytes = 10L * 1024L * 1024L * 1024L, // 10 GB
+MaxUploadFileBytes = 500L * 1024L * 1024L,       // 500 MB
+RetentionDaysAfterDelete = 30
+```
+
+Cách đổi initial cho plan seed mới:
+
+1. Đổi các field trên trong `SubscriptionSeeder.cs`.
+2. Nếu database đã có plan cùng `Name`, seeder hiện tại sẽ skip plan đó; muốn đổi plan đã tồn tại thì dùng admin API hoặc migration/data script.
+
+Cách admin đổi storage của một plan đang tồn tại:
+
+```http
+PATCH /api/User/admin/storage/plans/{subscriptionId}
+Content-Type: application/json
+
+{
+  "storageQuotaBytes": 21474836480,
+  "maxUploadFileBytes": 1073741824,
+  "retentionDaysAfterDelete": 45
+}
+```
+
+Hoặc dùng subscription API canonical:
+
+```http
+PATCH /api/User/admin/subscriptions/{subscriptionId}
+Content-Type: application/json
+
+{
+  "limits": {
+    "storage_quota_bytes": 21474836480,
+    "max_upload_file_bytes": 1073741824,
+    "retention_days_after_delete": 45
+  }
+}
+```
+
+Các user đang active trên plan đó nhận quota mới ngay ở lần upload tiếp theo.
+
+### Initial system total storage
+
+System total storage là quota tổng toàn hệ thống. Giá trị mặc định hiện tại là `null`, nghĩa là chưa giới hạn tổng hệ thống.
+
+Nơi lưu:
+
+- `configs.system_storage_quota_bytes`
+- Cột được thêm bởi migration: `Backend/Microservices/User.Microservice/src/Infrastructure/Migrations/20260424055234_AddSystemStorageQuotaSetting.cs`
+
+Cách admin set tổng capacity:
+
+```http
+PUT /api/User/admin/storage/settings/system
+Content-Type: application/json
+
+{
+  "systemStorageQuotaBytes": 107374182400
+}
+```
+
+`107374182400` bytes = `100 GB`.
+
+Cách bỏ giới hạn tổng hệ thống:
+
+```http
+PUT /api/User/admin/storage/settings/system
+Content-Type: application/json
+
+{
+  "systemStorageQuotaBytes": null
+}
+```
+
 Rule bắt buộc:
 
 - Subscription plan là nơi cấu hình storage entitlement chính. Không hard-code quota theo role hoặc theo user trong upload command.
@@ -164,7 +289,7 @@ Free users không có subscription plan nên quota mặc định phải nằm tr
 Admin API:
 
 ```http
-GET /api/User/admin/storage/settings
+GET /api/User/admin/storage/settings/free-tier
 PUT /api/User/admin/storage/settings/free-tier
 Content-Type: application/json
 
@@ -173,12 +298,14 @@ Content-Type: application/json
 }
 ```
 
-Response dùng `Result<ConfigResponse>` và có field:
+Response dùng `Result<StorageSettingsResponse>` và chỉ trả field thuộc storage:
 
 ```json
 {
   "value": {
-    "freeStorageQuotaBytes": 104857600
+    "freeStorageQuotaBytes": 104857600,
+    "freeStorageQuotaMb": 100,
+    "updatedAt": "2026-04-24T05:37:55.330204Z"
   },
   "isSuccess": true,
   "isFailure": false,
@@ -192,6 +319,48 @@ Rule:
 - `0` nghĩa là free users không được upload resource mới.
 - User không có active subscription dùng ngay giá trị config mới trong lần upload kế tiếp.
 - User free đang over quota sau khi admin giảm quota vẫn được xem/xóa resource cũ, nhưng upload mới bị chặn.
+
+### System-wide storage setting
+
+Admin phải cấu hình được tổng dung lượng storage toàn hệ thống. Setting này dùng để vận hành/cảnh báo tổng capacity, tách biệt với quota từng user/plan.
+
+```http
+GET /api/User/admin/storage/settings/system
+PUT /api/User/admin/storage/settings/system
+Content-Type: application/json
+
+{
+  "systemStorageQuotaBytes": 107374182400
+}
+```
+
+`systemStorageQuotaBytes = null` nghĩa là chưa đặt giới hạn tổng hệ thống. Response luôn trả tổng đã dùng:
+
+```json
+{
+  "value": {
+    "systemStorageQuotaBytes": 107374182400,
+    "systemStorageQuotaGb": 100,
+    "usedBytes": 5368709120,
+    "usedGb": 5,
+    "availableBytes": 102005473280,
+    "availableGb": 95,
+    "usagePercent": 5,
+    "resourceCount": 120,
+    "userCount": 30,
+    "updatedAt": "2026-04-24T05:37:55.330204Z"
+  },
+  "isSuccess": true,
+  "isFailure": false,
+  "error": null
+}
+```
+
+Rule:
+
+- `systemStorageQuotaBytes` phải `>= 0` hoặc `null`.
+- System quota không thay thế quota theo user/plan; upload phải pass cả user quota và system quota.
+- Khi `usedBytes + requestedBytes > systemStorageQuotaBytes`, mọi flow tạo resource mới bị chặn trước khi ghi S3 với lỗi `Resource.SystemStorageQuotaExceeded`.
 
 ## Upload/quota flow
 
@@ -400,6 +569,12 @@ Alias response nên trả DTO tập trung vào storage để FE dễ render:
 
 ```http
 GET /api/User/admin/storage/usage?userId={guid?}&namespace={text?}
+```
+
+Admin có route detail rõ ràng cho từng user:
+
+```http
+GET /api/User/admin/storage/usage/users/{userId}
 ```
 
 Nên hỗ trợ filter theo plan để admin kiểm tra các user bị ảnh hưởng khi đổi quota:
