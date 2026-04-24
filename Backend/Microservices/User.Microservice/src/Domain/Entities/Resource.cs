@@ -35,6 +35,12 @@ public sealed class Resource
     public string? OriginalFileName { get; set; }
 
     [Column(TypeName = "timestamp with time zone")]
+    public DateTime? LastVerifiedAt { get; set; }
+
+    [Column(TypeName = "timestamp with time zone")]
+    public DateTime? DeletedFromStorageAt { get; set; }
+
+    [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 
     [Column(TypeName = "timestamp with time zone")]

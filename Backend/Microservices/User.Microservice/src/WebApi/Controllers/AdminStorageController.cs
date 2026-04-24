@@ -187,6 +187,52 @@ public sealed class AdminStorageController : ApiController
 
         return Ok(result);
     }
+
+    [HttpPost("cleanup/run")]
+    [ProducesResponseType(typeof(Result<StorageCleanupResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RunCleanup(
+        [FromBody] RunStorageCleanupRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new RunStorageCleanupCommand(
+                request.DryRun ?? true,
+                request.DeleteExpiredResources ?? true,
+                request.DeleteOrphanObjects ?? false,
+                request.OlderThanDays ?? 30,
+                request.Namespace),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPost("reconcile")]
+    [ProducesResponseType(typeof(Result<StorageReconcileResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Reconcile(
+        [FromBody] ReconcileStorageRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new ReconcileStorageCommand(
+                request.DryRun ?? true,
+                request.MarkMissingObjects ?? false,
+                request.Namespace),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
 }
 
 public sealed record UpdateFreeStorageQuotaRequest(long FreeStorageQuotaBytes);
@@ -197,3 +243,15 @@ public sealed record UpdateStoragePlanRequest(
     long? StorageQuotaBytes,
     long? MaxUploadFileBytes,
     int? RetentionDaysAfterDelete);
+
+public sealed record RunStorageCleanupRequest(
+    bool? DryRun,
+    bool? DeleteExpiredResources,
+    bool? DeleteOrphanObjects,
+    int? OlderThanDays,
+    string? Namespace);
+
+public sealed record ReconcileStorageRequest(
+    bool? DryRun,
+    bool? MarkMissingObjects,
+    string? Namespace);
