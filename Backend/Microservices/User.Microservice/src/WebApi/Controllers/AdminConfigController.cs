@@ -59,4 +59,6 @@ public sealed class AdminConfigController : ApiController
 public sealed record UpdateConfigRequest(
     string? ChatModel,
     string? MediaAspectRatio,
-    int? NumberOfVariances);
+    int? NumberOfVariances,
+    long? FreeStorageQuotaBytes,
+    long? SystemStorageQuotaBytes);

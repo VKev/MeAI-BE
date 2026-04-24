@@ -1,0 +1,155 @@
+{
+  "name": "MeAI Web Search",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "meai/web-search",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-web-search",
+      "name": "Webhook Web Search",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -840,
+        240
+      ],
+      "webhookId": "meai-web-search"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nconst payload = input.body ?? input;\nconst body = typeof payload === 'string' ? JSON.parse(payload) : payload;\nconst template = String(body.queryTemplate ?? '').trim();\nif (!template) {\n  throw new Error('queryTemplate is required');\n}\nconst requestedCount = Number(body.count ?? 5);\nconst count = Number.isFinite(requestedCount) && requestedCount > 0\n  ? Math.min(Math.trunc(requestedCount), 20)\n  : 5;\nconst executeAtUtc = body.executeAtUtc ?? null;\nconst timezone = body.timezone ?? 'UTC';\nconst query = template;\nconst queryParts = [];\nconst appendQuery = (name, value, transform = (text) => text) => {\n  const text = String(value ?? '').trim();\n  if (!text || ['null', 'undefined'].includes(text.toLowerCase())) {\n    return;\n  }\n  queryParts.push(`${name}=${encodeURIComponent(transform(text))}`);\n};\nappendQuery('q', query);\nappendQuery('count', count);\nappendQuery('country', body.country, (text) => text.toUpperCase());\nappendQuery('search_lang', body.searchLang, (text) => text.toLowerCase());\nappendQuery('freshness', body.freshness);\nconst braveSearchUrl = `https://api.search.brave.com/res/v1/web/search?${queryParts.join('&')}`;\nreturn [{ json: { ...body, query, count, timezone, executeAtUtc, braveSearchUrl } }];"
+      },
+      "id": "prepare-web-search",
+      "name": "Prepare Web Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -580,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$json.braveSearchUrl}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Subscription-Token",
+              "value": "={{$env.BRAVE_SEARCH_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "call-brave-search",
+      "name": "Call Brave Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -300,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nconst request = $('Prepare Web Search').first().json;\nconst results = (response.web?.results ?? []).slice(0, Number(request.count ?? 5)).map((item) => ({\n  title: item.title ?? null,\n  url: item.url ?? item.profile?.url ?? null,\n  description: item.description ?? item.snippet ?? null,\n  source: item.meta_url?.hostname ?? item.profile?.name ?? null\n}));\nconst llmContext = results\n  .map((item, index) => `${index + 1}. ${item.title ?? 'Untitled'}\\n${item.url ?? ''}\\n${item.description ?? ''}`.trim())\n  .join('\\n\\n');\nreturn [{ json: {\n  query: request.query,\n  retrievedAtUtc: new Date().toISOString(),\n  results,\n  llmContext\n} }];"
+      },
+      "id": "normalize-web-search",
+      "name": "Normalize Web Search Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json)}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-web-search",
+      "name": "Respond Web Search",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        220,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Web Search": {
+      "main": [
+        [
+          {
+            "node": "Prepare Web Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Web Search": {
+      "main": [
+        [
+          {
+            "node": "Call Brave Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Brave Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize Web Search Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Web Search Result": {
+      "main": [
+        [
+          {
+            "node": "Respond Web Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": true,
+  "versionId": "36c4f0c0-3f3b-4c0b-9e69-70af5ef31a01",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "meai-web-search"
+}

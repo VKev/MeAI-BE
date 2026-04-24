@@ -48,6 +48,8 @@ builder.ConfigureSerilogLogging();
 builder.Services.AddSingleton<EnvironmentConfig>();
 builder.Services.Configure<VeoOptions>(
     builder.Configuration.GetSection(VeoOptions.SectionName));
+builder.Services.Configure<N8nOptions>(
+    builder.Configuration.GetSection(N8nOptions.SectionName));
 builder.Services.Configure<SampleSeedOptions>(
     builder.Configuration.GetSection(SampleSeedOptions.SectionName));
 builder.AddDatabase();
@@ -88,4 +90,3 @@ app.Run();
 public partial class Program
 {
 }
-

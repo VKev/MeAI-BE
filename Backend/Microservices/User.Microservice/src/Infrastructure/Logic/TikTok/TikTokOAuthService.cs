@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.TikTok;
 using Microsoft.Extensions.Configuration;
 using SharedLibrary.Common;
@@ -15,10 +16,9 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
     private const string AuthorizationBaseUrl = "https://www.tiktok.com/v2/auth/authorize/";
     private const string TokenEndpoint = "https://open.tiktokapis.com/v2/oauth/token/";
 
-    private readonly string _clientKey;
-    private readonly string _clientSecret;
     private readonly string _redirectUri;
     private readonly HttpClient _httpClient;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -26,15 +26,15 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public TikTokOAuthService(IConfiguration configuration, IHttpClientFactory httpClientFactory)
+    public TikTokOAuthService(
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory,
+        IApiCredentialProvider credentialProvider)
     {
-        _clientKey = configuration["TikTok:ClientKey"]
-                     ?? throw new InvalidOperationException("TikTok:ClientKey is not configured");
-        _clientSecret = configuration["TikTok:ClientSecret"]
-                        ?? throw new InvalidOperationException("TikTok:ClientSecret is not configured");
         _redirectUri = configuration["TikTok:RedirectUri"]
                        ?? throw new InvalidOperationException("TikTok:RedirectUri is not configured");
         _httpClient = httpClientFactory.CreateClient("TikTok");
+        _credentialProvider = credentialProvider;
     }
 
     public (string AuthorizationUrl, string State, string CodeVerifier) GenerateAuthorizationUrl(Guid userId, string scopes)
@@ -46,9 +46,10 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
         var codeVerifier = GenerateCodeVerifier();
         var codeChallenge = GenerateCodeChallenge(codeVerifier);
 
+        var clientKey = _credentialProvider.GetRequiredValue("TikTok", "ClientKey");
         var queryParams = new Dictionary<string, string>
         {
-            ["client_key"] = _clientKey,
+            ["client_key"] = clientKey,
             ["scope"] = scopes,
             ["response_type"] = "code",
             ["redirect_uri"] = _redirectUri,
@@ -67,10 +68,12 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
         string codeVerifier,
         CancellationToken cancellationToken)
     {
+        var clientKey = _credentialProvider.GetRequiredValue("TikTok", "ClientKey");
+        var clientSecret = _credentialProvider.GetRequiredValue("TikTok", "ClientSecret");
         var formData = new Dictionary<string, string>
         {
-            ["client_key"] = _clientKey,
-            ["client_secret"] = _clientSecret,
+            ["client_key"] = clientKey,
+            ["client_secret"] = clientSecret,
             ["code"] = code,
             ["grant_type"] = "authorization_code",
             ["redirect_uri"] = _redirectUri,
@@ -83,10 +86,12 @@ public sealed class TikTokOAuthService : ITikTokOAuthService
     public async Task<Result<TikTokTokenResponse>> RefreshTokenAsync(string refreshToken,
         CancellationToken cancellationToken)
     {
+        var clientKey = _credentialProvider.GetRequiredValue("TikTok", "ClientKey");
+        var clientSecret = _credentialProvider.GetRequiredValue("TikTok", "ClientSecret");
         var formData = new Dictionary<string, string>
         {
-            ["client_key"] = _clientKey,
-            ["client_secret"] = _clientSecret,
+            ["client_key"] = clientKey,
+            ["client_secret"] = clientSecret,
             ["grant_type"] = "refresh_token",
             ["refresh_token"] = refreshToken
         };

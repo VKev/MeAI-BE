@@ -1,5 +1,6 @@
 using Infrastructure.Context;
 using Infrastructure.EmailTemplates;
+using Infrastructure.Logic.ApiCredentials;
 using Infrastructure.Logic.Seeding;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,6 +29,16 @@ public static class SeedingSetup
         catch (Exception ex)
         {
             app.Logger.LogError(ex, "Failed to seed default user at startup.");
+        }
+
+        try
+        {
+            var apiCredentialSeeder = scope.ServiceProvider.GetRequiredService<ApiCredentialSyncSeeder>();
+            await apiCredentialSeeder.SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Failed to sync API credentials at startup.");
         }
 
         try

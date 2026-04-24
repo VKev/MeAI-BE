@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Instagram;
 using Application.Abstractions.Meta;
 using Microsoft.Extensions.Configuration;
@@ -20,31 +21,29 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
 
     private static readonly string[] RequiredScopes = { "pages_show_list", "instagram_basic" };
 
-    private readonly string _appId;
-    private readonly string _appSecret;
     private readonly string _redirectUri;
     private readonly string _scopes;
     private readonly HttpClient _httpClient;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    public InstagramOAuthService(IConfiguration configuration, IHttpClientFactory httpClientFactory)
+    public InstagramOAuthService(
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory,
+        IApiCredentialProvider credentialProvider)
     {
-        _appId = configuration["Instagram:AppId"] ?? configuration["Facebook:AppId"]
-                 ?? throw new InvalidOperationException("Instagram:AppId is not configured");
-        _appSecret = configuration["Instagram:AppSecret"] ?? configuration["Facebook:AppSecret"]
-                     ?? throw new InvalidOperationException("Instagram:AppSecret is not configured");
         _redirectUri = configuration["Instagram:RedirectUri"] ?? configuration["Facebook:RedirectUri"]
                        ?? throw new InvalidOperationException("Instagram:RedirectUri is not configured");
         var configuredScopes = configuration["Instagram:Scopes"] ?? configuration["Facebook:Scopes"];
         _scopes = string.IsNullOrWhiteSpace(configuredScopes)
             ? DefaultScopes
             : configuredScopes;
-
         _httpClient = httpClientFactory.CreateClient("Instagram");
+        _credentialProvider = credentialProvider;
     }
 
     public (string AuthorizationUrl, string State) GenerateAuthorizationUrl(Guid userId, string? scopes)
@@ -55,9 +54,10 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
 
         var state = BuildState(userId);
 
+        var appId = ResolveAppId();
         var queryParams = new Dictionary<string, string>
         {
-            ["client_id"] = _appId,
+            ["client_id"] = appId,
             ["redirect_uri"] = _redirectUri,
             ["response_type"] = "code",
             ["scope"] = resolvedScopes,
@@ -76,8 +76,10 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
     {
         try
         {
+            var appId = ResolveAppId();
+            var appSecret = ResolveAppSecret();
             var url =
-                $"{OAuthTokenEndpoint}?client_id={Uri.EscapeDataString(_appId)}&redirect_uri={Uri.EscapeDataString(_redirectUri)}&client_secret={Uri.EscapeDataString(_appSecret)}&code={Uri.EscapeDataString(code)}";
+                $"{OAuthTokenEndpoint}?client_id={Uri.EscapeDataString(appId)}&redirect_uri={Uri.EscapeDataString(_redirectUri)}&client_secret={Uri.EscapeDataString(appSecret)}&code={Uri.EscapeDataString(code)}";
 
             using var response = await _httpClient.GetAsync(url, cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -116,8 +118,10 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
     {
         try
         {
+            var appId = ResolveAppId();
+            var appSecret = ResolveAppSecret();
             var url =
-                $"{GraphApiBaseUrl}/debug_token?input_token={Uri.EscapeDataString(accessToken)}&access_token={_appId}|{_appSecret}";
+                $"{GraphApiBaseUrl}/debug_token?input_token={Uri.EscapeDataString(accessToken)}&access_token={appId}|{appSecret}";
 
             using var response = await _httpClient.GetAsync(url, cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -138,7 +142,7 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
             }
 
             if (!string.IsNullOrWhiteSpace(debugToken.AppId) &&
-                !string.Equals(debugToken.AppId, _appId, StringComparison.Ordinal))
+                !string.Equals(debugToken.AppId, appId, StringComparison.Ordinal))
             {
                 return Result.Failure<MetaDebugToken>(
                     new Error("Instagram.AppMismatch", "Instagram token does not belong to this app."));
@@ -156,6 +160,18 @@ public sealed class InstagramOAuthService : IInstagramOAuthService
             return Result.Failure<MetaDebugToken>(
                 new Error("Instagram.ParseError", $"JSON parse error: {ex.Message}"));
         }
+    }
+
+    private string ResolveAppId()
+    {
+        return _credentialProvider.GetOptionalValue("Instagram", "AppId")
+               ?? _credentialProvider.GetRequiredValue("Facebook", "AppId");
+    }
+
+    private string ResolveAppSecret()
+    {
+        return _credentialProvider.GetOptionalValue("Instagram", "AppSecret")
+               ?? _credentialProvider.GetRequiredValue("Facebook", "AppSecret");
     }
 
     public async Task<Result<InstagramGraphProfileResult>> FetchBusinessProfileAsync(

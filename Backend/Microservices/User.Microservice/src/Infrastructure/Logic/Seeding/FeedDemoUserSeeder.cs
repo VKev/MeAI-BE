@@ -71,8 +71,7 @@ public sealed class FeedDemoUserSeeder
             .Select(filePath => new MediaFileDefinition(
                 RelativePath: Path.GetRelativePath(mediaRoot, filePath).Replace('\\', '/'),
                 ResourceType: InferResourceType(filePath),
-                ContentType: InferContentType(filePath),
-                FileSizeBytes: new FileInfo(filePath).Length))
+                ContentType: InferContentType(filePath)))
             .OrderBy(item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -172,7 +171,6 @@ public sealed class FeedDemoUserSeeder
                     Status = "ready",
                     ResourceType = mediaFile.ResourceType,
                     ContentType = mediaFile.ContentType,
-                    FileSizeBytes = mediaFile.FileSizeBytes,
                     CreatedAt = createdAt,
                     UpdatedAt = createdAt,
                     IsDeleted = false,
@@ -187,7 +185,6 @@ public sealed class FeedDemoUserSeeder
                     RelativePath = mediaFile.RelativePath,
                     ResourceType = mediaFile.ResourceType,
                     ContentType = mediaFile.ContentType,
-                    FileSizeBytes = mediaFile.FileSizeBytes,
                     Link = link
                 });
             }
@@ -261,7 +258,6 @@ public sealed class FeedDemoUserSeeder
                     RelativePath = mediaFile.RelativePath,
                     ResourceType = mediaFile.ResourceType,
                     ContentType = mediaFile.ContentType,
-                    FileSizeBytes = mediaFile.FileSizeBytes,
                     Link = BuildSeedMediaUrl(_options.PublicBaseUrl, mediaFile.RelativePath)
                 }))
             .ToList();
@@ -461,8 +457,7 @@ public sealed class FeedDemoUserSeeder
     private sealed record MediaFileDefinition(
         string RelativePath,
         string ResourceType,
-        string ContentType,
-        long FileSizeBytes);
+        string ContentType);
 
     public sealed class FeedSeedState
     {
@@ -501,8 +496,6 @@ public sealed class FeedDemoUserSeeder
         public string ResourceType { get; set; } = string.Empty;
 
         public string ContentType { get; set; } = string.Empty;
-
-        public long FileSizeBytes { get; set; }
 
         public string Link { get; set; } = string.Empty;
     }

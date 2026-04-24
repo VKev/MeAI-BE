@@ -12,6 +12,8 @@ internal static class ConfigMapping
             config.ChatModel,
             config.MediaAspectRatio,
             config.NumberOfVariances,
+            config.FreeStorageQuotaBytes,
+            config.SystemStorageQuotaBytes,
             config.CreatedAt ?? DateTimeExtensions.PostgreSqlUtcNow,
             config.UpdatedAt);
 }

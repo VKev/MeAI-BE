@@ -5,6 +5,7 @@ using Application.Abstractions.Threads;
 using Application.Abstractions.TikTok;
 using FluentAssertions;
 using Infrastructure.Logic.SocialMedia;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SharedLibrary.Common.ResponseModel;
 
@@ -38,7 +39,8 @@ public sealed class SocialMediaProfileServiceTests
             tikTokOAuthService.Object,
             threadsOAuthService.Object,
             facebookOAuthService.Object,
-            instagramOAuthService.Object);
+            instagramOAuthService.Object,
+            NullLogger<SocialMediaProfileService>.Instance);
 
         using var metadata = JsonDocument.Parse(
             """
@@ -53,7 +55,7 @@ public sealed class SocialMediaProfileServiceTests
         var result = await service.GetUserProfileAsync("facebook", metadata, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.UserId.Should().Be("page-2");
+        result.Value.UserId.Should().Be("user-profile-id");
         result.Value.DisplayName.Should().Be("Facebook User");
         result.Value.FollowerCount.Should().Be(123);
 

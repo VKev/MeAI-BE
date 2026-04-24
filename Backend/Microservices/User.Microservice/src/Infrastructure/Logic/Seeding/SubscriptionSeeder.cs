@@ -54,7 +54,10 @@ public sealed class SubscriptionSeeder
                     NumberOfSocialAccounts = seed.SocialAccounts,
                     RateLimitForContentCreation = seed.ContentRate,
                     NumberOfWorkspaces = null,
-                    MaxPagesPerSocialAccount = seed.MaxPages
+                    MaxPagesPerSocialAccount = seed.MaxPages,
+                    StorageQuotaBytes = 10L * 1024L * 1024L * 1024L,
+                    MaxUploadFileBytes = 500L * 1024L * 1024L,
+                    RetentionDaysAfterDelete = 30
                 },
                 CreatedAt = now,
                 UpdatedAt = now
@@ -72,4 +75,3 @@ public sealed class SubscriptionSeeder
         _logger.LogInformation("Seeded {Count} subscription(s).", toAdd.Count);
     }
 }
-

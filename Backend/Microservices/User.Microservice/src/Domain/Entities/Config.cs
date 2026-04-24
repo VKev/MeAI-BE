@@ -14,6 +14,10 @@ public sealed class Config
 
     public int? NumberOfVariances { get; set; }
 
+    public long? FreeStorageQuotaBytes { get; set; }
+
+    public long? SystemStorageQuotaBytes { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 

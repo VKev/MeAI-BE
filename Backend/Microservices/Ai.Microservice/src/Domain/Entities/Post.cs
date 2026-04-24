@@ -14,6 +14,8 @@ public sealed class Post
 
     public Guid? WorkspaceId { get; set; }
 
+    public Guid? ChatSessionId { get; set; }
+
     public Guid? SocialMediaId { get; set; }
 
     public string? Platform { get; set; }
@@ -25,6 +27,18 @@ public sealed class Post
 
     public string? Status { get; set; }
 
+    public Guid? ScheduleGroupId { get; set; }
+
+    [Column(TypeName = "uuid[]")]
+    public Guid[] ScheduledSocialMediaIds { get; set; } = Array.Empty<Guid>();
+
+    public bool? ScheduledIsPrivate { get; set; }
+
+    public string? ScheduleTimezone { get; set; }
+
+    [Column(TypeName = "timestamp with time zone")]
+    public DateTime? ScheduledAtUtc { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 
@@ -35,4 +49,6 @@ public sealed class Post
     public DateTime? DeletedAt { get; set; }
 
     public PostBuilder? PostBuilder { get; set; }
+
+    public ChatSession? ChatSession { get; set; }
 }

@@ -31,7 +31,7 @@ public sealed class GetSocialMediasByIdsQueryTests
                   "access_token": "old-access-token",
                   "refresh_token": "refresh-token",
                   "expires_at": "2026-03-23T00:00:00.0000000Z",
-                  "refresh_expires_at": "2026-04-23T00:00:00.0000000Z",
+                  "refresh_expires_at": "2026-05-23T00:00:00.0000000Z",
                   "display_name": "Old Name"
                 }
                 """),

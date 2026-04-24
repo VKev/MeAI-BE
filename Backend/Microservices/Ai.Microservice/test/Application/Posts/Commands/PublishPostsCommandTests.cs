@@ -1,74 +1,56 @@
-using Application.Abstractions.Facebook;
-using Application.Abstractions.Instagram;
-using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
-using Application.Abstractions.Threads;
-using Application.Abstractions.TikTok;
 using Application.Posts.Commands;
 using Domain.Entities;
 using Domain.Repositories;
 using FluentAssertions;
+using MassTransit;
 using Moq;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.Publishing;
 
 namespace AiMicroservice.Tests.Application.Posts.Commands;
 
 public sealed class PublishPostsCommandTests
 {
     [Fact]
-    public async Task Handle_ShouldPublishMultiplePostsAndSocialMediaTargets()
+    public async Task Handle_ShouldCreateProcessingPlaceholdersAndPublishTargetMessages()
     {
         var userId = Guid.NewGuid();
         var firstPostId = Guid.NewGuid();
         var secondPostId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
-        var firstResourceId = Guid.NewGuid();
-        var secondResourceId = Guid.NewGuid();
         var facebookId = Guid.NewGuid();
         var threadsId = Guid.NewGuid();
         var instagramId = Guid.NewGuid();
+        var scheduleGroupId = Guid.NewGuid();
+
+        var firstPost = CreatePost(firstPostId, userId, workspaceId);
+        firstPost.ScheduleGroupId = scheduleGroupId;
+        firstPost.ScheduledAtUtc = DateTime.UtcNow.AddHours(1);
+        firstPost.ScheduledSocialMediaIds = [facebookId, threadsId];
+
+        var secondPost = CreatePost(secondPostId, userId, workspaceId);
 
         var postRepository = new Mock<IPostRepository>();
-        var postPublicationRepository = new Mock<IPostPublicationRepository>();
-        var userResourceService = new Mock<IUserResourceService>();
-        var userSocialMediaService = new Mock<IUserSocialMediaService>();
-        var facebookPublishService = new Mock<IFacebookPublishService>();
-        var instagramPublishService = new Mock<IInstagramPublishService>();
-        var tikTokPublishService = new Mock<ITikTokPublishService>();
-        var threadsPublishService = new Mock<IThreadsPublishService>();
-
         postRepository
             .Setup(repository => repository.GetByIdForUpdateAsync(firstPostId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Post
-            {
-                Id = firstPostId,
-                UserId = userId,
-                WorkspaceId = workspaceId,
-                Content = new PostContent
-                {
-                    Content = "First caption",
-                    PostType = "posts",
-                    ResourceList = [firstResourceId.ToString()]
-                },
-                Status = "draft"
-            });
-
+            .ReturnsAsync(firstPost);
         postRepository
             .Setup(repository => repository.GetByIdForUpdateAsync(secondPostId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new Post
-            {
-                Id = secondPostId,
-                UserId = userId,
-                WorkspaceId = workspaceId,
-                Content = new PostContent
-                {
-                    Content = "Second caption",
-                    PostType = "posts",
-                    ResourceList = [secondResourceId.ToString()]
-                },
-                Status = "draft"
-            });
+            .ReturnsAsync(secondPost);
+        postRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
 
+        var postPublicationRepository = new Mock<IPostPublicationRepository>();
+        postPublicationRepository
+            .Setup(repository => repository.GetByPostIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<PostPublication>());
+        postPublicationRepository
+            .Setup(repository => repository.AddRangeAsync(It.IsAny<IEnumerable<PostPublication>>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var userSocialMediaService = new Mock<IUserSocialMediaService>();
         userSocialMediaService
             .Setup(service => service.GetSocialMediasAsync(
                 userId,
@@ -80,135 +62,69 @@ public sealed class PublishPostsCommandTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success<IReadOnlyList<UserSocialMediaResult>>(
             [
-                new UserSocialMediaResult(
-                    facebookId,
-                    "facebook",
-                    "{\"user_access_token\":\"facebook-token\",\"page_id\":\"page-1\",\"page_access_token\":\"page-token\"}"),
-                new UserSocialMediaResult(
-                    threadsId,
-                    "threads",
-                    "{\"access_token\":\"threads-token\",\"user_id\":\"threads-user\"}"),
-                new UserSocialMediaResult(
-                    instagramId,
-                    "instagram",
-                    "{\"access_token\":\"instagram-token\",\"instagram_business_account_id\":\"ig-user\"}")
+                new UserSocialMediaResult(facebookId, "facebook", "{}"),
+                new UserSocialMediaResult(threadsId, "threads", "{}"),
+                new UserSocialMediaResult(instagramId, "instagram", "{}")
             ]));
 
-        userResourceService
-            .Setup(service => service.GetPresignedResourcesAsync(
-                userId,
-                It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 1 && ids[0] == firstResourceId),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success<IReadOnlyList<UserResourcePresignResult>>(
-            [
-                new UserResourcePresignResult(
-                    firstResourceId,
-                    "https://cdn.example.com/first.png",
-                    "image/png",
-                    "image")
-            ]));
-
-        userResourceService
-            .Setup(service => service.GetPresignedResourcesAsync(
-                userId,
-                It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 1 && ids[0] == secondResourceId),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success<IReadOnlyList<UserResourcePresignResult>>(
-            [
-                new UserResourcePresignResult(
-                    secondResourceId,
-                    "https://cdn.example.com/second.png",
-                    "image/png",
-                    "image")
-            ]));
-
-        facebookPublishService
-            .Setup(service => service.PublishAsync(
-                It.IsAny<FacebookPublishRequest>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success<IReadOnlyList<FacebookPublishResult>>(
-            [
-                new FacebookPublishResult("page-1", "facebook-post-1")
-            ]));
-
-        threadsPublishService
-            .Setup(service => service.PublishAsync(
-                It.IsAny<ThreadsPublishRequest>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new ThreadsPublishResult("threads-user", "threads-post-1")));
-
-        instagramPublishService
-            .Setup(service => service.PublishAsync(
-                It.IsAny<InstagramPublishRequest>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new InstagramPublishResult("ig-user", "instagram-post-1")));
-
-        postPublicationRepository
-            .Setup(repository => repository.AddRangeAsync(It.IsAny<IEnumerable<PostPublication>>(), It.IsAny<CancellationToken>()))
+        var publishedMessages = new List<PublishToTargetRequested>();
+        var bus = new Mock<IBus>();
+        bus
+            .Setup(instance => instance.Publish(It.IsAny<PublishToTargetRequested>(), It.IsAny<CancellationToken>()))
+            .Callback<PublishToTargetRequested, CancellationToken>((message, _) => publishedMessages.Add(message))
             .Returns(Task.CompletedTask);
-
-        postRepository
-            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(1);
 
         var handler = new PublishPostsCommandHandler(
             postRepository.Object,
             postPublicationRepository.Object,
-            userResourceService.Object,
             userSocialMediaService.Object,
-            facebookPublishService.Object,
-            instagramPublishService.Object,
-            tikTokPublishService.Object,
-            threadsPublishService.Object);
+            bus.Object);
 
         var result = await handler.Handle(
             new PublishPostsCommand(
                 userId,
                 [
-                    new PublishPostTargetInput(firstPostId, [facebookId, threadsId]),
+                    new PublishPostTargetInput(firstPostId, [facebookId, threadsId], true),
                     new PublishPostTargetInput(secondPostId, [instagramId])
                 ]),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Posts.Should().HaveCount(2);
-        result.Value.Posts.Should().OnlyContain(post => post.Status == "published");
-        result.Value.Posts.Should().Contain(post =>
-            post.PostId == firstPostId &&
-            post.Results.Count == 2 &&
-            post.Results.Any(item => item.SocialMediaId == facebookId && item.ExternalPostId == "facebook-post-1") &&
-            post.Results.Any(item => item.SocialMediaId == threadsId && item.ExternalPostId == "threads-post-1"));
-        result.Value.Posts.Should().Contain(post =>
-            post.PostId == secondPostId &&
-            post.Results.Count == 1 &&
-            post.Results[0].SocialMediaId == instagramId &&
-            post.Results[0].ExternalPostId == "instagram-post-1");
+        result.Value.Posts.Should().OnlyContain(post => post.Status == "processing");
+        result.Value.Posts.SelectMany(post => post.Results).Should().HaveCount(3);
+        result.Value.Posts.SelectMany(post => post.Results).Should().OnlyContain(resultItem =>
+            resultItem.PublishStatus == "processing" &&
+            resultItem.PublicationId.HasValue);
 
-        facebookPublishService.Verify(service => service.PublishAsync(
-            It.Is<FacebookPublishRequest>(request =>
-                request.Message == "First caption" &&
-                request.Media.Count == 1 &&
-                request.Media[0].Url == "https://cdn.example.com/first.png"),
-            It.IsAny<CancellationToken>()), Times.Once);
-
-        threadsPublishService.Verify(service => service.PublishAsync(
-            It.Is<ThreadsPublishRequest>(request =>
-                request.Text == "First caption" &&
-                request.Media != null &&
-                request.Media.Url == "https://cdn.example.com/first.png"),
-            It.IsAny<CancellationToken>()), Times.Once);
-
-        instagramPublishService.Verify(service => service.PublishAsync(
-            It.Is<InstagramPublishRequest>(request =>
-                request.Caption == "Second caption" &&
-                request.Media.Url == "https://cdn.example.com/second.png"),
-            It.IsAny<CancellationToken>()), Times.Once);
+        firstPost.ScheduleGroupId.Should().BeNull();
+        firstPost.ScheduledAtUtc.Should().BeNull();
+        firstPost.ScheduledSocialMediaIds.Should().BeEmpty();
 
         postPublicationRepository.Verify(repository => repository.AddRangeAsync(
-            It.IsAny<IEnumerable<PostPublication>>(),
-            It.IsAny<CancellationToken>()), Times.Exactly(3));
+            It.Is<IEnumerable<PostPublication>>(items => items.Count() == 2),
+            It.IsAny<CancellationToken>()), Times.Once);
+        postPublicationRepository.Verify(repository => repository.AddRangeAsync(
+            It.Is<IEnumerable<PostPublication>>(items => items.Count() == 1),
+            It.IsAny<CancellationToken>()), Times.Once);
+        postRepository.Verify(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
 
-        postRepository.Verify(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(3));
+        publishedMessages.Should().HaveCount(3);
+        publishedMessages.Should().Contain(message =>
+            message.PostId == firstPostId &&
+            message.SocialMediaId == facebookId &&
+            message.IsPrivate == true &&
+            message.PublishingScheduleId == scheduleGroupId);
+        publishedMessages.Should().Contain(message =>
+            message.PostId == firstPostId &&
+            message.SocialMediaId == threadsId &&
+            message.IsPrivate == true &&
+            message.PublishingScheduleId == scheduleGroupId);
+        publishedMessages.Should().Contain(message =>
+            message.PostId == secondPostId &&
+            message.SocialMediaId == instagramId &&
+            message.IsPrivate == null &&
+            message.PublishingScheduleId == null);
     }
 
     [Fact]
@@ -216,22 +132,14 @@ public sealed class PublishPostsCommandTests
     {
         var postRepository = new Mock<IPostRepository>();
         var postPublicationRepository = new Mock<IPostPublicationRepository>();
-        var userResourceService = new Mock<IUserResourceService>();
         var userSocialMediaService = new Mock<IUserSocialMediaService>();
-        var facebookPublishService = new Mock<IFacebookPublishService>();
-        var instagramPublishService = new Mock<IInstagramPublishService>();
-        var tikTokPublishService = new Mock<ITikTokPublishService>();
-        var threadsPublishService = new Mock<IThreadsPublishService>();
+        var bus = new Mock<IBus>();
 
         var handler = new PublishPostsCommandHandler(
             postRepository.Object,
             postPublicationRepository.Object,
-            userResourceService.Object,
             userSocialMediaService.Object,
-            facebookPublishService.Object,
-            instagramPublishService.Object,
-            tikTokPublishService.Object,
-            threadsPublishService.Object);
+            bus.Object);
 
         var result = await handler.Handle(
             new PublishPostsCommand(Guid.NewGuid(), []),
@@ -242,4 +150,19 @@ public sealed class PublishPostsCommandTests
         userSocialMediaService.VerifyNoOtherCalls();
         postRepository.VerifyNoOtherCalls();
     }
+
+    private static Post CreatePost(Guid postId, Guid userId, Guid workspaceId) =>
+        new()
+        {
+            Id = postId,
+            UserId = userId,
+            WorkspaceId = workspaceId,
+            Content = new PostContent
+            {
+                Content = "Caption",
+                PostType = "posts",
+                ResourceList = [Guid.NewGuid().ToString()]
+            },
+            Status = "draft"
+        };
 }

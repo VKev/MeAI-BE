@@ -15,10 +15,19 @@ internal static class PostMapping
             Username: UnknownUsername,
             AvatarUrl: null,
             WorkspaceId: post.WorkspaceId,
+            ChatSessionId: post.ChatSessionId,
             SocialMediaId: post.SocialMediaId,
             Title: post.Title,
             Content: post.Content,
             Status: post.Status,
+            Schedule: post.ScheduleGroupId.HasValue && post.ScheduledAtUtc.HasValue
+                ? new PostScheduleResponse(
+                    post.ScheduleGroupId.Value,
+                    post.ScheduledAtUtc.Value,
+                    post.ScheduleTimezone,
+                    post.ScheduledSocialMediaIds,
+                    post.ScheduledIsPrivate)
+                : null,
             IsPublished: false,
             Media: Array.Empty<PostMediaResponse>(),
             Publications: Array.Empty<PostPublicationResponse>(),

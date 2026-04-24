@@ -25,6 +25,7 @@ public sealed record UserSubscriptionEntitlement(
     private const int FreeTierMaxSocialAccounts = 2;
     private const int FreeTierMaxWorkspaces = int.MaxValue;
     private const int FreeTierMaxPagesPerSocialAccount = 5;
+    public const long DefaultFreeStorageQuotaBytes = 100L * 1024L * 1024L;
 
     public bool HasActivePlan => CurrentSubscription != null && CurrentPlan != null;
 
@@ -35,4 +36,9 @@ public sealed record UserSubscriptionEntitlement(
     public int MaxPagesPerSocialAccount => CurrentPlan?.Limits?.MaxPagesPerSocialAccount ?? FreeTierMaxPagesPerSocialAccount;
 
     public decimal CoinAllowance => CurrentPlan?.MeAiCoin ?? 0m;
+
+    public long? StorageQuotaBytes(long? freeStorageQuotaBytes) =>
+        CurrentPlan?.Limits?.StorageQuotaBytes ?? freeStorageQuotaBytes ?? DefaultFreeStorageQuotaBytes;
+
+    public long? MaxUploadFileBytes => CurrentPlan?.Limits?.MaxUploadFileBytes;
 }

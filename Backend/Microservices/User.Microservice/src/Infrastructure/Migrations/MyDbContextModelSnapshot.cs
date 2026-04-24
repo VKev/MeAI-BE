@@ -23,6 +23,95 @@ namespace Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Entities.ApiCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("KeyName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("key_name");
+
+                    b.Property<DateTime?>("LastRotatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_rotated_at");
+
+                    b.Property<DateTime?>("LastSyncedFromEnvAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_synced_from_env_at");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("ServiceName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("service_name");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("ValueEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("value_encrypted");
+
+                    b.Property<string>("ValueLast4")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("value_last4");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("api_credentials_pkey");
+
+                    b.HasIndex("ServiceName", "Provider", "KeyName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_api_credentials_service_provider_key");
+
+                    b.ToTable("api_credentials", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.CoinTransaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -92,6 +181,12 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<long?>("FreeStorageQuotaBytes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(104857600L)
+                        .HasColumnName("free_storage_quota_bytes");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
@@ -103,6 +198,10 @@ namespace Infrastructure.Migrations
                     b.Property<int?>("NumberOfVariances")
                         .HasColumnType("integer")
                         .HasColumnName("number_of_variances");
+
+                    b.Property<long?>("SystemStorageQuotaBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("system_storage_quota_bytes");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -278,26 +377,58 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("FileSizeBytes")
-                        .HasColumnType("bigint")
-                        .HasColumnName("file_size_bytes");
+                    b.Property<DateTime?>("DeletedFromStorageAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_from_storage_at");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<DateTime?>("LastVerifiedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_verified_at");
 
                     b.Property<string>("Link")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("link");
 
+                    b.Property<string>("OriginalFileName")
+                        .HasColumnType("text")
+                        .HasColumnName("original_file_name");
+
                     b.Property<string>("ResourceType")
                         .HasColumnType("text")
                         .HasColumnName("type");
 
+                    b.Property<long?>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
                     b.Property<string>("Status")
                         .HasColumnType("text")
                         .HasColumnName("status");
+
+                    b.Property<string>("StorageBucket")
+                        .HasColumnType("text")
+                        .HasColumnName("storage_bucket");
+
+                    b.Property<string>("StorageKey")
+                        .HasColumnType("text")
+                        .HasColumnName("storage_key");
+
+                    b.Property<string>("StorageNamespace")
+                        .HasColumnType("text")
+                        .HasColumnName("storage_namespace");
+
+                    b.Property<string>("StorageProvider")
+                        .HasColumnType("text")
+                        .HasColumnName("storage_provider");
+
+                    b.Property<string>("StorageRegion")
+                        .HasColumnType("text")
+                        .HasColumnName("storage_region");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -313,6 +444,10 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("resources_pkey");
+
+                    b.HasIndex(new[] { "StorageNamespace", "StorageKey" }, "ix_resources_storage_namespace_key");
+
+                    b.HasIndex(new[] { "UserId", "IsDeleted" }, "ix_resources_user_deleted");
 
                     b.HasIndex(new[] { "UserId", "WorkspaceId", "CreatedAt" }, "ix_resources_user_workspace_created_at");
 

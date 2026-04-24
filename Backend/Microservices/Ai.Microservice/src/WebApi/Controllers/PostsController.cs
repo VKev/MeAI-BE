@@ -70,6 +70,34 @@ public sealed class PostsController : ApiController
         return Ok(result);
     }
 
+    [HttpGet("chat-session/{chatSessionId:guid}")]
+    [ProducesResponseType(typeof(Result<IEnumerable<PostResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetByChatSession(
+        Guid chatSessionId,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new GetChatSessionPostsQuery(chatSessionId, userId, cursorCreatedAt, cursorId, limit),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("{postId:guid}")]
     [ProducesResponseType(typeof(Result<PostResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -262,6 +290,7 @@ public sealed class PostsController : ApiController
         var command = new CreatePostCommand(
             UserId: userId,
             WorkspaceId: request.WorkspaceId,
+            ChatSessionId: request.ChatSessionId,
             SocialMediaId: request.SocialMediaId,
             Title: request.Title,
             Content: request.Content,
@@ -297,12 +326,47 @@ public sealed class PostsController : ApiController
             PostId: postId,
             UserId: userId,
             WorkspaceId: request.WorkspaceId,
+            ChatSessionId: request.ChatSessionId,
             SocialMediaId: request.SocialMediaId,
             Title: request.Title,
             Content: request.Content,
             Status: request.Status);
 
         var result = await _mediator.Send(command, cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPost("{postId:guid}/schedule")]
+    [ProducesResponseType(typeof(Result<PostResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Schedule(
+        Guid postId,
+        [FromBody] SchedulePostRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new SchedulePostCommand(
+                postId,
+                userId,
+                new PostScheduleInput(
+                    request.ScheduleGroupId,
+                    request.ScheduledAtUtc,
+                    request.Timezone,
+                    request.SocialMediaIds,
+                    request.IsPrivate)),
+            cancellationToken);
 
         if (result.IsFailure)
         {
@@ -800,6 +864,7 @@ public sealed class PostsController : ApiController
 
 public sealed record CreatePostRequest(
     Guid? WorkspaceId,
+    Guid? ChatSessionId,
     Guid? SocialMediaId,
     string? Title,
     PostContent? Content,
@@ -809,10 +874,18 @@ public sealed record CreatePostRequest(
 
 public sealed record UpdatePostRequest(
     Guid? WorkspaceId,
+    Guid? ChatSessionId,
     Guid? SocialMediaId,
     string? Title,
     PostContent? Content,
     string? Status);
+
+public sealed record SchedulePostRequest(
+    Guid? ScheduleGroupId,
+    DateTime ScheduledAtUtc,
+    string? Timezone,
+    IReadOnlyList<Guid>? SocialMediaIds,
+    bool? IsPrivate);
 
 sealed record PublishPostsRequestPayload(
     IReadOnlyList<PublishPostTargetInput> Targets,

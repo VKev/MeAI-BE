@@ -1,6 +1,6 @@
 using Application.Abstractions.Billing;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Data;
-using Application.Abstractions.Feed;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Instagram;
 using Application.Abstractions.Payments;
@@ -11,9 +11,9 @@ using Application.Abstractions.Threads;
 using Application.Abstractions.SocialMedia;
 using Domain.Repositories;
 using Infrastructure.Logic.Payments;
-using Infrastructure.Logic.Feed;
 using Infrastructure.Logic.Security;
 using Infrastructure.Logic.Storage;
+using Infrastructure.Logic.ApiCredentials;
 using Infrastructure.Repositories;
 using Infrastructure.Logic.Seeding;
 using Infrastructure.Logic.Facebook;
@@ -24,7 +24,6 @@ using MassTransit;
 using Microsoft.Extensions.DependencyInjection;
 using SharedLibrary.Authentication;
 using SharedLibrary.Configs;
-using SharedLibrary.Grpc.FeedAnalytics;
 using StackExchange.Redis;
 
 namespace Infrastructure
@@ -41,11 +40,14 @@ namespace Infrastructure
             services.AddScoped<SampleDataSeeder>();
             services.AddScoped<FeedDemoUserSeeder>();
             services.AddScoped<ConfigSeeder>();
+            services.AddScoped<ApiCredentialSyncSeeder>();
             services.AddScoped<SubscriptionSeeder>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
+            services.AddSingleton<ApiCredentialCryptoService>();
+            services.AddSingleton<IApiCredentialProvider, ApiCredentialProvider>();
             services.AddScoped<IEmailRepository, EmailRepository>();
             services.AddScoped<IBillingService, Logic.Services.BillingService>();
-            services.AddSingleton<IStripePaymentService, StripePaymentService>();
+            services.AddScoped<IStripePaymentService, StripePaymentService>();
             services.AddHttpClient("TikTok");
             services.AddScoped<ITikTokOAuthService, TikTokOAuthService>();
             services.AddHttpClient("Threads");
@@ -58,15 +60,6 @@ namespace Infrastructure
             services.AddHttpClient("ResourceFetch");
             services.AddScoped<IRemoteFileService, RemoteFileService>();
             services.AddSingleton<IObjectStorageService, S3ObjectStorageService>();
-            services.AddGrpcClient<FeedAnalyticsService.FeedAnalyticsServiceClient>((sp, options) =>
-            {
-                var configuration = sp.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>();
-                var grpcUrl = configuration["FeedService:GrpcUrl"]
-                              ?? configuration["FeedService__GrpcUrl"]
-                              ?? "http://feed-microservice:5008";
-                options.Address = new Uri(grpcUrl);
-            });
-            services.AddScoped<IFeedResourceUsageService, FeedResourceUsageGrpcService>();
             services.AddSingleton<IConnectionMultiplexer>(sp =>
             {
                 var env = sp.GetRequiredService<EnvironmentConfig>();

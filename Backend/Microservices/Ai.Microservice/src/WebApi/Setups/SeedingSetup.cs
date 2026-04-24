@@ -1,3 +1,4 @@
+using Infrastructure.Logic.ApiCredentials;
 using Infrastructure.Logic.Seeding;
 
 namespace WebApi.Setups;
@@ -7,6 +8,16 @@ public static class SeedingSetup
     public static async Task SeedSampleDataAsync(this WebApplication app)
     {
         using var scope = app.Services.CreateScope();
+
+        try
+        {
+            var apiCredentialSeeder = scope.ServiceProvider.GetRequiredService<ApiCredentialSyncSeeder>();
+            await apiCredentialSeeder.SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Failed to sync AI API credentials at startup.");
+        }
 
         try
         {

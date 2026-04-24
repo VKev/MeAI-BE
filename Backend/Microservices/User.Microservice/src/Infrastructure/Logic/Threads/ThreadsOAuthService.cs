@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Threads;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -18,13 +19,12 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
     private const string LongLivedTokenEndpoint = "https://graph.threads.net/access_token";
     private const string RefreshTokenEndpoint = "https://graph.threads.net/refresh_access_token";
 
-    private readonly string _clientId;
-    private readonly string _clientSecret;
     private readonly string _redirectUri;
     private readonly string _scopes;
     private readonly string _authorizationBaseUrl;
     private readonly HttpClient _httpClient;
     private readonly ILogger<ThreadsOAuthService> _logger;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -33,13 +33,13 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
-    public ThreadsOAuthService(IConfiguration configuration, IHttpClientFactory httpClientFactory, ILogger<ThreadsOAuthService> logger)
+    public ThreadsOAuthService(
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory,
+        ILogger<ThreadsOAuthService> logger,
+        IApiCredentialProvider credentialProvider)
     {
         _logger = logger;
-        _clientId = configuration["Threads:AppId"]
-                     ?? throw new InvalidOperationException("Threads:AppId is not configured");
-        _clientSecret = configuration["Threads:AppSecret"]
-                        ?? throw new InvalidOperationException("Threads:AppSecret is not configured");
         _redirectUri = configuration["Threads:RedirectUri"]
                        ?? throw new InvalidOperationException("Threads:RedirectUri is not configured");
         // threads_read_replies is required for GET on /conversation and /replies (reading
@@ -50,6 +50,7 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         _scopes = configuration["Threads:Scopes"] ?? "threads_basic,threads_content_publish,threads_manage_insights,threads_read_replies,threads_manage_replies";
         _authorizationBaseUrl = configuration["Threads:AuthorizationBaseUrl"] ?? DefaultAuthorizationBaseUrl;
         _httpClient = httpClientFactory.CreateClient("Threads");
+        _credentialProvider = credentialProvider;
     }
 
     public (string AuthorizationUrl, string State) GenerateAuthorizationUrl(Guid userId, string? scopes)
@@ -61,9 +62,10 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
             ? _scopes
             : scopes;
 
+        var clientId = _credentialProvider.GetRequiredValue("Threads", "AppId");
         var queryParams = new Dictionary<string, string>
         {
-            ["client_id"] = _clientId,
+            ["client_id"] = clientId,
             ["scope"] = resolvedScopes,
             ["response_type"] = "code",
             ["redirect_uri"] = _redirectUri,
@@ -80,10 +82,12 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         CancellationToken cancellationToken)
     {
         // Step 1: Exchange authorization code for short-lived access token
+        var clientId = _credentialProvider.GetRequiredValue("Threads", "AppId");
+        var clientSecret = _credentialProvider.GetRequiredValue("Threads", "AppSecret");
         var formData = new Dictionary<string, string>
         {
-            ["client_id"] = _clientId,
-            ["client_secret"] = _clientSecret,
+            ["client_id"] = clientId,
+            ["client_secret"] = clientSecret,
             ["code"] = code,
             ["grant_type"] = "authorization_code",
             ["redirect_uri"] = _redirectUri
@@ -98,7 +102,7 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         // Step 2: Exchange short-lived token for long-lived token
         var shortLivedToken = shortLivedTokenResult.Value.AccessToken;
         var longLivedTokenUrl =
-            $"{LongLivedTokenEndpoint}?grant_type=th_exchange_token&client_secret={Uri.EscapeDataString(_clientSecret)}&access_token={Uri.EscapeDataString(shortLivedToken)}";
+            $"{LongLivedTokenEndpoint}?grant_type=th_exchange_token&client_secret={Uri.EscapeDataString(clientSecret)}&access_token={Uri.EscapeDataString(shortLivedToken)}";
 
         return await SendGetTokenRequestAsync(longLivedTokenUrl, shortLivedTokenResult.Value.UserId,
             cancellationToken);
@@ -361,4 +365,3 @@ public sealed class ThreadsOAuthService : IThreadsOAuthService
         public int? MediaCount { get; set; }
     }
 }
-

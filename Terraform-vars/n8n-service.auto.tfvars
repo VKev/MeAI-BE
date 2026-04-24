@@ -103,6 +103,10 @@ services = {
         value = "true"
       },
       {
+        name  = "N8N_BLOCK_ENV_ACCESS_IN_NODE"
+        value = "false"
+      },
+      {
         name  = "N8N_DIAGNOSTICS_ENABLED"
         value = "false"
       },
@@ -137,6 +141,10 @@ services = {
       {
         name  = "VUE_APP_URL_BASE_API"
         value = "TERRAFORM_PUBLIC_ENDPOINT/n8n/"
+      },
+      {
+        name  = "BRAVE_SEARCH_API_KEY"
+        value = "change-me"
       }
     ]
     ecs_container_health_check = {

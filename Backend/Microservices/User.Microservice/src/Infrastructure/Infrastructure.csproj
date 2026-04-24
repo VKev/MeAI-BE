@@ -12,12 +12,6 @@
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="3.7.200" />
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
-    <PackageReference Include="Google.Protobuf" Version="3.27.3" />
-    <PackageReference Include="Grpc.Net.ClientFactory" Version="2.67.0" />
-    <PackageReference Include="Grpc.Tools" Version="2.67.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
     <PackageReference Include="MailKit" Version="4.15.1" />
     <PackageReference Include="MassTransit.EntityFrameworkCore" Version="8.5.7" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.7" />
@@ -42,10 +36,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\SharedLibrary\SharedLibrary.csproj" />
     <ProjectReference Include="..\Application\Application.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Protobuf Include="..\..\..\SharedLibrary\Protos\feed_analytics.proto" GrpcServices="Client" />
   </ItemGroup>
 
   <Target Name="CopyEFCoreTargetsFile" BeforeTargets="BeforeBuild">

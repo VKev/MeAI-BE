@@ -2,9 +2,7 @@ using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Application.Abstractions.Storage;
-using Infrastructure.Configuration;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Options;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using StackExchange.Redis;
@@ -20,26 +18,27 @@ public sealed class S3ObjectStorageService : IObjectStorageService
     private readonly IAmazonS3? _client;
     private readonly string _bucket;
     private readonly string _region;
+    private readonly string? _namespace;
     private readonly string? _serviceUrl;
     private readonly string? _publicBaseUrl;
-    private readonly string _feedSeedDataRoot;
     private readonly bool _forcePathStyle;
     private readonly bool _isConfigured;
     private readonly IDatabase? _cache;
 
+    public string? CurrentNamespace => _namespace;
+
     public S3ObjectStorageService(
         IConfiguration configuration,
-        IConnectionMultiplexer multiplexer,
-        IOptions<FeedSeedOptions> feedSeedOptions)
+        IConnectionMultiplexer multiplexer)
     {
         _bucket = configuration["S3:Bucket"] ?? string.Empty;
         var accessKey = configuration["S3:AccessKey"];
         var secretKey = configuration["S3:SecretKey"];
 
         _region = configuration["S3:Region"] ?? "us-east-1";
+        _namespace = NormalizeNamespace(configuration["S3:Namespace"]);
         _serviceUrl = configuration["S3:ServiceUrl"];
         _publicBaseUrl = configuration["S3:PublicBaseUrl"];
-        _feedSeedDataRoot = feedSeedOptions.Value.DataRoot;
 
         var forcePathStyleConfigured = bool.TryParse(configuration["S3:ForcePathStyle"], out var fps);
         _forcePathStyle = forcePathStyleConfigured ? fps : !string.IsNullOrWhiteSpace(_serviceUrl);
@@ -70,52 +69,6 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         _client = new AmazonS3Client(accessKey, secretKey, config);
     }
 
-    public async Task<Result<StorageObjectMetadata>> GetMetadataAsync(
-        string keyOrUrl,
-        CancellationToken cancellationToken)
-    {
-        if (TryGetSeedMediaFileInfo(keyOrUrl, out var seedMediaFile))
-        {
-            return Result.Success(new StorageObjectMetadata(seedMediaFile.Length, null));
-        }
-
-        if (!_isConfigured || _client is null)
-        {
-            return Result.Failure<StorageObjectMetadata>(
-                new Error("S3.NotConfigured", "S3 storage is not configured."));
-        }
-
-        try
-        {
-            var key = NormalizeKey(keyOrUrl);
-            if (string.IsNullOrWhiteSpace(key))
-            {
-                return Result.Failure<StorageObjectMetadata>(
-                    new Error("S3.InvalidKey", "Storage key is missing"));
-            }
-
-            var response = await _client.GetObjectMetadataAsync(
-                new GetObjectMetadataRequest
-                {
-                    BucketName = _bucket,
-                    Key = key
-                },
-                cancellationToken);
-
-            return Result.Success(new StorageObjectMetadata(response.ContentLength, response.Headers.ContentType));
-        }
-        catch (AmazonS3Exception ex)
-        {
-            return Result.Failure<StorageObjectMetadata>(
-                new Error("S3.MetadataFailed", ex.Message));
-        }
-        catch (Exception ex)
-        {
-            return Result.Failure<StorageObjectMetadata>(
-                new Error("S3.MetadataFailed", ex.Message));
-        }
-    }
-
     public async Task<Result<StorageUploadResult>> UploadAsync(
         StorageUploadRequest request,
         CancellationToken cancellationToken)
@@ -128,7 +81,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
         try
         {
-            var key = NormalizeKey(request.Key);
+            var key = NormalizeKey(request.Key, applyNamespace: true);
             if (string.IsNullOrWhiteSpace(key))
             {
                 return Result.Failure<StorageUploadResult>(
@@ -152,7 +105,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
             await _client.PutObjectAsync(putRequest, cancellationToken);
 
             var url = BuildUrl(key);
-            return Result.Success(new StorageUploadResult(key, url));
+            return Result.Success(new StorageUploadResult(key, url, _bucket, _region, _namespace));
         }
         catch (AmazonS3Exception ex)
         {
@@ -180,7 +133,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
         try
         {
-            var key = NormalizeKey(keyOrUrl);
+            var key = NormalizeKey(keyOrUrl, applyNamespace: false);
             if (string.IsNullOrWhiteSpace(key))
             {
                 return Result.Failure<string>(new Error("S3.InvalidKey", "Storage key is missing"));
@@ -229,7 +182,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
         try
         {
-            var key = NormalizeKey(keyOrUrl);
+            var key = NormalizeKey(keyOrUrl, applyNamespace: false);
             if (string.IsNullOrWhiteSpace(key))
             {
                 return Result.Failure<bool>(new Error("S3.InvalidKey", "Storage key is missing"));
@@ -251,6 +204,94 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         catch (Exception ex)
         {
             return Result.Failure<bool>(new Error("S3.DeleteFailed", ex.Message));
+        }
+    }
+
+    public async Task<Result<bool>> ExistsAsync(string keyOrUrl, CancellationToken cancellationToken)
+    {
+        if (TryGetSeedMediaUrl(keyOrUrl, out _))
+        {
+            return Result.Success(true);
+        }
+
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<bool>(new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
+        try
+        {
+            var key = NormalizeKey(keyOrUrl, applyNamespace: false);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return Result.Failure<bool>(new Error("S3.InvalidKey", "Storage key is missing"));
+            }
+
+            await _client.GetObjectMetadataAsync(new GetObjectMetadataRequest
+            {
+                BucketName = _bucket,
+                Key = key
+            }, cancellationToken);
+
+            return Result.Success(true);
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return Result.Success(false);
+        }
+        catch (AmazonS3Exception ex)
+        {
+            return Result.Failure<bool>(new Error("S3.HeadFailed", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<bool>(new Error("S3.HeadFailed", ex.Message));
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<StorageObjectInfo>>> ListAsync(
+        string? prefix,
+        CancellationToken cancellationToken)
+    {
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<IReadOnlyList<StorageObjectInfo>>(
+                new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
+        try
+        {
+            var scopedPrefix = NormalizeListPrefix(prefix);
+            var objects = new List<StorageObjectInfo>();
+            string? continuationToken = null;
+
+            do
+            {
+                var response = await _client.ListObjectsV2Async(new ListObjectsV2Request
+                {
+                    BucketName = _bucket,
+                    Prefix = scopedPrefix,
+                    ContinuationToken = continuationToken
+                }, cancellationToken);
+
+                objects.AddRange(response.S3Objects.Select(item =>
+                    new StorageObjectInfo(item.Key, item.Size, item.LastModified)));
+
+                continuationToken = response.IsTruncated == true
+                    ? response.NextContinuationToken
+                    : null;
+            }
+            while (!string.IsNullOrWhiteSpace(continuationToken));
+
+            return Result.Success<IReadOnlyList<StorageObjectInfo>>(objects);
+        }
+        catch (AmazonS3Exception ex)
+        {
+            return Result.Failure<IReadOnlyList<StorageObjectInfo>>(new Error("S3.ListFailed", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<IReadOnlyList<StorageObjectInfo>>(new Error("S3.ListFailed", ex.Message));
         }
     }
 
@@ -305,70 +346,6 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
         seedMediaUrl = string.Empty;
         return false;
-    }
-
-    private bool TryGetSeedMediaFileInfo(string keyOrUrl, out FileInfo fileInfo)
-    {
-        fileInfo = null!;
-
-        if (!TryExtractSeedMediaRelativePath(keyOrUrl, out var relativePath))
-        {
-            return false;
-        }
-
-        var mediaRoot = Path.Combine(ResolveFeedSeedDataRoot(), "media");
-        if (!Directory.Exists(mediaRoot))
-        {
-            return false;
-        }
-
-        var decodedPath = Uri.UnescapeDataString(relativePath)
-            .Replace('/', Path.DirectorySeparatorChar)
-            .Replace('\\', Path.DirectorySeparatorChar)
-            .TrimStart(Path.DirectorySeparatorChar);
-
-        var mediaRootFullPath = Path.GetFullPath(mediaRoot);
-        var targetPath = Path.GetFullPath(Path.Combine(mediaRootFullPath, decodedPath));
-        if (!targetPath.StartsWith(mediaRootFullPath, StringComparison.OrdinalIgnoreCase) ||
-            !File.Exists(targetPath))
-        {
-            return false;
-        }
-
-        fileInfo = new FileInfo(targetPath);
-        return true;
-    }
-
-    private static bool TryExtractSeedMediaRelativePath(string keyOrUrl, out string relativePath)
-    {
-        relativePath = string.Empty;
-
-        if (Uri.TryCreate(keyOrUrl, UriKind.Absolute, out var absoluteUri) &&
-            absoluteUri.AbsolutePath.StartsWith(SeedMediaPathPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            relativePath = absoluteUri.AbsolutePath[SeedMediaPathPrefix.Length..];
-            return !string.IsNullOrWhiteSpace(relativePath);
-        }
-
-        if (keyOrUrl.StartsWith(SeedMediaPathPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            relativePath = keyOrUrl[SeedMediaPathPrefix.Length..];
-            return !string.IsNullOrWhiteSpace(relativePath);
-        }
-
-        return false;
-    }
-
-    private string ResolveFeedSeedDataRoot()
-    {
-        if (string.IsNullOrWhiteSpace(_feedSeedDataRoot))
-        {
-            return Path.GetFullPath("/seed-data/feed");
-        }
-
-        return Path.IsPathRooted(_feedSeedDataRoot)
-            ? Path.GetFullPath(_feedSeedDataRoot)
-            : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, _feedSeedDataRoot));
     }
 
     private static TimeSpan NormalizePresignTtl(TimeSpan? expiresIn)
@@ -427,7 +404,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         return $"https://{_bucket}.s3{regionSegment}.amazonaws.com/{key}";
     }
 
-    private string NormalizeKey(string keyOrUrl)
+    private string NormalizeKey(string keyOrUrl, bool applyNamespace)
     {
         if (string.IsNullOrWhiteSpace(keyOrUrl))
         {
@@ -440,13 +417,70 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
             if (path.StartsWith($"{_bucket}/", StringComparison.OrdinalIgnoreCase))
             {
-                return path[(_bucket.Length + 1)..];
+                return ApplyNamespace(path[(_bucket.Length + 1)..], applyNamespace);
             }
 
-            return path;
+            return ApplyNamespace(path, applyNamespace);
         }
 
-        return keyOrUrl.TrimStart('/');
+        return ApplyNamespace(keyOrUrl.TrimStart('/'), applyNamespace);
+    }
+
+    private string ApplyNamespace(string key, bool applyNamespace)
+    {
+        var normalized = key.TrimStart('/');
+        if (!applyNamespace || string.IsNullOrWhiteSpace(_namespace))
+        {
+            return normalized;
+        }
+
+        return normalized.StartsWith($"{_namespace}/", StringComparison.OrdinalIgnoreCase)
+            ? normalized
+            : $"{_namespace}/{normalized}";
+    }
+
+    private string NormalizeListPrefix(string? prefix)
+    {
+        var normalizedPrefix = string.IsNullOrWhiteSpace(prefix)
+            ? string.Empty
+            : prefix.TrimStart('/');
+
+        if (string.IsNullOrWhiteSpace(_namespace))
+        {
+            return normalizedPrefix;
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedPrefix))
+        {
+            return $"{_namespace}/";
+        }
+
+        return normalizedPrefix.StartsWith($"{_namespace}/", StringComparison.OrdinalIgnoreCase)
+            ? normalizedPrefix
+            : $"{_namespace}/{normalizedPrefix}";
+    }
+
+    private static string? NormalizeNamespace(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim().Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        foreach (var character in normalized)
+        {
+            if (!char.IsAsciiLetterOrDigit(character) && character is not '-' and not '_' and not '.' and not '/')
+            {
+                throw new InvalidOperationException("S3 namespace contains invalid characters.");
+            }
+        }
+
+        return normalized;
     }
 }
-

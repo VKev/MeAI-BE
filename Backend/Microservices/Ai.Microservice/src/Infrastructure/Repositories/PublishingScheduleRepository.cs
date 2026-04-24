@@ -1,0 +1,80 @@
+using Domain.Entities;
+using Domain.Repositories;
+using Infrastructure.Context;
+using Microsoft.EntityFrameworkCore;
+
+namespace Infrastructure.Repositories;
+
+public sealed class PublishingScheduleRepository : IPublishingScheduleRepository
+{
+    private readonly MyDbContext _dbContext;
+    private readonly DbSet<PublishingSchedule> _dbSet;
+
+    public PublishingScheduleRepository(MyDbContext dbContext)
+    {
+        _dbContext = dbContext;
+        _dbSet = dbContext.Set<PublishingSchedule>();
+    }
+
+    public Task AddAsync(PublishingSchedule entity, CancellationToken cancellationToken)
+    {
+        return _dbSet.AddAsync(entity, cancellationToken).AsTask();
+    }
+
+    public void Update(PublishingSchedule entity)
+    {
+        _dbSet.Update(entity);
+    }
+
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        return _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public Task<PublishingSchedule?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return BaseQuery(_dbSet.AsNoTracking())
+            .FirstOrDefaultAsync(schedule => schedule.Id == id, cancellationToken);
+    }
+
+    public Task<PublishingSchedule?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return BaseQuery(_dbSet)
+            .FirstOrDefaultAsync(schedule => schedule.Id == id, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PublishingSchedule>> GetByUserIdAsync(
+        Guid userId,
+        Guid? workspaceId,
+        string? status,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var query = BaseQuery(_dbSet.AsNoTracking())
+            .Where(schedule => schedule.UserId == userId && schedule.DeletedAt == null);
+
+        if (workspaceId.HasValue)
+        {
+            query = query.Where(schedule => schedule.WorkspaceId == workspaceId.Value);
+        }
+
+        var normalizedStatus = string.IsNullOrWhiteSpace(status) ? null : status.Trim();
+        if (!string.IsNullOrWhiteSpace(normalizedStatus))
+        {
+            query = query.Where(schedule => schedule.Status == normalizedStatus);
+        }
+
+        return await query
+            .OrderByDescending(schedule => schedule.CreatedAt)
+            .ThenByDescending(schedule => schedule.Id)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
+    private static IQueryable<PublishingSchedule> BaseQuery(IQueryable<PublishingSchedule> query)
+    {
+        return query
+            .Include(schedule => schedule.Items)
+            .Include(schedule => schedule.Targets);
+    }
+}
