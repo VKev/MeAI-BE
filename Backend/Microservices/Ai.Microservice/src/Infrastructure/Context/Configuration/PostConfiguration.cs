@@ -15,6 +15,8 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.ToTable("posts");
 
         entity.HasIndex(e => e.PostBuilderId, "ix_posts_post_builder_id");
+        entity.HasIndex(e => new { e.ChatSessionId, e.CreatedAt, e.Id }, "ix_posts_chat_session_created_at_id")
+            .IsDescending(false, true, true);
         entity.HasIndex(e => new { e.UserId, e.WorkspaceId, e.CreatedAt }, "ix_posts_user_workspace_created_at")
             .IsDescending(false, false, true);
 
@@ -25,6 +27,7 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.Property(e => e.PostBuilderId).HasColumnName("post_builder_id");
         entity.Property(e => e.UserId).HasColumnName("user_id");
         entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
+        entity.Property(e => e.ChatSessionId).HasColumnName("chat_session_id");
         entity.Property(e => e.SocialMediaId).HasColumnName("social_media_id");
         entity.Property(e => e.Platform).HasColumnName("platform");
         entity.Property(e => e.Title).HasColumnName("title");
@@ -63,6 +66,11 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
             .OnDelete(DeleteBehavior.Cascade)
             .HasConstraintName("posts_post_builder_id_fkey");
 
+        entity.HasOne(e => e.ChatSession)
+            .WithMany()
+            .HasForeignKey(e => e.ChatSessionId)
+            .OnDelete(DeleteBehavior.SetNull)
+            .HasConstraintName("posts_chat_session_id_fkey");
     }
 
     private static bool PostContentEquals(PostContent? left, PostContent? right)

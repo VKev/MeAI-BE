@@ -149,15 +149,18 @@ public sealed class GetAgentSessionMessagesQueryTests
             null,
             null,
             [],
+            [],
             createdAt,
             null));
 
         messages[1].Role.Should().Be("user");
         messages[1].ToolNames.Should().BeEmpty();
+        messages[1].Actions.Should().BeEmpty();
 
         messages[2].Role.Should().Be("assistant");
         messages[2].Model.Should().Be("gemini-3.1-flash-lite-preview");
         messages[2].ToolNames.Should().BeEquivalentTo(["get_posts"]);
+        messages[2].Actions.Should().BeEmpty();
 
         chatSessionRepository.VerifyAll();
         chatRepository.VerifyAll();

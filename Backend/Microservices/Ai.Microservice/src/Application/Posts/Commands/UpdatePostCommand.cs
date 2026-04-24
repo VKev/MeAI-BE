@@ -10,6 +10,7 @@ public sealed record UpdatePostCommand(
     Guid PostId,
     Guid UserId,
     Guid? WorkspaceId,
+    Guid? ChatSessionId,
     Guid? SocialMediaId,
     string? Title,
     Domain.Entities.PostContent? Content,
@@ -20,15 +21,18 @@ public sealed class UpdatePostCommandHandler
 {
     private readonly IPostRepository _postRepository;
     private readonly IWorkspaceRepository _workspaceRepository;
+    private readonly IChatSessionRepository _chatSessionRepository;
     private readonly PostResponseBuilder _postResponseBuilder;
 
     public UpdatePostCommandHandler(
         IPostRepository postRepository,
         IWorkspaceRepository workspaceRepository,
+        IChatSessionRepository chatSessionRepository,
         PostResponseBuilder postResponseBuilder)
     {
         _postRepository = postRepository;
         _workspaceRepository = workspaceRepository;
+        _chatSessionRepository = chatSessionRepository;
         _postResponseBuilder = postResponseBuilder;
     }
 
@@ -50,6 +54,34 @@ public sealed class UpdatePostCommandHandler
         // clobbering them — callers sending a partial update (e.g. content-only from the
         // post-builder publish flow) must not wipe workspaceId, status, title, etc.
         var requestedWorkspaceId = NormalizeGuid(request.WorkspaceId);
+        var requestedChatSessionId = NormalizeGuid(request.ChatSessionId);
+        if (requestedChatSessionId.HasValue)
+        {
+            var chatSession = await _chatSessionRepository.GetByIdAsync(requestedChatSessionId.Value, cancellationToken);
+            if (chatSession is null || chatSession.DeletedAt.HasValue)
+            {
+                return Result.Failure<PostResponse>(PostErrors.ChatSessionNotFound);
+            }
+
+            if (chatSession.UserId != request.UserId)
+            {
+                return Result.Failure<PostResponse>(PostErrors.Unauthorized);
+            }
+
+            if (requestedWorkspaceId.HasValue && chatSession.WorkspaceId != requestedWorkspaceId.Value)
+            {
+                return Result.Failure<PostResponse>(PostErrors.ChatSessionWorkspaceMismatch);
+            }
+
+            if (post.WorkspaceId.HasValue && post.WorkspaceId.Value != chatSession.WorkspaceId)
+            {
+                return Result.Failure<PostResponse>(PostErrors.ChatSessionWorkspaceMismatch);
+            }
+
+            post.ChatSessionId = requestedChatSessionId;
+            requestedWorkspaceId ??= chatSession.WorkspaceId;
+        }
+
         if (requestedWorkspaceId.HasValue)
         {
             var workspaceExists = await _workspaceRepository.ExistsForUserAsync(

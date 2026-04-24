@@ -15,6 +15,7 @@ internal static class PostMapping
             Username: UnknownUsername,
             AvatarUrl: null,
             WorkspaceId: post.WorkspaceId,
+            ChatSessionId: post.ChatSessionId,
             SocialMediaId: post.SocialMediaId,
             Title: post.Title,
             Content: post.Content,

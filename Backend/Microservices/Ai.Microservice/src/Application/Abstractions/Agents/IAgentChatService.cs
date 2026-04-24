@@ -18,4 +18,5 @@ public sealed record AgentChatRequest(
 public sealed record AgentChatCompletionResult(
     string Content,
     string? Model,
-    IReadOnlyList<string> ToolNames);
+    IReadOnlyList<string> ToolNames,
+    IReadOnlyList<AgentActionResponse>? Actions = null);

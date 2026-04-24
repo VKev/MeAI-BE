@@ -137,6 +137,35 @@ public sealed class PostRepository : IPostRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Post>> GetByUserIdAndChatSessionIdAsync(
+        Guid userId,
+        Guid chatSessionId,
+        DateTime? cursorCreatedAt,
+        Guid? cursorId,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var query = _dbSet.AsNoTracking()
+            .Where(p => p.UserId == userId &&
+                        p.ChatSessionId == chatSessionId &&
+                        p.DeletedAt == null);
+
+        if (cursorCreatedAt.HasValue && cursorId.HasValue)
+        {
+            var createdAt = cursorCreatedAt.Value;
+            var lastId = cursorId.Value;
+            query = query.Where(post =>
+                (post.CreatedAt < createdAt) ||
+                (post.CreatedAt == createdAt && post.Id.CompareTo(lastId) < 0));
+        }
+
+        return await query
+            .OrderByDescending(p => p.CreatedAt)
+            .ThenByDescending(p => p.Id)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<ScheduledPostDispatchCandidate>> ClaimDueScheduledPostsAsync(
         DateTime dueBeforeUtc,
         int limit,

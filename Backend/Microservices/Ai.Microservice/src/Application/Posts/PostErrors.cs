@@ -7,6 +7,8 @@ public static class PostErrors
     public static readonly Error NotFound = new("Post.NotFound", "Post not found");
     public static readonly Error Unauthorized = new("Post.Unauthorized", "You are not authorized to access this post");
     public static readonly Error WorkspaceNotFound = new("Post.WorkspaceNotFound", "Workspace not found");
+    public static readonly Error ChatSessionNotFound = new("Post.ChatSessionNotFound", "Chat session not found");
+    public static readonly Error ChatSessionWorkspaceMismatch = new("Post.ChatSessionWorkspaceMismatch", "Chat session workspace does not match the post workspace");
     public static readonly Error WorkspaceIdRequired = new("Post.WorkspaceIdRequired", "WorkspaceId is required to publish this post");
     public static readonly Error ScheduleInPast = new("Post.ScheduleInPast", "ScheduledAtUtc must be in the future");
     public static readonly Error ScheduleMissingTargets = new("Post.ScheduleMissingTargets", "At least one social media id is required to schedule this post");

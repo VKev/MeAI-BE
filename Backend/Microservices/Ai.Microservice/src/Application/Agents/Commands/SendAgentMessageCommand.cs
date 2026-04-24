@@ -1,6 +1,7 @@
 using Application.Abstractions.Agents;
 using Application.Agents.Models;
 using Application.ChatSessions;
+using System.Collections.Concurrent;
 using Domain.Entities;
 using Domain.Repositories;
 using MediatR;
@@ -17,6 +18,8 @@ public sealed record SendAgentMessageCommand(
 public sealed class SendAgentMessageCommandHandler
     : IRequestHandler<SendAgentMessageCommand, Result<AgentChatResponse>>
 {
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> SessionLocks = new();
+
     private readonly IChatSessionRepository _chatSessionRepository;
     private readonly IChatRepository _chatRepository;
     private readonly IAgentChatService _agentChatService;
@@ -35,11 +38,29 @@ public sealed class SendAgentMessageCommandHandler
         SendAgentMessageCommand request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Message))
+        var normalizedMessage = NormalizeMessage(request.Message);
+        if (string.IsNullOrWhiteSpace(normalizedMessage))
         {
             return Result.Failure<AgentChatResponse>(AgentErrors.InvalidMessage);
         }
 
+        var sessionLock = SessionLocks.GetOrAdd(request.SessionId, _ => new SemaphoreSlim(1, 1));
+        await sessionLock.WaitAsync(cancellationToken);
+        try
+        {
+            return await HandleLockedAsync(request, normalizedMessage, cancellationToken);
+        }
+        finally
+        {
+            sessionLock.Release();
+        }
+    }
+
+    private async Task<Result<AgentChatResponse>> HandleLockedAsync(
+        SendAgentMessageCommand request,
+        string normalizedMessage,
+        CancellationToken cancellationToken)
+    {
         var session = await _chatSessionRepository.GetByIdForUpdateAsync(request.SessionId, cancellationToken);
         if (session is null || session.DeletedAt.HasValue)
         {
@@ -52,11 +73,22 @@ public sealed class SendAgentMessageCommandHandler
         }
 
         var now = DateTimeExtensions.PostgreSqlUtcNow;
+        var existingChats = (await _chatRepository.GetBySessionIdAsync(session.Id, cancellationToken))
+            .OrderBy(chat => chat.CreatedAt ?? DateTime.MinValue)
+            .ThenBy(chat => chat.Id)
+            .ToList();
+
+        var duplicateResult = TryHandleDuplicateMessage(session.Id, normalizedMessage, existingChats, now);
+        if (duplicateResult is not null)
+        {
+            return duplicateResult;
+        }
+
         var userChat = new Chat
         {
             Id = Guid.CreateVersion7(),
             SessionId = session.Id,
-            Prompt = request.Message.Trim(),
+            Prompt = normalizedMessage,
             Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(Role: "user")),
             CreatedAt = now
         };
@@ -83,7 +115,8 @@ public sealed class SendAgentMessageCommandHandler
             Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(
                 Role: "assistant",
                 Model: completionResult.Value.Model,
-                ToolNames: completionResult.Value.ToolNames)),
+                ToolNames: completionResult.Value.ToolNames,
+                Actions: completionResult.Value.Actions)),
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
@@ -96,5 +129,72 @@ public sealed class SendAgentMessageCommandHandler
             session.Id,
             AgentMessageConfigSerializer.ToResponse(userChat),
             AgentMessageConfigSerializer.ToResponse(assistantChat)));
+    }
+
+    private static Result<AgentChatResponse>? TryHandleDuplicateMessage(
+        Guid sessionId,
+        string normalizedMessage,
+        IReadOnlyList<Chat> existingChats,
+        DateTime now)
+    {
+        if (existingChats.Count == 0)
+        {
+            return null;
+        }
+
+        var latest = existingChats[^1];
+        var latestMetadata = AgentMessageConfigSerializer.Parse(latest.Config);
+
+        if (string.Equals(latestMetadata.Role, "user", StringComparison.OrdinalIgnoreCase) &&
+            IsSameRecentMessage(latest, normalizedMessage, now, TimeSpan.FromSeconds(30)))
+        {
+            return Result.Failure<AgentChatResponse>(AgentErrors.DuplicateMessageInProgress);
+        }
+
+        if (!string.Equals(latestMetadata.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var previousUser = existingChats
+            .Take(existingChats.Count - 1)
+            .LastOrDefault(chat =>
+                string.Equals(
+                    AgentMessageConfigSerializer.Parse(chat.Config).Role,
+                    "user",
+                    StringComparison.OrdinalIgnoreCase));
+
+        if (previousUser is null ||
+            !IsSameRecentMessage(previousUser, normalizedMessage, now, TimeSpan.FromMinutes(5)))
+        {
+            return null;
+        }
+
+        return Result.Success(new AgentChatResponse(
+            sessionId,
+            AgentMessageConfigSerializer.ToResponse(previousUser),
+            AgentMessageConfigSerializer.ToResponse(latest)));
+    }
+
+    private static bool IsSameRecentMessage(Chat chat, string normalizedMessage, DateTime now, TimeSpan window)
+    {
+        if (!string.Equals(NormalizeMessage(chat.Prompt), normalizedMessage, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!chat.CreatedAt.HasValue)
+        {
+            return true;
+        }
+
+        var age = now - chat.CreatedAt.Value;
+        return age >= TimeSpan.Zero && age <= window;
+    }
+
+    private static string NormalizeMessage(string? message)
+    {
+        return string.Join(' ', (message ?? string.Empty)
+            .Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 }

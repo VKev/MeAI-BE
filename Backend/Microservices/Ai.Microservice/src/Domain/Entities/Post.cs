@@ -14,6 +14,8 @@ public sealed class Post
 
     public Guid? WorkspaceId { get; set; }
 
+    public Guid? ChatSessionId { get; set; }
+
     public Guid? SocialMediaId { get; set; }
 
     public string? Platform { get; set; }
@@ -47,4 +49,6 @@ public sealed class Post
     public DateTime? DeletedAt { get; set; }
 
     public PostBuilder? PostBuilder { get; set; }
+
+    public ChatSession? ChatSession { get; set; }
 }

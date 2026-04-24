@@ -7,9 +7,12 @@ using Application.Abstractions.Configs;
 using Application.Abstractions.SocialMedias;
 using Application.Abstractions.Workspaces;
 using Application.Agents;
+using Application.Agents.Models;
+using Application.Posts.Commands;
 using Application.PublishingSchedules;
 using Application.PublishingSchedules.Commands;
 using Application.PublishingSchedules.Models;
+using Domain.Entities;
 using Domain.Repositories;
 using Google.GenAI;
 using MediatR;
@@ -79,6 +82,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
         var history = await BuildHistoryAsync(request.SessionId, request.WorkspaceId, cancellationToken);
         var tools = new AgentToolbox(
             request.UserId,
+            request.SessionId,
             request.WorkspaceId,
             _userWorkspaceService,
             _userSocialMediaService,
@@ -123,6 +127,14 @@ public sealed class GeminiAgentChatService : IAgentChatService
                     "get_schedule",
                     "Get one schedule by id."),
                 AIFunctionFactory.Create(
+                    tools.CreatePostAsync,
+                    "create_post",
+                    "Create an editable draft post in MeAI and link it to the current chat session."),
+                AIFunctionFactory.Create(
+                    tools.UpdatePostAsync,
+                    "update_post",
+                    "Update an existing MeAI post draft and link it to the current chat session."),
+                AIFunctionFactory.Create(
                     tools.CreateScheduleAsync,
                     "create_schedule",
                     "Create a fixed_content or agentic schedule. Use comma-separated GUID strings for targetSocialMediaIds and postIds."),
@@ -160,7 +172,8 @@ public sealed class GeminiAgentChatService : IAgentChatService
             return Result.Success(new AgentChatCompletionResult(
                 content,
                 model,
-                tools.GetInvokedToolNames()));
+                tools.GetInvokedToolNames(),
+                tools.GetActions()));
         }
         catch (Exception ex)
         {
@@ -230,6 +243,8 @@ public sealed class GeminiAgentChatService : IAgentChatService
              - Never guess a social account when there is ambiguity.
              - If the user asks for a future action, do not say it is already scheduled unless the system actually created a schedule.
              - Use tools to inspect workspaces, linked social accounts, workspace social accounts, and existing posts before asking the user to repeat information you can fetch.
+             - If the user asks to create/save a post without a publish time, create an editable draft post with create_post. Do not claim drafts are unsupported.
+             - If the user asks to edit a post created in this conversation, use update_post. If the post id is ambiguous, call get_posts and ask only if still ambiguous.
              - If the user has multiple candidate accounts for the same platform, ask which one should be used.
              - When talking about time-sensitive information, say that a later runtime web search will be needed rather than inventing live data.
              - Keep responses concise and practical.
@@ -249,6 +264,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
     private sealed class AgentToolbox
     {
         private readonly Guid _userId;
+        private readonly Guid _sessionId;
         private readonly Guid _workspaceId;
         private readonly IUserWorkspaceService _userWorkspaceService;
         private readonly IUserSocialMediaService _userSocialMediaService;
@@ -258,9 +274,11 @@ public sealed class GeminiAgentChatService : IAgentChatService
         private readonly IN8nWorkflowClient _n8nWorkflowClient;
         private readonly IMediator _mediator;
         private readonly List<string> _invokedToolNames = new();
+        private readonly List<AgentActionResponse> _actions = new();
 
         public AgentToolbox(
             Guid userId,
+            Guid sessionId,
             Guid workspaceId,
             IUserWorkspaceService userWorkspaceService,
             IUserSocialMediaService userSocialMediaService,
@@ -271,6 +289,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
             IMediator mediator)
         {
             _userId = userId;
+            _sessionId = sessionId;
             _workspaceId = workspaceId;
             _userWorkspaceService = userWorkspaceService;
             _userSocialMediaService = userSocialMediaService;
@@ -286,6 +305,11 @@ public sealed class GeminiAgentChatService : IAgentChatService
             return _invokedToolNames.Distinct(StringComparer.Ordinal).ToList();
         }
 
+        public IReadOnlyList<AgentActionResponse> GetActions()
+        {
+            return _actions.ToArray();
+        }
+
         public async Task<string> GetUserWorkspacesAsync()
         {
             Track("get_user_workspaces");
@@ -293,8 +317,15 @@ public sealed class GeminiAgentChatService : IAgentChatService
             var result = await _userWorkspaceService.GetWorkspacesAsync(_userId, CancellationToken.None);
             if (result.IsFailure)
             {
+                RecordAction("tool_call", "get_user_workspaces", "failed", summary: result.Error.Description);
                 return Serialize(new { error = result.Error.Description });
             }
+
+            RecordAction(
+                "tool_call",
+                "get_user_workspaces",
+                "completed",
+                summary: $"Loaded {result.Value.Count} workspace(s).");
 
             return Serialize(result.Value.Select(item => new
             {
@@ -315,8 +346,15 @@ public sealed class GeminiAgentChatService : IAgentChatService
             var result = await _userSocialMediaService.GetSocialMediasByUserAsync(_userId, platform, CancellationToken.None);
             if (result.IsFailure)
             {
+                RecordAction("tool_call", "get_linked_social_accounts", "failed", summary: result.Error.Description);
                 return Serialize(new { error = result.Error.Description });
             }
+
+            RecordAction(
+                "tool_call",
+                "get_linked_social_accounts",
+                "completed",
+                summary: $"Loaded {result.Value.Count} linked social account(s).");
 
             return Serialize(result.Value.Select(MapSocialSummary));
         }
@@ -339,8 +377,17 @@ public sealed class GeminiAgentChatService : IAgentChatService
 
             if (result.IsFailure)
             {
+                RecordAction("tool_call", "get_workspace_social_accounts", "failed", summary: result.Error.Description);
                 return Serialize(new { error = result.Error.Description });
             }
+
+            RecordAction(
+                "tool_call",
+                "get_workspace_social_accounts",
+                "completed",
+                entityType: "workspace",
+                entityId: resolvedWorkspaceId.Value,
+                summary: $"Loaded {result.Value.Count} workspace social account(s).");
 
             return Serialize(result.Value.Select(MapSocialSummary));
         }
@@ -348,6 +395,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
         public async Task<string> GetPostsAsync(
             [Description("Optional workspace id. If omitted, the current chat session workspace is used.")] string? workspaceId = null,
             [Description("Optional post status filter like draft, scheduled, processing, or failed.")] string? status = null,
+            [Description("If true, return only posts linked to the current chat session.")] bool currentChatOnly = false,
             [Description("Maximum number of posts to return.")] int limit = 20)
         {
             Track("get_posts");
@@ -355,7 +403,17 @@ public sealed class GeminiAgentChatService : IAgentChatService
             limit = Math.Clamp(limit, 1, 50);
 
             IReadOnlyList<Domain.Entities.Post> posts;
-            if (string.IsNullOrWhiteSpace(workspaceId))
+            if (currentChatOnly)
+            {
+                posts = await _postRepository.GetByUserIdAndChatSessionIdAsync(
+                    _userId,
+                    _sessionId,
+                    null,
+                    null,
+                    limit,
+                    CancellationToken.None);
+            }
+            else if (string.IsNullOrWhiteSpace(workspaceId))
             {
                 posts = await _postRepository.GetByUserIdAndWorkspaceIdAsync(
                     _userId,
@@ -370,6 +428,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 var resolvedWorkspaceId = ResolveWorkspaceId(workspaceId);
                 if (resolvedWorkspaceId.IsFailure)
                 {
+                    RecordAction("tool_call", "get_posts", "failed", summary: resolvedWorkspaceId.Error.Description);
                     return Serialize(new { error = resolvedWorkspaceId.Error.Description });
                 }
 
@@ -386,11 +445,22 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 ? posts
                 : posts.Where(post => string.Equals(post.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
 
+            RecordAction(
+                "tool_call",
+                "get_posts",
+                "completed",
+                currentChatOnly ? "chat_session" : "workspace",
+                currentChatOnly ? _sessionId : _workspaceId,
+                summary: $"Loaded {filteredPosts.Count()} post(s).");
+
             return Serialize(filteredPosts.Select(post => new
             {
                 postId = post.Id,
                 workspaceId = post.WorkspaceId,
+                chatSessionId = post.ChatSessionId,
                 title = post.Title,
+                content = post.Content?.Content,
+                hashtag = post.Content?.Hashtag,
                 status = post.Status,
                 platform = post.Platform,
                 postType = post.Content?.PostType,
@@ -408,6 +478,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
             var utcNow = DateTime.UtcNow;
             if (string.IsNullOrWhiteSpace(timezone))
             {
+                RecordAction("tool_call", "get_current_time", "completed", summary: "Loaded current UTC time.");
                 return Serialize(new
                 {
                     utc = utcNow,
@@ -420,6 +491,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 var zone = TimeZoneInfo.FindSystemTimeZoneById(timezone.Trim());
                 var localTime = TimeZoneInfo.ConvertTimeFromUtc(utcNow, zone);
 
+                RecordAction("tool_call", "get_current_time", "completed", summary: $"Loaded current time for {zone.Id}.");
                 return Serialize(new
                 {
                     utc = utcNow,
@@ -429,10 +501,12 @@ public sealed class GeminiAgentChatService : IAgentChatService
             }
             catch (TimeZoneNotFoundException)
             {
+                RecordAction("tool_call", "get_current_time", "failed", summary: $"Timezone '{timezone}' was not found.");
                 return Serialize(new { error = $"Timezone '{timezone}' was not found." });
             }
             catch (InvalidTimeZoneException)
             {
+                RecordAction("tool_call", "get_current_time", "failed", summary: $"Timezone '{timezone}' is invalid.");
                 return Serialize(new { error = $"Timezone '{timezone}' is invalid." });
             }
         }
@@ -450,6 +524,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 var resolved = ResolveWorkspaceId(workspaceId);
                 if (resolved.IsFailure)
                 {
+                    RecordAction("tool_call", "get_schedules", "failed", summary: resolved.Error.Description);
                     return Serialize(new { error = resolved.Error.Description });
                 }
 
@@ -464,6 +539,14 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 CancellationToken.None);
 
             var response = await _publishingScheduleResponseBuilder.BuildManyAsync(schedules, CancellationToken.None);
+            RecordAction(
+                "tool_call",
+                "get_schedules",
+                "completed",
+                resolvedWorkspaceId.HasValue ? "workspace" : null,
+                resolvedWorkspaceId,
+                summary: $"Loaded {response.Count} schedule(s).");
+
             return Serialize(response.Select(schedule => new
             {
                 scheduleId = schedule.Id,
@@ -484,17 +567,266 @@ public sealed class GeminiAgentChatService : IAgentChatService
 
             if (!Guid.TryParse(scheduleId, out var parsedScheduleId) || parsedScheduleId == Guid.Empty)
             {
+                RecordAction("tool_call", "get_schedule", "failed", "schedule", summary: "scheduleId must be a valid GUID.");
                 return Serialize(new { error = "scheduleId must be a valid GUID." });
             }
 
             var schedule = await _publishingScheduleRepository.GetByIdAsync(parsedScheduleId, CancellationToken.None);
             if (schedule is null || schedule.DeletedAt.HasValue || schedule.UserId != _userId)
             {
+                RecordAction("tool_call", "get_schedule", "failed", "schedule", parsedScheduleId, summary: "Publishing schedule not found.");
                 return Serialize(new { error = "Publishing schedule not found." });
             }
 
             var response = await _publishingScheduleResponseBuilder.BuildAsync(schedule, CancellationToken.None);
+            RecordAction("tool_call", "get_schedule", "completed", "schedule", response.Id, response.Name, response.Status);
             return Serialize(response);
+        }
+
+        public async Task<string> CreatePostAsync(
+            [Description("Post body/content text.")] string content,
+            [Description("Optional post title.")] string? title = null,
+            [Description("Optional hashtag text, for example '#AI #Marketing'.")] string? hashtag = null,
+            [Description("Post type: posts, reels, video, story. Defaults to posts.")] string? postType = null,
+            [Description("Optional platform like facebook, instagram, threads, or tiktok.")] string? platform = null,
+            [Description("Optional social media GUID. Only use this if the target account is known unambiguously.")] string? socialMediaId = null,
+            [Description("Comma-separated resource GUIDs to attach to this post.")] string? resourceIds = null,
+            [Description("Optional workspace id. Defaults to current chat workspace.")] string? workspaceId = null)
+        {
+            Track("create_post");
+
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                RecordAction("post_create", "create_post", "failed", "post", summary: "content is required.");
+                return Serialize(new { error = "content is required." });
+            }
+
+            var resolvedWorkspaceId = ResolveWorkspaceId(workspaceId);
+            if (resolvedWorkspaceId.IsFailure)
+            {
+                RecordAction("post_create", "create_post", "failed", "post", summary: resolvedWorkspaceId.Error.Description);
+                return Serialize(new { error = resolvedWorkspaceId.Error.Description });
+            }
+
+            var socialMediaIdResult = ParseOptionalGuid(socialMediaId, "socialMediaId");
+            if (socialMediaIdResult.IsFailure)
+            {
+                RecordAction("post_create", "create_post", "failed", "post", summary: socialMediaIdResult.Error.Description);
+                return Serialize(new { error = socialMediaIdResult.Error.Description });
+            }
+
+            var resourceIdsResult = ParseGuidList(resourceIds, "resourceIds");
+            if (resourceIdsResult.IsFailure)
+            {
+                RecordAction("post_create", "create_post", "failed", "post", summary: resourceIdsResult.Error.Description);
+                return Serialize(new { error = resourceIdsResult.Error.Description });
+            }
+
+            var postContent = new PostContent
+            {
+                Content = content.Trim(),
+                Hashtag = NormalizeOptionalString(hashtag),
+                PostType = NormalizeOptionalString(postType) ?? "posts",
+                ResourceList = resourceIdsResult.Value.Select(id => id.ToString()).ToList()
+            };
+
+            var duplicate = await FindRecentDraftDuplicateAsync(
+                resolvedWorkspaceId.Value,
+                title,
+                postContent,
+                platform,
+                CancellationToken.None);
+
+            if (duplicate is not null)
+            {
+                var updateResult = await _mediator.Send(
+                    new UpdatePostCommand(
+                        duplicate.Id,
+                        _userId,
+                        resolvedWorkspaceId.Value,
+                        _sessionId,
+                        socialMediaIdResult.Value,
+                        title,
+                        postContent,
+                        "draft"),
+                    CancellationToken.None);
+
+                return updateResult.IsFailure
+                    ? SerializeWithAction(
+                        new { error = updateResult.Error.Description, code = updateResult.Error.Code },
+                        "post_create",
+                        "create_post",
+                        "failed",
+                        "post",
+                        duplicate.Id,
+                        duplicate.Title,
+                        updateResult.Error.Description)
+                    : SerializeWithAction(new
+                    {
+                        postId = updateResult.Value.Id,
+                        updateResult.Value.ChatSessionId,
+                        updateResult.Value.WorkspaceId,
+                        updateResult.Value.Title,
+                        updateResult.Value.Status,
+                        deduplicated = true,
+                        message = "A matching draft already existed in this chat session, so it was updated instead of creating a duplicate."
+                    },
+                        "post_update",
+                        "create_post",
+                        "completed",
+                        "post",
+                        updateResult.Value.Id,
+                        updateResult.Value.Title,
+                        "Updated an existing matching draft instead of creating a duplicate.");
+            }
+
+            var result = await _mediator.Send(
+                new CreatePostCommand(
+                    _userId,
+                    resolvedWorkspaceId.Value,
+                    _sessionId,
+                    socialMediaIdResult.Value,
+                    title,
+                    postContent,
+                    "draft",
+                    null,
+                    platform),
+                CancellationToken.None);
+
+            return result.IsFailure
+                ? SerializeWithAction(
+                    new { error = result.Error.Description, code = result.Error.Code },
+                    "post_create",
+                    "create_post",
+                    "failed",
+                    "post",
+                    summary: result.Error.Description)
+                : SerializeWithAction(new
+                {
+                    postId = result.Value.Id,
+                    result.Value.ChatSessionId,
+                    result.Value.WorkspaceId,
+                    result.Value.Title,
+                    result.Value.Status,
+                    platform,
+                    message = "Draft post created and linked to the current chat session."
+                },
+                    "post_create",
+                    "create_post",
+                    "completed",
+                    "post",
+                    result.Value.Id,
+                    result.Value.Title,
+                    "Draft post created and linked to the current chat session.");
+        }
+
+        public async Task<string> UpdatePostAsync(
+            [Description("Post id as a GUID string.")] string postId,
+            [Description("Optional replacement post body/content text.")] string? content = null,
+            [Description("Optional replacement title.")] string? title = null,
+            [Description("Optional replacement hashtag text.")] string? hashtag = null,
+            [Description("Optional replacement post type.")] string? postType = null,
+            [Description("Optional replacement status, for example draft.")] string? status = null,
+            [Description("Optional social media GUID.")] string? socialMediaId = null,
+            [Description("Optional comma-separated resource GUIDs to replace attached resources.")] string? resourceIds = null,
+            [Description("Set true to link the post to the current chat session. Defaults to true.")] bool linkToCurrentChatSession = true)
+        {
+            Track("update_post");
+
+            if (!Guid.TryParse(postId, out var parsedPostId) || parsedPostId == Guid.Empty)
+            {
+                RecordAction("post_update", "update_post", "failed", "post", summary: "postId must be a valid GUID.");
+                return Serialize(new { error = "postId must be a valid GUID." });
+            }
+
+            var existing = await _postRepository.GetByIdAsync(parsedPostId, CancellationToken.None);
+            if (existing is null || existing.DeletedAt.HasValue)
+            {
+                RecordAction("post_update", "update_post", "failed", "post", parsedPostId, summary: "Post not found.");
+                return Serialize(new { error = "Post not found." });
+            }
+
+            if (existing.UserId != _userId)
+            {
+                RecordAction("post_update", "update_post", "failed", "post", parsedPostId, existing.Title, "You are not authorized to update this post.");
+                return Serialize(new { error = "You are not authorized to update this post." });
+            }
+
+            var socialMediaIdResult = ParseOptionalGuid(socialMediaId, "socialMediaId");
+            if (socialMediaIdResult.IsFailure)
+            {
+                RecordAction("post_update", "update_post", "failed", "post", parsedPostId, existing.Title, socialMediaIdResult.Error.Description);
+                return Serialize(new { error = socialMediaIdResult.Error.Description });
+            }
+
+            var resourceIdsResult = ParseGuidList(resourceIds, "resourceIds");
+            if (resourceIdsResult.IsFailure)
+            {
+                RecordAction("post_update", "update_post", "failed", "post", parsedPostId, existing.Title, resourceIdsResult.Error.Description);
+                return Serialize(new { error = resourceIdsResult.Error.Description });
+            }
+
+            PostContent? mergedContent = null;
+            if (!string.IsNullOrWhiteSpace(content) ||
+                !string.IsNullOrWhiteSpace(hashtag) ||
+                !string.IsNullOrWhiteSpace(postType) ||
+                !string.IsNullOrWhiteSpace(resourceIds))
+            {
+                mergedContent = new PostContent
+                {
+                    Content = string.IsNullOrWhiteSpace(content)
+                        ? existing.Content?.Content
+                        : content.Trim(),
+                    Hashtag = string.IsNullOrWhiteSpace(hashtag)
+                        ? existing.Content?.Hashtag
+                        : hashtag.Trim(),
+                    PostType = string.IsNullOrWhiteSpace(postType)
+                        ? existing.Content?.PostType
+                        : postType.Trim(),
+                    ResourceList = string.IsNullOrWhiteSpace(resourceIds)
+                        ? existing.Content?.ResourceList
+                        : resourceIdsResult.Value.Select(id => id.ToString()).ToList()
+                };
+            }
+
+            var result = await _mediator.Send(
+                new UpdatePostCommand(
+                    parsedPostId,
+                    _userId,
+                    existing.WorkspaceId,
+                    linkToCurrentChatSession ? _sessionId : null,
+                    socialMediaIdResult.Value,
+                    title,
+                    mergedContent,
+                    status),
+                CancellationToken.None);
+
+            return result.IsFailure
+                ? SerializeWithAction(
+                    new { error = result.Error.Description, code = result.Error.Code },
+                    "post_update",
+                    "update_post",
+                    "failed",
+                    "post",
+                    parsedPostId,
+                    existing.Title,
+                    result.Error.Description)
+                : SerializeWithAction(new
+                {
+                    postId = result.Value.Id,
+                    result.Value.ChatSessionId,
+                    result.Value.WorkspaceId,
+                    result.Value.Title,
+                    result.Value.Status,
+                    message = "Post updated."
+                },
+                    "post_update",
+                    "update_post",
+                    "completed",
+                    "post",
+                    result.Value.Id,
+                    result.Value.Title,
+                    "Post updated.");
         }
 
         public async Task<string> CreateScheduleAsync(
@@ -518,17 +850,20 @@ public sealed class GeminiAgentChatService : IAgentChatService
             var resolvedWorkspaceId = ResolveWorkspaceId(workspaceId);
             if (resolvedWorkspaceId.IsFailure)
             {
+                RecordAction("schedule_create", "create_schedule", "failed", "schedule", summary: resolvedWorkspaceId.Error.Description);
                 return Serialize(new { error = resolvedWorkspaceId.Error.Description });
             }
 
             if (!DateTime.TryParse(executeAtUtc, out var parsedExecuteAtUtc))
             {
+                RecordAction("schedule_create", "create_schedule", "failed", "schedule", summary: "executeAtUtc must be a valid ISO 8601 datetime.");
                 return Serialize(new { error = "executeAtUtc must be a valid ISO 8601 datetime." });
             }
 
             var targetIdsResult = ParseGuidList(targetSocialMediaIds, "targetSocialMediaIds");
             if (targetIdsResult.IsFailure)
             {
+                RecordAction("schedule_create", "create_schedule", "failed", "schedule", summary: targetIdsResult.Error.Description);
                 return Serialize(new { error = targetIdsResult.Error.Description });
             }
 
@@ -559,13 +894,28 @@ public sealed class GeminiAgentChatService : IAgentChatService
                     CancellationToken.None);
 
                 return result.IsFailure
-                    ? Serialize(new { error = result.Error.Description, code = result.Error.Code })
-                    : Serialize(result.Value);
+                    ? SerializeWithAction(
+                        new { error = result.Error.Description, code = result.Error.Code },
+                        "schedule_create",
+                        "create_schedule",
+                        "failed",
+                        "schedule",
+                        summary: result.Error.Description)
+                    : SerializeWithAction(
+                        result.Value,
+                        "schedule_create",
+                        "create_schedule",
+                        "completed",
+                        "schedule",
+                        result.Value.Id,
+                        result.Value.Name,
+                        $"Created {result.Value.Mode} schedule.");
             }
 
             var postIdsResult = ParseGuidList(postIds, "postIds");
             if (postIdsResult.IsFailure || postIdsResult.Value.Count == 0)
             {
+                RecordAction("schedule_create", "create_schedule", "failed", "schedule", summary: "postIds is required for fixed_content schedules.");
                 return Serialize(new { error = "postIds is required for fixed_content schedules." });
             }
 
@@ -583,8 +933,22 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 CancellationToken.None);
 
             return fixedResult.IsFailure
-                ? Serialize(new { error = fixedResult.Error.Description, code = fixedResult.Error.Code })
-                : Serialize(fixedResult.Value);
+                ? SerializeWithAction(
+                    new { error = fixedResult.Error.Description, code = fixedResult.Error.Code },
+                    "schedule_create",
+                    "create_schedule",
+                    "failed",
+                    "schedule",
+                    summary: fixedResult.Error.Description)
+                : SerializeWithAction(
+                    fixedResult.Value,
+                    "schedule_create",
+                    "create_schedule",
+                    "completed",
+                    "schedule",
+                    fixedResult.Value.Id,
+                    fixedResult.Value.Name,
+                    $"Created {fixedResult.Value.Mode} schedule.");
         }
 
         public async Task<string> WebSearchAsync(
@@ -608,8 +972,86 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 CancellationToken.None);
 
             return result.IsFailure
-                ? Serialize(new { error = result.Error.Description, code = result.Error.Code })
-                : Serialize(result.Value);
+                ? SerializeWithAction(
+                    new { error = result.Error.Description, code = result.Error.Code },
+                    "web_search",
+                    "web_search",
+                    "failed",
+                    label: query,
+                    summary: result.Error.Description)
+                : SerializeWithAction(
+                    result.Value,
+                    "web_search",
+                    "web_search",
+                    "completed",
+                    label: query,
+                    summary: "Web search completed through n8n.");
+        }
+
+        private async Task<Post?> FindRecentDraftDuplicateAsync(
+            Guid workspaceId,
+            string? title,
+            PostContent content,
+            string? platform,
+            CancellationToken cancellationToken)
+        {
+            var candidates = await _postRepository.GetByUserIdAndChatSessionIdAsync(
+                _userId,
+                _sessionId,
+                null,
+                null,
+                20,
+                cancellationToken);
+
+            var now = DateTime.UtcNow;
+            var cutoff = now.AddMinutes(-10);
+            var requestedTitle = NormalizeForDedupe(title);
+            var requestedContent = NormalizeForDedupe(content.Content);
+            var requestedPostType = NormalizeForDedupe(content.PostType) ?? "posts";
+            var requestedPlatform = NormalizeForDedupe(platform);
+
+            return candidates.FirstOrDefault(post =>
+            {
+                if (!string.Equals(post.Status, "draft", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                if (post.WorkspaceId != workspaceId || post.ScheduleGroupId.HasValue || post.ScheduledAtUtc.HasValue)
+                {
+                    return false;
+                }
+
+                if (post.CreatedAt.HasValue && post.CreatedAt.Value < cutoff)
+                {
+                    return false;
+                }
+
+                var existingPostType = NormalizeForDedupe(post.Content?.PostType) ?? "posts";
+                if (!string.Equals(existingPostType, requestedPostType, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                var existingPlatform = NormalizeForDedupe(post.Platform);
+                if (!string.IsNullOrWhiteSpace(existingPlatform) &&
+                    !string.IsNullOrWhiteSpace(requestedPlatform) &&
+                    !string.Equals(existingPlatform, requestedPlatform, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                var existingTitle = NormalizeForDedupe(post.Title);
+                if (!string.IsNullOrWhiteSpace(requestedTitle) &&
+                    string.Equals(existingTitle, requestedTitle, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                var existingContent = NormalizeForDedupe(post.Content?.Content);
+                return !string.IsNullOrWhiteSpace(requestedContent) &&
+                       string.Equals(existingContent, requestedContent, StringComparison.Ordinal);
+            });
         }
 
         private Result<Guid> ResolveWorkspaceId(string? rawWorkspaceId)
@@ -648,6 +1090,20 @@ public sealed class GeminiAgentChatService : IAgentChatService
             return JsonSerializer.Serialize(payload, JsonOptions);
         }
 
+        private string SerializeWithAction(
+            object payload,
+            string type,
+            string toolName,
+            string status,
+            string? entityType = null,
+            Guid? entityId = null,
+            string? label = null,
+            string? summary = null)
+        {
+            RecordAction(type, toolName, status, entityType, entityId, label, summary);
+            return Serialize(payload);
+        }
+
         private static Result<IReadOnlyList<Guid>> ParseGuidList(string? raw, string fieldName)
         {
             if (string.IsNullOrWhiteSpace(raw))
@@ -677,9 +1133,63 @@ public sealed class GeminiAgentChatService : IAgentChatService
             return Result.Success<IReadOnlyList<Guid>>(ids);
         }
 
+        private static Result<Guid?> ParseOptionalGuid(string? raw, string fieldName)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return Result.Success<Guid?>(null);
+            }
+
+            if (!Guid.TryParse(raw.Trim(), out var parsed) || parsed == Guid.Empty)
+            {
+                return Result.Failure<Guid?>(
+                    new Error("Agent.InvalidGuid", $"{fieldName} must be a valid GUID."));
+            }
+
+            return Result.Success<Guid?>(parsed);
+        }
+
+        private static string? NormalizeOptionalString(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        private static string? NormalizeForDedupe(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return string.Join(' ', value
+                    .Trim()
+                    .ToLowerInvariant()
+                    .Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+
         private void Track(string toolName)
         {
             _invokedToolNames.Add(toolName);
+        }
+
+        private void RecordAction(
+            string type,
+            string toolName,
+            string status,
+            string? entityType = null,
+            Guid? entityId = null,
+            string? label = null,
+            string? summary = null)
+        {
+            _actions.Add(new AgentActionResponse(
+                type,
+                toolName,
+                status,
+                entityType,
+                entityId,
+                label,
+                summary,
+                DateTime.UtcNow));
         }
     }
 }

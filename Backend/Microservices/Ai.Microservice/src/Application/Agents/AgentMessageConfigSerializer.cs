@@ -45,6 +45,7 @@ public static class AgentMessageConfigSerializer
             chat.ErrorMessage,
             metadata.Model,
             metadata.ToolNames?.ToArray() ?? Array.Empty<string>(),
+            metadata.Actions?.ToArray() ?? Array.Empty<AgentActionResponse>(),
             chat.CreatedAt,
             chat.UpdatedAt);
     }

@@ -71,7 +71,14 @@ Assistant này:
 Repo hiện đã có một phần nền tảng tốt cho `FR-U8.1` và `FR-U8.4`:
 
 - `Ai.Microservice` đã có `POST /api/Ai/posts/{postId}/schedule`.
+- `Ai.Microservice` đã có API tạo/sửa post draft:
+  - `POST /api/Ai/posts`
+  - `PUT /api/Ai/posts/{postId}`
+  - request/response đã hỗ trợ `chatSessionId` để link post với một chat session.
+- `Ai.Microservice` đã có API lấy post theo chat session:
+  - `GET /api/Ai/posts/chat-session/{chatSessionId}`
 - `Post` đã có các field:
+  - `ChatSessionId`
   - `ScheduleGroupId`
   - `ScheduledAtUtc`
   - `ScheduleTimezone`
@@ -83,22 +90,24 @@ Repo hiện đã có một phần nền tảng tốt cho `FR-U8.1` và `FR-U8.4`
 - `User.Microservice` đã có API lấy social accounts và workspace-social links.
 - `Ai.Microservice` đã có gRPC client `UserSocialMediaService` để resolve social media ids.
 - `Ai.Microservice` đã có `ChatSession` / `Chat` CRUD cơ bản.
+- Gemini agent đã có tool tạo/sửa draft post:
+  - `create_post`
+  - `update_post`
+  - `get_posts(currentChatOnly: true)`
 - Repo đã có hạ tầng `n8n` trong:
   - `Backend/Compose/docker-compose.yml`
   - `Backend/Kubernetes/manifests/05-n8n.yaml`
   - Terraform service definitions cho `n8n`
 
-### Chưa đủ để hoàn thành FR-U8 đầy đủ
+### Giới hạn còn lại để product hóa FR-U8
 
-Phần hiện tại vẫn chưa đủ cho yêu cầu mới, vì:
+Phần hiện tại đã có foundation chính cho scheduling, agent tool calling và `n8n` runtime, nhưng vẫn còn các giới hạn cần hardening/productization:
 
-- scheduling hiện gắn trực tiếp lên `Post`, nên hợp cho "một post có sẵn", chưa phải first-class aggregate cho "một schedule chứa nhiều item";
 - chưa có khái niệm schedule dành cho `video` hoặc mixed items;
-- chưa có conversational agent orchestration dùng Gemini + tool calling;
-- chưa có tool catalog đủ để agent tự khám phá workspace, social account, post, schedule;
-- chưa có luồng "đến giờ mới tra web rồi mới sinh nội dung";
-- chưa có integration contract giữa `Ai.Microservice` và `n8n` cho `web_search`;
-- entity `Chat` hiện chỉ lưu `Prompt`, `Config`, `ReferenceResourceIds`, `ResultResourceIds`, chưa biểu diễn tốt hội thoại role-based kiểu `user/assistant/tool`.
+- chưa có retry/pause/resume first-class cho `agentic` schedule;
+- chưa có notification flow đầy đủ cho `needs_user_action`;
+- chưa có end-to-end integration test chạy thật qua `n8n` container + Brave Search sandbox;
+- entity `Chat` hiện vẫn chưa phải transcript model hoàn chỉnh cho role-based history kiểu `user/assistant/tool`; implementation hiện dùng metadata tạm trong `Chat.Config`.
 
 ## Quyết định kiến trúc
 
@@ -426,7 +435,7 @@ Khuyến nghị:
 - `get_user_workspaces`
 - `get_workspace_social_accounts(workspaceId)`
 - `get_linked_social_accounts(platform?)`
-- `get_posts(workspaceId, status?, limit?)`
+- `get_posts(workspaceId?, status?, currentChatOnly?, limit?)`
 - `get_post(postId)`
 - `get_schedules(workspaceId?, status?)`
 - `get_schedule(scheduleId)`
@@ -435,8 +444,8 @@ Khuyến nghị:
 
 ### Mutating tools
 
-- `create_post(workspaceId, title, content, platform, resourceIds, postType)`
-- `update_post(postId, ...)`
+- `create_post(content, title?, hashtag?, postType?, platform?, socialMediaId?, resourceIds?, workspaceId?)`
+- `update_post(postId, content?, title?, hashtag?, postType?, status?, socialMediaId?, resourceIds?, linkToCurrentChatSession?)`
 - `create_schedule(...)`
 - `update_schedule(scheduleId, ...)`
 - `cancel_schedule(scheduleId)`
@@ -726,9 +735,9 @@ User chat trực tiếp với Gemini phải dùng cùng agent core, nghĩa là:
 - tool availability phụ thuộc context nhưng không tách thành 2 chatbot khác nhau;
 - agent có thể trả lời bình thường hoặc chuyển sang create schedule flow khi nhận ra intent phù hợp.
 
-### Endpoint đề xuất
+### Endpoint hiện có
 
-Có thể giữ `ChatSession` hiện tại nhưng bổ sung một command/endpoint mới kiểu:
+Chat agent hiện dùng endpoint:
 
 - `POST /api/Ai/agent/sessions/{sessionId}/messages`
 
@@ -831,9 +840,9 @@ Các field như `access_token`, `page_access_token`, refresh token, app secret:
 
 ## Tình trạng implementation hiện tại
 
-### Trạng thái tại ngày 2026-04-23
+### Trạng thái tại ngày 2026-04-24
 
-`Phase 1`, `Phase 2` và `Phase 3` đã được implement ở mức backend foundation + fixed-content scheduling + agentic runtime integration foundation.
+`Phase 1`, `Phase 2` và `Phase 3` đã được implement ở mức backend foundation + fixed-content scheduling + agentic runtime integration foundation. Sau cập nhật mới nhất, agent cũng đã có thể tạo/sửa draft post thật và link các post đó với chat session hiện tại.
 
 ### Đã hoàn thành trong phase 1
 
@@ -846,19 +855,26 @@ Các field như `access_token`, `page_access_token`, refresh token, app secret:
   - lấy linked social accounts của user;
   - lấy social accounts theo workspace;
   - lấy posts hiện có;
+  - lấy posts của chat session hiện tại qua `get_posts(currentChatOnly: true)`;
   - lấy current time;
+- đã thêm mutating tools cho post draft:
+  - `create_post`;
+  - `update_post`;
+- đã thêm `chatSessionId` vào `Post`/`PostResponse` để bài được tạo trong hội thoại có thể quay lại đúng chat session;
+- đã thêm API `GET /api/Ai/posts/chat-session/{chatSessionId}` để FE lấy danh sách post gắn với một hội thoại;
 - đã mở rộng gRPC contract giữa `Ai.Microservice` và `User.Microservice` để agent tự resolve workspace và social account;
 - đã lưu metadata hội thoại agent vào `Chat.Config` dưới dạng role-based metadata tạm thời để tránh migration sớm ở phase 1;
 - đã có automated tests cho command/query chính của agent flow.
 
-### Chưa nằm trong phase 1
+### Đã được bổ sung sau phase 1
 
-- chưa có tool tạo schedule thật (`create_schedule`);
-- chưa có tool tạo post thật (`create_post`);
-- chưa có first-class aggregate `PublishingSchedule`;
-- chưa có integration runtime với `n8n`;
-- chưa có `web_search` forwarding sang `n8n` hoặc Brave Search runtime execution;
-- chưa có callback flow từ `n8n` về `Ai.Microservice` để hoàn tất live-content schedule.
+- đã có tool tạo schedule thật (`create_schedule`);
+- đã có tool tạo post thật (`create_post`);
+- đã có tool sửa post thật (`update_post`);
+- đã có first-class aggregate `PublishingSchedule`;
+- đã có integration runtime với `n8n`;
+- đã có `web_search` forwarding sang `n8n` và Brave Search runtime execution;
+- đã có callback flow từ `n8n` về `Ai.Microservice` để hoàn tất live-content schedule.
 
 ### Ý nghĩa của trạng thái hiện tại
 
@@ -867,7 +883,8 @@ Sau phase 1, hệ thống đã có thể:
 - cho user chat trực tiếp với Gemini trong `Ai.Microservice`;
 - để agent tự hỏi ngược user khi thiếu thông tin;
 - để agent đọc ngữ cảnh thật từ hệ thống thay vì đoán;
-- làm nền cho phase 2, nơi agent bắt đầu tạo schedule/post thay vì mới chỉ đọc và phân tích.
+- tạo/sửa post draft thật từ hội thoại và link bài đó về chat session;
+- tạo schedule thật, gọi `web_search`, và chạy nền cho agentic live-content schedule.
 
 ### Mục tiêu bàn giao của phase 2
 
@@ -915,13 +932,10 @@ Khi phase 2 hoàn thành, backend phải có tối thiểu:
 - đã truyền `publishingScheduleId` qua command/message nội bộ để publish pipeline cập nhật lại item/schedule status sau khi dispatch;
 - đã bổ sung automated tests cho create/cancel schedule và cập nhật test cho dispatch/publish flow.
 
-### Chưa nằm trong phase 2
+### Giới hạn còn lại sau phase 2
 
-- chưa support `agentic` schedule;
 - chưa support `video` item như first-class schedule item;
-- chưa có `create_schedule` tool cho Gemini agent gọi trực tiếp;
-- chưa có integration `n8n` runtime cho `web_search`;
-- chưa có callback execution flow cho live-content schedule.
+- các phần `agentic`, `create_schedule`, `web_search` qua `n8n`, và callback live-content đã được xử lý ở phase 3 bên dưới.
 
 ### Đã hoàn thành trong phase 3
 
@@ -979,19 +993,31 @@ Frontend nên coi đây là 2 flow khác nhau:
 
 ### API FE cần dùng
 
-#### 1. Tạo post trước khi schedule
+#### 1. Tạo post draft trước khi schedule hoặc từ chat
 
 - `POST /api/Ai/posts`
 - mục đích:
   - tạo post draft trước;
+  - tạo post draft từ agent/chat khi user nói "tạo bài này";
   - lưu caption, media, post type;
+  - link post vào chat session nếu request có `chatSessionId`;
   - sau đó mới đưa `postId` vào schedule.
 
-Payload tối thiểu:
+Request body hiện tại:
+
+- `workspaceId`: optional nếu có `chatSessionId`; backend sẽ lấy workspace từ chat session.
+- `chatSessionId`: optional, dùng để gắn post với hội thoại.
+- `socialMediaId`: optional, nếu đã resolve target account.
+- `title`: optional.
+- `content`: optional `PostContent`.
+- `status`: optional, thường là `draft`.
+- `postBuilderId`: optional, dùng cho flow post builder; nếu trùng thì backend upsert để tránh duplicate.
+- `platform`: optional, ví dụ `facebook`, `instagram`, `threads`, `tiktok`.
 
 ```json
 {
   "workspaceId": "<workspaceId>",
+  "chatSessionId": "<chatSessionId>",
   "title": "Test scheduled post",
   "content": {
     "content": "Caption",
@@ -1004,12 +1030,127 @@ Payload tối thiểu:
 }
 ```
 
+Response success là `Result<PostResponse>`. `PostResponse` hiện có thêm `chatSessionId`:
+
+```json
+{
+  "value": {
+    "id": "<postId>",
+    "userId": "<userId>",
+    "username": "user",
+    "avatarUrl": null,
+    "workspaceId": "<workspaceId>",
+    "chatSessionId": "<chatSessionId>",
+    "socialMediaId": null,
+    "title": "Test scheduled post",
+    "content": {
+      "content": "Caption",
+      "hashtag": "#tag",
+      "resourceList": ["<resourceId>"],
+      "postType": "posts"
+    },
+    "status": "draft",
+    "schedule": null,
+    "isPublished": false,
+    "media": [],
+    "publications": [],
+    "createdAt": "2026-04-24T00:00:00Z",
+    "updatedAt": "2026-04-24T00:00:00Z"
+  },
+  "isSuccess": true,
+  "isFailure": false,
+  "error": {
+    "code": "",
+    "description": ""
+  }
+}
+```
+
 Lưu ý FE:
 
 - với TikTok, resource phải là đúng `1` video;
 - với TikTok, không nên để `postType` rỗng;
 - với Facebook text-only post, `resourceList` có thể rỗng;
 - `post.status = draft` ở đây chỉ có nghĩa là bài viết chưa publish.
+- nếu truyền cả `workspaceId` và `chatSessionId`, chúng phải cùng workspace, nếu không backend trả `Post.ChatSessionWorkspaceMismatch`.
+- nếu chỉ truyền `chatSessionId`, backend tự resolve `workspaceId` từ chat session.
+
+#### 1.1. Sửa post draft đã tạo
+
+- `PUT /api/Ai/posts/{postId}`
+- mục đích:
+  - sửa caption/title/media/status của post;
+  - gắn hoặc cập nhật link với chat session qua `chatSessionId`;
+  - phục vụ flow agent khi user nói "sửa bài vừa tạo".
+
+Request body là partial update; field `null` được hiểu là không đổi:
+
+```json
+{
+  "workspaceId": "<workspaceId>",
+  "chatSessionId": "<chatSessionId>",
+  "socialMediaId": "<socialMediaId>",
+  "title": "Updated title",
+  "content": {
+    "content": "Updated caption",
+    "hashtag": "#updated",
+    "resourceList": ["<resourceId>"],
+    "postType": "posts"
+  },
+  "status": "draft"
+}
+```
+
+Response success là `Result<PostResponse>`.
+
+Validation và ownership:
+
+- chỉ owner của post được sửa;
+- `chatSessionId` phải thuộc cùng user;
+- nếu post đã có `workspaceId`, chat session mới phải cùng workspace;
+- nếu post đã được schedule, backend giữ `status = scheduled`.
+
+#### 1.2. Lấy post theo chat session
+
+- `GET /api/Ai/posts/chat-session/{chatSessionId}`
+- mục đích:
+  - render các draft/post được tạo trong hội thoại hiện tại;
+  - giúp FE hiển thị "bài đã tạo từ chat này";
+  - giúp agent tìm lại bài để sửa khi user nói "sửa bài vừa tạo".
+
+Query params:
+
+- `cursorCreatedAt`: optional, dùng cho cursor pagination.
+- `cursorId`: optional, dùng cùng `cursorCreatedAt`.
+- `limit`: optional, default `20`, max `50`.
+
+Ví dụ:
+
+```bash
+curl -X GET "http://localhost:2406/api/Ai/posts/chat-session/<chatSessionId>?limit=20" \
+  -H "Authorization: Bearer <access-token>"
+```
+
+Response success là `Result<IEnumerable<PostResponse>>`.
+
+Error cases chính:
+
+- `ChatSession.NotFound`: chat session không tồn tại hoặc đã xóa.
+- `ChatSession.Unauthorized`: chat session không thuộc current user.
+
+#### 1.3. Agent tool tương ứng với post APIs
+
+Gemini agent hiện có các tool post sau:
+
+- `get_posts(workspaceId?, status?, currentChatOnly?, limit?)`
+- `create_post(content, title?, hashtag?, postType?, platform?, socialMediaId?, resourceIds?, workspaceId?)`
+- `update_post(postId, content?, title?, hashtag?, postType?, status?, socialMediaId?, resourceIds?, linkToCurrentChatSession?)`
+
+Mapping behavior:
+
+- `create_post` luôn tạo `status = draft` và link với chat session hiện tại.
+- `update_post` mặc định `linkToCurrentChatSession = true`, nên bài được sửa từ chat sẽ được gắn lại với chat session hiện tại.
+- `get_posts(currentChatOnly: true)` chỉ trả các post có `chatSessionId` là session đang chat.
 
 #### 2. Tạo fixed-content schedule
 
@@ -1135,8 +1276,114 @@ FE nên dùng:
   - `POST /api/Ai/agent/sessions/{sessionId}/messages`
 - đọc transcript:
   - `GET /api/Ai/agent/sessions/{sessionId}/messages`
+- đọc các post được tạo/sửa trong chat session:
+  - `GET /api/Ai/posts/chat-session/{sessionId}`
 
 FE có thể dùng flow này khi muốn cho user nói tự nhiên thay vì điền form schedule thủ công.
+
+Payload tạo chat session:
+
+```json
+{
+  "workspaceId": "<workspaceId>",
+  "sessionName": "Chiến dịch Facebook tuần này"
+}
+```
+
+Payload gửi message:
+
+```json
+{
+  "message": "Tạo một bài Facebook ngắn về chương trình khuyến mãi hôm nay."
+}
+```
+
+Khi assistant dùng `create_post`, FE nên gọi `GET /api/Ai/posts/chat-session/{sessionId}` hoặc đọc `postId` trong nội dung/tool result để hiển thị draft mới cho user chỉnh sửa tiếp.
+
+#### 7.1. Contract action metadata cho frontend
+
+Response của agent không chỉ có text. `assistantMessage` hiện có thêm field `actions`, và transcript từ `GET /api/Ai/agent/sessions/{sessionId}/messages` cũng trả lại field này cho từng message.
+
+FE không nên parse `assistantMessage.content` để đoán agent vừa làm gì. Hãy render UI action cards từ `assistantMessage.actions`.
+
+Shape của một action:
+
+```json
+{
+  "type": "post_create",
+  "toolName": "create_post",
+  "status": "completed",
+  "entityType": "post",
+  "entityId": "<postId>",
+  "label": "Tiêu đề bài viết",
+  "summary": "Draft post created and linked to the current chat session.",
+  "occurredAt": "2026-04-24T00:10:00Z"
+}
+```
+
+Field semantics:
+
+- `type`: loại hành động cấp sản phẩm, ví dụ `tool_call`, `post_create`, `post_update`, `schedule_create`, `web_search`.
+- `toolName`: tên tool agent đã gọi, ví dụ `get_posts`, `create_post`, `update_post`, `create_schedule`, `web_search`.
+- `status`: `completed` hoặc `failed`.
+- `entityType`: loại entity bị tác động, ví dụ `post`, `schedule`, `workspace`, `chat_session`.
+- `entityId`: id entity để FE route/link tới detail page.
+- `label`: text ngắn để render card title, ví dụ post title hoặc schedule name.
+- `summary`: mô tả ngắn backend cung cấp, không cần parse từ assistant text.
+- `occurredAt`: thời điểm backend ghi nhận action.
+
+Ví dụ response `POST /api/Ai/agent/sessions/{sessionId}/messages` khi agent tạo draft post:
+
+```json
+{
+  "value": {
+    "sessionId": "<sessionId>",
+    "userMessage": {
+      "id": "<userMessageId>",
+      "sessionId": "<sessionId>",
+      "role": "user",
+      "content": "tạo một bài mới tên chúc mừng bạn Thắng ngọt đã trúng",
+      "toolNames": [],
+      "actions": []
+    },
+    "assistantMessage": {
+      "id": "<assistantMessageId>",
+      "sessionId": "<sessionId>",
+      "role": "assistant",
+      "content": "Tôi đã tạo thành công bài đăng mới dưới dạng bản nháp...",
+      "model": "gemini-3.1-flash-lite-preview",
+      "toolNames": ["create_post"],
+      "actions": [
+        {
+          "type": "post_create",
+          "toolName": "create_post",
+          "status": "completed",
+          "entityType": "post",
+          "entityId": "<postId>",
+          "label": "chúc mừng bạn Thắng ngọt đã trúng",
+          "summary": "Draft post created and linked to the current chat session.",
+          "occurredAt": "2026-04-24T00:10:00Z"
+        }
+      ]
+    }
+  },
+  "isSuccess": true,
+  "isFailure": false,
+  "error": {
+    "code": "",
+    "description": ""
+  }
+}
+```
+
+FE rendering rules:
+
+- Nếu `actions[].status = completed` và `entityType = post`, hiển thị card "Đã tạo/sửa bài viết" với CTA mở post detail bằng `entityId`.
+- Nếu `type = schedule_create`, hiển thị card lịch đăng với CTA mở schedule detail.
+- Nếu `type = web_search`, hiển thị trạng thái đã search web; không cần tự parse link trong text.
+- Nếu `status = failed`, hiển thị error/action failed card từ `summary`.
+- `toolNames` vẫn dùng được để hiển thị chip/debug, nhưng UI nghiệp vụ nên dựa vào `actions`.
+- `content` vẫn là text hội thoại để hiển thị bubble chat.
 
 ### State machine FE nên hiểu
 

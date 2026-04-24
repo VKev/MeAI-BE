@@ -99,6 +99,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
                 schedule.UserId,
                 schedule.WorkspaceId,
                 null,
+                null,
                 contentDraftResult.Value.Title,
                 new PostContent
                 {

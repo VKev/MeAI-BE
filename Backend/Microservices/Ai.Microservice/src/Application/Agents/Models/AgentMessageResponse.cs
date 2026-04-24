@@ -9,5 +9,6 @@ public sealed record AgentMessageResponse(
     string? ErrorMessage,
     string? Model,
     IReadOnlyList<string> ToolNames,
+    IReadOnlyList<AgentActionResponse> Actions,
     DateTime? CreatedAt,
     DateTime? UpdatedAt);

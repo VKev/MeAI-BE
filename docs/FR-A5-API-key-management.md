@@ -107,20 +107,18 @@ Không gom toàn bộ write API vào một service trung tâm duy nhất.
 
 Nếu một service có key trong `env`, service đó phải tự expose endpoint admin để quản lý phần key của chính nó.
 
-Ví dụ endpoint mục tiêu:
+Endpoint hiện có:
 
 - `User.Microservice`
   - `GET /api/User/admin/api-keys`
   - `POST /api/User/admin/api-keys`
   - `PUT /api/User/admin/api-keys/{id}`
-  - `PUT /api/User/admin/api-keys/{id}/rotate`
 - `Ai.Microservice`
   - `GET /api/Ai/admin/api-keys`
   - `POST /api/Ai/admin/api-keys`
   - `PUT /api/Ai/admin/api-keys/{id}`
-  - `PUT /api/Ai/admin/api-keys/{id}/rotate`
 
-Service nào không có secret/key riêng thì không cần endpoint này.
+Service nào không có secret/key riêng thì không cần endpoint này. Route `/rotate` riêng chưa tồn tại; rotate hiện là `PUT {id}` với `value` mới.
 
 ### 5. Mọi nghiệp vụ phải luôn dùng key mới nhất
 
@@ -245,13 +243,43 @@ Requirement đã chốt rõ:
 
 Tuy nhiên sau khi startup xong, các update tiếp theo của admin trong DB vẫn là giá trị runtime mới nhất mà nghiệp vụ phải dùng.
 
-## Thiết kế API mục tiêu
+## API hiện có trong repo
 
-## Response shape
+Các API quản lý credential đã được triển khai riêng trong từng service sở hữu credential. Không gọi chéo sang service khác để ghi key.
 
-Vì repo đang ưu tiên `Result` / `Result<T>` và `HandleFailure(result)`, API mới nên giữ cùng response contract.
+Base routes hiện tại:
 
-Response item gợi ý:
+- `User.Microservice`: `/api/User/admin/api-keys`
+- `Ai.Microservice`: `/api/Ai/admin/api-keys`
+
+Tất cả response thành công giữ envelope hiện có:
+
+```json
+{
+  "value": { },
+  "isSuccess": true,
+  "isFailure": false,
+  "error": {
+    "code": "",
+    "description": ""
+  }
+}
+```
+
+Khi fail, controller dùng `HandleFailure(result)`, trả `ProblemDetails` theo contract chung của backend.
+
+### Authorization
+
+Các route này là admin-only:
+
+- `User.Microservice`: `[Authorize("ADMIN", "Admin")]`
+- `Ai.Microservice`: `[Authorize("ADMIN", "Admin", "admin")]`
+
+Non-admin không được xem hoặc chỉnh key. FE nên xử lý `401/403` theo contract auth hiện có của service, không tự suy diễn từ body thành công.
+
+### Response DTO
+
+Mọi endpoint trả `ApiCredentialResponse` hoặc list của DTO này. Raw secret không bao giờ được trả về.
 
 ```json
 {
@@ -262,30 +290,93 @@ Response item gợi ý:
   "displayName": "Gemini API key",
   "maskedValue": "****abcd",
   "isActive": true,
-  "version": 3,
   "source": "admin_updated",
+  "version": 3,
   "lastSyncedFromEnvAt": "2026-04-23T08:30:00Z",
   "lastRotatedAt": "2026-04-23T09:00:00Z",
+  "createdAt": "2026-04-23T08:30:00Z",
   "updatedAt": "2026-04-23T09:00:00Z"
 }
 ```
 
-## GET danh sách key
+Field semantics:
 
-Ví dụ:
+- `id`: credential row id, dùng cho update.
+- `serviceName`: service sở hữu credential, hiện là `User` hoặc `Ai`.
+- `provider`: nhóm provider, ví dụ `Stripe`, `Facebook`, `Gemini`.
+- `keyName`: tên key trong provider, ví dụ `SecretKey`, `ApiKey`.
+- `displayName`: label cho UI admin.
+- `maskedValue`: chỉ hiển thị dạng mask dựa trên `ValueLast4`; không phải raw secret.
+- `isActive`: `false` nghĩa là runtime provider không nên trả credential này cho nghiệp vụ.
+- `source`: `env_seeded`, `admin_created`, hoặc `admin_updated`.
+- `version`: tăng khi startup sync hoặc admin update.
+- `lastSyncedFromEnvAt`: lần gần nhất service seed/overwrite từ env.
+- `lastRotatedAt`: lần gần nhất value được thay đổi.
+- `createdAt`, `updatedAt`: audit timestamp cơ bản.
+
+### GET danh sách key
+
+Routes:
 
 - `GET /api/User/admin/api-keys`
 - `GET /api/Ai/admin/api-keys`
 
-Cho phép filter theo:
+Query params:
 
-- `provider`
-- `isActive`
-- `keyName`
+- `provider` optional, exact match sau khi trim, ví dụ `Stripe`, `Gemini`.
+- `keyName` optional, exact match sau khi trim, ví dụ `SecretKey`, `ApiKey`.
+- `isActive` optional boolean, ví dụ `true` hoặc `false`.
 
-## POST thêm key mới
+Response type:
+
+- `200 OK`
+- Body: `Result<IReadOnlyList<ApiCredentialResponse>>`
 
 Ví dụ request:
+
+```bash
+curl -X GET "http://localhost:2406/api/Ai/admin/api-keys?provider=Gemini&isActive=true" \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+Ví dụ response:
+
+```json
+{
+  "value": [
+    {
+      "id": "019dbc11-3f6f-7110-bf4f-83d2f8fd8e02",
+      "serviceName": "Ai",
+      "provider": "Gemini",
+      "keyName": "ApiKey",
+      "displayName": "Gemini API key",
+      "maskedValue": "****1234",
+      "isActive": true,
+      "source": "env_seeded",
+      "version": 1,
+      "lastSyncedFromEnvAt": "2026-04-23T08:30:00Z",
+      "lastRotatedAt": "2026-04-23T08:30:00Z",
+      "createdAt": "2026-04-23T08:30:00Z",
+      "updatedAt": "2026-04-23T08:30:00Z"
+    }
+  ],
+  "isSuccess": true,
+  "isFailure": false,
+  "error": {
+    "code": "",
+    "description": ""
+  }
+}
+```
+
+### POST thêm key mới
+
+Routes:
+
+- `POST /api/User/admin/api-keys`
+- `POST /api/Ai/admin/api-keys`
+
+Request DTO:
 
 ```json
 {
@@ -297,14 +388,56 @@ Ví dụ request:
 }
 ```
 
-Rule:
+Validation hiện tại:
 
-- nếu key chưa tồn tại thì tạo mới;
-- nếu key đã tồn tại thì hoặc trả lỗi duplicate, hoặc treat như upsert. Với `FR-A5`, hướng an toàn hơn là chỉ `POST` cho create mới và để `PUT` xử lý update.
+- `provider` required, không được whitespace.
+- `keyName` required, không được whitespace.
+- `value` required, không được whitespace.
+- `displayName` optional; nếu rỗng thì backend dùng default `"{provider} {keyName}"`.
+- `isActive` optional ở JSON; default record là `true` nếu omitted.
 
-## PUT chỉnh sửa key
+Behavior:
 
-Ví dụ:
+- Chỉ tạo mới nếu chưa có row active/non-deleted cùng `serviceName + provider + keyName` trong service hiện tại.
+- Nếu đã tồn tại, trả failure `ApiCredential.AlreadyExists`.
+- Backend encrypt `value`, lưu `valueLast4`, set `source = "admin_created"`, `version = 1`, `lastRotatedAt = now`.
+- Sau khi save DB, credential provider được cập nhật in-memory bằng value mới nếu `isActive = true`; nếu `isActive = false`, provider lưu null cho key đó.
+
+Response type:
+
+- `200 OK`
+- Body: `Result<ApiCredentialResponse>`
+
+Error cases chính:
+
+- `ApiCredential.InvalidRequest`: thiếu `provider`, `keyName`, hoặc `value`.
+- `ApiCredential.AlreadyExists`: key đã tồn tại trong service hiện tại.
+
+Ví dụ tạo Gemini key:
+
+```bash
+curl -X POST "http://localhost:2406/api/Ai/admin/api-keys" \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  --data-binary @- <<'JSON'
+{
+  "provider": "Gemini",
+  "keyName": "ApiKey",
+  "displayName": "Gemini API key",
+  "value": "<new-secret>",
+  "isActive": true
+}
+JSON
+```
+
+### PUT cập nhật metadata, bật/tắt, hoặc rotate value
+
+Routes:
+
+- `PUT /api/User/admin/api-keys/{id}`
+- `PUT /api/Ai/admin/api-keys/{id}`
+
+Request DTO:
 
 ```json
 {
@@ -314,120 +447,164 @@ Ví dụ:
 }
 ```
 
-Rule:
+Tất cả fields đều optional:
 
-- admin có thể đổi `displayName`;
-- admin có thể thay đổi secret value;
-- cập nhật phải tăng `Version`;
-- ghi audit log;
-- mọi request sau đó phải dùng version mới.
+- `displayName`: nếu non-empty thì cập nhật label.
+- `value`: nếu non-empty thì rotate secret value.
+- `isActive`: nếu có thì bật/tắt key.
 
-## PUT rotate key
+Behavior:
 
-Endpoint rotate có thể là semantic wrapper cho update value:
+- Chỉ tìm credential trong service hiện tại; `Ai` không update được row của `User` và ngược lại.
+- Nếu không tìm thấy row non-deleted, trả `ApiCredential.NotFound`.
+- Nếu `value` có giá trị, backend encrypt lại, cập nhật `valueLast4`, `lastRotatedAt` và runtime provider.
+- Luôn set `source = "admin_updated"`, tăng `version`, cập nhật `updatedAt`.
+- Nếu sau update `isActive = false`, runtime provider lưu null cho key đó.
+- Nếu `isActive = true` và request có `value`, runtime provider dùng ngay value mới.
+- Nếu `isActive = true` nhưng request không có `value`, runtime provider bị invalidate để lần đọc sau resolve lại từ DB.
 
-- `PUT /api/{service}/admin/api-keys/{id}/rotate`
+Response type:
 
-Mục đích:
+- `200 OK`
+- Body: `Result<ApiCredentialResponse>`
 
-- giúp log/audit phân biệt giữa update metadata và rotate credential;
-- thuận lợi cho UI admin.
+Error cases chính:
 
-## Phân quyền chi tiết
+- `ApiCredential.NotFound`: id không tồn tại, đã xóa, hoặc không thuộc service hiện tại.
 
-Mọi endpoint trên phải gắn:
+Ví dụ rotate Stripe secret key:
 
-- `[Authorize("ADMIN", "Admin")]`
+```bash
+curl -X PUT "http://localhost:2406/api/User/admin/api-keys/<credential-id>" \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  --data-binary @- <<'JSON'
+{
+  "value": "<new-stripe-secret-key>",
+  "isActive": true
+}
+JSON
+```
 
-hoặc một admin policy tương đương, nhưng phải giữ tương thích với role naming hiện có trong repo.
+Ví dụ disable key:
 
-## Thiết kế runtime để luôn dùng key mới nhất
+```bash
+curl -X PUT "http://localhost:2406/api/Ai/admin/api-keys/<credential-id>" \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  --data-binary '{ "isActive": false }'
+```
 
-Đây là phần bắt buộc để `FR-A5` có giá trị thực tế.
+### Route rotate riêng
 
-## Anti-pattern cần tránh
+Hiện repo chưa có endpoint riêng:
 
-Sau khi có `FR-A5`, không nên tiếp tục các pattern sau cho những key được quản lý bởi admin:
+- chưa có `PUT /api/User/admin/api-keys/{id}/rotate`;
+- chưa có `PUT /api/Ai/admin/api-keys/{id}/rotate`.
 
-- đọc key một lần trong constructor rồi giữ ở field private suốt vòng đời service;
-- bind secret vào singleton options và không bao giờ refresh;
-- gọi provider bằng giá trị trực tiếp từ `IConfiguration` nếu key đó đã nằm trong bảng quản lý.
+Rotate hiện được thực hiện bằng `PUT /api/{Service}/admin/api-keys/{id}` với body có `value` mới. Nếu FE muốn nút "Rotate", hãy gọi endpoint `PUT {id}` và chỉ gửi `value` + `isActive` nếu cần.
 
-## Pattern nên dùng
+Nếu sau này cần audit phân biệt metadata update và rotate rõ hơn, có thể thêm route semantic wrapper `/rotate`, nhưng phải giữ endpoint `PUT {id}` backward-compatible.
 
-Thêm abstraction kiểu:
+## Catalog key theo service hiện tại
 
-- `IApiCredentialProvider`
-- `IApiCredentialRepository`
-- `IApiCredentialEncryptionService`
+### `User.Microservice`
 
-Trách nhiệm:
+Base route:
 
-- `IApiCredentialProvider` trả về key active mới nhất theo `ServiceName + Provider + KeyName`;
-- provider có thể dùng cache ngắn hạn, nhưng phải có invalidation khi admin update;
-- mọi nghiệp vụ gọi provider ngoài hệ thống phải resolve credential thông qua abstraction này.
+- `/api/User/admin/api-keys`
 
-Ví dụ các nơi cần chuyển sang đọc từ DB/runtime provider:
+`serviceName` trong DB:
 
-- `StripePaymentService`
-- `StripeWebhooksController`
-- `FacebookOAuthService`
-- `InstagramOAuthService`
-- `TikTokOAuthService`
-- `ThreadsOAuthService`
-- `GeminiCaptionService`
-- `GeminiContentModerationService`
-- `KieCaptionService`
-- `KieImageService`
-- `VeoVideoService`
-- `AgenticRuntimeContentService`
-- `GeminiAgentChatService`
+- `User`
 
-## Thứ tự ưu tiên giá trị
+Catalog sync từ env hiện tại:
 
-Để tránh mơ hồ, runtime precedence phải là:
+| Provider | KeyName | Display name | Config key | Env key |
+| --- | --- | --- | --- | --- |
+| `Stripe` | `PublishableKey` | Stripe publishable key | `Stripe:PublishableKey` | `Stripe__PublishableKey` |
+| `Stripe` | `SecretKey` | Stripe secret key | `Stripe:SecretKey` | `Stripe__SecretKey` |
+| `Stripe` | `WebhookSecret` | Stripe webhook secret | `Stripe:WebhookSecret` | `Stripe__WebhookSecret` |
+| `Facebook` | `AppId` | Facebook app id | `Facebook:AppId` | `Facebook__AppId` |
+| `Facebook` | `AppSecret` | Facebook app secret | `Facebook:AppSecret` | `Facebook__AppSecret` |
+| `Instagram` | `AppId` | Instagram app id | `Instagram:AppId` | `Instagram__AppId` |
+| `Instagram` | `AppSecret` | Instagram app secret | `Instagram:AppSecret` | `Instagram__AppSecret` |
+| `TikTok` | `ClientKey` | TikTok client key | `TikTok:ClientKey` | `TikTok__ClientKey` |
+| `TikTok` | `ClientSecret` | TikTok client secret | `TikTok:ClientSecret` | `TikTok__ClientSecret` |
+| `Threads` | `AppId` | Threads app id | `Threads:AppId` | `Threads__AppId` |
+| `Threads` | `AppSecret` | Threads app secret | `Threads:AppSecret` | `Threads__AppSecret` |
 
-1. key active mới nhất trong database;
-2. nếu chưa có bản ghi trong database, fallback sang `env` chỉ cho lần bootstrap tương thích ngược;
-3. sau khi sync startup hoàn tất, các flow bình thường phải đọc từ database/provider.
+Runtime consumers already using credential provider include Stripe payment/webhook paths and social OAuth services for Facebook, Instagram, TikTok, and Threads.
 
-Nếu service không resolve được key active thì phải fail fast với lỗi rõ ràng thay vì gọi provider với secret cũ hoặc secret rỗng.
+### `Ai.Microservice`
 
-## Phạm vi theo service
+Base route:
 
-## `User.Microservice`
+- `/api/Ai/admin/api-keys`
 
-Service này nên quản lý ít nhất:
+`serviceName` trong DB:
 
-- Stripe keys
-- Meta app credentials cho Facebook/Instagram
-- TikTok OAuth credentials
-- Threads OAuth credentials
-- các credential hạ tầng mà service dùng trực tiếp nếu muốn đưa vào cùng mô hình quản lý
+- `Ai`
 
-Endpoint đề xuất:
+Catalog sync từ env hiện tại:
 
-- `GET /api/User/admin/api-keys`
-- `POST /api/User/admin/api-keys`
-- `PUT /api/User/admin/api-keys/{id}`
-- `PUT /api/User/admin/api-keys/{id}/rotate`
+| Provider | KeyName | Display name | Config key | Env key |
+| --- | --- | --- | --- | --- |
+| `Gemini` | `ApiKey` | Gemini API key | `Gemini:ApiKey` | `Gemini__ApiKey` |
+| `Kie` | `ApiKey` | Kie API key | `Kie:ApiKey` | `Kie__ApiKey` |
+| `N8n` | `InternalCallbackToken` | n8n internal callback token | `N8n:InternalCallbackToken` | `N8n__InternalCallbackToken` |
 
-## `Ai.Microservice`
+Runtime consumers already using credential provider include Gemini agent/caption/runtime generation flows, Kie/Veo services, and n8n callback token generation.
 
-Service này nên quản lý ít nhất:
+## Runtime sync và provider hiện tại
 
-- Gemini API key
-- Kie API key
-- Veo/Kie callback-related credentials nếu có
-- n8n internal callback token
-- các AI provider key khác được thêm sau này
+Startup sync:
 
-Endpoint đề xuất:
+- `User.Microservice` gọi `ApiCredentialSyncSeeder` trong `WebApi/Setups/SeedingSetup.cs`.
+- `Ai.Microservice` gọi `ApiCredentialSyncSeeder` trong `WebApi/Setups/SeedingSetup.cs`.
+- Seeder đọc catalog của service, lấy value từ `IConfiguration`, skip value rỗng, upsert vào `api_credentials`.
+- Nếu env có key trùng DB, startup sync ghi đè value, set `source = "env_seeded"`, `isActive = true`, cập nhật `lastSyncedFromEnvAt`, và tăng `version` khi value đổi.
 
-- `GET /api/Ai/admin/api-keys`
-- `POST /api/Ai/admin/api-keys`
-- `PUT /api/Ai/admin/api-keys/{id}`
-- `PUT /api/Ai/admin/api-keys/{id}/rotate`
+Runtime provider:
+
+- Abstraction: `IApiCredentialProvider`.
+- Methods: `GetRequiredValue(provider, keyName)`, `GetOptionalValue(provider, keyName)`, `StoreValue(provider, keyName, value)`, `Invalidate(provider, keyName)`.
+- Admin create/update gọi `StoreValue` hoặc `Invalidate` để request sau dùng credential mới.
+- Raw secret được decrypt trong provider khi cần dùng, không trả qua API response.
+
+## Dữ liệu và bảo mật hiện tại
+
+Bảng `api_credentials` hiện có các field chính:
+
+- `id`
+- `service_name`
+- `provider`
+- `key_name`
+- `display_name`
+- `value_encrypted`
+- `value_last4`
+- `is_active`
+- `source`
+- `version`
+- `last_synced_from_env_at`
+- `last_rotated_at`
+- `created_at`
+- `updated_at`
+- `deleted_at`
+- `is_deleted`
+
+Unique index:
+
+- `service_name + provider + key_name`
+
+Không có bảng revision/audit riêng trong implementation hiện tại. Audit hiện chỉ ở metadata row (`source`, `version`, timestamps). Nếu cần audit đầy đủ từng lần rotate/update, phải bổ sung bảng revision sau.
+
+Raw secret rule:
+
+- Request `POST/PUT` nhận plaintext `value`.
+- Backend encrypt trước khi lưu.
+- Response chỉ trả `maskedValue`.
+- Không log raw secret.
 
 ## Rule mở rộng cho service mới
 
@@ -443,7 +620,7 @@ Nếu sau này thêm microservice mới và service đó có credential trong `e
 - Không trả raw secret trong API list/detail mặc định.
 - Không log raw secret.
 - Không commit secret thật vào repo, docs, hay test snapshot.
-- Audit mọi thao tác create/update/rotate.
+- Audit tối thiểu bằng `source`, `version`, `lastSyncedFromEnvAt`, `lastRotatedAt`, `createdAt`, `updatedAt`; nếu cần audit đầy đủ từng lần đổi, bổ sung bảng revision riêng.
 - Hỗ trợ soft delete hoặc deactivate thay vì hard delete để tránh mất trace.
 - Nên có optimistic concurrency bằng `Version` để tránh admin ghi đè lẫn nhau.
 
@@ -453,7 +630,7 @@ Nếu sau này thêm microservice mới và service đó có credential trong `e
 
 1. Mỗi service có key trong `env` đều tự sync các key đó lên database lúc startup.
 2. Bản ghi trùng `ServiceName + Provider + KeyName` luôn bị ghi đè bởi giá trị từ `env` trong bước sync startup.
-3. Admin có thể xem, thêm mới, chỉnh sửa, và rotate key qua endpoint admin của từng service.
+3. Admin có thể xem, thêm mới, chỉnh sửa, bật/tắt, và rotate key qua `PUT /api/{Service}/admin/api-keys/{id}`.
 4. Toàn bộ endpoint quản lý key đều bị chặn cho non-admin.
 5. Các nghiệp vụ gọi social network, Stripe, hoặc AI provider luôn resolve key mới nhất từ database/runtime credential provider.
 6. Không còn điểm gọi provider quan trọng nào phụ thuộc cứng vào key đã đọc từ `env` lúc startup mà không có cơ chế refresh.

@@ -100,6 +100,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 null,
                 workspaceId,
                 null,
+                null,
                 "KQXS Miền Bắc",
                 new PostContent
                 {
