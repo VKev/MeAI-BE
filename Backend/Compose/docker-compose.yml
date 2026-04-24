@@ -102,6 +102,7 @@ services:
       FeedSeed__Enabled: "true"
       FeedSeed__DataRoot: /feed-seed-data
       FeedSeed__PublicBaseUrl: http://localhost:2406
+      S3__Namespace: ${MEAI_S3_NAMESPACE:-local-vinhdo}
     volumes:
       - ./seed-data/feed:/feed-seed-data
     depends_on:

@@ -1,6 +1,7 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Storage;
 using Application.Resources.Models;
+using Application.Resources.Services;
 using Domain.Entities;
 using MediatR;
 using SharedLibrary.Common;
@@ -24,11 +25,16 @@ public sealed class UploadResourceFileCommandHandler
 {
     private readonly IRepository<Resource> _repository;
     private readonly IObjectStorageService _objectStorageService;
+    private readonly IStorageUsageService _storageUsageService;
 
-    public UploadResourceFileCommandHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
+    public UploadResourceFileCommandHandler(
+        IUnitOfWork unitOfWork,
+        IObjectStorageService objectStorageService,
+        IStorageUsageService storageUsageService)
     {
         _repository = unitOfWork.Repository<Resource>();
         _objectStorageService = objectStorageService;
+        _storageUsageService = storageUsageService;
     }
 
     public async Task<Result<ResourceResponse>> Handle(
@@ -37,6 +43,14 @@ public sealed class UploadResourceFileCommandHandler
     {
         var resourceId = Guid.CreateVersion7();
         var storageKey = ResourceStorageKey.Build(request.UserId, resourceId);
+        var quotaResult = await _storageUsageService.EnsureUploadAllowedAsync(
+            request.UserId,
+            request.ContentLength,
+            cancellationToken);
+        if (quotaResult.IsFailure)
+        {
+            return Result.Failure<ResourceResponse>(quotaResult.Error);
+        }
 
         await using var fileStream = request.FileStream;
         var uploadResult = await _objectStorageService.UploadAsync(
@@ -58,6 +72,13 @@ public sealed class UploadResourceFileCommandHandler
             UserId = request.UserId,
             WorkspaceId = request.WorkspaceId,
             Link = uploadResult.Value.Key,
+            StorageProvider = "s3",
+            StorageBucket = uploadResult.Value.Bucket,
+            StorageRegion = uploadResult.Value.Region,
+            StorageNamespace = uploadResult.Value.Namespace,
+            StorageKey = uploadResult.Value.Key,
+            SizeBytes = request.ContentLength,
+            OriginalFileName = request.FileName,
             Status = request.Status?.Trim(),
             ResourceType = request.ResourceType?.Trim(),
             ContentType = request.ContentType.Trim(),

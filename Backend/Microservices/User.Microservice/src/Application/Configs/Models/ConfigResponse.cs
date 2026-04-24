@@ -5,5 +5,6 @@ public sealed record ConfigResponse(
     string? ChatModel,
     string? MediaAspectRatio,
     int? NumberOfVariances,
+    long? FreeStorageQuotaBytes,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

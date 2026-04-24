@@ -7,5 +7,6 @@ public sealed record ResourceResponse(
     string? Status,
     string? ResourceType,
     string? ContentType,
+    long? SizeBytes,
     DateTime? CreatedAt,
     DateTime? UpdatedAt);

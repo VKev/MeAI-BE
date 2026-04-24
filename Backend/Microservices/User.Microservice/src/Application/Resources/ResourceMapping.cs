@@ -13,6 +13,7 @@ internal static class ResourceMapping
             resource.Status,
             resource.ResourceType,
             resource.ContentType,
+            resource.SizeBytes,
             resource.CreatedAt,
             resource.UpdatedAt);
 
@@ -24,6 +25,7 @@ internal static class ResourceMapping
             resource.Status,
             resource.ResourceType,
             resource.ContentType,
+            resource.SizeBytes,
             resource.CreatedAt,
             resource.UpdatedAt);
 }

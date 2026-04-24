@@ -9,55 +9,49 @@ using SharedLibrary.Extensions;
 
 namespace Application.Configs.Commands;
 
-public sealed record UpdateConfigCommand(
-    string? ChatModel,
-    string? MediaAspectRatio,
-    int? NumberOfVariances,
-    long? FreeStorageQuotaBytes) : IRequest<Result<ConfigResponse>>;
+public sealed record UpdateFreeStorageQuotaCommand(long FreeStorageQuotaBytes) : IRequest<Result<ConfigResponse>>;
 
-public sealed class UpdateConfigCommandHandler
-    : IRequestHandler<UpdateConfigCommand, Result<ConfigResponse>>
+public sealed class UpdateFreeStorageQuotaCommandHandler
+    : IRequestHandler<UpdateFreeStorageQuotaCommand, Result<ConfigResponse>>
 {
     private readonly IRepository<Config> _repository;
 
-    public UpdateConfigCommandHandler(IUnitOfWork unitOfWork)
+    public UpdateFreeStorageQuotaCommandHandler(IUnitOfWork unitOfWork)
     {
         _repository = unitOfWork.Repository<Config>();
     }
 
-    public async Task<Result<ConfigResponse>> Handle(UpdateConfigCommand request,
+    public async Task<Result<ConfigResponse>> Handle(
+        UpdateFreeStorageQuotaCommand request,
         CancellationToken cancellationToken)
     {
+        if (request.FreeStorageQuotaBytes < 0)
+        {
+            return Result.Failure<ConfigResponse>(
+                new Error("Config.InvalidFreeStorageQuota", "Free storage quota must be greater than or equal to 0."));
+        }
+
         var config = await _repository.GetAll()
             .Where(item => !item.IsDeleted)
             .OrderByDescending(item => item.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var isNew = false;
-        if (config == null)
+        if (config is null)
         {
             config = new Config
             {
                 Id = Guid.CreateVersion7(),
-                CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
+                MediaAspectRatio = "1:1",
+                CreatedAt = DateTimeExtensions.PostgreSqlUtcNow,
+                IsDeleted = false
             };
-            isNew = true;
-        }
 
-        config.ChatModel = request.ChatModel?.Trim();
-        config.MediaAspectRatio = request.MediaAspectRatio?.Trim();
-        config.NumberOfVariances = request.NumberOfVariances;
-        config.FreeStorageQuotaBytes = request.FreeStorageQuotaBytes;
-        config.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
-
-        if (isNew)
-        {
             await _repository.AddAsync(config, cancellationToken);
         }
-        else
-        {
-            _repository.Update(config);
-        }
+
+        config.FreeStorageQuotaBytes = request.FreeStorageQuotaBytes;
+        config.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        _repository.Update(config);
 
         return Result.Success(ConfigMapping.ToResponse(config));
     }

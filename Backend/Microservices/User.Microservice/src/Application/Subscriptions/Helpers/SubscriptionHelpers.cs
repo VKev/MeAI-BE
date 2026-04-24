@@ -44,6 +44,30 @@ internal static class SubscriptionHelpers
             updated = true;
         }
 
+        if (patch.MaxPagesPerSocialAccount.HasValue)
+        {
+            target.MaxPagesPerSocialAccount = patch.MaxPagesPerSocialAccount;
+            updated = true;
+        }
+
+        if (patch.StorageQuotaBytes.HasValue)
+        {
+            target.StorageQuotaBytes = patch.StorageQuotaBytes;
+            updated = true;
+        }
+
+        if (patch.MaxUploadFileBytes.HasValue)
+        {
+            target.MaxUploadFileBytes = patch.MaxUploadFileBytes;
+            updated = true;
+        }
+
+        if (patch.RetentionDaysAfterDelete.HasValue)
+        {
+            target.RetentionDaysAfterDelete = patch.RetentionDaysAfterDelete;
+            updated = true;
+        }
+
         return updated;
     }
 
