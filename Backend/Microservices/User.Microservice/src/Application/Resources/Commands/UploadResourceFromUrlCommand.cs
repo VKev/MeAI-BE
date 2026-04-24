@@ -69,6 +69,7 @@ public sealed class UploadResourceFromUrlCommandHandler
             Status = request.Status?.Trim(),
             ResourceType = request.ResourceType?.Trim(),
             ContentType = fetchResult.Value.ContentType.Trim(),
+            FileSizeBytes = fetchResult.Value.ContentLength,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 

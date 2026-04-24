@@ -1,6 +1,8 @@
+using Application.Abstractions.Billing;
 using Application.Abstractions.Resources;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Gemini;
+using Application.Billing;
 using Application.Posts.Commands;
 using Domain.Entities;
 using Domain.Repositories;
@@ -25,6 +27,9 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
         var userResourceService = new Mock<IUserResourceService>();
         var userConfigService = new Mock<IUserConfigService>();
         var geminiCaptionService = new Mock<IGeminiCaptionService>();
+        var pricingService = new Mock<ICoinPricingService>();
+        var billingClient = new Mock<IBillingClient>();
+        var aiSpendRecordRepository = new Mock<IAiSpendRecordRepository>();
 
         postRepository
             .Setup(repository => repository.GetByIdAsync(firstPostId, It.IsAny<CancellationToken>()))
@@ -90,11 +95,50 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
                         "Try it now")
                 ]));
 
+        pricingService
+            .Setup(service => service.GetCostAsync(
+                CoinActionTypes.CaptionGeneration,
+                "gemini-test-model",
+                null,
+                2,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new CoinCostQuote(
+                CoinActionTypes.CaptionGeneration,
+                "gemini-test-model",
+                null,
+                "per_platform",
+                3m,
+                2,
+                6m)));
+
+        billingClient
+            .Setup(client => client.DebitAsync(
+                userId,
+                6m,
+                CoinDebitReasons.CaptionGenerationDebit,
+                CoinReferenceTypes.CaptionBatch,
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(100m));
+
+        aiSpendRecordRepository
+            .Setup(repository => repository.AddAsync(
+                It.IsAny<AiSpendRecord>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        aiSpendRecordRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
         var handler = new GenerateSocialMediaCaptionsCommandHandler(
             postRepository.Object,
             userResourceService.Object,
             userConfigService.Object,
-            geminiCaptionService.Object);
+            geminiCaptionService.Object,
+            pricingService.Object,
+            billingClient.Object,
+            aiSpendRecordRepository.Object);
 
         var result = await handler.Handle(
             new GenerateSocialMediaCaptionsCommand(
@@ -142,12 +186,18 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
         var userResourceService = new Mock<IUserResourceService>();
         var userConfigService = new Mock<IUserConfigService>();
         var geminiCaptionService = new Mock<IGeminiCaptionService>();
+        var pricingService = new Mock<ICoinPricingService>();
+        var billingClient = new Mock<IBillingClient>();
+        var aiSpendRecordRepository = new Mock<IAiSpendRecordRepository>();
 
         var handler = new GenerateSocialMediaCaptionsCommandHandler(
             postRepository.Object,
             userResourceService.Object,
             userConfigService.Object,
-            geminiCaptionService.Object);
+            geminiCaptionService.Object,
+            pricingService.Object,
+            billingClient.Object,
+            aiSpendRecordRepository.Object);
 
         var result = await handler.Handle(
             new GenerateSocialMediaCaptionsCommand(

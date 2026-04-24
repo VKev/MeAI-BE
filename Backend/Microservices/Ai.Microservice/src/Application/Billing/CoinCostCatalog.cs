@@ -26,3 +26,14 @@ public static class CoinReferenceTypes
     public const string ChatVideo = "chat_video";
     public const string CaptionBatch = "caption_batch";
 }
+
+public static class AiSpendProviders
+{
+    public const string Kie = "kie";
+}
+
+public static class AiSpendStatuses
+{
+    public const string Debited = "debited";
+    public const string Refunded = "refunded";
+}

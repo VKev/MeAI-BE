@@ -9,6 +9,8 @@ public interface IObjectStorageService
 
     Result<string> GetPresignedUrl(string keyOrUrl, TimeSpan? expiresIn = null);
 
+    Task<Result<StorageObjectMetadata>> GetMetadataAsync(string keyOrUrl, CancellationToken cancellationToken);
+
     Task<Result<bool>> DeleteAsync(string keyOrUrl, CancellationToken cancellationToken);
 }
 
@@ -19,3 +21,5 @@ public sealed record StorageUploadRequest(
     long ContentLength);
 
 public sealed record StorageUploadResult(string Key, string Url);
+
+public sealed record StorageObjectMetadata(long ContentLength, string? ContentType);

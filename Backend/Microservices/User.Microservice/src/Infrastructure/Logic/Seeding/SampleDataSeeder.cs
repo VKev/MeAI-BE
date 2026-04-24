@@ -143,6 +143,7 @@ public sealed class SampleDataSeeder
             existingResource.Status = string.IsNullOrWhiteSpace(resourceItem.Status) ? "ready" : resourceItem.Status.Trim();
             existingResource.ResourceType = resourceItem.ResourceType.Trim();
             existingResource.ContentType = resourceItem.ContentType.Trim();
+            existingResource.FileSizeBytes = fileStream.Length;
             existingResource.IsDeleted = false;
             existingResource.DeletedAt = null;
             existingResource.UpdatedAt = now;

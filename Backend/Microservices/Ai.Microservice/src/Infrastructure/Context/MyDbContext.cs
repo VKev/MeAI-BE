@@ -34,6 +34,8 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<CoinPricingCatalogEntry> CoinPricingCatalog { get; set; }
 
+    public virtual DbSet<AiSpendRecord> AiSpendRecords { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MyDbContext).Assembly);

@@ -75,6 +75,7 @@ public sealed class UpdateAvatarCommandHandler
             Status = request.Status?.Trim() ?? "active",
             ResourceType = request.ResourceType?.Trim() ?? "avatar",
             ContentType = request.ContentType.Trim(),
+            FileSizeBytes = request.ContentLength,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 

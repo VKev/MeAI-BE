@@ -61,6 +61,7 @@ public sealed class UploadResourceFileCommandHandler
             Status = request.Status?.Trim(),
             ResourceType = request.ResourceType?.Trim(),
             ContentType = request.ContentType.Trim(),
+            FileSizeBytes = request.ContentLength,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 

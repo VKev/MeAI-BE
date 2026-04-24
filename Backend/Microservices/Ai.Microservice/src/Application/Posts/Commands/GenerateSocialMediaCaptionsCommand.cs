@@ -39,6 +39,7 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
     private readonly IGeminiCaptionService _geminiCaptionService;
     private readonly ICoinPricingService _pricingService;
     private readonly IBillingClient _billingClient;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
 
     public GenerateSocialMediaCaptionsCommandHandler(
         IPostRepository postRepository,
@@ -46,7 +47,8 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
         IUserConfigService userConfigService,
         IGeminiCaptionService geminiCaptionService,
         ICoinPricingService pricingService,
-        IBillingClient billingClient)
+        IBillingClient billingClient,
+        IAiSpendRecordRepository aiSpendRecordRepository)
     {
         _postRepository = postRepository;
         _userResourceService = userResourceService;
@@ -54,6 +56,7 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
         _geminiCaptionService = geminiCaptionService;
         _pricingService = pricingService;
         _billingClient = billingClient;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
     }
 
     public async Task<Result<GenerateSocialMediaCaptionsResponse>> Handle(
@@ -138,12 +141,40 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
             return Result.Failure<GenerateSocialMediaCaptionsResponse>(debitResult.Error);
         }
 
+        var spendRecord = new AiSpendRecord
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = request.UserId,
+            WorkspaceId = ResolveSingleWorkspaceId(postsById.Values),
+            Provider = AiSpendProviders.Kie,
+            ActionType = CoinActionTypes.CaptionGeneration,
+            Model = billingModel,
+            Variant = null,
+            Unit = quoteResult.Value.Unit,
+            Quantity = quoteResult.Value.Quantity,
+            UnitCostCoins = quoteResult.Value.UnitCostCoins,
+            TotalCoins = quoteResult.Value.TotalCoins,
+            ReferenceType = CoinReferenceTypes.CaptionBatch,
+            ReferenceId = batchReferenceId,
+            Status = AiSpendStatuses.Debited,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _aiSpendRecordRepository.AddAsync(spendRecord, cancellationToken);
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
+
         var responses = new List<SocialMediaCaptionsByPostResponse>(normalizedPlatformsResult.Value.Count);
 
         foreach (var socialMedia in normalizedPlatformsResult.Value)
         {
             if (!TryResolveResources(resourcesById, socialMedia.ResourceIds, out var orderedResources))
             {
+                await RefundCaptionBatchAsync(
+                    request.UserId,
+                    quoteResult.Value.TotalCoins,
+                    batchReferenceId,
+                    spendRecord,
+                    cancellationToken);
                 return Result.Failure<GenerateSocialMediaCaptionsResponse>(
                     new Error("Resource.NotFound", "One or more resources were not found."));
             }
@@ -178,12 +209,11 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
                 // Refund the whole batch on any failure — user pays per full successful
                 // batch or not at all. Refund is idempotent on (reason, refType, refId)
                 // so a retry won't double-credit.
-                await _billingClient.RefundAsync(
+                await RefundCaptionBatchAsync(
                     request.UserId,
                     quoteResult.Value.TotalCoins,
-                    CoinDebitReasons.CaptionGenerationRefund,
-                    CoinReferenceTypes.CaptionBatch,
                     batchReferenceId,
+                    spendRecord,
                     cancellationToken);
                 return Result.Failure<GenerateSocialMediaCaptionsResponse>(geminiResult.Error);
             }
@@ -202,6 +232,45 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
         }
 
         return Result.Success(new GenerateSocialMediaCaptionsResponse(responses));
+    }
+
+    private async Task RefundCaptionBatchAsync(
+        Guid userId,
+        decimal totalCoins,
+        string batchReferenceId,
+        AiSpendRecord spendRecord,
+        CancellationToken cancellationToken)
+    {
+        var refundResult = await _billingClient.RefundAsync(
+            userId,
+            totalCoins,
+            CoinDebitReasons.CaptionGenerationRefund,
+            CoinReferenceTypes.CaptionBatch,
+            batchReferenceId,
+            cancellationToken);
+
+        if (refundResult.IsFailure)
+        {
+            return;
+        }
+
+        spendRecord.Status = AiSpendStatuses.Refunded;
+        spendRecord.UpdatedAt = DateTime.UtcNow;
+        _aiSpendRecordRepository.Update(spendRecord);
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
+    }
+
+    private static Guid? ResolveSingleWorkspaceId(IEnumerable<Post> posts)
+    {
+        var workspaceIds = posts
+            .Select(post => post.WorkspaceId)
+            .Where(id => id.HasValue && id.Value != Guid.Empty)
+            .Select(id => id!.Value)
+            .Distinct()
+            .Take(2)
+            .ToList();
+
+        return workspaceIds.Count == 1 ? workspaceIds[0] : null;
     }
 
     private static Result<IReadOnlyList<SocialMediaCaptionPostInput>> NormalizePlatforms(

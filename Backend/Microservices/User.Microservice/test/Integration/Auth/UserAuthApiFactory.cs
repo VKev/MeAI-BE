@@ -70,6 +70,13 @@ internal sealed class UserAuthApiFactory(
             return Result.Success("https://example.test/presigned");
         }
 
+        public Task<Result<StorageObjectMetadata>> GetMetadataAsync(
+            string keyOrUrl,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Result.Success(new StorageObjectMetadata(0, null)));
+        }
+
         public Task<Result<StorageUploadResult>> UploadAsync(
             StorageUploadRequest request,
             CancellationToken cancellationToken)

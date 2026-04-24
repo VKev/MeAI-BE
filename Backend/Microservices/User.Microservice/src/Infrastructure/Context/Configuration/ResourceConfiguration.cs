@@ -19,6 +19,7 @@ public sealed class ResourceConfiguration : IEntityTypeConfiguration<Resource>
         entity.Property(e => e.Status).HasColumnName("status");
         entity.Property(e => e.ResourceType).HasColumnName("type");
         entity.Property(e => e.ContentType).HasColumnName("content_type");
+        entity.Property(e => e.FileSizeBytes).HasColumnName("file_size_bytes");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");

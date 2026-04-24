@@ -20,6 +20,8 @@ public sealed class Resource
 
     public string? ContentType { get; set; }
 
+    public long? FileSizeBytes { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 

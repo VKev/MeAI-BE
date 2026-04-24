@@ -68,6 +68,7 @@ public sealed class UpdateResourceFileCommandHandler
 
         resource.Link = uploadResult.Value.Key;
         resource.ContentType = request.ContentType.Trim();
+        resource.FileSizeBytes = request.ContentLength;
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {

@@ -12,4 +12,8 @@ public interface IChatRepository
     Task<IEnumerable<Chat>> GetBySessionIdAsync(Guid sessionId, CancellationToken cancellationToken);
     Task<IEnumerable<Chat>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken);
     Task<IEnumerable<Chat>> GetBySessionIdsAsync(IReadOnlyList<Guid> sessionIds, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Chat>> GetCreatedBetweenAsync(
+        DateTime startInclusive,
+        DateTime endExclusive,
+        CancellationToken cancellationToken);
 }

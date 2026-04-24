@@ -45,6 +45,7 @@ namespace Infrastructure
             services.AddMemoryCache();
             services.AddHttpClient<IVeoVideoService, VeoVideoService>();
             services.AddHttpClient<IKieImageService, KieImageService>();
+            services.AddHttpClient<IKieAccountService, KieAccountService>();
             services.AddHttpClient<IKieFallbackCallbackService, KieFallbackCallbackService>();
             services.AddSingleton<IAiFallbackTemplateService, AiFallbackTemplateService>();
             services.AddHttpClient("Gemini");
@@ -121,6 +122,7 @@ namespace Infrastructure
 
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
             services.AddScoped<IImageTaskRepository, ImageTaskRepository>();
+            services.AddScoped<IAiSpendRecordRepository, AiSpendRecordRepository>();
             services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
             services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();

@@ -40,6 +40,7 @@ public sealed class CreateChatImageCommandHandler
     private readonly IUserResourceService _userResourceService;
     private readonly ICoinPricingService _pricingService;
     private readonly IBillingClient _billingClient;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
     private readonly IBus _bus;
 
     public CreateChatImageCommandHandler(
@@ -49,6 +50,7 @@ public sealed class CreateChatImageCommandHandler
         IUserResourceService userResourceService,
         ICoinPricingService pricingService,
         IBillingClient billingClient,
+        IAiSpendRecordRepository aiSpendRecordRepository,
         IBus bus)
     {
         _chatRepository = chatRepository;
@@ -57,6 +59,7 @@ public sealed class CreateChatImageCommandHandler
         _userResourceService = userResourceService;
         _pricingService = pricingService;
         _billingClient = billingClient;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
         _bus = bus;
     }
 
@@ -182,6 +185,7 @@ public sealed class CreateChatImageCommandHandler
 
         var config = new ChatImageConfig(
             correlationId,
+            model,
             aspectRatio,
             resolution,
             outputFormat,
@@ -199,10 +203,22 @@ public sealed class CreateChatImageCommandHandler
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
-        await _chatRepository.AddAsync(chat, cancellationToken);
-        await _chatRepository.SaveChangesAsync(cancellationToken);
-
         var workspaceId = session.WorkspaceId == Guid.Empty ? (Guid?)null : session.WorkspaceId;
+        var messageCreatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+
+        await _chatRepository.AddAsync(chat, cancellationToken);
+        await _aiSpendRecordRepository.AddRangeAsync(
+            BuildSpendRecords(
+                request.UserId,
+                workspaceId,
+                chatId,
+                model,
+                resolution,
+                quoteResult.Value,
+                Math.Max(1, expectedResultCount),
+                messageCreatedAt),
+            cancellationToken);
+        await _chatRepository.SaveChangesAsync(cancellationToken);
 
         var message = new ImageGenerationStarted
         {
@@ -217,7 +233,7 @@ public sealed class CreateChatImageCommandHandler
             OutputFormat = outputFormat,
             NumberOfVariances = numberOfVariances,
             SocialTargets = socialTargets is { Count: > 0 } ? socialTargets : null,
-            CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
+            CreatedAt = messageCreatedAt
         };
 
         await _bus.Publish(message, cancellationToken);
@@ -248,12 +264,71 @@ public sealed class CreateChatImageCommandHandler
 
     private sealed record ChatImageConfig(
         Guid CorrelationId,
+        string Model,
         string AspectRatio,
         string Resolution,
         string OutputFormat,
         int NumberOfVariances,
         int ExpectedResultCount,
         List<SocialTargetDto>? SocialTargets);
+
+    private static IReadOnlyList<AiSpendRecord> BuildSpendRecords(
+        Guid userId,
+        Guid? workspaceId,
+        Guid chatId,
+        string model,
+        string resolution,
+        CoinCostQuote quote,
+        int expectedResultCount,
+        DateTime createdAt)
+    {
+        var records = new List<AiSpendRecord>
+        {
+            new()
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = userId,
+                WorkspaceId = workspaceId,
+                Provider = AiSpendProviders.Kie,
+                ActionType = CoinActionTypes.ImageGeneration,
+                Model = model,
+                Variant = resolution,
+                Unit = quote.Unit,
+                Quantity = 1,
+                UnitCostCoins = quote.UnitCostCoins,
+                TotalCoins = quote.UnitCostCoins,
+                ReferenceType = CoinReferenceTypes.ChatImage,
+                ReferenceId = chatId.ToString(),
+                Status = AiSpendStatuses.Debited,
+                CreatedAt = createdAt
+            }
+        };
+
+        var variantQuantity = expectedResultCount - 1;
+        if (variantQuantity > 0)
+        {
+            records.Add(new AiSpendRecord
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = userId,
+                WorkspaceId = workspaceId,
+                Provider = AiSpendProviders.Kie,
+                ActionType = CoinActionTypes.ImageReframeVariant,
+                Model = model,
+                Variant = resolution,
+                Unit = "per_variant",
+                Quantity = variantQuantity,
+                UnitCostCoins = quote.UnitCostCoins,
+                TotalCoins = quote.UnitCostCoins * variantQuantity,
+                ReferenceType = CoinReferenceTypes.ChatImage,
+                ReferenceId = chatId.ToString(),
+                Status = AiSpendStatuses.Debited,
+                CreatedAt = createdAt
+            });
+        }
+
+        return records;
+    }
 
     private async Task<UserAiConfig?> TryGetActiveConfigAsync(CancellationToken cancellationToken)
     {
@@ -265,12 +340,12 @@ public sealed class CreateChatImageCommandHandler
     {
         if (requestedValue.GetValueOrDefault() > 0)
         {
-            return requestedValue.Value;
+            return requestedValue.GetValueOrDefault();
         }
 
         if (configuredValue.GetValueOrDefault() > 0)
         {
-            return configuredValue.Value;
+            return configuredValue.GetValueOrDefault();
         }
 
         return fallback;

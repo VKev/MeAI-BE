@@ -7,6 +7,7 @@ package feedanalytics;
 service FeedAnalyticsService {
   rpc GetDashboardSummary (GetFeedDashboardSummaryRequest) returns (GetFeedDashboardSummaryResponse);
   rpc GetPostAnalytics (GetFeedPostAnalyticsRequest) returns (GetFeedPostAnalyticsResponse);
+  rpc GetActiveResourceIds (GetActiveFeedResourceIdsRequest) returns (GetActiveFeedResourceIdsResponse);
 }
 
 message FeedAnalyticsProfile {
@@ -80,4 +81,11 @@ message GetFeedPostAnalyticsResponse {
   FeedAnalyticsProfile profile = 1;
   FeedDashboardPost post = 2;
   repeated FeedCommentSample comment_samples = 3;
+}
+
+message GetActiveFeedResourceIdsRequest {
+}
+
+message GetActiveFeedResourceIdsResponse {
+  repeated string resource_ids = 1;
 }

@@ -76,6 +76,21 @@ public sealed class FeedAnalyticsGrpcService : FeedAnalyticsService.FeedAnalytic
         return response;
     }
 
+    public override async Task<GetActiveFeedResourceIdsResponse> GetActiveResourceIds(
+        GetActiveFeedResourceIdsRequest request,
+        ServerCallContext context)
+    {
+        var result = await _mediator.Send(new GetActiveFeedResourceIdsQuery(), context.CancellationToken);
+        if (result.IsFailure)
+        {
+            throw new RpcException(new Status(StatusCode.Internal, result.Error.Description));
+        }
+
+        var response = new GetActiveFeedResourceIdsResponse();
+        response.ResourceIds.AddRange(result.Value.Select(id => id.ToString()));
+        return response;
+    }
+
     private static Guid? ParseOptionalGuid(string? value, string errorMessage)
     {
         if (string.IsNullOrWhiteSpace(value))
