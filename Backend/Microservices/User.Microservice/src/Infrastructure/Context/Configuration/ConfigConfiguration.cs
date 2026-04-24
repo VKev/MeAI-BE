@@ -16,6 +16,13 @@ public sealed class ConfigConfiguration : IEntityTypeConfiguration<Config>
         entity.Property(e => e.ChatModel).HasColumnName("chat_model");
         entity.Property(e => e.MediaAspectRatio).HasColumnName("media_aspect_ratio");
         entity.Property(e => e.NumberOfVariances).HasColumnName("number_of_variances");
+        entity.Property(e => e.FreeStorageQuotaBytes)
+            .HasColumnName("free_storage_quota_bytes")
+            .HasColumnType("bigint")
+            .HasDefaultValue(104857600L);
+        entity.Property(e => e.SystemStorageQuotaBytes)
+            .HasColumnName("system_storage_quota_bytes")
+            .HasColumnType("bigint");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");

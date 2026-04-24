@@ -18,6 +18,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
     private readonly IAmazonS3? _client;
     private readonly string _bucket;
     private readonly string _region;
+    private readonly string? _namespace;
     private readonly string? _serviceUrl;
     private readonly string? _publicBaseUrl;
     private readonly bool _forcePathStyle;
@@ -33,6 +34,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         var secretKey = configuration["S3:SecretKey"];
 
         _region = configuration["S3:Region"] ?? "us-east-1";
+        _namespace = NormalizeNamespace(configuration["S3:Namespace"]);
         _serviceUrl = configuration["S3:ServiceUrl"];
         _publicBaseUrl = configuration["S3:PublicBaseUrl"];
 
@@ -77,7 +79,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
         try
         {
-            var key = NormalizeKey(request.Key);
+            var key = NormalizeKey(request.Key, applyNamespace: true);
             if (string.IsNullOrWhiteSpace(key))
             {
                 return Result.Failure<StorageUploadResult>(
@@ -101,7 +103,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
             await _client.PutObjectAsync(putRequest, cancellationToken);
 
             var url = BuildUrl(key);
-            return Result.Success(new StorageUploadResult(key, url));
+            return Result.Success(new StorageUploadResult(key, url, _bucket, _region, _namespace));
         }
         catch (AmazonS3Exception ex)
         {
@@ -129,7 +131,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
         try
         {
-            var key = NormalizeKey(keyOrUrl);
+            var key = NormalizeKey(keyOrUrl, applyNamespace: false);
             if (string.IsNullOrWhiteSpace(key))
             {
                 return Result.Failure<string>(new Error("S3.InvalidKey", "Storage key is missing"));
@@ -178,7 +180,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
         try
         {
-            var key = NormalizeKey(keyOrUrl);
+            var key = NormalizeKey(keyOrUrl, applyNamespace: false);
             if (string.IsNullOrWhiteSpace(key))
             {
                 return Result.Failure<bool>(new Error("S3.InvalidKey", "Storage key is missing"));
@@ -312,7 +314,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         return $"https://{_bucket}.s3{regionSegment}.amazonaws.com/{key}";
     }
 
-    private string NormalizeKey(string keyOrUrl)
+    private string NormalizeKey(string keyOrUrl, bool applyNamespace)
     {
         if (string.IsNullOrWhiteSpace(keyOrUrl))
         {
@@ -325,13 +327,49 @@ public sealed class S3ObjectStorageService : IObjectStorageService
 
             if (path.StartsWith($"{_bucket}/", StringComparison.OrdinalIgnoreCase))
             {
-                return path[(_bucket.Length + 1)..];
+                return ApplyNamespace(path[(_bucket.Length + 1)..], applyNamespace);
             }
 
-            return path;
+            return ApplyNamespace(path, applyNamespace);
         }
 
-        return keyOrUrl.TrimStart('/');
+        return ApplyNamespace(keyOrUrl.TrimStart('/'), applyNamespace);
+    }
+
+    private string ApplyNamespace(string key, bool applyNamespace)
+    {
+        var normalized = key.TrimStart('/');
+        if (!applyNamespace || string.IsNullOrWhiteSpace(_namespace))
+        {
+            return normalized;
+        }
+
+        return normalized.StartsWith($"{_namespace}/", StringComparison.OrdinalIgnoreCase)
+            ? normalized
+            : $"{_namespace}/{normalized}";
+    }
+
+    private static string? NormalizeNamespace(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim().Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        foreach (var character in normalized)
+        {
+            if (!char.IsAsciiLetterOrDigit(character) && character is not '-' and not '_' and not '.' and not '/')
+            {
+                throw new InvalidOperationException("S3 namespace contains invalid characters.");
+            }
+        }
+
+        return normalized;
     }
 }
-

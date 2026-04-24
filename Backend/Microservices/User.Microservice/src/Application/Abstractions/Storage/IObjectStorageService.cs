@@ -18,4 +18,9 @@ public sealed record StorageUploadRequest(
     string ContentType,
     long ContentLength);
 
-public sealed record StorageUploadResult(string Key, string Url);
+public sealed record StorageUploadResult(
+    string Key,
+    string Url,
+    string? Bucket = null,
+    string? Region = null,
+    string? Namespace = null);

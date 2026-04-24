@@ -159,6 +159,26 @@ public sealed class ResourcesController : ApiController
         return Ok(result);
     }
 
+    [HttpGet("storage-usage")]
+    [ProducesResponseType(typeof(Result<StorageUsageResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetStorageUsage(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(new GetStorageUsageQuery(userId), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpPost]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(Result<ResourceResponse>), StatusCodes.Status200OK)]

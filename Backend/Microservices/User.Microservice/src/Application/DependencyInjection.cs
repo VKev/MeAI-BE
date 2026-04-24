@@ -1,5 +1,6 @@
 using Application.Behaviors;
 using Application.Billing.Services;
+using Application.Resources.Services;
 using Application.Subscriptions.Services;
 using FluentValidation;
 using MediatR;
@@ -17,6 +18,7 @@ namespace Application
             services.AddScoped<IStripeCustomerResolver, StripeCustomerResolver>();
             services.AddScoped<IUserSubscriptionStateService, UserSubscriptionStateService>();
             services.AddScoped<IUserSubscriptionEntitlementService, UserSubscriptionEntitlementService>();
+            services.AddScoped<IStorageUsageService, StorageUsageService>();
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationPipelineBehavior<,>));
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(UnitOfWorkBehavior<,>));
             return services;

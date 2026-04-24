@@ -51,6 +51,10 @@ public sealed class PatchSubscriptionCommandValidator : AbstractValidator<PatchS
 
         return command.Limits.NumberOfSocialAccounts.HasValue
             || command.Limits.RateLimitForContentCreation.HasValue
-            || command.Limits.NumberOfWorkspaces.HasValue;
+            || command.Limits.NumberOfWorkspaces.HasValue
+            || command.Limits.MaxPagesPerSocialAccount.HasValue
+            || command.Limits.StorageQuotaBytes.HasValue
+            || command.Limits.MaxUploadFileBytes.HasValue
+            || command.Limits.RetentionDaysAfterDelete.HasValue;
     }
 }

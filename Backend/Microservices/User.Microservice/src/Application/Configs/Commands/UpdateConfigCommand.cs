@@ -12,7 +12,9 @@ namespace Application.Configs.Commands;
 public sealed record UpdateConfigCommand(
     string? ChatModel,
     string? MediaAspectRatio,
-    int? NumberOfVariances) : IRequest<Result<ConfigResponse>>;
+    int? NumberOfVariances,
+    long? FreeStorageQuotaBytes,
+    long? SystemStorageQuotaBytes) : IRequest<Result<ConfigResponse>>;
 
 public sealed class UpdateConfigCommandHandler
     : IRequestHandler<UpdateConfigCommand, Result<ConfigResponse>>
@@ -46,6 +48,8 @@ public sealed class UpdateConfigCommandHandler
         config.ChatModel = request.ChatModel?.Trim();
         config.MediaAspectRatio = request.MediaAspectRatio?.Trim();
         config.NumberOfVariances = request.NumberOfVariances;
+        config.FreeStorageQuotaBytes = request.FreeStorageQuotaBytes;
+        config.SystemStorageQuotaBytes = request.SystemStorageQuotaBytes;
         config.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
 
         if (isNew)

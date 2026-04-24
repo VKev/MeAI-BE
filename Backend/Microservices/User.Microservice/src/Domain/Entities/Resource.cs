@@ -20,6 +20,20 @@ public sealed class Resource
 
     public string? ContentType { get; set; }
 
+    public long? SizeBytes { get; set; }
+
+    public string? StorageProvider { get; set; }
+
+    public string? StorageBucket { get; set; }
+
+    public string? StorageRegion { get; set; }
+
+    public string? StorageNamespace { get; set; }
+
+    public string? StorageKey { get; set; }
+
+    public string? OriginalFileName { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 

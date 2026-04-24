@@ -1,6 +1,7 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.Storage;
 using Application.Resources;
+using Application.Resources.Services;
 using Application.Users.Models;
 using Domain.Entities;
 using MediatR;
@@ -28,14 +29,19 @@ public sealed class UpdateAvatarCommandHandler
     private readonly IRepository<UserRole> _userRoleRepository;
     private readonly IRepository<Resource> _resourceRepository;
     private readonly IObjectStorageService _objectStorageService;
+    private readonly IStorageUsageService _storageUsageService;
 
-    public UpdateAvatarCommandHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
+    public UpdateAvatarCommandHandler(
+        IUnitOfWork unitOfWork,
+        IObjectStorageService objectStorageService,
+        IStorageUsageService storageUsageService)
     {
         _userRepository = unitOfWork.Repository<User>();
         _roleRepository = unitOfWork.Repository<Role>();
         _userRoleRepository = unitOfWork.Repository<UserRole>();
         _resourceRepository = unitOfWork.Repository<Resource>();
         _objectStorageService = objectStorageService;
+        _storageUsageService = storageUsageService;
     }
 
     public async Task<Result<UserProfileResponse>> Handle(UpdateAvatarCommand request,
@@ -51,6 +57,14 @@ public sealed class UpdateAvatarCommandHandler
 
         var resourceId = Guid.CreateVersion7();
         var storageKey = ResourceStorageKey.Build(request.UserId, resourceId);
+        var quotaResult = await _storageUsageService.EnsureUploadAllowedAsync(
+            request.UserId,
+            request.ContentLength,
+            cancellationToken);
+        if (quotaResult.IsFailure)
+        {
+            return Result.Failure<UserProfileResponse>(quotaResult.Error);
+        }
 
         await using var fileStream = request.FileStream;
         var uploadResult = await _objectStorageService.UploadAsync(
@@ -72,6 +86,13 @@ public sealed class UpdateAvatarCommandHandler
             Id = resourceId,
             UserId = request.UserId,
             Link = uploadResult.Value.Key,
+            StorageProvider = "s3",
+            StorageBucket = uploadResult.Value.Bucket,
+            StorageRegion = uploadResult.Value.Region,
+            StorageNamespace = uploadResult.Value.Namespace,
+            StorageKey = uploadResult.Value.Key,
+            SizeBytes = request.ContentLength,
+            OriginalFileName = request.FileName,
             Status = request.Status?.Trim() ?? "active",
             ResourceType = request.ResourceType?.Trim() ?? "avatar",
             ContentType = request.ContentType.Trim(),

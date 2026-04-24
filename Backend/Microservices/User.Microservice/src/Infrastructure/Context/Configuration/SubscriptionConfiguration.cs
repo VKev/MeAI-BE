@@ -60,7 +60,11 @@ public sealed class SubscriptionConfiguration : IEntityTypeConfiguration<Subscri
 
         return left.NumberOfSocialAccounts == right.NumberOfSocialAccounts
             && left.RateLimitForContentCreation == right.RateLimitForContentCreation
-            && left.NumberOfWorkspaces == right.NumberOfWorkspaces;
+            && left.NumberOfWorkspaces == right.NumberOfWorkspaces
+            && left.MaxPagesPerSocialAccount == right.MaxPagesPerSocialAccount
+            && left.StorageQuotaBytes == right.StorageQuotaBytes
+            && left.MaxUploadFileBytes == right.MaxUploadFileBytes
+            && left.RetentionDaysAfterDelete == right.RetentionDaysAfterDelete;
     }
 
     private static int SubscriptionLimitsHashCode(SubscriptionLimits? value)
@@ -73,7 +77,11 @@ public sealed class SubscriptionConfiguration : IEntityTypeConfiguration<Subscri
         return HashCode.Combine(
             value.NumberOfSocialAccounts,
             value.RateLimitForContentCreation,
-            value.NumberOfWorkspaces);
+            value.NumberOfWorkspaces,
+            value.MaxPagesPerSocialAccount,
+            value.StorageQuotaBytes,
+            value.MaxUploadFileBytes,
+            value.RetentionDaysAfterDelete);
     }
 
     private static SubscriptionLimits? SubscriptionLimitsSnapshot(SubscriptionLimits? value)
@@ -87,7 +95,11 @@ public sealed class SubscriptionConfiguration : IEntityTypeConfiguration<Subscri
         {
             NumberOfSocialAccounts = value.NumberOfSocialAccounts,
             RateLimitForContentCreation = value.RateLimitForContentCreation,
-            NumberOfWorkspaces = value.NumberOfWorkspaces
+            NumberOfWorkspaces = value.NumberOfWorkspaces,
+            MaxPagesPerSocialAccount = value.MaxPagesPerSocialAccount,
+            StorageQuotaBytes = value.StorageQuotaBytes,
+            MaxUploadFileBytes = value.MaxUploadFileBytes,
+            RetentionDaysAfterDelete = value.RetentionDaysAfterDelete
         };
     }
 }
