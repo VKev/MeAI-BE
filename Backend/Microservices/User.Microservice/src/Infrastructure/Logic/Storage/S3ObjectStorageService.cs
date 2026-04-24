@@ -25,6 +25,8 @@ public sealed class S3ObjectStorageService : IObjectStorageService
     private readonly bool _isConfigured;
     private readonly IDatabase? _cache;
 
+    public string? CurrentNamespace => _namespace;
+
     public S3ObjectStorageService(
         IConfiguration configuration,
         IConnectionMultiplexer multiplexer)
@@ -205,6 +207,94 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         }
     }
 
+    public async Task<Result<bool>> ExistsAsync(string keyOrUrl, CancellationToken cancellationToken)
+    {
+        if (TryGetSeedMediaUrl(keyOrUrl, out _))
+        {
+            return Result.Success(true);
+        }
+
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<bool>(new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
+        try
+        {
+            var key = NormalizeKey(keyOrUrl, applyNamespace: false);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return Result.Failure<bool>(new Error("S3.InvalidKey", "Storage key is missing"));
+            }
+
+            await _client.GetObjectMetadataAsync(new GetObjectMetadataRequest
+            {
+                BucketName = _bucket,
+                Key = key
+            }, cancellationToken);
+
+            return Result.Success(true);
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return Result.Success(false);
+        }
+        catch (AmazonS3Exception ex)
+        {
+            return Result.Failure<bool>(new Error("S3.HeadFailed", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<bool>(new Error("S3.HeadFailed", ex.Message));
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<StorageObjectInfo>>> ListAsync(
+        string? prefix,
+        CancellationToken cancellationToken)
+    {
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<IReadOnlyList<StorageObjectInfo>>(
+                new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
+        try
+        {
+            var scopedPrefix = NormalizeListPrefix(prefix);
+            var objects = new List<StorageObjectInfo>();
+            string? continuationToken = null;
+
+            do
+            {
+                var response = await _client.ListObjectsV2Async(new ListObjectsV2Request
+                {
+                    BucketName = _bucket,
+                    Prefix = scopedPrefix,
+                    ContinuationToken = continuationToken
+                }, cancellationToken);
+
+                objects.AddRange(response.S3Objects.Select(item =>
+                    new StorageObjectInfo(item.Key, item.Size, item.LastModified)));
+
+                continuationToken = response.IsTruncated == true
+                    ? response.NextContinuationToken
+                    : null;
+            }
+            while (!string.IsNullOrWhiteSpace(continuationToken));
+
+            return Result.Success<IReadOnlyList<StorageObjectInfo>>(objects);
+        }
+        catch (AmazonS3Exception ex)
+        {
+            return Result.Failure<IReadOnlyList<StorageObjectInfo>>(new Error("S3.ListFailed", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<IReadOnlyList<StorageObjectInfo>>(new Error("S3.ListFailed", ex.Message));
+        }
+    }
+
     private string? TryGetCachedUrl(string cacheKey)
     {
         if (_cache is null)
@@ -347,6 +437,27 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         return normalized.StartsWith($"{_namespace}/", StringComparison.OrdinalIgnoreCase)
             ? normalized
             : $"{_namespace}/{normalized}";
+    }
+
+    private string NormalizeListPrefix(string? prefix)
+    {
+        var normalizedPrefix = string.IsNullOrWhiteSpace(prefix)
+            ? string.Empty
+            : prefix.TrimStart('/');
+
+        if (string.IsNullOrWhiteSpace(_namespace))
+        {
+            return normalizedPrefix;
+        }
+
+        if (string.IsNullOrWhiteSpace(normalizedPrefix))
+        {
+            return $"{_namespace}/";
+        }
+
+        return normalizedPrefix.StartsWith($"{_namespace}/", StringComparison.OrdinalIgnoreCase)
+            ? normalizedPrefix
+            : $"{_namespace}/{normalizedPrefix}";
     }
 
     private static string? NormalizeNamespace(string? value)

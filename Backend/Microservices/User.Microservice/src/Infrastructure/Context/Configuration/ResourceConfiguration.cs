@@ -26,6 +26,8 @@ public sealed class ResourceConfiguration : IEntityTypeConfiguration<Resource>
         entity.Property(e => e.StorageNamespace).HasColumnName("storage_namespace");
         entity.Property(e => e.StorageKey).HasColumnName("storage_key");
         entity.Property(e => e.OriginalFileName).HasColumnName("original_file_name");
+        entity.Property(e => e.LastVerifiedAt).HasColumnName("last_verified_at").HasColumnType("timestamp with time zone");
+        entity.Property(e => e.DeletedFromStorageAt).HasColumnName("deleted_from_storage_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");

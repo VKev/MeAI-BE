@@ -60,7 +60,14 @@ internal sealed class UserAuthApiFactory(
 
     private sealed class StubObjectStorageService : IObjectStorageService
     {
+        public string? CurrentNamespace => "test";
+
         public Task<Result<bool>> DeleteAsync(string keyOrUrl, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Result.Success(true));
+        }
+
+        public Task<Result<bool>> ExistsAsync(string keyOrUrl, CancellationToken cancellationToken)
         {
             return Task.FromResult(Result.Success(true));
         }
@@ -68,6 +75,11 @@ internal sealed class UserAuthApiFactory(
         public Result<string> GetPresignedUrl(string keyOrUrl, TimeSpan? expiresIn = null)
         {
             return Result.Success("https://example.test/presigned");
+        }
+
+        public Task<Result<IReadOnlyList<StorageObjectInfo>>> ListAsync(string? prefix, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Result.Success<IReadOnlyList<StorageObjectInfo>>([]));
         }
 
         public Task<Result<StorageUploadResult>> UploadAsync(
