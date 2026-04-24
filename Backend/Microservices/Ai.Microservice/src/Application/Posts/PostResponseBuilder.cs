@@ -123,16 +123,27 @@ public sealed class PostResponseBuilder
             ? authorProfile
             : CreateFallbackAuthor(post.UserId);
 
+        var schedule = post.ScheduleGroupId.HasValue && post.ScheduledAtUtc.HasValue
+            ? new PostScheduleResponse(
+                post.ScheduleGroupId.Value,
+                post.ScheduledAtUtc.Value,
+                post.ScheduleTimezone,
+                post.ScheduledSocialMediaIds,
+                post.ScheduledIsPrivate)
+            : null;
+
         return new PostResponse(
             Id: post.Id,
             UserId: post.UserId,
             Username: author.Username,
             AvatarUrl: author.AvatarUrl,
             WorkspaceId: post.WorkspaceId,
+            ChatSessionId: post.ChatSessionId,
             SocialMediaId: post.SocialMediaId,
             Title: post.Title,
             Content: post.Content,
             Status: post.Status,
+            Schedule: schedule,
             IsPublished: publications.Any(publication =>
                 string.Equals(publication.PublishStatus, "published", StringComparison.OrdinalIgnoreCase)),
             Media: media,

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Gemini;
 using Microsoft.Extensions.Configuration;
 using SharedLibrary.Common.ResponseModel;
@@ -10,12 +11,12 @@ namespace Infrastructure.Logic.Gemini;
 public sealed class GeminiContentModerationService : IGeminiContentModerationService
 {
     private const string DefaultBaseUrl = "https://generativelanguage.googleapis.com/v1beta";
-    private const string DefaultModel = "gemini-2.0-flash";
+    private const string DefaultModel = "gemini-3.1-flash-lite-preview";
 
-    private readonly string _apiKey;
     private readonly string _baseUrl;
     private readonly string _defaultModel;
     private readonly HttpClient _httpClient;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -23,13 +24,15 @@ public sealed class GeminiContentModerationService : IGeminiContentModerationSer
         PropertyNameCaseInsensitive = true
     };
 
-    public GeminiContentModerationService(IConfiguration configuration, IHttpClientFactory httpClientFactory)
+    public GeminiContentModerationService(
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory,
+        IApiCredentialProvider credentialProvider)
     {
-        _apiKey = configuration["Gemini:ApiKey"]
-                  ?? throw new InvalidOperationException("Gemini:ApiKey is not configured");
         _baseUrl = configuration["Gemini:BaseUrl"] ?? DefaultBaseUrl;
         _defaultModel = configuration["Gemini:Model"] ?? DefaultModel;
         _httpClient = httpClientFactory.CreateClient("Gemini");
+        _credentialProvider = credentialProvider;
     }
 
     public async Task<Result<ContentModerationResult>> CheckSensitiveContentAsync(
@@ -175,7 +178,8 @@ public sealed class GeminiContentModerationService : IGeminiContentModerationSer
         var model = string.IsNullOrWhiteSpace(preferredModel)
             ? _defaultModel
             : preferredModel.Trim();
-        return $"{_baseUrl.TrimEnd('/')}/models/{model}:generateContent?key={Uri.EscapeDataString(_apiKey)}";
+        var apiKey = _credentialProvider.GetRequiredValue("Gemini", "ApiKey");
+        return $"{_baseUrl.TrimEnd('/')}/models/{model}:generateContent?key={Uri.EscapeDataString(apiKey)}";
     }
 
     private static string? TryReadErrorMessage(string payload)

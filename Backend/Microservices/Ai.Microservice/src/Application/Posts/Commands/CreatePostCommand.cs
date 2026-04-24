@@ -10,6 +10,7 @@ namespace Application.Posts.Commands;
 public sealed record CreatePostCommand(
     Guid UserId,
     Guid? WorkspaceId,
+    Guid? ChatSessionId,
     Guid? SocialMediaId,
     string? Title,
     PostContent? Content,
@@ -22,21 +23,46 @@ public sealed class CreatePostCommandHandler
 {
     private readonly IPostRepository _postRepository;
     private readonly IWorkspaceRepository _workspaceRepository;
+    private readonly IChatSessionRepository _chatSessionRepository;
     private readonly PostResponseBuilder _postResponseBuilder;
 
     public CreatePostCommandHandler(
         IPostRepository postRepository,
         IWorkspaceRepository workspaceRepository,
+        IChatSessionRepository chatSessionRepository,
         PostResponseBuilder postResponseBuilder)
     {
         _postRepository = postRepository;
         _workspaceRepository = workspaceRepository;
+        _chatSessionRepository = chatSessionRepository;
         _postResponseBuilder = postResponseBuilder;
     }
 
     public async Task<Result<PostResponse>> Handle(CreatePostCommand request, CancellationToken cancellationToken)
     {
         var workspaceId = NormalizeGuid(request.WorkspaceId);
+        var chatSessionId = NormalizeGuid(request.ChatSessionId);
+        if (chatSessionId.HasValue)
+        {
+            var chatSession = await _chatSessionRepository.GetByIdAsync(chatSessionId.Value, cancellationToken);
+            if (chatSession is null || chatSession.DeletedAt.HasValue)
+            {
+                return Result.Failure<PostResponse>(PostErrors.ChatSessionNotFound);
+            }
+
+            if (chatSession.UserId != request.UserId)
+            {
+                return Result.Failure<PostResponse>(PostErrors.Unauthorized);
+            }
+
+            if (workspaceId.HasValue && chatSession.WorkspaceId != workspaceId.Value)
+            {
+                return Result.Failure<PostResponse>(PostErrors.ChatSessionWorkspaceMismatch);
+            }
+
+            workspaceId ??= chatSession.WorkspaceId;
+        }
+
         if (workspaceId.HasValue)
         {
             var workspaceExists = await _workspaceRepository.ExistsForUserAsync(
@@ -77,6 +103,10 @@ public sealed class CreatePostCommandHandler
                 primary.Status = NormalizeString(request.Status);
                 primary.SocialMediaId = NormalizeGuid(request.SocialMediaId);
                 primary.WorkspaceId = workspaceId;
+                if (chatSessionId.HasValue)
+                {
+                    primary.ChatSessionId = chatSessionId;
+                }
                 primary.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
 
                 // Soft-delete duplicates so GetPostBuilder no longer surfaces them. Hard
@@ -99,6 +129,7 @@ public sealed class CreatePostCommandHandler
             Id = Guid.CreateVersion7(),
             UserId = request.UserId,
             WorkspaceId = workspaceId,
+            ChatSessionId = chatSessionId,
             SocialMediaId = NormalizeGuid(request.SocialMediaId),
             PostBuilderId = postBuilderId,
             Platform = NormalizeString(request.Platform),

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Abstractions;
+using Application.Abstractions.ApiCredentials;
 using Infrastructure.Configs;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,6 +14,7 @@ public sealed class VeoVideoService : IVeoVideoService
     private readonly HttpClient _httpClient;
     private readonly VeoOptions _options;
     private readonly ILogger<VeoVideoService> _logger;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -23,10 +25,12 @@ public sealed class VeoVideoService : IVeoVideoService
     public VeoVideoService(
         HttpClient httpClient,
         IOptions<VeoOptions> options,
+        IApiCredentialProvider credentialProvider,
         ILogger<VeoVideoService> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
+        _credentialProvider = credentialProvider;
         _logger = logger;
 
         _httpClient.BaseAddress = new Uri(_options.BaseUrl);
@@ -36,7 +40,8 @@ public sealed class VeoVideoService : IVeoVideoService
         VeoGenerateRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        var apiKey = _credentialProvider.GetOptionalValue("Kie", "ApiKey");
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("Veo API key is not configured");
             return new VeoGenerateResult(false, 401, "Veo API key is not configured", null);
@@ -79,7 +84,7 @@ public sealed class VeoVideoService : IVeoVideoService
         try
         {
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
-            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
+            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
             httpRequest.Content = JsonContent.Create(payload, options: JsonOptions);
 
             _logger.LogInformation("Sending video generation request to Veo API");
@@ -122,7 +127,8 @@ public sealed class VeoVideoService : IVeoVideoService
         VeoExtendRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        var apiKey = _credentialProvider.GetOptionalValue("Kie", "ApiKey");
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("Veo API key is not configured");
             return new VeoExtendResult(false, 401, "Veo API key is not configured", null);
@@ -140,7 +146,7 @@ public sealed class VeoVideoService : IVeoVideoService
         try
         {
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/veo/extend");
-            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
+            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
             httpRequest.Content = JsonContent.Create(payload, options: JsonOptions);
 
             _logger.LogInformation("Sending video extension request to Veo API for task {TaskId}", request.TaskId);
@@ -183,7 +189,8 @@ public sealed class VeoVideoService : IVeoVideoService
         string taskId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        var apiKey = _credentialProvider.GetOptionalValue("Kie", "ApiKey");
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("Veo API key is not configured");
             return new VeoRecordInfoResult(false, 401, "Veo API key is not configured", null);
@@ -192,7 +199,7 @@ public sealed class VeoVideoService : IVeoVideoService
         try
         {
             using var httpRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/veo/record-info?taskId={Uri.EscapeDataString(taskId)}");
-            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
+            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
             _logger.LogInformation("Querying video details for task {TaskId}", taskId);
 
@@ -253,7 +260,8 @@ public sealed class VeoVideoService : IVeoVideoService
         int index = 0,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        var apiKey = _credentialProvider.GetOptionalValue("Kie", "ApiKey");
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("Veo API key is not configured");
             return new Veo1080PResult(false, 401, "Veo API key is not configured", null);
@@ -263,7 +271,7 @@ public sealed class VeoVideoService : IVeoVideoService
         {
             var url = $"/api/v1/veo/get-1080p-video?taskId={Uri.EscapeDataString(taskId)}&index={index}";
             using var httpRequest = new HttpRequestMessage(HttpMethod.Get, url);
-            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
+            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
             _logger.LogInformation("Requesting 1080P video for task {TaskId}, index {Index}", taskId, index);
 
@@ -484,4 +492,3 @@ public sealed class VeoVideoService : IVeoVideoService
         public string? ResultUrl { get; set; }
     }
 }
-

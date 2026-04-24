@@ -174,12 +174,6 @@ public sealed class FacebookPublishService : IFacebookPublishService
         FacebookPublishRequest request,
         CancellationToken cancellationToken)
     {
-        if (request.Media.Count == 0)
-        {
-            return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
-                new Error("Facebook.MissingMedia", "At least one media resource is required."));
-        }
-
         var resolveResult = await ResolvePagesAsync(request, cancellationToken);
         if (resolveResult.IsFailure)
         {
@@ -193,6 +187,29 @@ public sealed class FacebookPublishService : IFacebookPublishService
 
         var wantsReel = !string.IsNullOrWhiteSpace(request.PostType) &&
                         string.Equals(request.PostType, "reels", StringComparison.OrdinalIgnoreCase);
+
+        if (!wantsReel && videos.Count == 0 && images.Count == 0)
+        {
+            var textResults = new List<FacebookPublishResult>();
+            foreach (var page in pages)
+            {
+                var publishResult = await PublishFeedAsync(
+                    page.PageId,
+                    page.PageAccessToken,
+                    request.Message,
+                    [],
+                    cancellationToken);
+
+                if (publishResult.IsFailure)
+                {
+                    return Result.Failure<IReadOnlyList<FacebookPublishResult>>(publishResult.Error);
+                }
+
+                textResults.Add(new FacebookPublishResult(page.PageId, publishResult.Value));
+            }
+
+            return Result.Success<IReadOnlyList<FacebookPublishResult>>(textResults);
+        }
 
         // Reels must be exactly one video. Reject images-for-reel loudly so the user gets a
         // clear error instead of silently falling through to the regular /photos feed path.

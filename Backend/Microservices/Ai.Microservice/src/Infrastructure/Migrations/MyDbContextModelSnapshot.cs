@@ -22,6 +22,95 @@ namespace Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Entities.ApiCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("KeyName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("key_name");
+
+                    b.Property<DateTime?>("LastRotatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_rotated_at");
+
+                    b.Property<DateTime?>("LastSyncedFromEnvAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_synced_from_env_at");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("ServiceName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("service_name");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("source");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("ValueEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("value_encrypted");
+
+                    b.Property<string>("ValueLast4")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("value_last4");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("api_credentials_pkey");
+
+                    b.HasIndex("ServiceName", "Provider", "KeyName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_api_credentials_service_provider_key");
+
+                    b.ToTable("api_credentials", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.Chat", b =>
                 {
                     b.Property<Guid>("Id")
@@ -266,6 +355,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("ChatSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chat_session_id");
+
                     b.Property<string>("Content")
                         .HasColumnType("jsonb")
                         .HasColumnName("content");
@@ -285,6 +378,27 @@ namespace Infrastructure.Migrations
                     b.Property<Guid?>("PostBuilderId")
                         .HasColumnType("uuid")
                         .HasColumnName("post_builder_id");
+
+                    b.Property<Guid?>("ScheduleGroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_group_id");
+
+                    b.Property<string>("ScheduleTimezone")
+                        .HasColumnType("text")
+                        .HasColumnName("schedule_timezone");
+
+                    b.Property<DateTime?>("ScheduledAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scheduled_at_utc");
+
+                    b.Property<bool?>("ScheduledIsPrivate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("scheduled_is_private");
+
+                    b.PrimitiveCollection<Guid[]>("ScheduledSocialMediaIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("scheduled_social_media_ids");
 
                     b.Property<Guid?>("SocialMediaId")
                         .HasColumnType("uuid")
@@ -313,7 +427,12 @@ namespace Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("posts_pkey");
 
+                    b.HasIndex(new[] { "ChatSessionId", "CreatedAt", "Id" }, "ix_posts_chat_session_created_at_id")
+                        .IsDescending(false, true, true);
+
                     b.HasIndex(new[] { "PostBuilderId" }, "ix_posts_post_builder_id");
+
+                    b.HasIndex(new[] { "Status", "ScheduledAtUtc" }, "ix_posts_status_scheduled_at_utc");
 
                     b.HasIndex(new[] { "UserId", "WorkspaceId", "CreatedAt" }, "ix_posts_user_workspace_created_at")
                         .IsDescending(false, false, true);
@@ -590,6 +709,210 @@ namespace Infrastructure.Migrations
                     b.ToTable("post_resources", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.PublishingSchedule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AgentPrompt")
+                        .HasColumnType("text")
+                        .HasColumnName("agent_prompt");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("ErrorCode")
+                        .HasColumnType("text")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<DateTime>("ExecuteAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("execute_at_utc");
+
+                    b.Property<string>("ExecutionContextJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("execution_context_json");
+
+                    b.Property<bool?>("IsPrivate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_private");
+
+                    b.Property<DateTime?>("LastExecutionAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_execution_at");
+
+                    b.Property<string>("Mode")
+                        .HasColumnType("text")
+                        .HasColumnName("mode");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("NextRetryAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_retry_at");
+
+                    b.Property<string>("PlatformPreference")
+                        .HasColumnType("text")
+                        .HasColumnName("platform_preference");
+
+                    b.Property<string>("Status")
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Timezone")
+                        .HasColumnType("text")
+                        .HasColumnName("timezone");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id")
+                        .HasName("publishing_schedules_pkey");
+
+                    b.HasIndex(new[] { "Status", "ExecuteAtUtc" }, "ix_publishing_schedules_status_execute_at_utc");
+
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "ix_publishing_schedules_user_created_at")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "WorkspaceId" }, "ix_publishing_schedules_workspace_id");
+
+                    b.ToTable("publishing_schedules", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.PublishingScheduleItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("ExecutionBehavior")
+                        .HasColumnType("text")
+                        .HasColumnName("execution_behavior");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("item_id");
+
+                    b.Property<string>("ItemType")
+                        .HasColumnType("text")
+                        .HasColumnName("item_type");
+
+                    b.Property<DateTime?>("LastExecutionAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_execution_at");
+
+                    b.Property<Guid>("ScheduleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("Status")
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("publishing_schedule_items_pkey");
+
+                    b.HasIndex(new[] { "ScheduleId", "ItemId" }, "ix_publishing_schedule_items_schedule_item_id");
+
+                    b.HasIndex(new[] { "ScheduleId", "SortOrder" }, "ix_publishing_schedule_items_schedule_sort_order");
+
+                    b.ToTable("publishing_schedule_items", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.PublishingScheduleTarget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_primary");
+
+                    b.Property<string>("Platform")
+                        .HasColumnType("text")
+                        .HasColumnName("platform");
+
+                    b.Property<Guid>("ScheduleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_id");
+
+                    b.Property<Guid>("SocialMediaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("social_media_id");
+
+                    b.Property<string>("TargetLabel")
+                        .HasColumnType("text")
+                        .HasColumnName("target_label");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("publishing_schedule_targets_pkey");
+
+                    b.HasIndex(new[] { "ScheduleId", "SocialMediaId" }, "ix_publishing_schedule_targets_schedule_social_media");
+
+                    b.ToTable("publishing_schedule_targets", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.VideoTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -681,11 +1004,19 @@ namespace Infrastructure.Migrations
 
             modelBuilder.Entity("Domain.Entities.Post", b =>
                 {
+                    b.HasOne("Domain.Entities.ChatSession", "ChatSession")
+                        .WithMany()
+                        .HasForeignKey("ChatSessionId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("posts_chat_session_id_fkey");
+
                     b.HasOne("Domain.Entities.PostBuilder", "PostBuilder")
                         .WithMany("Posts")
                         .HasForeignKey("PostBuilderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .HasConstraintName("posts_post_builder_id_fkey");
+
+                    b.Navigation("ChatSession");
 
                     b.Navigation("PostBuilder");
                 });
@@ -710,9 +1041,40 @@ namespace Infrastructure.Migrations
                         .HasConstraintName("post_resources_post_id_fkey");
                 });
 
+            modelBuilder.Entity("Domain.Entities.PublishingScheduleItem", b =>
+                {
+                    b.HasOne("Domain.Entities.PublishingSchedule", "Schedule")
+                        .WithMany("Items")
+                        .HasForeignKey("ScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("publishing_schedule_items_schedule_id_fkey");
+
+                    b.Navigation("Schedule");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PublishingScheduleTarget", b =>
+                {
+                    b.HasOne("Domain.Entities.PublishingSchedule", "Schedule")
+                        .WithMany("Targets")
+                        .HasForeignKey("ScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("publishing_schedule_targets_schedule_id_fkey");
+
+                    b.Navigation("Schedule");
+                });
+
             modelBuilder.Entity("Domain.Entities.PostBuilder", b =>
                 {
                     b.Navigation("Posts");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PublishingSchedule", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Targets");
                 });
 #pragma warning restore 612, 618
         }

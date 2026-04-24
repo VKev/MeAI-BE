@@ -14,6 +14,8 @@ public class PublishToTargetRequested
 
     public Guid PublicationId { get; set; }
 
+    public Guid? PublishingScheduleId { get; set; }
+
     public string SocialMediaType { get; set; } = null!;
 
     public bool? IsPrivate { get; set; }

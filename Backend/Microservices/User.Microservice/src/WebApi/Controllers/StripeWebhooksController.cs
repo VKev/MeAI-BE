@@ -1,9 +1,9 @@
 using Application.Subscriptions.Commands;
+using Application.Abstractions.ApiCredentials;
 using Infrastructure.Configs;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using SharedLibrary.Attributes;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
@@ -15,25 +15,14 @@ namespace WebApi.Controllers;
 [Route("api/User/webhooks/stripe")]
 public sealed class StripeWebhooksController : ApiController
 {
-    private readonly StripeOptions _stripeOptions;
-    private readonly SubscriptionService _subscriptionService;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     public StripeWebhooksController(
-        IOptions<StripeOptions> stripeOptions,
+        IApiCredentialProvider credentialProvider,
         IMediator mediator)
         : base(mediator)
     {
-        _stripeOptions = stripeOptions.Value;
-
-        if (!string.IsNullOrWhiteSpace(_stripeOptions.SecretKey))
-        {
-            var client = new StripeClient(_stripeOptions.SecretKey);
-            _subscriptionService = new SubscriptionService(client);
-        }
-        else
-        {
-            _subscriptionService = new SubscriptionService();
-        }
+        _credentialProvider = credentialProvider;
     }
 
     [HttpPost]
@@ -42,7 +31,8 @@ public sealed class StripeWebhooksController : ApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Handle(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_stripeOptions.WebhookSecret))
+        var webhookSecret = _credentialProvider.GetOptionalValue("Stripe", "WebhookSecret");
+        if (string.IsNullOrWhiteSpace(webhookSecret))
         {
             return HandleFailure(Result.Failure<bool>(
                 new Error("Stripe.WebhookSecretMissing", "Stripe webhook secret is not configured.")));
@@ -54,10 +44,10 @@ public sealed class StripeWebhooksController : ApiController
         Event stripeEvent;
         try
         {
-            stripeEvent = EventUtility.ConstructEvent(
+                stripeEvent = EventUtility.ConstructEvent(
                 json,
                 signature,
-                _stripeOptions.WebhookSecret,
+                webhookSecret,
                 throwOnApiVersionMismatch: false);
         }
         catch (Exception ex)
@@ -95,9 +85,9 @@ public sealed class StripeWebhooksController : ApiController
                     var metadata = new Dictionary<string, string>(invoice.Metadata ?? new Dictionary<string, string>());
                     if (RequiresMetadata(metadata) &&
                         !string.IsNullOrWhiteSpace(invoice.SubscriptionId) &&
-                        !string.IsNullOrWhiteSpace(_stripeOptions.SecretKey))
+                        !string.IsNullOrWhiteSpace(_credentialProvider.GetOptionalValue("Stripe", "SecretKey")))
                     {
-                        var subscription = await _subscriptionService.GetAsync(
+                        var subscription = await CreateSubscriptionService().GetAsync(
                             invoice.SubscriptionId,
                             cancellationToken: cancellationToken);
 
@@ -167,6 +157,12 @@ public sealed class StripeWebhooksController : ApiController
     private static bool RequiresMetadata(IDictionary<string, string> metadata)
     {
         return !metadata.ContainsKey("user_id") || !metadata.ContainsKey("subscription_id");
+    }
+
+    private SubscriptionService CreateSubscriptionService()
+    {
+        var secretKey = _credentialProvider.GetRequiredValue("Stripe", "SecretKey");
+        return new SubscriptionService(new StripeClient(secretKey));
     }
 
     private static bool TryParseMetadata(

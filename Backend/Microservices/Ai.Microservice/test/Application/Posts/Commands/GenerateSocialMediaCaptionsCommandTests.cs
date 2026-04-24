@@ -1,6 +1,8 @@
+using Application.Abstractions.Billing;
 using Application.Abstractions.Resources;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Gemini;
+using Application.Billing;
 using Application.Posts.Commands;
 using Domain.Entities;
 using Domain.Repositories;
@@ -25,6 +27,8 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
         var userResourceService = new Mock<IUserResourceService>();
         var userConfigService = new Mock<IUserConfigService>();
         var geminiCaptionService = new Mock<IGeminiCaptionService>();
+        var pricingService = new Mock<ICoinPricingService>();
+        var billingClient = new Mock<IBillingClient>();
 
         postRepository
             .Setup(repository => repository.GetByIdAsync(firstPostId, It.IsAny<CancellationToken>()))
@@ -87,14 +91,42 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
                         $"{request.Platform}-caption",
                         ["#launch", "#ai"],
                         ["#trend", "#fyp"],
-                        "Try it now")
+                    "Try it now")
                 ]));
+
+        pricingService
+            .Setup(service => service.GetCostAsync(
+                CoinActionTypes.CaptionGeneration,
+                "gemini-test-model",
+                null,
+                2,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new CoinCostQuote(
+                CoinActionTypes.CaptionGeneration,
+                "gemini-test-model",
+                null,
+                "caption",
+                1m,
+                2,
+                2m)));
+
+        billingClient
+            .Setup(client => client.DebitAsync(
+                userId,
+                2m,
+                CoinDebitReasons.CaptionGenerationDebit,
+                CoinReferenceTypes.CaptionBatch,
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(98m));
 
         var handler = new GenerateSocialMediaCaptionsCommandHandler(
             postRepository.Object,
             userResourceService.Object,
             userConfigService.Object,
-            geminiCaptionService.Object);
+            geminiCaptionService.Object,
+            pricingService.Object,
+            billingClient.Object);
 
         var result = await handler.Handle(
             new GenerateSocialMediaCaptionsCommand(
@@ -142,12 +174,16 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
         var userResourceService = new Mock<IUserResourceService>();
         var userConfigService = new Mock<IUserConfigService>();
         var geminiCaptionService = new Mock<IGeminiCaptionService>();
+        var pricingService = new Mock<ICoinPricingService>();
+        var billingClient = new Mock<IBillingClient>();
 
         var handler = new GenerateSocialMediaCaptionsCommandHandler(
             postRepository.Object,
             userResourceService.Object,
             userConfigService.Object,
-            geminiCaptionService.Object);
+            geminiCaptionService.Object,
+            pricingService.Object,
+            billingClient.Object);
 
         var result = await handler.Handle(
             new GenerateSocialMediaCaptionsCommand(

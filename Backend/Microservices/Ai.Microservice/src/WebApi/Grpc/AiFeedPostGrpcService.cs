@@ -27,6 +27,7 @@ public sealed class AiFeedPostGrpcService : AiFeedPostService.AiFeedPostServiceB
         var command = new CreatePostCommand(
             UserId: userId,
             WorkspaceId: TryParseGuid(request.WorkspaceId),
+            ChatSessionId: null,
             SocialMediaId: TryParseGuid(request.SocialMediaId),
             Title: NormalizeString(request.Title),
             Content: MapContent(request.Content),

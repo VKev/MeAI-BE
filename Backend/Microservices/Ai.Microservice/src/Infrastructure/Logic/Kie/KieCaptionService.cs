@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Gemini;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -21,11 +22,11 @@ public sealed class KieCaptionService : IGeminiCaptionService
     private const string DefaultChatModel = "gpt-5-4";
     private const string ResponsesPath = "/codex/v1/responses";
 
-    private readonly string _apiKey;
     private readonly string _baseUrl;
     private readonly string _chatModel;
     private readonly HttpClient _httpClient;
     private readonly ILogger<KieCaptionService> _logger;
+    private readonly IApiCredentialProvider _credentialProvider;
 
     private static readonly Regex HashtagSplitRegex = new(@"[\s,]+", RegexOptions.Compiled);
     private static readonly char[] SentenceTrimCharacters = [' ', '.', ',', ';', ':', '!', '?', '-', '"', '\''];
@@ -39,14 +40,13 @@ public sealed class KieCaptionService : IGeminiCaptionService
     public KieCaptionService(
         IConfiguration configuration,
         IHttpClientFactory httpClientFactory,
+        IApiCredentialProvider credentialProvider,
         ILogger<KieCaptionService> logger)
     {
-        _apiKey = configuration["Kie:ApiKey"]
-                  ?? configuration["Kie__ApiKey"]
-                  ?? throw new InvalidOperationException("Kie:ApiKey is not configured");
         _baseUrl = (configuration["Kie:BaseUrl"] ?? configuration["Kie__BaseUrl"] ?? DefaultBaseUrl).TrimEnd('/');
         _chatModel = configuration["Kie:ChatModel"] ?? configuration["Kie__ChatModel"] ?? DefaultChatModel;
         _httpClient = httpClientFactory.CreateClient("KieChat");
+        _credentialProvider = credentialProvider;
         _logger = logger;
     }
 
@@ -230,7 +230,7 @@ public sealed class KieCaptionService : IGeminiCaptionService
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _credentialProvider.GetRequiredValue("Kie", "ApiKey"));
 
         HttpResponseMessage response;
         try

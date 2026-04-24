@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Gemini;
 using FluentAssertions;
 using Infrastructure.Logic.Gemini;
@@ -49,7 +50,10 @@ public sealed class GeminiCaptionServiceTests
             })
             .Build();
 
-        var service = new GeminiCaptionService(configuration, httpClientFactory.Object);
+        var service = new GeminiCaptionService(
+            configuration,
+            httpClientFactory.Object,
+            CreateCredentialProvider());
 
         var result = await service.GenerateSocialMediaCaptionsAsync(
             new GeminiSocialMediaCaptionRequest(
@@ -192,7 +196,20 @@ public sealed class GeminiCaptionServiceTests
             })
             .Build();
 
-        return new GeminiCaptionService(configuration, httpClientFactory.Object);
+        return new GeminiCaptionService(
+            configuration,
+            httpClientFactory.Object,
+            CreateCredentialProvider());
+    }
+
+    private static IApiCredentialProvider CreateCredentialProvider()
+    {
+        var credentialProvider = new Mock<IApiCredentialProvider>();
+        credentialProvider
+            .Setup(provider => provider.GetRequiredValue("Gemini", "ApiKey"))
+            .Returns("unit-test-key");
+
+        return credentialProvider.Object;
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler

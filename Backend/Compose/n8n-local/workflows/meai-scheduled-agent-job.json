@@ -1,0 +1,222 @@
+{
+  "name": "MeAI Scheduled Agent Job",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "meai/scheduled-agent-job",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-scheduled-agent-job",
+      "name": "Webhook Scheduled Agent Job",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1160,
+        280
+      ],
+      "webhookId": "meai-scheduled-agent-job"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({ executionId: $execution.id, acceptedAtUtc: new Date().toISOString() })}}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "acknowledge-registration",
+      "name": "Acknowledge Registration",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -900,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nconst payload = input.body ?? input;\nconst body = typeof payload === 'string' ? JSON.parse(payload) : payload;\nconst search = body.search ?? {};\nconst callback = body.callback ?? {};\nconst query = String(search.queryTemplate ?? '').trim();\nif (!query) {\n  throw new Error('search.queryTemplate is required');\n}\nif (!body.executeAtUtc) {\n  throw new Error('executeAtUtc is required');\n}\nif (!callback.url || !callback.token) {\n  throw new Error('callback.url and callback.token are required');\n}\nconst requestedCount = Number(search.count ?? 5);\nconst count = Number.isFinite(requestedCount) && requestedCount > 0\n  ? Math.min(Math.trunc(requestedCount), 20)\n  : 5;\nconst queryParts = [];\nconst appendQuery = (name, value, transform = (text) => text) => {\n  const text = String(value ?? '').trim();\n  if (!text || ['null', 'undefined'].includes(text.toLowerCase())) {\n    return;\n  }\n  queryParts.push(`${name}=${encodeURIComponent(transform(text))}`);\n};\nappendQuery('q', query);\nappendQuery('count', count);\nappendQuery('country', search.country, (text) => text.toUpperCase());\nappendQuery('search_lang', search.searchLang, (text) => text.toLowerCase());\nappendQuery('freshness', search.freshness);\nconst braveSearchUrl = `https://api.search.brave.com/res/v1/web/search?${queryParts.join('&')}`;\nreturn [{ json: {\n  ...body,\n  search: {\n    queryTemplate: query,\n    country: search.country ?? null,\n    searchLang: search.searchLang ?? null,\n    count,\n    freshness: search.freshness ?? null,\n    braveSearchUrl\n  },\n  callback\n} }];"
+      },
+      "id": "prepare-job-context",
+      "name": "Prepare Job Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -900,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{$json.executeAtUtc}}"
+      },
+      "id": "wait-until-execute-at",
+      "name": "Wait Until ExecuteAt",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -640,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$json.search.braveSearchUrl}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Subscription-Token",
+              "value": "={{$env.BRAVE_SEARCH_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "call-brave-scheduled",
+      "name": "Call Brave Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -380,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nconst context = $('Prepare Job Context').first().json;\nconst results = (response.web?.results ?? []).slice(0, Number(context.search.count ?? 5)).map((item) => ({\n  title: item.title ?? null,\n  url: item.url ?? item.profile?.url ?? null,\n  description: item.description ?? item.snippet ?? null,\n  source: item.meta_url?.hostname ?? item.profile?.name ?? null\n}));\nconst llmContext = results\n  .map((item, index) => `${index + 1}. ${item.title ?? 'Untitled'}\\n${item.url ?? ''}\\n${item.description ?? ''}`.trim())\n  .join('\\n\\n');\nreturn [{ json: {\n  callbackUrl: context.callback.url,\n  callbackToken: context.callback.token,\n  jobId: context.jobId,\n  scheduleId: context.scheduleId,\n  query: context.search.queryTemplate,\n  retrievedAtUtc: new Date().toISOString(),\n  results,\n  llmContext,\n  correlationId: context.jobId,\n  attemptNumber: 1\n} }];"
+      },
+      "id": "normalize-callback-payload",
+      "name": "Normalize Callback Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.callbackUrl}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $json.callbackToken}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParametersJson": "={{JSON.stringify({ jobId: $json.jobId, scheduleId: $json.scheduleId, query: $json.query, retrievedAtUtc: $json.retrievedAtUtc, results: $json.results, llmContext: $json.llmContext, correlationId: $json.correlationId, attemptNumber: $json.attemptNumber })}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "callback-ai-microservice",
+      "name": "Callback Ai Microservice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        160,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Scheduled Agent Job": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Registration",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Job Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Job Context": {
+      "main": [
+        [
+          {
+            "node": "Wait Until ExecuteAt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Until ExecuteAt": {
+      "main": [
+        [
+          {
+            "node": "Call Brave Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Brave Search": {
+      "main": [
+        [
+          {
+            "node": "Normalize Callback Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Callback Payload": {
+      "main": [
+        [
+          {
+            "node": "Callback Ai Microservice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": true,
+  "versionId": "26a98e34-52dd-4f4c-99fb-cfb5820b1c2b",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "meai-scheduled-agent-job"
+}
