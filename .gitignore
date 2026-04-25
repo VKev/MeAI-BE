@@ -7,3 +7,6 @@ vinh-branch
 .temp
 /.forge
 .codex
+Tools/DesignAnalyzer/bin
+Tools/DesignAnalyzer/obj
+artifacts/
