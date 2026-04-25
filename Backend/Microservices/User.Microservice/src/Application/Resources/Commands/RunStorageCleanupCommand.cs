@@ -57,8 +57,10 @@ public sealed class RunStorageCleanupCommandHandler
                 .Where(resource =>
                     resource.IsDeleted &&
                     resource.DeletedFromStorageAt == null &&
-                    resource.DeletedAt != null &&
-                    resource.DeletedAt <= cutoff)
+                    ((resource.ExpiresAt != null && resource.ExpiresAt <= now) ||
+                     (resource.ExpiresAt == null &&
+                      resource.DeletedAt != null &&
+                      resource.DeletedAt <= cutoff)))
                 .ToListAsync(cancellationToken);
 
             expiredCandidates = expiredCandidates

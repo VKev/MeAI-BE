@@ -38,13 +38,40 @@ namespace SharedLibrary.Common
                     ),
             };
 
-        private static ProblemDetails CreateProblemDetails(int status, Error error, Error[]? errors = null) =>
-            new()
+        private static ProblemDetails CreateProblemDetails(int status, Error error, Error[]? errors = null)
+        {
+            var problemDetails = new ProblemDetails
             {
                 Status = status,
                 Type = error.Code,
-                Detail = error.Description,
-                Extensions = { { nameof(errors), errors } }
+                Detail = error.Description
             };
+
+            if (errors != null)
+            {
+                problemDetails.Extensions[nameof(errors)] = errors;
+                return problemDetails;
+            }
+
+            if (!string.IsNullOrWhiteSpace(error.Code))
+            {
+                var errorPayload = new Dictionary<string, object?>
+                {
+                    ["code"] = error.Code
+                };
+
+                if (error.Metadata != null)
+                {
+                    foreach (var metadata in error.Metadata)
+                    {
+                        errorPayload[metadata.Key] = metadata.Value;
+                    }
+                }
+
+                problemDetails.Extensions[nameof(errors)] = errorPayload;
+            }
+
+            return problemDetails;
+        }
     }
 } 

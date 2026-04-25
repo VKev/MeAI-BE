@@ -1,0 +1,24 @@
+{
+  "defaultInput": "../../Backend/Microservices/Microservices.sln",
+  "defaultOutput": "../../artifacts/design",
+  "linkedProjects": [
+    "../../Backend/Microservices/User.Microservice/src/Domain/Domain.csproj",
+    "../../Backend/Microservices/User.Microservice/src/Application/Application.csproj",
+    "../../Backend/Microservices/User.Microservice/src/Infrastructure/Infrastructure.csproj",
+    "../../Backend/Microservices/User.Microservice/src/WebApi/WebApi.csproj",
+    "../../Backend/Microservices/Ai.Microservice/src/Domain/Domain.csproj",
+    "../../Backend/Microservices/Ai.Microservice/src/Application/Application.csproj",
+    "../../Backend/Microservices/Ai.Microservice/src/Infrastructure/Infrastructure.csproj",
+    "../../Backend/Microservices/Ai.Microservice/src/WebApi/WebApi.csproj",
+    "../../Backend/Microservices/Feed.Microservice/src/Domain/Domain.csproj",
+    "../../Backend/Microservices/Feed.Microservice/src/Application/Application.csproj",
+    "../../Backend/Microservices/Feed.Microservice/src/Infrastructure/Infrastructure.csproj",
+    "../../Backend/Microservices/Feed.Microservice/src/WebApi/WebApi.csproj",
+    "../../Backend/Microservices/Notification.Microservice/src/Domain/Domain.csproj",
+    "../../Backend/Microservices/Notification.Microservice/src/Application/Application.csproj",
+    "../../Backend/Microservices/Notification.Microservice/src/Infrastructure/Infrastructure.csproj",
+    "../../Backend/Microservices/Notification.Microservice/src/WebApi/WebApi.csproj",
+    "../../Backend/Microservices/ApiGateway/src/src.csproj",
+    "../../Backend/Microservices/SharedLibrary/SharedLibrary.csproj"
+  ]
+}

@@ -1,7 +1,9 @@
 namespace Application.Resources.Models;
 
 public sealed record AdminStorageUsageResponse(
+    string? Namespace,
     long TotalUsedBytes,
+    long TotalReservedBytes,
     int TotalResourceCount,
     IReadOnlyList<AdminStorageUserUsageResponse> Users);
 
@@ -12,6 +14,7 @@ public sealed record AdminStorageUserUsageResponse(
     string? SubscriptionName,
     long? QuotaBytes,
     long UsedBytes,
+    long ReservedBytes,
     long? AvailableBytes,
     decimal? UsagePercent,
     bool IsOverQuota,

@@ -155,10 +155,11 @@ public sealed class AdminStorageController : ApiController
         [FromQuery] Guid? userId,
         [FromQuery] Guid? subscriptionId,
         [FromQuery] bool overQuotaOnly,
+        [FromQuery] string? @namespace,
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new GetAdminStorageUsageQuery(userId, subscriptionId, overQuotaOnly),
+            new GetAdminStorageUsageQuery(userId, subscriptionId, overQuotaOnly, @namespace),
             cancellationToken);
 
         if (result.IsFailure)
@@ -174,10 +175,47 @@ public sealed class AdminStorageController : ApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetUserUsageDetail(
         Guid userId,
+        [FromQuery] string? @namespace,
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(
-            new GetAdminStorageUsageQuery(userId, null, false),
+            new GetAdminStorageUsageQuery(userId, null, false, @namespace),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("resources")]
+    [ProducesResponseType(typeof(Result<IReadOnlyList<AdminStorageResourceResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetResources(
+        [FromQuery] Guid? userId,
+        [FromQuery] Guid? workspaceId,
+        [FromQuery] string? resourceType,
+        [FromQuery] bool includeDeleted,
+        [FromQuery] string? @namespace,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        [FromQuery] bool includePresignedUrl,
+        CancellationToken cancellationToken)
+    {
+        var result = await _mediator.Send(
+            new GetAdminStorageResourcesQuery(
+                userId,
+                workspaceId,
+                resourceType,
+                includeDeleted,
+                @namespace,
+                cursorCreatedAt,
+                cursorId,
+                limit,
+                includePresignedUrl),
             cancellationToken);
 
         if (result.IsFailure)
