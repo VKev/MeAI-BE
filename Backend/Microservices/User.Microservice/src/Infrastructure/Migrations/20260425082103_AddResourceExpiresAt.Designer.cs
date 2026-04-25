@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(MyDbContext))]
-    [Migration("20260425081216_AddExpiresAtToResource")]
-    partial class AddExpiresAtToResource
+    [Migration("20260425082103_AddResourceExpiresAt")]
+    partial class AddResourceExpiresAt
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
