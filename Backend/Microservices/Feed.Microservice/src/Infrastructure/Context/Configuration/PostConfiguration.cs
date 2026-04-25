@@ -23,6 +23,12 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.Property(e => e.MediaType).HasColumnName("media_type");
         entity.Property(e => e.LikesCount).HasColumnName("likes_count");
         entity.Property(e => e.CommentsCount).HasColumnName("comments_count");
+        entity.Property(e => e.AiPostId).HasColumnName("ai_post_id");
+        entity.Property(e => e.ScheduleGroupId).HasColumnName("schedule_group_id");
+        entity.Property(e => e.ScheduledSocialMediaIds).HasColumnName("scheduled_social_media_ids").HasColumnType("uuid[]");
+        entity.Property(e => e.ScheduledIsPrivate).HasColumnName("scheduled_is_private");
+        entity.Property(e => e.ScheduleTimezone).HasColumnName("schedule_timezone");
+        entity.Property(e => e.ScheduledAtUtc).HasColumnName("scheduled_at_utc").HasColumnType("timestamp with time zone");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
