@@ -33,7 +33,8 @@ public sealed class GetStorageUsageQueryHandler
 public sealed record GetAdminStorageUsageQuery(
     Guid? UserId,
     Guid? SubscriptionId,
-    bool OverQuotaOnly) : IRequest<Result<AdminStorageUsageResponse>>;
+    bool OverQuotaOnly,
+    string? Namespace) : IRequest<Result<AdminStorageUsageResponse>>;
 
 public sealed class GetAdminStorageUsageQueryHandler
     : IRequestHandler<GetAdminStorageUsageQuery, Result<AdminStorageUsageResponse>>
@@ -83,14 +84,33 @@ public sealed class GetAdminStorageUsageQueryHandler
                 continue;
             }
 
-            if (request.OverQuotaOnly && !usage.IsOverQuota)
+            var resourcesQuery = _resourceRepository.GetAll()
+                .AsNoTracking()
+                .Where(resource => resource.UserId == user.Id && !resource.IsDeleted);
+
+            if (!string.IsNullOrWhiteSpace(request.Namespace))
+            {
+                var storageNamespace = request.Namespace.Trim();
+                resourcesQuery = resourcesQuery.Where(resource =>
+                    resource.StorageNamespace == storageNamespace ||
+                    (resource.StorageKey != null && EF.Functions.Like(resource.StorageKey, storageNamespace + "/%")) ||
+                    EF.Functions.Like(resource.Link, "%" + storageNamespace + "/%"));
+            }
+
+            var resourceCount = await resourcesQuery.CountAsync(cancellationToken);
+            var usedBytes = await resourcesQuery.SumAsync(resource => resource.SizeBytes ?? 0L, cancellationToken);
+            long? availableBytes = usage.QuotaBytes.HasValue
+                ? Math.Max(0L, usage.QuotaBytes.Value - usedBytes)
+                : null;
+            decimal? usagePercent = usage.QuotaBytes is > 0
+                ? Math.Round((decimal)usedBytes / usage.QuotaBytes.Value * 100m, 2)
+                : null;
+            var isOverQuota = usage.QuotaBytes.HasValue && usedBytes > usage.QuotaBytes.Value;
+
+            if (request.OverQuotaOnly && !isOverQuota)
             {
                 continue;
             }
-
-            var resourceCount = await _resourceRepository.GetAll()
-                .AsNoTracking()
-                .CountAsync(resource => resource.UserId == user.Id && !resource.IsDeleted, cancellationToken);
 
             responseUsers.Add(new AdminStorageUserUsageResponse(
                 user.Id,
@@ -98,15 +118,18 @@ public sealed class GetAdminStorageUsageQueryHandler
                 usage.SubscriptionId,
                 usage.SubscriptionName,
                 usage.QuotaBytes,
-                usage.UsedBytes,
-                usage.AvailableBytes,
-                usage.UsagePercent,
-                usage.IsOverQuota,
+                usedBytes,
+                0,
+                availableBytes,
+                usagePercent,
+                isOverQuota,
                 resourceCount));
         }
 
         return Result.Success(new AdminStorageUsageResponse(
+            request.Namespace,
             responseUsers.Sum(item => item.UsedBytes),
+            responseUsers.Sum(item => item.ReservedBytes),
             responseUsers.Sum(item => item.ResourceCount),
             responseUsers));
     }

@@ -41,6 +41,9 @@ public sealed class Resource
     public DateTime? DeletedFromStorageAt { get; set; }
 
     [Column(TypeName = "timestamp with time zone")]
+    public DateTime? ExpiresAt { get; set; }
+
+    [Column(TypeName = "timestamp with time zone")]
     public DateTime? CreatedAt { get; set; }
 
     [Column(TypeName = "timestamp with time zone")]
