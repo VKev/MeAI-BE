@@ -223,7 +223,8 @@ public sealed class FeedController : ApiController
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new DeletePostCommand(userId, id), cancellationToken);
+        var isAdmin = IsAdmin();
+        var result = await _mediator.Send(new DeletePostCommand(userId, id, isAdmin), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);
@@ -526,6 +527,80 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Reports")]
+    [HttpGet("reports")]
+    [ProducesResponseType(typeof(Result<IReadOnlyList<ReportResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetMyReports(
+        [FromQuery] string? status,
+        [FromQuery] string? targetType,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(new GetMyReportsQuery(userId, status, targetType), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [Tags("Reports")]
+    [HttpGet("reports/{id:guid}/preview")]
+    [ProducesResponseType(typeof(Result<AdminReportPreviewResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetMyReportPreview(
+        Guid id,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new GetMyReportPreviewQuery(id, cursorCreatedAt, cursorId, limit, userId),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [Tags("Reports")]
+    [HttpPatch("reports/{id:guid}/cancel")]
+    [ProducesResponseType(typeof(Result<ReportResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CancelReport(Guid id, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(new CancelReportCommand(userId, id), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [Tags("Admin Reports")]
     [HttpGet("admin/reports")]
     [Authorize("ADMIN", "Admin")]
@@ -609,6 +684,11 @@ public sealed class FeedController : ApiController
     {
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return Guid.TryParse(claimValue, out userId);
+    }
+
+    private bool IsAdmin()
+    {
+        return User.HasClaim(ClaimTypes.Role, "Admin") || User.HasClaim(ClaimTypes.Role, "ADMIN");
     }
 }
 
