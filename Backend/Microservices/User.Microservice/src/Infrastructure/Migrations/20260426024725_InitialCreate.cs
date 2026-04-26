@@ -7,11 +7,55 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateTable(
+                name: "api_credentials",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    service_name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    provider = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    key_name = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    display_name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    value_encrypted = table.Column<string>(type: "text", nullable: false),
+                    value_last4 = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
+                    is_active = table.Column<bool>(type: "boolean", nullable: false),
+                    source = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    version = table.Column<int>(type: "integer", nullable: false),
+                    last_synced_from_env_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    last_rotated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    is_deleted = table.Column<bool>(type: "boolean", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("api_credentials_pkey", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "coin_transactions",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    delta = table.Column<decimal>(type: "numeric(18,2)", nullable: false),
+                    reason = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
+                    reference_type = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    reference_id = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
+                    balance_after = table.Column<decimal>(type: "numeric(18,2)", nullable: false),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_coin_transactions", x => x.id);
+                });
+
             migrationBuilder.CreateTable(
                 name: "configs",
                 columns: table => new
@@ -20,6 +64,8 @@ namespace Infrastructure.Migrations
                     chat_model = table.Column<string>(type: "text", nullable: true),
                     media_aspect_ratio = table.Column<string>(type: "text", nullable: true),
                     number_of_variances = table.Column<int>(type: "integer", nullable: true),
+                    free_storage_quota_bytes = table.Column<long>(type: "bigint", nullable: true, defaultValue: 104857600L),
+                    system_storage_quota_bytes = table.Column<long>(type: "bigint", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -72,7 +118,12 @@ namespace Infrastructure.Migrations
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     name = table.Column<string>(type: "text", nullable: true),
                     limits = table.Column<string>(type: "jsonb", nullable: true),
+                    cost = table.Column<float>(type: "real", nullable: true),
+                    duration_months = table.Column<int>(type: "integer", nullable: false, defaultValue: 1),
                     me_ai_coin = table.Column<decimal>(type: "numeric(18,2)", nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    stripe_product_id = table.Column<string>(type: "text", nullable: true),
+                    stripe_price_id = table.Column<string>(type: "text", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -96,6 +147,7 @@ namespace Infrastructure.Migrations
                     birthday = table.Column<DateTime>(type: "date", nullable: true),
                     phone_number = table.Column<string>(type: "text", nullable: true),
                     provider = table.Column<string>(type: "text", nullable: true),
+                    stripe_customer_id = table.Column<string>(type: "text", nullable: true),
                     avatar_resource_id = table.Column<Guid>(type: "uuid", nullable: true),
                     address = table.Column<string>(type: "text", nullable: true),
                     me_ai_coin = table.Column<decimal>(type: "numeric(18,2)", nullable: true, defaultValue: 0m),
@@ -164,10 +216,21 @@ namespace Infrastructure.Migrations
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    workspace_id = table.Column<Guid>(type: "uuid", nullable: true),
                     link = table.Column<string>(type: "text", nullable: false),
                     status = table.Column<string>(type: "text", nullable: true),
                     type = table.Column<string>(type: "text", nullable: true),
                     content_type = table.Column<string>(type: "text", nullable: true),
+                    size_bytes = table.Column<long>(type: "bigint", nullable: true),
+                    storage_provider = table.Column<string>(type: "text", nullable: true),
+                    storage_bucket = table.Column<string>(type: "text", nullable: true),
+                    storage_region = table.Column<string>(type: "text", nullable: true),
+                    storage_namespace = table.Column<string>(type: "text", nullable: true),
+                    storage_key = table.Column<string>(type: "text", nullable: true),
+                    original_file_name = table.Column<string>(type: "text", nullable: true),
+                    last_verified_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    deleted_from_storage_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -221,6 +284,7 @@ namespace Infrastructure.Migrations
                     token_used = table.Column<int>(type: "integer", nullable: true),
                     payment_method = table.Column<string>(type: "text", nullable: true),
                     status = table.Column<string>(type: "text", nullable: true),
+                    provider_reference_id = table.Column<string>(type: "text", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -276,6 +340,8 @@ namespace Infrastructure.Migrations
                     active_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     end_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     status = table.Column<string>(type: "text", nullable: true),
+                    stripe_subscription_id = table.Column<string>(type: "text", nullable: true),
+                    stripe_schedule_id = table.Column<string>(type: "text", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -360,6 +426,22 @@ namespace Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "ix_api_credentials_service_provider_key",
+                table: "api_credentials",
+                columns: new[] { "service_name", "provider", "key_name" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_coin_transactions_ref",
+                table: "coin_transactions",
+                columns: new[] { "reason", "reference_type", "reference_id" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_coin_transactions_user_created",
+                table: "coin_transactions",
+                columns: new[] { "user_id", "created_at" });
+
+            migrationBuilder.CreateIndex(
                 name: "email_template_contents_email_template_id_key",
                 table: "email_template_contents",
                 column: "email_template_id",
@@ -389,9 +471,19 @@ namespace Infrastructure.Migrations
                 column: "user_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_resources_user_id",
+                name: "ix_resources_storage_namespace_key",
                 table: "resources",
-                column: "user_id");
+                columns: new[] { "storage_namespace", "storage_key" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_resources_user_deleted",
+                table: "resources",
+                columns: new[] { "user_id", "is_deleted" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_resources_user_workspace_created_at",
+                table: "resources",
+                columns: new[] { "user_id", "workspace_id", "created_at" });
 
             migrationBuilder.CreateIndex(
                 name: "roles_name_key",
@@ -433,13 +525,15 @@ namespace Infrastructure.Migrations
                 name: "users_email_key",
                 table: "users",
                 column: "email",
-                unique: true);
+                unique: true,
+                filter: "\"is_deleted\" = false");
 
             migrationBuilder.CreateIndex(
                 name: "users_username_key",
                 table: "users",
                 column: "username",
-                unique: true);
+                unique: true,
+                filter: "\"is_deleted\" = false");
 
             migrationBuilder.CreateIndex(
                 name: "IX_workspace_social_medias_social_media_id",
@@ -465,6 +559,12 @@ namespace Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "api_credentials");
+
+            migrationBuilder.DropTable(
+                name: "coin_transactions");
+
             migrationBuilder.DropTable(
                 name: "configs");
 

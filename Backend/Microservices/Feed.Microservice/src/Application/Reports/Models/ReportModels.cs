@@ -1,4 +1,6 @@
 using Domain.Entities;
+using Application.Comments.Models;
+using Application.Posts.Models;
 
 namespace Application.Reports.Models;
 
@@ -15,6 +17,16 @@ public sealed record ReportResponse(
     string? ActionType,
     DateTime? CreatedAt,
     DateTime? UpdatedAt);
+
+public sealed record AdminReportCommentPreviewResponse(
+    CommentResponse TargetComment,
+    CommentResponse? ParentComment,
+    IReadOnlyList<CommentResponse> Comments);
+
+public sealed record AdminReportPreviewResponse(
+    ReportResponse Report,
+    PostResponse? Post,
+    AdminReportCommentPreviewResponse? Comment);
 
 internal static class ReportResponseMapping
 {

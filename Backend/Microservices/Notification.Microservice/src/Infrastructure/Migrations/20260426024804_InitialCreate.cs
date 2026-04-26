@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialNotificationSchema : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -16,6 +16,7 @@ namespace Infrastructure.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
+                    source = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     title = table.Column<string>(type: "character varying(250)", maxLength: 250, nullable: false),
                     message = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
