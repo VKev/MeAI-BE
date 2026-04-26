@@ -575,6 +575,36 @@ public sealed class FeedController : ApiController
         return Ok(result);
     }
 
+    [Tags("Admin Reports")]
+    [HttpGet("admin/reports/{id:guid}/preview")]
+    [Authorize("ADMIN", "Admin")]
+    [ProducesResponseType(typeof(Result<AdminReportPreviewResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetAdminReportPreview(
+        Guid id,
+        [FromQuery] DateTime? cursorCreatedAt,
+        [FromQuery] Guid? cursorId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var adminUserId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new GetAdminReportPreviewQuery(id, cursorCreatedAt, cursorId, limit, adminUserId),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);

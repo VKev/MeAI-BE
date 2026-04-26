@@ -439,6 +439,61 @@ public sealed class FeedControllerTests
     }
 
     [Fact]
+    public async Task GetAdminReportPreview_Should_ForwardPagingAndAdminUserId()
+    {
+        var adminUserId = Guid.NewGuid();
+        var reportId = Guid.NewGuid();
+        var cursorCreatedAt = new DateTime(2026, 4, 21, 9, 0, 0, DateTimeKind.Utc);
+        var cursorId = Guid.NewGuid();
+        var expectedPreview = CreateAdminReportPreviewResponse(reportId);
+
+        var mediator = new Mock<IMediator>();
+        var expectedResult = Result.Success(expectedPreview);
+
+        mediator
+            .Setup(item => item.Send(It.IsAny<GetAdminReportPreviewQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expectedResult);
+
+        var controller = CreateController(mediator.Object, adminUserId);
+
+        var actionResult = await controller.GetAdminReportPreview(
+            reportId,
+            cursorCreatedAt,
+            cursorId,
+            15,
+            CancellationToken.None);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeSameAs(expectedResult);
+        mediator.Verify(
+            item => item.Send(
+                It.Is<GetAdminReportPreviewQuery>(query =>
+                    query == new GetAdminReportPreviewQuery(reportId, cursorCreatedAt, cursorId, 15, adminUserId)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetAdminReportPreview_Should_ReturnUnauthorized_WhenUserMissing()
+    {
+        var mediator = new Mock<IMediator>();
+        var controller = CreateController(mediator.Object);
+
+        var actionResult = await controller.GetAdminReportPreview(
+            Guid.NewGuid(),
+            null,
+            null,
+            20,
+            CancellationToken.None);
+
+        var unauthorizedResult = actionResult.Should().BeOfType<UnauthorizedObjectResult>().Subject;
+        unauthorizedResult.Value.Should().BeEquivalentTo(new MessageResponse("Unauthorized"));
+        mediator.Verify(
+            item => item.Send(It.IsAny<GetAdminReportPreviewQuery>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task UpdatePost_Should_SendAuthenticatedUserIdAndPayload()
     {
         var currentUserId = Guid.NewGuid();
@@ -595,5 +650,22 @@ public sealed class FeedControllerTests
             "None",
             DateTime.UtcNow,
             DateTime.UtcNow);
+    }
+
+    private static AdminReportPreviewResponse CreateAdminReportPreviewResponse(Guid? reportId = null)
+    {
+        var postId = Guid.NewGuid();
+        var parentCommentId = Guid.NewGuid();
+
+        return new AdminReportPreviewResponse(
+            CreateReportResponse(reportId),
+            CreatePostResponse(postId),
+            new AdminReportCommentPreviewResponse(
+                CreateCommentResponse(Guid.NewGuid(), postId, Guid.NewGuid(), parentCommentId, "reported comment"),
+                CreateCommentResponse(parentCommentId, postId, Guid.NewGuid(), null, "parent comment"),
+                new List<CommentResponse>
+                {
+                    CreateCommentResponse(Guid.NewGuid(), postId, Guid.NewGuid(), parentCommentId, "sibling comment")
+                }));
     }
 }

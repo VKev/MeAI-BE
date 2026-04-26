@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialFeedSchema : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -114,7 +114,12 @@ namespace Infrastructure.Migrations
                     media_type = table.Column<string>(type: "text", nullable: true),
                     likes_count = table.Column<int>(type: "integer", nullable: false),
                     comments_count = table.Column<int>(type: "integer", nullable: false),
-                    shares_count = table.Column<int>(type: "integer", nullable: false),
+                    ai_post_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    schedule_group_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    scheduled_social_media_ids = table.Column<Guid[]>(type: "uuid[]", nullable: false),
+                    scheduled_is_private = table.Column<bool>(type: "boolean", nullable: true),
+                    schedule_timezone = table.Column<string>(type: "text", nullable: true),
+                    scheduled_at_utc = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -135,6 +140,10 @@ namespace Infrastructure.Migrations
                     target_id = table.Column<Guid>(type: "uuid", nullable: false),
                     reason = table.Column<string>(type: "text", nullable: false),
                     status = table.Column<string>(type: "text", nullable: false),
+                    reviewed_by_admin_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    reviewed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    resolution_note = table.Column<string>(type: "text", nullable: true),
+                    action_type = table.Column<string>(type: "text", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
@@ -160,9 +169,19 @@ namespace Infrastructure.Migrations
                 column: "user_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_comments_parent_created_at_id",
+                table: "comments",
+                columns: new[] { "parent_comment_id", "created_at", "id" });
+
+            migrationBuilder.CreateIndex(
                 name: "ix_comments_post_id",
                 table: "comments",
                 column: "post_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_comments_post_parent_created_at_id",
+                table: "comments",
+                columns: new[] { "post_id", "parent_comment_id", "created_at", "id" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_comments_user_id",
@@ -212,6 +231,16 @@ namespace Infrastructure.Migrations
                 column: "user_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_posts_created_at_id",
+                table: "posts",
+                columns: new[] { "created_at", "id" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_posts_user_created_at_id",
+                table: "posts",
+                columns: new[] { "user_id", "created_at", "id" });
+
+            migrationBuilder.CreateIndex(
                 name: "ix_posts_user_id",
                 table: "posts",
                 column: "user_id");
@@ -220,6 +249,11 @@ namespace Infrastructure.Migrations
                 name: "ix_reports_reporter_id",
                 table: "reports",
                 column: "reporter_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_reports_status",
+                table: "reports",
+                column: "status");
 
             migrationBuilder.CreateIndex(
                 name: "ix_reports_target_type_target_id",

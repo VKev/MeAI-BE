@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(MyDbContext))]
-    [Migration("20260417160442_InitialFeedSchema")]
-    partial class InitialFeedSchema
+    [Migration("20260426024754_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -76,7 +76,11 @@ namespace Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("comments_pkey");
 
+                    b.HasIndex(new[] { "ParentCommentId", "CreatedAt", "Id" }, "ix_comments_parent_created_at_id");
+
                     b.HasIndex(new[] { "PostId" }, "ix_comments_post_id");
+
+                    b.HasIndex(new[] { "PostId", "ParentCommentId", "CreatedAt", "Id" }, "ix_comments_post_parent_created_at_id");
 
                     b.HasIndex(new[] { "UserId" }, "ix_comments_user_id");
 
@@ -180,6 +184,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<Guid?>("AiPostId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ai_post_id");
+
                     b.Property<int>("CommentsCount")
                         .HasColumnType("integer")
                         .HasColumnName("comments_count");
@@ -212,9 +220,31 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("media_url");
 
-                    b.Property<int>("SharesCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("shares_count");
+                    b.PrimitiveCollection<Guid[]>("ResourceIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("resource_ids");
+
+                    b.Property<Guid?>("ScheduleGroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_group_id");
+
+                    b.Property<string>("ScheduleTimezone")
+                        .HasColumnType("text")
+                        .HasColumnName("schedule_timezone");
+
+                    b.Property<DateTime?>("ScheduledAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("scheduled_at_utc");
+
+                    b.Property<bool?>("ScheduledIsPrivate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("scheduled_is_private");
+
+                    b.PrimitiveCollection<Guid[]>("ScheduledSocialMediaIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("scheduled_social_media_ids");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -226,6 +256,10 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("posts_pkey");
+
+                    b.HasIndex(new[] { "CreatedAt", "Id" }, "ix_posts_created_at_id");
+
+                    b.HasIndex(new[] { "UserId", "CreatedAt", "Id" }, "ix_posts_user_created_at_id");
 
                     b.HasIndex(new[] { "UserId" }, "ix_posts_user_id");
 
@@ -300,6 +334,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ActionType")
+                        .HasColumnType("text")
+                        .HasColumnName("action_type");
+
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -312,6 +350,18 @@ namespace Infrastructure.Migrations
                     b.Property<Guid>("ReporterId")
                         .HasColumnType("uuid")
                         .HasColumnName("reporter_id");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasColumnType("text")
+                        .HasColumnName("resolution_note");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedByAdminId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_admin_id");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -335,6 +385,8 @@ namespace Infrastructure.Migrations
                         .HasName("reports_pkey");
 
                     b.HasIndex(new[] { "ReporterId" }, "ix_reports_reporter_id");
+
+                    b.HasIndex(new[] { "Status" }, "ix_reports_status");
 
                     b.HasIndex(new[] { "TargetType", "TargetId" }, "ix_reports_target_type_target_id");
 
