@@ -110,32 +110,33 @@ Frontend không nên giả định backend trả custom envelope kiểu `{ succe
 
 ## Danh sách API hiện tại
 
-| Method | Route | Auth | Mục đích |
-|---|---|---|---|
-| GET | `/api/Feed/profiles/{username}` | Anonymous | Lấy public profile theo username |
-| GET | `/api/Feed/profiles/{username}/posts` | Anonymous | Lấy danh sách post theo username với cursor pagination |
-| POST | `/api/Feed/posts` | Required | Tạo post mới |
-| GET | `/api/Feed/posts/feed` | Required | Lấy home feed của user hiện tại |
-| GET | `/api/Feed/posts/{id}` | Anonymous | Lấy chi tiết post |
-| POST | `/api/Feed/posts/{id}/like` | Required | Like post |
-| DELETE | `/api/Feed/posts/{id}/like` | Required | Unlike post |
-| PUT | `/api/Feed/posts/{id}` | Required | Cập nhật post của chính mình |
-| DELETE | `/api/Feed/posts/{id}` | Required | Xóa mềm post của chính mình |
-| POST | `/api/Feed/comments` | Required | Tạo root comment cho post |
-| GET | `/api/Feed/posts/{id}/comments` | Anonymous | Lấy root comments của post với cursor pagination |
-| GET | `/api/Feed/comments/{id}/replies` | Anonymous | Lấy replies của một comment với cursor pagination |
-| POST | `/api/Feed/comments/{id}/like` | Required | Like comment |
-| DELETE | `/api/Feed/comments/{id}/like` | Required | Unlike comment |
-| POST | `/api/Feed/comments/{id}/reply` | Required | Tạo reply cho comment |
-| DELETE | `/api/Feed/comments/{id}` | Required | Xóa comment/thread của post owner |
-| POST | `/api/Feed/follow/{userId}` | Required | Follow một user |
-| DELETE | `/api/Feed/follow/{userId}` | Required | Unfollow một user |
-| GET | `/api/Feed/followers/{userId}` | Required | Lấy danh sách followers |
-| GET | `/api/Feed/following/{userId}` | Required | Lấy danh sách following |
-| GET | `/api/Feed/follow/suggestions` | Required | Gợi ý user nên follow |
-| POST | `/api/Feed/reports` | Required | Tạo report cho post hoặc comment |
-| GET | `/api/Feed/admin/reports` | Admin | Lấy danh sách report cho admin |
-| PATCH | `/api/Feed/admin/reports/{id}` | Admin | Review report và áp dụng moderation action |
+| Method | Route | Auth | Query | Body | Success response | Mục đích |
+|---|---|---|---|---|---|---|
+| GET | `/api/Feed/profiles/{username}` | Anonymous | - | - | `Result<PublicProfileResponse>` | Lấy public profile theo username |
+| GET | `/api/Feed/profiles/{username}/posts` | Anonymous | `FeedCursor` | - | `Result<PostResponse[]>` | Lấy danh sách post theo username với cursor pagination |
+| POST | `/api/Feed/posts` | Required | - | `CreatePostRequest` | `Result<PostResponse>` | Tạo post mới |
+| GET | `/api/Feed/posts/feed` | Required | `FeedCursor` | - | `Result<PostResponse[]>` | Lấy home feed của user hiện tại |
+| GET | `/api/Feed/posts/{id}` | Anonymous | - | - | `Result<PostResponse>` | Lấy chi tiết post |
+| POST | `/api/Feed/posts/{id}/like` | Required | - | - | `Result<PostLikeResponse>` | Like post |
+| DELETE | `/api/Feed/posts/{id}/like` | Required | - | - | `Result<PostLikeResponse>` | Unlike post |
+| PUT | `/api/Feed/posts/{id}` | Required | - | `UpdatePostRequest` | `Result<PostResponse>` | Cập nhật post của chính mình |
+| DELETE | `/api/Feed/posts/{id}` | Required | - | - | `Result<boolean>` | Xóa mềm post của chính mình |
+| POST | `/api/Feed/comments` | Required | - | `CreateCommentRequest` | `Result<CommentResponse>` | Tạo root comment cho post |
+| GET | `/api/Feed/posts/{id}/comments` | Anonymous | `FeedCursor` | - | `Result<CommentResponse[]>` | Lấy root comments của post với cursor pagination |
+| GET | `/api/Feed/comments/{id}/replies` | Anonymous | `FeedCursor` | - | `Result<CommentResponse[]>` | Lấy replies của một comment với cursor pagination |
+| POST | `/api/Feed/comments/{id}/like` | Required | - | - | `Result<CommentLikeResponse>` | Like comment |
+| DELETE | `/api/Feed/comments/{id}/like` | Required | - | - | `Result<CommentLikeResponse>` | Unlike comment |
+| POST | `/api/Feed/comments/{id}/reply` | Required | - | `ReplyToCommentRequest` | `Result<CommentResponse>` | Tạo reply cho comment |
+| DELETE | `/api/Feed/comments/{id}` | Required | - | - | `Result<boolean>` | Xóa comment/thread của post owner |
+| POST | `/api/Feed/follow/{userId}` | Required | - | - | `Result<FollowUserResponse>` | Follow một user |
+| DELETE | `/api/Feed/follow/{userId}` | Required | - | - | `Result<boolean>` | Unfollow một user |
+| GET | `/api/Feed/followers/{userId}` | Required | `FeedCursor` | - | `Result<FollowUserResponse[]>` | Lấy danh sách followers |
+| GET | `/api/Feed/following/{userId}` | Required | `FeedCursor` | - | `Result<FollowUserResponse[]>` | Lấy danh sách following |
+| GET | `/api/Feed/follow/suggestions` | Required | `{ limit?: number }` | - | `Result<FollowSuggestionResponse[]>` | Gợi ý user nên follow |
+| POST | `/api/Feed/reports` | Required | - | `CreateReportRequest` | `Result<ReportResponse>` | Tạo report cho post hoặc comment |
+| GET | `/api/Feed/admin/reports` | Admin | `AdminReportsQuery` | - | `Result<ReportResponse[]>` | Lấy danh sách report cho admin |
+| GET | `/api/Feed/admin/reports/{id}/preview` | Admin | `AdminReportPreviewQuery` | - | `Result<AdminReportPreviewResponse>` | Preview target của report cho admin, hỗ trợ paging khi target là comment |
+| PATCH | `/api/Feed/admin/reports/{id}` | Admin | - | `ReviewReportRequest` | `Result<ReportResponse>` | Review report và áp dụng moderation action |
 
 ---
 
@@ -245,6 +246,43 @@ Lưu ý:
 - Backend resolve profile theo batch distinct `userId` trong từng page comments/replies để tránh N+1 calls.
 - `isLikedByCurrentUser` có thể là `null` khi request anonymous.
 
+### `CreatePostRequest`
+
+```ts
+interface CreatePostRequest {
+  content: string | null;
+  resourceIds: string[] | null;
+  mediaType: string | null;
+}
+```
+
+### `UpdatePostRequest`
+
+```ts
+interface UpdatePostRequest {
+  content: string | null;
+  resourceIds: string[] | null;
+  mediaType: string | null;
+}
+```
+
+### `CreateCommentRequest`
+
+```ts
+interface CreateCommentRequest {
+  postId: string;
+  content: string;
+}
+```
+
+### `ReplyToCommentRequest`
+
+```ts
+interface ReplyToCommentRequest {
+  content: string;
+}
+```
+
 ### `FollowUserResponse`
 
 ```ts
@@ -289,6 +327,70 @@ interface ReportResponse {
   updatedAt: string | null;
 }
 ```
+
+### `CreateReportRequest`
+
+```ts
+interface CreateReportRequest {
+  targetType: 'Post' | 'Comment';
+  targetId: string;
+  reason: string;
+}
+```
+
+### `ReviewReportRequest`
+
+```ts
+interface ReviewReportRequest {
+  status: 'Pending' | 'InReview' | 'Resolved' | 'Dismissed';
+  action: 'None' | 'DeleteTargetPost' | null;
+  resolutionNote: string | null;
+}
+```
+
+### `AdminReportsQuery`
+
+```ts
+interface AdminReportsQuery {
+  status?: 'Pending' | 'InReview' | 'Resolved' | 'Dismissed';
+  targetType?: 'Post' | 'Comment';
+}
+```
+
+### `AdminReportPreviewQuery`
+
+```ts
+interface AdminReportPreviewQuery extends FeedCursor {}
+```
+
+### `AdminReportCommentPreviewResponse`
+
+```ts
+interface AdminReportCommentPreviewResponse {
+  targetComment: CommentResponse;
+  parentComment: CommentResponse | null;
+  comments: CommentResponse[];
+}
+```
+
+### `AdminReportPreviewResponse`
+
+```ts
+interface AdminReportPreviewResponse {
+  report: ReportResponse;
+  post: PostResponse | null;
+  comment: AdminReportCommentPreviewResponse | null;
+}
+```
+
+Lưu ý:
+
+- nếu report target là `Post`, backend trả `post` và `comment = null`
+- nếu report target là `Comment`, backend trả `comment` và `post = null`
+- `comment.targetComment` luôn là comment bị report
+- `comment.parentComment` có dữ liệu khi comment bị report là reply; nếu target là root comment thì field này là `null`
+- `comment.comments` là page hiện tại của các comment có cùng `parentCommentId` với comment bị report
+- shape của `PostResponse` và `CommentResponse` trong preview giữ nguyên contract hydrate hiện có như các API user-facing
 
 ---
 
@@ -336,6 +438,7 @@ Các list dùng cursor pagination trong Feed hiện tại:
 - `GET /api/Feed/comments/{id}/replies`
 - `GET /api/Feed/followers/{userId}`
 - `GET /api/Feed/following/{userId}`
+- `GET /api/Feed/admin/reports/{id}/preview`
 
 ### Query params
 
@@ -348,6 +451,12 @@ Các list dùng cursor pagination trong Feed hiện tại:
 - nếu gửi cursor thì phải gửi đủ cả `cursorCreatedAt` và `cursorId`
 - backend clamp `limit` trong khoảng `1..100`
 - nếu không truyền `limit`, backend dùng mặc định `50`
+
+Riêng với `GET /api/Feed/admin/reports/{id}/preview`:
+
+- nếu report target là `Post`, paging params có thể bỏ qua vì response chỉ có một `PostResponse`
+- nếu report target là `Comment`, paging chỉ áp dụng cho `comment.comments`
+- `comment.targetComment` và `comment.parentComment` luôn được trả riêng, không phụ thuộc page hiện tại
 
 ### Cursor strategy cho frontend
 
@@ -1108,7 +1217,60 @@ Yêu cầu user đã đăng nhập và thỏa policy admin.
 
 ---
 
-## 24) PATCH `/api/Feed/admin/reports/{id}`
+## 24) GET `/api/Feed/admin/reports/{id}/preview`
+
+### Quyền truy cập
+
+Yêu cầu user đã đăng nhập và thỏa policy admin.
+
+### Query params
+
+- `cursorCreatedAt`: optional
+- `cursorId`: optional
+- `limit`: optional
+
+### Mục đích
+
+Cho admin preview target bị report trước khi review:
+
+- nếu target là `Post`, preview đầy đủ bài post
+- nếu target là `Comment`, preview chính comment bị report, comment cha của nó nếu có, và page hiện tại của các comment cùng cha
+
+### Response shape
+
+```ts
+interface AdminReportPreviewResponse {
+  report: ReportResponse;
+  post: PostResponse | null;
+  comment: {
+    targetComment: CommentResponse;
+    parentComment: CommentResponse | null;
+    comments: CommentResponse[];
+  } | null;
+}
+```
+
+### Hành vi backend hiện tại
+
+- backend luôn resolve `report` trước
+- với report `Post`, backend trả `post` đầy đủ giống contract của `GET /api/Feed/posts/{id}`
+- với report `Comment`, backend trả:
+  - `targetComment`: comment bị report
+  - `parentComment`: comment cha nếu có
+  - `comments`: danh sách comment có cùng `parentCommentId` với `targetComment`
+- `comments` dùng cursor pagination chuẩn của Feed với sort `createdAt desc`, sau đó `id desc`
+- các field hydrate như `username`, `avatarUrl`, `isLikedByCurrentUser`, `canDelete` vẫn được trả đầy đủ như các API user-facing
+
+### Gợi ý frontend
+
+- nên gọi endpoint này khi mở detail drawer/modal của report thay vì tự compose từ nhiều API khác
+- với report `Comment`, vẫn render `targetComment` riêng dù page hiện tại của `comments` có hoặc không chứa target đó
+- có thể highlight `targetComment` trong `comments` khi target nằm trong page hiện tại
+- dùng item cuối của `comment.comments` để tạo cursor page tiếp theo
+
+---
+
+## 25) PATCH `/api/Feed/admin/reports/{id}`
 
 ### Request body
 
@@ -1184,6 +1346,7 @@ export const feedKeys = {
   following: (userId: string, limit: number) => ['feed', 'following', userId, { limit }] as const,
   followSuggestions: (limit: number) => ['feed', 'follow-suggestions', { limit }] as const,
   adminReports: (filters: { status?: string; targetType?: string }) => ['feed', 'admin-reports', filters] as const,
+  adminReportPreview: (reportId: string, cursor?: FeedCursor) => ['feed', 'admin-report-preview', reportId, cursor] as const,
 };
 ```
 

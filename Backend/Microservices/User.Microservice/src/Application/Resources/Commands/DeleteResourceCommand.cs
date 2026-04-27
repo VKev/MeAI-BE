@@ -1,5 +1,5 @@
 using Application.Abstractions.Data;
-using Application.Abstractions.Storage;
+using Application.Subscriptions.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -14,12 +14,14 @@ public sealed record DeleteResourceCommand(Guid ResourceId, Guid UserId) : IRequ
 public sealed class DeleteResourceCommandHandler : IRequestHandler<DeleteResourceCommand, Result<bool>>
 {
     private readonly IRepository<Resource> _repository;
-    private readonly IObjectStorageService _objectStorageService;
+    private readonly IUserSubscriptionEntitlementService _entitlementService;
 
-    public DeleteResourceCommandHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
+    public DeleteResourceCommandHandler(
+        IUnitOfWork unitOfWork,
+        IUserSubscriptionEntitlementService entitlementService)
     {
         _repository = unitOfWork.Repository<Resource>();
-        _objectStorageService = objectStorageService;
+        _entitlementService = entitlementService;
     }
 
     public async Task<Result<bool>> Handle(DeleteResourceCommand request, CancellationToken cancellationToken)
@@ -40,9 +42,12 @@ public sealed class DeleteResourceCommandHandler : IRequestHandler<DeleteResourc
         // from post-builder/product pages (which pin resource ids at create time) keep
         // resolving presigned URLs. The library listing filters IsDeleted so the user
         // sees the item removed there.
-        resource.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        var deletedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        var entitlement = await _entitlementService.GetCurrentEntitlementAsync(request.UserId, cancellationToken);
+        resource.DeletedAt = deletedAt;
+        resource.ExpiresAt = deletedAt.AddDays(entitlement.RetentionDaysAfterDelete);
         resource.IsDeleted = true;
-        resource.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        resource.UpdatedAt = deletedAt;
         _repository.Update(resource);
 
         return Result.Success(true);
