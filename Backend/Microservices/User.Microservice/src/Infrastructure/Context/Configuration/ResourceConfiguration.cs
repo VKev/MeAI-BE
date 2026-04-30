@@ -26,6 +26,10 @@ public sealed class ResourceConfiguration : IEntityTypeConfiguration<Resource>
         entity.Property(e => e.StorageNamespace).HasColumnName("storage_namespace");
         entity.Property(e => e.StorageKey).HasColumnName("storage_key");
         entity.Property(e => e.OriginalFileName).HasColumnName("original_file_name");
+        entity.Property(e => e.OriginKind).HasColumnName("origin_kind");
+        entity.Property(e => e.OriginSourceUrl).HasColumnName("origin_source_url");
+        entity.Property(e => e.OriginChatSessionId).HasColumnName("origin_chat_session_id");
+        entity.Property(e => e.OriginChatId).HasColumnName("origin_chat_id");
         entity.Property(e => e.LastVerifiedAt).HasColumnName("last_verified_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedFromStorageAt).HasColumnName("deleted_from_storage_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.ExpiresAt).HasColumnName("expires_at").HasColumnType("timestamp with time zone");
@@ -37,6 +41,7 @@ public sealed class ResourceConfiguration : IEntityTypeConfiguration<Resource>
         entity.HasIndex(e => new { e.UserId, e.WorkspaceId, e.CreatedAt }, "ix_resources_user_workspace_created_at");
         entity.HasIndex(e => new { e.UserId, e.IsDeleted }, "ix_resources_user_deleted");
         entity.HasIndex(e => new { e.StorageNamespace, e.StorageKey }, "ix_resources_storage_namespace_key");
+        entity.HasIndex(e => new { e.UserId, e.OriginKind, e.OriginChatSessionId }, "ix_resources_user_origin_session");
 
         entity.HasOne<User>()
             .WithMany()

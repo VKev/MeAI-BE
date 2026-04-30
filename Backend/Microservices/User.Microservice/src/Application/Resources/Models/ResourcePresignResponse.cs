@@ -4,4 +4,8 @@ public sealed record ResourcePresignResponse(
     Guid Id,
     string PresignedUrl,
     string? ContentType,
-    string? ResourceType);
+    string? ResourceType,
+    string? OriginKind = null,
+    string? OriginSourceUrl = null,
+    Guid? OriginChatSessionId = null,
+    Guid? OriginChatId = null);

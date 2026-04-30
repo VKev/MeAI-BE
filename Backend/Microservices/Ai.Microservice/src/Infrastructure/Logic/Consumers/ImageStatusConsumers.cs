@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Contracts.ImageGenerating;
 using SharedLibrary.Contracts.Notifications;
+using SharedLibrary.Common.Resources;
 using SharedLibrary.Extensions;
 
 namespace Infrastructure.Logic.Consumers;
@@ -218,13 +219,20 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
             return;
         }
 
+        var chat = await FindChatByCorrelationAsync(parentCorrelationId, cancellationToken);
         var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
             userId,
             resultUrls,
             status: "generated",
             resourceType: "image",
             cancellationToken,
-            workspaceId);
+            workspaceId,
+            chat is null
+                ? null
+                : new ResourceProvenanceMetadata(
+                    ResourceOriginKinds.AiGenerated,
+                    chat.SessionId,
+                    chat.Id));
 
         if (uploadResult.IsFailure)
         {
@@ -236,30 +244,11 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
         }
 
         var newResourceIds = uploadResult.Value.Select(r => r.ResourceId.ToString()).ToList();
-
-        var correlationText = parentCorrelationId.ToString();
-        var candidates = await _dbContext.Chats
-            .AsNoTracking()
-            .Where(c => c.Config != null && !c.DeletedAt.HasValue)
-            .ToListAsync(cancellationToken);
-
-        var matched = candidates.FirstOrDefault(c =>
-            c.Config != null &&
-            c.Config.Contains(correlationText, StringComparison.OrdinalIgnoreCase));
-
-        if (matched is null)
+        if (chat is null)
         {
             _logger.LogWarning(
                 "Parent chat not found for reframe ParentCorrelationId: {CorrelationId}",
                 parentCorrelationId);
-            return;
-        }
-
-        var chat = await _dbContext.Chats
-            .FirstOrDefaultAsync(c => c.Id == matched.Id, cancellationToken);
-
-        if (chat is null)
-        {
             return;
         }
 
@@ -301,13 +290,20 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
             return Array.Empty<UserResourceCreatedResult>();
         }
 
+        var chat = await FindChatByCorrelationAsync(correlationId, cancellationToken);
         var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
             userId,
             resultUrls,
             status: "generated",
             resourceType: "image",
             cancellationToken,
-            workspaceId);
+            workspaceId,
+            chat is null
+                ? null
+                : new ResourceProvenanceMetadata(
+                    ResourceOriginKinds.AiGenerated,
+                    chat.SessionId,
+                    chat.Id));
 
         if (uploadResult.IsFailure)
         {
@@ -320,7 +316,23 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
 
         var uploaded = uploadResult.Value;
         var resourceIds = uploaded.Select(resource => resource.ResourceId.ToString()).ToList();
+        if (chat is null)
+        {
+            _logger.LogWarning("Chat not found for CorrelationId: {CorrelationId}", correlationId);
+            return uploaded;
+        }
 
+        chat.ResultResourceIds = JsonSerializer.Serialize(resourceIds);
+        chat.Status = "Completed";
+        chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        await TryAttachResultsToLinkedPostAsync(chat, resourceIds, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return uploaded;
+    }
+
+    private async Task<Chat?> FindChatByCorrelationAsync(Guid correlationId, CancellationToken cancellationToken)
+    {
         var correlationText = correlationId.ToString();
         var candidates = await _dbContext.Chats
             .AsNoTracking()
@@ -333,25 +345,89 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
 
         if (matched is null)
         {
-            _logger.LogWarning("Chat not found for CorrelationId: {CorrelationId}", correlationId);
-            return uploaded;
+            return null;
         }
 
-        var chat = await _dbContext.Chats
+        return await _dbContext.Chats
             .FirstOrDefaultAsync(c => c.Id == matched.Id, cancellationToken);
+    }
 
-        if (chat is null)
+    private async Task TryAttachResultsToLinkedPostAsync(
+        Chat chat,
+        IReadOnlyList<string> resourceIds,
+        CancellationToken cancellationToken)
+    {
+        if (resourceIds.Count == 0)
         {
-            _logger.LogWarning("Chat not found for CorrelationId: {CorrelationId}", correlationId);
-            return uploaded;
+            return;
         }
 
-        chat.ResultResourceIds = JsonSerializer.Serialize(resourceIds);
-        chat.Status = "Completed";
-        chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var linkedPostId = TryExtractLinkedPostId(chat.Config);
+        if (!linkedPostId.HasValue)
+        {
+            return;
+        }
 
-        return uploaded;
+        var post = await _dbContext.Posts
+            .FirstOrDefaultAsync(p => p.Id == linkedPostId.Value && !p.DeletedAt.HasValue, cancellationToken);
+
+        if (post is null)
+        {
+            _logger.LogWarning(
+                "Linked draft post not found for ChatId {ChatId}. LinkedPostId: {PostId}",
+                chat.Id,
+                linkedPostId.Value);
+            return;
+        }
+
+        var content = post.Content ?? new PostContent();
+        var existing = content.ResourceList?
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+
+        foreach (var resourceId in resourceIds)
+        {
+            if (!existing.Contains(resourceId, StringComparer.OrdinalIgnoreCase))
+            {
+                existing.Add(resourceId);
+            }
+        }
+
+        content.ResourceList = existing;
+        post.Content = content;
+        post.Status = "draft";
+        post.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+    }
+
+    private static Guid? TryExtractLinkedPostId(string? configJson)
+    {
+        if (string.IsNullOrWhiteSpace(configJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(configJson);
+            if (!doc.RootElement.TryGetProperty("linkedPostId", out var linkedPostIdElement))
+            {
+                return null;
+            }
+
+            if (linkedPostIdElement.ValueKind == JsonValueKind.String &&
+                Guid.TryParse(linkedPostIdElement.GetString(), out var parsedGuid) &&
+                parsedGuid != Guid.Empty)
+            {
+                return parsedGuid;
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
     }
 }
 
@@ -457,6 +533,7 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
             }
 
             await MarkChatAsFailedAsync(message.CorrelationId, message.ErrorMessage, context.CancellationToken);
+            await MarkLinkedPostAsFailedAsync(message.CorrelationId, context.CancellationToken);
 
             await context.Publish(
                 NotificationRequestedEventFactory.CreateForUser(
@@ -574,6 +651,72 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
         // refund amount always matches the debit even if the catalog price has since been
         // edited by an admin. Idempotent via (reason, referenceId=chatId).
         await TryRefundChatAsync(chat, userId.Value, cancellationToken);
+    }
+
+    private async Task MarkLinkedPostAsFailedAsync(Guid correlationId, CancellationToken cancellationToken)
+    {
+        var correlationText = correlationId.ToString();
+        var candidates = await _dbContext.Chats
+            .AsNoTracking()
+            .Where(c => c.Config != null && !c.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        var matched = candidates.FirstOrDefault(c =>
+            c.Config != null &&
+            c.Config.Contains(correlationText, StringComparison.OrdinalIgnoreCase));
+
+        if (matched is null)
+        {
+            return;
+        }
+
+        var linkedPostId = TryExtractLinkedPostId(matched.Config);
+        if (!linkedPostId.HasValue)
+        {
+            return;
+        }
+
+        var post = await _dbContext.Posts
+            .FirstOrDefaultAsync(p => p.Id == linkedPostId.Value && !p.DeletedAt.HasValue, cancellationToken);
+
+        if (post is null)
+        {
+            return;
+        }
+
+        post.Status = "image_generation_failed";
+        post.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static Guid? TryExtractLinkedPostId(string? configJson)
+    {
+        if (string.IsNullOrWhiteSpace(configJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(configJson);
+            if (!doc.RootElement.TryGetProperty("linkedPostId", out var linkedPostIdElement))
+            {
+                return null;
+            }
+
+            if (linkedPostIdElement.ValueKind == JsonValueKind.String &&
+                Guid.TryParse(linkedPostIdElement.GetString(), out var parsedGuid) &&
+                parsedGuid != Guid.Empty)
+            {
+                return parsedGuid;
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private async Task TryRefundChatAsync(Chat chat, Guid userId, CancellationToken cancellationToken)

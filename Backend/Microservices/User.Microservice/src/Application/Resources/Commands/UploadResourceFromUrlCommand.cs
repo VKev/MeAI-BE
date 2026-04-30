@@ -6,6 +6,7 @@ using Domain.Entities;
 using MediatR;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Common.Resources;
 using SharedLibrary.Extensions;
 
 namespace Application.Resources.Commands;
@@ -15,7 +16,8 @@ public sealed record UploadResourceFromUrlCommand(
     string Url,
     string? Status,
     string? ResourceType,
-    Guid? WorkspaceId = null) : IRequest<Result<ResourceResponse>>;
+    Guid? WorkspaceId = null,
+    ResourceProvenanceMetadata? Provenance = null) : IRequest<Result<ResourceResponse>>;
 
 public sealed class UploadResourceFromUrlCommandHandler
     : IRequestHandler<UploadResourceFromUrlCommand, Result<ResourceResponse>>
@@ -87,6 +89,10 @@ public sealed class UploadResourceFromUrlCommandHandler
             Status = request.Status?.Trim(),
             ResourceType = request.ResourceType?.Trim(),
             ContentType = fetchResult.Value.ContentType.Trim(),
+            OriginKind = Normalize(request.Provenance?.OriginKind),
+            OriginSourceUrl = Normalize(request.Provenance?.OriginSourceUrl) ?? request.Url.Trim(),
+            OriginChatSessionId = NormalizeGuid(request.Provenance?.OriginChatSessionId),
+            OriginChatId = NormalizeGuid(request.Provenance?.OriginChatId),
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
@@ -99,5 +105,15 @@ public sealed class UploadResourceFromUrlCommandHandler
         }
 
         return Result.Success(ResourceMapping.ToResponse(resource, presignedResult.Value));
+    }
+
+    private static string? Normalize(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static Guid? NormalizeGuid(Guid? value)
+    {
+        return value is null || value == Guid.Empty ? null : value;
     }
 }

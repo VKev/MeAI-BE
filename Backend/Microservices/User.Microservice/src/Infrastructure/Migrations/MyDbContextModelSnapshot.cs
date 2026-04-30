@@ -402,6 +402,22 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("original_file_name");
 
+                    b.Property<Guid?>("OriginChatId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("origin_chat_id");
+
+                    b.Property<Guid?>("OriginChatSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("origin_chat_session_id");
+
+                    b.Property<string>("OriginKind")
+                        .HasColumnType("text")
+                        .HasColumnName("origin_kind");
+
+                    b.Property<string>("OriginSourceUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("origin_source_url");
+
                     b.Property<string>("ResourceType")
                         .HasColumnType("text")
                         .HasColumnName("type");
@@ -452,6 +468,8 @@ namespace Infrastructure.Migrations
                     b.HasIndex(new[] { "StorageNamespace", "StorageKey" }, "ix_resources_storage_namespace_key");
 
                     b.HasIndex(new[] { "UserId", "IsDeleted" }, "ix_resources_user_deleted");
+
+                    b.HasIndex(new[] { "UserId", "OriginKind", "OriginChatSessionId" }, "ix_resources_user_origin_session");
 
                     b.HasIndex(new[] { "UserId", "WorkspaceId", "CreatedAt" }, "ix_resources_user_workspace_created_at");
 

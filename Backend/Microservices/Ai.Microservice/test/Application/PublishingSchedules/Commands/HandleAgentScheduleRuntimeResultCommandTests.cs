@@ -70,6 +70,40 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
             .ReturnsAsync(1);
 
         var runtimeContentService = new Mock<IAgenticRuntimeContentService>(MockBehavior.Strict);
+        var webSearchEnrichmentService = new Mock<IWebSearchEnrichmentService>(MockBehavior.Strict);
+        webSearchEnrichmentService
+            .Setup(service => service.EnrichAsync(
+                It.Is<N8nWebSearchResponse>(search =>
+                    search.Query == "kết quả xổ số miền bắc hôm nay" &&
+                    search.Results.Count == 1),
+                userId,
+                workspaceId,
+                null,
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new N8nWebSearchResponse(
+                "kết quả xổ số miền bắc hôm nay",
+                DateTime.UtcNow,
+                [
+                    new N8nWebSearchResultItem(
+                        "KQXS",
+                        "https://example.com",
+                        "Mô tả",
+                        "example.com",
+                        "KQXS Mien Bac",
+                        "Chi tiet noi dung trang",
+                        ["https://example.com/image.jpg"])
+                ],
+                "context",
+                [
+                    new N8nImportedResourceItem(
+                        Guid.NewGuid(),
+                        "https://cdn.example.com/image.jpg",
+                        "image/jpeg",
+                        "image",
+                        "https://example.com/image.jpg",
+                        "https://example.com")
+                ]));
         runtimeContentService
             .Setup(service => service.GeneratePostDraftAsync(
                 It.Is<AgenticRuntimeContentRequest>(request =>
@@ -91,7 +125,9 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                     command.WorkspaceId == workspaceId &&
                     command.Platform == "facebook" &&
                     command.Content != null &&
-                    command.Content.PostType == "posts"),
+                    command.Content.PostType == "posts" &&
+                    command.Content.ResourceList != null &&
+                    command.Content.ResourceList.Count == 1),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new PostResponse(
                 runtimePostId,
@@ -145,6 +181,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
         var handler = new HandleAgentScheduleRuntimeResultCommandHandler(
             scheduleRepository.Object,
             runtimeContentService.Object,
+            webSearchEnrichmentService.Object,
             mediator.Object);
 
         var result = await handler.Handle(
@@ -179,6 +216,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
         updatedContext.LastQuery.Should().Be("kết quả xổ số miền bắc hôm nay");
 
         scheduleRepository.VerifyAll();
+        webSearchEnrichmentService.VerifyAll();
         runtimeContentService.VerifyAll();
         mediator.VerifyAll();
     }

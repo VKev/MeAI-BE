@@ -63,16 +63,24 @@ namespace Infrastructure
             services.AddHttpClient("Instagram");
             services.AddHttpClient("TikTok");
             services.AddHttpClient("n8n");
+            services.AddHttpClient("WebSearchContent", client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(12);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; MeAIWebSearch/1.0)");
+                client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9,vi;q=0.8");
+            });
             // Caption generation runs through Kie's GPT-5.4 Responses API. GeminiCaptionService
             // stays registered as a concrete class for future fallback / A-B; the interface
             // binding points at the Kie-backed implementation.
             services.AddScoped<IGeminiCaptionService, Infrastructure.Logic.Kie.KieCaptionService>();
             services.AddScoped<GeminiCaptionService>();
             services.AddScoped<IN8nWorkflowClient, N8nWorkflowClient>();
+            services.AddScoped<IWebSearchEnrichmentService, WebSearchEnrichmentService>();
             services.AddScoped<IAgenticRuntimeContentService, AgenticRuntimeContentService>();
             services.AddScoped<IFacebookContentService, FacebookContentService>();
             services.AddScoped<IGeminiContentModerationService, GeminiContentModerationService>();
             services.AddScoped<IAgentChatService, GeminiAgentChatService>();
+            services.AddScoped<IChatWebPostService, ChatWebPostService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
             services.AddScoped<IInstagramPublishService, InstagramPublishService>();
             services.AddScoped<IInstagramContentService, InstagramContentService>();
@@ -150,6 +158,7 @@ namespace Infrastructure
             services.AddScoped<PostResponseBuilder>();
             services.AddScoped<PublishingScheduleResponseBuilder>();
             services.AddScoped<ScheduledPostDispatchService>();
+            services.AddScoped<ResourceProvenanceBackfillService>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddHostedService<ScheduledPostPublishingWorker>();
 

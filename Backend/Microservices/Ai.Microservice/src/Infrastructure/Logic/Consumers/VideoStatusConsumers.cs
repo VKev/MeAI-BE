@@ -9,6 +9,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Contracts.Notifications;
+using SharedLibrary.Common.Resources;
 using SharedLibrary.Contracts.VideoGenerating;
 using SharedLibrary.Extensions;
 
@@ -127,13 +128,20 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
             return;
         }
 
+        var chat = await FindChatByCorrelationAsync(correlationId, cancellationToken);
         var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
             userId,
             urls,
             status: "generated",
             resourceType: "video",
             cancellationToken,
-            workspaceId);
+            workspaceId,
+            chat is null
+                ? null
+                : new ResourceProvenanceMetadata(
+                    ResourceOriginKinds.AiGenerated,
+                    chat.SessionId,
+                    chat.Id));
 
         if (uploadResult.IsFailure)
         {
@@ -145,7 +153,20 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
         }
 
         var resourceIds = uploadResult.Value.Select(resource => resource.ResourceId.ToString()).ToList();
+        if (chat is null)
+        {
+            _logger.LogWarning("Chat not found for CorrelationId: {CorrelationId}", correlationId);
+            return;
+        }
 
+        chat.ResultResourceIds = JsonSerializer.Serialize(resourceIds);
+        chat.Status = "Completed";
+        chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<Chat?> FindChatByCorrelationAsync(Guid correlationId, CancellationToken cancellationToken)
+    {
         var correlationText = correlationId.ToString();
         var candidates = await _dbContext.Chats
             .AsNoTracking()
@@ -158,23 +179,11 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
 
         if (matched is null)
         {
-            _logger.LogWarning("Chat not found for CorrelationId: {CorrelationId}", correlationId);
-            return;
+            return null;
         }
 
-        var chat = await _dbContext.Chats
+        return await _dbContext.Chats
             .FirstOrDefaultAsync(c => c.Id == matched.Id, cancellationToken);
-
-        if (chat is null)
-        {
-            _logger.LogWarning("Chat not found for CorrelationId: {CorrelationId}", correlationId);
-            return;
-        }
-
-        chat.ResultResourceIds = JsonSerializer.Serialize(resourceIds);
-        chat.Status = "Completed";
-        chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
-        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 
@@ -373,4 +382,3 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
         return model;
     }
 }
-

@@ -14,6 +14,10 @@ internal static class ResourceMapping
             resource.ResourceType,
             resource.ContentType,
             resource.SizeBytes,
+            resource.OriginKind,
+            resource.OriginSourceUrl,
+            resource.OriginChatSessionId,
+            resource.OriginChatId,
             resource.CreatedAt,
             resource.UpdatedAt);
 
@@ -26,6 +30,10 @@ internal static class ResourceMapping
             resource.ResourceType,
             resource.ContentType,
             resource.SizeBytes,
+            resource.OriginKind,
+            resource.OriginSourceUrl,
+            resource.OriginChatSessionId,
+            resource.OriginChatId,
             resource.CreatedAt,
             resource.UpdatedAt);
 }

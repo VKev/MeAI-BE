@@ -40,13 +40,13 @@ public sealed class GetAgentSessionMessagesQueryHandler
         }
 
         var chats = await _chatRepository.GetBySessionIdAsync(request.SessionId, cancellationToken);
-        var response = chats
+        var messages = chats
             .Where(chat => !chat.DeletedAt.HasValue)
             .OrderBy(chat => chat.CreatedAt ?? DateTime.MinValue)
             .ThenBy(chat => chat.Id)
             .Select(AgentMessageConfigSerializer.ToResponse)
             .ToList();
 
-        return Result.Success<IReadOnlyList<AgentMessageResponse>>(response);
+        return Result.Success<IReadOnlyList<AgentMessageResponse>>(messages);
     }
 }

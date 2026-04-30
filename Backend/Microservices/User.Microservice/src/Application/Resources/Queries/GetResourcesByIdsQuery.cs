@@ -69,7 +69,11 @@ public sealed class GetResourcesByIdsQueryHandler
                 resource.Id,
                 presignedResult.Value,
                 resource.ContentType,
-                resource.ResourceType));
+                resource.ResourceType,
+                resource.OriginKind,
+                resource.OriginSourceUrl,
+                resource.OriginChatSessionId,
+                resource.OriginChatId));
         }
 
         return Result.Success(response);

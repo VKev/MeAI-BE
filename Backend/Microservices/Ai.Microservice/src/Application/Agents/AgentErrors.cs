@@ -15,4 +15,12 @@ public static class AgentErrors
     public static readonly Error DuplicateMessageInProgress = new(
         "Agent.DuplicateMessageInProgress",
         "This message is already being processed.");
+
+    public static readonly Error TranscriptDisabled = new(
+        "Agent.TranscriptDisabled",
+        "Agent transcript is disabled. Send a new message to get a single-turn response.");
+
+    public static readonly Error WebContentNotFound = new(
+        "Agent.WebContentNotFound",
+        "Could not retrieve enough web content to create a draft post.");
 }

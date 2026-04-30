@@ -62,6 +62,7 @@ var app = builder.Build();
 
 app.ApplyMigrationsIfEnabled(shouldAutoApplyMigrations);
 await app.SeedSampleDataAsync();
+await app.BackfillResourceProvenanceAsync();
 app.MapHealthEndpoints();
 
 app.UseSerilogRequestLogging();

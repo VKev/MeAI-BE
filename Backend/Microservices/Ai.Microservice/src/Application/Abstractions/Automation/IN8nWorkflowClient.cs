@@ -33,16 +33,32 @@ public sealed record N8nWebSearchRequest(
     string? SearchLanguage,
     string? Freshness,
     string? Timezone = null,
-    DateTime? ExecuteAtUtc = null);
+    DateTime? ExecuteAtUtc = null,
+    Guid? UserId = null,
+    Guid? WorkspaceId = null,
+    Guid? OriginChatSessionId = null,
+    Guid? OriginChatId = null);
 
 public sealed record N8nWebSearchResponse(
     string Query,
     DateTime RetrievedAtUtc,
     IReadOnlyList<N8nWebSearchResultItem> Results,
-    string? LlmContext);
+    string? LlmContext,
+    IReadOnlyList<N8nImportedResourceItem>? ImportedResources = null);
 
 public sealed record N8nWebSearchResultItem(
     string? Title,
     string? Url,
     string? Description,
-    string? Source);
+    string? Source,
+    string? PageTitle = null,
+    string? PageContent = null,
+    IReadOnlyList<string>? MediaUrls = null);
+
+public sealed record N8nImportedResourceItem(
+    Guid ResourceId,
+    string PresignedUrl,
+    string? ContentType,
+    string? ResourceType,
+    string SourceUrl,
+    string? SourcePageUrl);

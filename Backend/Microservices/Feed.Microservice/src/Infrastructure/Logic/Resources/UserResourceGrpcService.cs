@@ -165,8 +165,19 @@ public sealed class UserResourceGrpcService : IUserResourceService
                 Guid.TryParse(item.ResourceId, out var resourceId) ? resourceId : Guid.Empty,
                 item.PresignedUrl,
                 item.ContentType,
-                item.ResourceType))
+                item.ResourceType,
+                string.IsNullOrWhiteSpace(item.OriginKind) ? null : item.OriginKind,
+                string.IsNullOrWhiteSpace(item.OriginSourceUrl) ? null : item.OriginSourceUrl,
+                ParseOptionalGuid(item.OriginChatSessionId),
+                ParseOptionalGuid(item.OriginChatId)))
             .Where(item => item.ResourceId != Guid.Empty)
             .ToList();
+    }
+
+    private static Guid? ParseOptionalGuid(string value)
+    {
+        return Guid.TryParse(value, out var parsedId) && parsedId != Guid.Empty
+            ? parsedId
+            : null;
     }
 }

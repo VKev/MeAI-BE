@@ -39,7 +39,6 @@ public sealed class SendAgentMessageCommandTests
     [Fact]
     public async Task Handle_ShouldFail_WhenSessionBelongsToAnotherUser()
     {
-        var userId = Guid.NewGuid();
         var session = new ChatSession
         {
             Id = Guid.NewGuid(),
@@ -48,11 +47,11 @@ public sealed class SendAgentMessageCommandTests
         };
 
         var chatSessionRepository = new Mock<IChatSessionRepository>(MockBehavior.Strict);
+        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         chatSessionRepository
             .Setup(repository => repository.GetByIdForUpdateAsync(session.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
-        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         var agentChatService = new Mock<IAgentChatService>(MockBehavior.Strict);
 
         var handler = new SendAgentMessageCommandHandler(
@@ -61,7 +60,7 @@ public sealed class SendAgentMessageCommandTests
             agentChatService.Object);
 
         var result = await handler.Handle(
-            new SendAgentMessageCommand(session.Id, userId, "Hello"),
+            new SendAgentMessageCommand(session.Id, Guid.NewGuid(), "Hello"),
             CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -72,7 +71,7 @@ public sealed class SendAgentMessageCommandTests
     }
 
     [Fact]
-    public async Task Handle_ShouldPersistUserAndAssistantMessages_WhenReplySucceeds()
+    public async Task Handle_ShouldReturnTransientMessages_WhenReplySucceeds()
     {
         var userId = Guid.NewGuid();
         var session = new ChatSession
@@ -81,43 +80,48 @@ public sealed class SendAgentMessageCommandTests
             UserId = userId,
             WorkspaceId = Guid.NewGuid()
         };
-        var storedChats = new List<Chat>();
 
         var chatSessionRepository = new Mock<IChatSessionRepository>(MockBehavior.Strict);
+        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         chatSessionRepository
             .Setup(repository => repository.GetByIdForUpdateAsync(session.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
-        chatSessionRepository
-            .Setup(repository => repository.Update(session));
-
-        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
-        chatRepository
-            .Setup(repository => repository.GetBySessionIdAsync(session.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<Chat>());
         chatRepository
             .Setup(repository => repository.AddAsync(It.IsAny<Chat>(), It.IsAny<CancellationToken>()))
-            .Callback<Chat, CancellationToken>((chat, _) => storedChats.Add(chat))
             .Returns(Task.CompletedTask);
         chatRepository
             .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(1);
+            .ReturnsAsync(2);
 
         var agentChatService = new Mock<IAgentChatService>(MockBehavior.Strict);
         agentChatService
             .Setup(service => service.GenerateReplyAsync(
-                new AgentChatRequest(userId, session.Id, session.WorkspaceId),
+                It.Is<AgentChatRequest>(request =>
+                    request.UserId == userId &&
+                    request.SessionId == session.Id &&
+                    request.WorkspaceId == session.WorkspaceId &&
+                    request.Message == "Schedule a post for 5pm" &&
+                    request.AssistantChatId.HasValue &&
+                    request.AssistantChatId.Value != Guid.Empty),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new AgentChatCompletionResult(
-                "Scheduled. I will prepare the slot.",
+                "Draft post created for later scheduling.",
                 "gemini-3.1-flash-lite-preview",
-                ["get_user_workspaces", "get_linked_social_accounts"],
+                ["create_post"],
                 [
                     new AgentActionResponse(
-                        "tool_call",
-                        "get_user_workspaces",
+                        "post_create",
+                        "create_post",
                         "completed",
-                        Summary: "Loaded 1 workspace(s).")
-                ])));
+                        "post",
+                        Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                        "Draft",
+                        "Created draft post.")
+                ],
+                "post_created",
+                null,
+                null,
+                Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))));
 
         var handler = new SendAgentMessageCommandHandler(
             chatSessionRepository.Object,
@@ -129,42 +133,32 @@ public sealed class SendAgentMessageCommandTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        storedChats.Should().HaveCount(2);
-        storedChats[0].Prompt.Should().Be("Schedule a post for 5pm");
-        storedChats[1].Prompt.Should().Be("Scheduled. I will prepare the slot.");
-
-        var userMetadata = AgentMessageConfigSerializer.Parse(storedChats[0].Config);
-        userMetadata.Role.Should().Be("user");
-
-        var assistantMetadata = AgentMessageConfigSerializer.Parse(storedChats[1].Config);
-        assistantMetadata.Role.Should().Be("assistant");
-        assistantMetadata.Model.Should().Be("gemini-3.1-flash-lite-preview");
-        assistantMetadata.ToolNames.Should().BeEquivalentTo(["get_user_workspaces", "get_linked_social_accounts"]);
-        assistantMetadata.Actions.Should().ContainSingle(action =>
-            action.ToolName == "get_user_workspaces" &&
-            action.Status == "completed");
-
         result.Value.SessionId.Should().Be(session.Id);
+        result.Value.Action.Should().Be("post_created");
+        result.Value.PostId.Should().Be(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
+        result.Value.ValidationError.Should().BeNull();
         result.Value.UserMessage.Role.Should().Be("user");
         result.Value.UserMessage.Content.Should().Be("Schedule a post for 5pm");
         result.Value.AssistantMessage.Role.Should().Be("assistant");
         result.Value.AssistantMessage.Model.Should().Be("gemini-3.1-flash-lite-preview");
-        result.Value.AssistantMessage.ToolNames.Should().BeEquivalentTo(["get_user_workspaces", "get_linked_social_accounts"]);
+        result.Value.AssistantMessage.ToolNames.Should().BeEquivalentTo(["create_post"]);
         result.Value.AssistantMessage.Actions.Should().ContainSingle(action =>
-            action.ToolName == "get_user_workspaces" &&
+            action.ToolName == "create_post" &&
             action.Status == "completed");
+        chatRepository.Verify(repository => repository.AddAsync(
+            It.Is<Chat>(chat => chat.Prompt == "Schedule a post for 5pm"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        chatRepository.Verify(repository => repository.AddAsync(
+            It.Is<Chat>(chat => chat.Prompt == "Draft post created for later scheduling."),
+            It.IsAny<CancellationToken>()), Times.Once);
 
-        session.UpdatedAt.Should().NotBeNull();
-        chatSessionRepository.Verify(repository => repository.Update(session), Times.Exactly(2));
-        chatRepository.Verify(repository => repository.AddAsync(It.IsAny<Chat>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
-        chatRepository.Verify(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
-        agentChatService.VerifyAll();
         chatSessionRepository.VerifyAll();
         chatRepository.VerifyAll();
+        agentChatService.VerifyAll();
     }
 
     [Fact]
-    public async Task Handle_ShouldReturnPreviousResponse_WhenRecentDuplicateMessageAlreadyCompleted()
+    public async Task Handle_ShouldReturnValidationFields_WhenReplyRequiresClarification()
     {
         var userId = Guid.NewGuid();
         var session = new ChatSession
@@ -174,38 +168,37 @@ public sealed class SendAgentMessageCommandTests
             WorkspaceId = Guid.NewGuid()
         };
 
-        var userChat = new Chat
-        {
-            Id = Guid.CreateVersion7(),
-            SessionId = session.Id,
-            Prompt = "Create a draft post",
-            Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(Role: "user")),
-            CreatedAt = DateTime.UtcNow.AddSeconds(-20)
-        };
-
-        var assistantChat = new Chat
-        {
-            Id = Guid.CreateVersion7(),
-            SessionId = session.Id,
-            Prompt = "Draft created.",
-            Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(
-                Role: "assistant",
-                Model: "gemini-3.1-flash-lite-preview",
-                ToolNames: ["create_post"])),
-            CreatedAt = DateTime.UtcNow.AddSeconds(-10)
-        };
-
         var chatSessionRepository = new Mock<IChatSessionRepository>(MockBehavior.Strict);
+        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         chatSessionRepository
             .Setup(repository => repository.GetByIdForUpdateAsync(session.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
-
-        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         chatRepository
-            .Setup(repository => repository.GetBySessionIdAsync(session.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([userChat, assistantChat]);
+            .Setup(repository => repository.AddAsync(It.IsAny<Chat>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        chatRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
 
         var agentChatService = new Mock<IAgentChatService>(MockBehavior.Strict);
+        agentChatService
+            .Setup(service => service.GenerateReplyAsync(
+                It.Is<AgentChatRequest>(request =>
+                    request.UserId == userId &&
+                    request.SessionId == session.Id &&
+                    request.WorkspaceId == session.WorkspaceId &&
+                    request.Message == "hay tao hinh anh ve doi bong toi yeu" &&
+                    request.AssistantChatId.HasValue &&
+                    request.AssistantChatId.Value != Guid.Empty),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new AgentChatCompletionResult(
+                "Yeu cau chua ro doi bong nao.",
+                "gemini-3.1-flash-lite-preview",
+                [],
+                [],
+                "validation_failed",
+                "Yeu cau chua xac dinh doi bong nao.",
+                "hay tao hinh anh ve doi bong {{ten doi bong}}")));
 
         var handler = new SendAgentMessageCommandHandler(
             chatSessionRepository.Object,
@@ -213,69 +206,24 @@ public sealed class SendAgentMessageCommandTests
             agentChatService.Object);
 
         var result = await handler.Handle(
-            new SendAgentMessageCommand(session.Id, userId, "  Create   a draft post "),
+            new SendAgentMessageCommand(session.Id, userId, "hay tao hinh anh ve doi bong toi yeu"),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.UserMessage.Id.Should().Be(userChat.Id);
-        result.Value.AssistantMessage.Id.Should().Be(assistantChat.Id);
-        result.Value.AssistantMessage.ToolNames.Should().BeEquivalentTo(["create_post"]);
+        result.Value.Action.Should().Be("validation_failed");
+        result.Value.ValidationError.Should().Be("Yeu cau chua xac dinh doi bong nao.");
+        result.Value.RevisedPrompt.Should().Be("hay tao hinh anh ve doi bong {{ten doi bong}}");
+        result.Value.PostId.Should().BeNull();
+        result.Value.ChatId.Should().BeNull();
+        chatRepository.Verify(repository => repository.AddAsync(
+            It.Is<Chat>(chat => chat.Prompt == "hay tao hinh anh ve doi bong toi yeu"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        chatRepository.Verify(repository => repository.AddAsync(
+            It.Is<Chat>(chat => chat.Prompt == "Yeu cau chua ro doi bong nao."),
+            It.IsAny<CancellationToken>()), Times.Never);
 
         chatSessionRepository.VerifyAll();
         chatRepository.VerifyAll();
-        chatRepository.Verify(repository => repository.AddAsync(It.IsAny<Chat>(), It.IsAny<CancellationToken>()), Times.Never);
-        chatRepository.Verify(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
-        agentChatService.VerifyNoOtherCalls();
-    }
-
-    [Fact]
-    public async Task Handle_ShouldFailWithoutCallingAgent_WhenDuplicateMessageIsAlreadyInProgress()
-    {
-        var userId = Guid.NewGuid();
-        var session = new ChatSession
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            WorkspaceId = Guid.NewGuid()
-        };
-
-        var existingUserChat = new Chat
-        {
-            Id = Guid.CreateVersion7(),
-            SessionId = session.Id,
-            Prompt = "Create a draft post",
-            Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(Role: "user")),
-            CreatedAt = DateTime.UtcNow.AddSeconds(-5)
-        };
-
-        var chatSessionRepository = new Mock<IChatSessionRepository>(MockBehavior.Strict);
-        chatSessionRepository
-            .Setup(repository => repository.GetByIdForUpdateAsync(session.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(session);
-
-        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
-        chatRepository
-            .Setup(repository => repository.GetBySessionIdAsync(session.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([existingUserChat]);
-
-        var agentChatService = new Mock<IAgentChatService>(MockBehavior.Strict);
-
-        var handler = new SendAgentMessageCommandHandler(
-            chatSessionRepository.Object,
-            chatRepository.Object,
-            agentChatService.Object);
-
-        var result = await handler.Handle(
-            new SendAgentMessageCommand(session.Id, userId, "Create a draft post"),
-            CancellationToken.None);
-
-        result.IsFailure.Should().BeTrue();
-        result.Error.Should().Be(AgentErrors.DuplicateMessageInProgress);
-
-        chatSessionRepository.VerifyAll();
-        chatRepository.VerifyAll();
-        chatRepository.Verify(repository => repository.AddAsync(It.IsAny<Chat>(), It.IsAny<CancellationToken>()), Times.Never);
-        chatRepository.Verify(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
-        agentChatService.VerifyNoOtherCalls();
+        agentChatService.VerifyAll();
     }
 }
