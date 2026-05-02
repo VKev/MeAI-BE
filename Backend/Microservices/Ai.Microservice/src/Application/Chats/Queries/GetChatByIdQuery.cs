@@ -67,10 +67,14 @@ public sealed class GetChatByIdQueryHandler
         }
 
         var urlById = presignResult.Value.ToDictionary(item => item.ResourceId, item => item.PresignedUrl);
+        var infoById = presignResult.Value.ToDictionary(item => item.ResourceId, item => item);
         var referenceUrls = MapUrls(referenceIds, urlById);
         var resultUrls = MapUrls(resultIds, urlById);
+        var referenceResources = MapResources(referenceIds, infoById);
+        var resultResources = MapResources(resultIds, infoById);
 
-        return Result.Success(ChatMapping.ToResponse(chat, referenceUrls, resultUrls));
+        return Result.Success(ChatMapping.ToResponse(
+            chat, referenceUrls, resultUrls, referenceResources, resultResources));
     }
 
     private static IReadOnlyList<string>? MapUrls(
@@ -92,5 +96,30 @@ public sealed class GetChatByIdQueryHandler
         }
 
         return urls.Count == 0 ? null : urls;
+    }
+
+    private static IReadOnlyList<ChatResourceInfo>? MapResources(
+        IReadOnlyList<Guid> ids,
+        IReadOnlyDictionary<Guid, UserResourcePresignResult> infoById)
+    {
+        if (ids.Count == 0)
+        {
+            return null;
+        }
+
+        var items = new List<ChatResourceInfo>();
+        foreach (var id in ids)
+        {
+            if (infoById.TryGetValue(id, out var info) && !string.IsNullOrWhiteSpace(info.PresignedUrl))
+            {
+                items.Add(new ChatResourceInfo(
+                    ResourceId: info.ResourceId,
+                    Url: info.PresignedUrl,
+                    ResourceType: info.ResourceType,
+                    ContentType: info.ContentType));
+            }
+        }
+
+        return items.Count == 0 ? null : items;
     }
 }

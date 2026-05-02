@@ -12,4 +12,12 @@ public sealed record ChatResponse(
     string? Status,
     string? ErrorMessage,
     DateTime? CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    IReadOnlyList<ChatResourceInfo>? ReferenceResources = null,
+    IReadOnlyList<ChatResourceInfo>? ResultResources = null);
+
+public sealed record ChatResourceInfo(
+    Guid ResourceId,
+    string Url,
+    string? ResourceType,
+    string? ContentType);

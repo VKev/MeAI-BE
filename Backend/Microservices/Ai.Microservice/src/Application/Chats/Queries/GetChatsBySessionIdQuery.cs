@@ -61,6 +61,8 @@ public sealed class GetChatsBySessionIdQueryHandler
             .ToList();
 
         IReadOnlyDictionary<Guid, string> urlById = new Dictionary<Guid, string>();
+        IReadOnlyDictionary<Guid, UserResourcePresignResult> infoById =
+            new Dictionary<Guid, UserResourcePresignResult>();
         if (allIds.Count > 0)
         {
             var presignResult = await _userResourceService.GetPresignedResourcesAsync(
@@ -74,13 +76,16 @@ public sealed class GetChatsBySessionIdQueryHandler
             }
 
             urlById = presignResult.Value.ToDictionary(item => item.ResourceId, item => item.PresignedUrl);
+            infoById = presignResult.Value.ToDictionary(item => item.ResourceId, item => item);
         }
 
         var response = chatItems
             .Select(item => ChatMapping.ToResponse(
                 item.Chat,
                 MapUrls(item.ReferenceIds, urlById),
-                MapUrls(item.ResultIds, urlById)))
+                MapUrls(item.ResultIds, urlById),
+                MapResources(item.ReferenceIds, infoById),
+                MapResources(item.ResultIds, infoById)))
             .ToList();
 
         return Result.Success<IEnumerable<ChatResponse>>(response);
@@ -105,5 +110,30 @@ public sealed class GetChatsBySessionIdQueryHandler
         }
 
         return urls.Count == 0 ? null : urls;
+    }
+
+    private static IReadOnlyList<ChatResourceInfo>? MapResources(
+        IReadOnlyList<Guid> ids,
+        IReadOnlyDictionary<Guid, UserResourcePresignResult> infoById)
+    {
+        if (ids.Count == 0)
+        {
+            return null;
+        }
+
+        var items = new List<ChatResourceInfo>();
+        foreach (var id in ids)
+        {
+            if (infoById.TryGetValue(id, out var info) && !string.IsNullOrWhiteSpace(info.PresignedUrl))
+            {
+                items.Add(new ChatResourceInfo(
+                    ResourceId: info.ResourceId,
+                    Url: info.PresignedUrl,
+                    ResourceType: info.ResourceType,
+                    ContentType: info.ContentType));
+            }
+        }
+
+        return items.Count == 0 ? null : items;
     }
 }
