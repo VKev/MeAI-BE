@@ -217,6 +217,7 @@ internal static class PostBuilderSummaryHelper
             summaries.Add(new PostBuilderSummaryResponse(
                 Id: builder.Id,
                 WorkspaceId: builder.WorkspaceId,
+                OriginKind: builder.OriginKind,
                 Type: builder.PostType,
                 PostCount: livePosts.Count,
                 PublishedCount: publishedCount,

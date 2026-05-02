@@ -3,6 +3,7 @@ namespace Application.Posts.Models;
 public sealed record PostBuilderDetailsResponse(
     Guid Id,
     Guid? WorkspaceId,
+    string? OriginKind,
     string? Type,
     IReadOnlyList<Guid> ResourceIds,
     IReadOnlyList<PostBuilderSocialMediaGroupResponse> SocialMedia,
@@ -18,6 +19,7 @@ public sealed record PostBuilderSocialMediaGroupResponse(
 public sealed record PostBuilderSummaryResponse(
     Guid Id,
     Guid? WorkspaceId,
+    string? OriginKind,
     string? Type,
     int PostCount,
     int PublishedCount,

@@ -115,7 +115,10 @@ public sealed class GeminiAgentChatService : IAgentChatService
                     Content = finalPrompt,
                     PostType = ResolvePostType(analysis.PostType, request.ImageOptions)
                 },
-                "waiting_for_image_generation"),
+                "waiting_for_image_generation",
+                null,
+                null,
+                PostBuilderOriginKinds.AiOther),
             cancellationToken);
 
         if (postResult.IsFailure)
@@ -196,7 +199,10 @@ public sealed class GeminiAgentChatService : IAgentChatService
                     Content = finalPrompt,
                     PostType = NormalizePostType(analysis.PostType)
                 },
-                "draft"),
+                "draft",
+                null,
+                null,
+                PostBuilderOriginKinds.AiOther),
             cancellationToken);
 
         if (postResult.IsFailure)

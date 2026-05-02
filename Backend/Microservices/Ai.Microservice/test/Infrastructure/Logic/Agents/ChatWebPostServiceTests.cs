@@ -20,6 +20,7 @@ public sealed class ChatWebPostServiceTests
         var sessionId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
         var postId = Guid.NewGuid();
+        var postBuilderId = Guid.NewGuid();
         var importedResourceId = Guid.NewGuid();
 
         var n8nWorkflowClient = new Mock<IN8nWorkflowClient>(MockBehavior.Strict);
@@ -79,6 +80,7 @@ public sealed class ChatWebPostServiceTests
                     command.ChatSessionId == sessionId &&
                     command.WorkspaceId == workspaceId &&
                     command.Status == "draft" &&
+                    command.NewPostBuilderOrigin == PostBuilderOriginKinds.AiOther &&
                     command.Title == "Generated title" &&
                     command.Content != null &&
                     command.Content.Content == "Generated content" &&
@@ -92,6 +94,7 @@ public sealed class ChatWebPostServiceTests
                 "user",
                 null,
                 workspaceId,
+                postBuilderId,
                 sessionId,
                 null,
                 "Generated title",
@@ -124,6 +127,7 @@ public sealed class ChatWebPostServiceTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.PostId.Should().Be(postId);
+        result.Value.PostBuilderId.Should().Be(postBuilderId);
         result.Value.RetrievalMode.Should().Be("direct_url");
         result.Value.SourceUrls.Should().BeEquivalentTo(["https://example.com/article"]);
         result.Value.ImportedResourceIds.Should().BeEquivalentTo([importedResourceId]);
@@ -141,6 +145,7 @@ public sealed class ChatWebPostServiceTests
         var sessionId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
         var postId = Guid.NewGuid();
+        var postBuilderId = Guid.NewGuid();
 
         var n8nWorkflowClient = new Mock<IN8nWorkflowClient>(MockBehavior.Strict);
         var webSearchEnrichmentService = new Mock<IWebSearchEnrichmentService>(MockBehavior.Strict);
@@ -187,6 +192,7 @@ public sealed class ChatWebPostServiceTests
             .Setup(service => service.Send(
                 It.Is<CreatePostCommand>(command =>
                     command.Title == "Create a post about today's AI news" &&
+                    command.NewPostBuilderOrigin == PostBuilderOriginKinds.AiOther &&
                     command.Content != null &&
                     command.Content.Content == "AI summary content"),
                 It.IsAny<CancellationToken>()))
@@ -196,6 +202,7 @@ public sealed class ChatWebPostServiceTests
                 "user",
                 null,
                 workspaceId,
+                postBuilderId,
                 sessionId,
                 null,
                 "Create a post about today's AI news",
@@ -224,6 +231,7 @@ public sealed class ChatWebPostServiceTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.PostId.Should().Be(postId);
+        result.Value.PostBuilderId.Should().Be(postBuilderId);
         result.Value.RetrievalMode.Should().Be("web_search");
         result.Value.SourceUrls.Should().BeEquivalentTo(["https://example.com/news"]);
         result.Value.ImportedResourceIds.Should().BeEmpty();

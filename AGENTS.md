@@ -81,7 +81,6 @@ Backend/Microservices/<Service>.Microservice/
 - Compose (dev): `docker compose -f Backend/Compose/docker-compose.yml up -d --build`.
 - Default ports (dev/prod compose): API Gateway 8080 (host 2406), User HTTP 5002 + gRPC 5004, Ai HTTP 5001 + gRPC 5005, Notification HTTP 5006, Feed HTTP 5007 + gRPC 5008, Postgres 5432, Redis 6379, RabbitMQ 5672/15672, n8n 5678 (via nginx in dev compose).
 - Service gRPC ports are internal unless explicitly published by compose/k8s/Terraform.
-- Mailpit 1025/8025 is exposed by `Backend/Compose/docker-compose-production.yml`, not by the dev compose file.
 
 ## Current service map
 - User owns auth, profile, resources/S3 presigned URLs, subscriptions/billing, social media OAuth/account metadata, workspaces, admin users/subscriptions/transactions/config, and gRPC services consumed by Ai/Feed.
@@ -142,7 +141,7 @@ Backend/Microservices/<Service>.Microservice/
 
 ## Docker & Compose
 - `Backend/Compose/docker-compose.yml`: dev stack with placeholders; includes n8n + nginx.
-- `Backend/Compose/docker-compose-production.yml`: prod-like stack; includes Mailpit; treat as sensitive.
+- `Backend/Compose/docker-compose-production.yml`: prod-like stack; treat as sensitive.
 - Compose service names use kebab-case (e.g., `ai-microservice`, `user-microservice`, `api-gateway`).
 - Postgres init: `Backend/Compose/postgres/init.sql` creates `aidb` and `userdb`.
 - Production compose enables `AutoApply__Migrations` and seed data. Running or restarting it can modify runtime state files under `Backend/Compose/seed-data/feed/runtime/*.state.json`; treat those as generated local test artifacts unless the task is specifically about seed state.

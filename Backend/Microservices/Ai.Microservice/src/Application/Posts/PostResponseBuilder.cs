@@ -138,6 +138,7 @@ public sealed class PostResponseBuilder
             Username: author.Username,
             AvatarUrl: author.AvatarUrl,
             WorkspaceId: post.WorkspaceId,
+            PostBuilderId: post.PostBuilderId,
             ChatSessionId: post.ChatSessionId,
             SocialMediaId: post.SocialMediaId,
             Title: post.Title,

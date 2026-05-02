@@ -90,6 +90,7 @@ public sealed class GetPostBuilderByIdQueryTests
                 Id = builderId,
                 UserId = userId,
                 WorkspaceId = Guid.NewGuid(),
+                OriginKind = PostBuilderOriginKinds.AiGeminiDraft,
                 PostType = null,
                 ResourceIds = $"[\"{firstResourceId}\",\"{secondResourceId}\",\"{thirdResourceId}\",\"{fourthResourceId}\"]",
                 CreatedAt = DateTime.UtcNow.AddMinutes(-4),
@@ -154,6 +155,7 @@ public sealed class GetPostBuilderByIdQueryTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Id.Should().Be(builderId);
+        result.Value.OriginKind.Should().Be(PostBuilderOriginKinds.AiGeminiDraft);
         result.Value.Type.Should().BeNull();
         result.Value.ResourceIds.Should().Equal(firstResourceId, secondResourceId, thirdResourceId, fourthResourceId);
         result.Value.SocialMedia.Should().HaveCount(3);

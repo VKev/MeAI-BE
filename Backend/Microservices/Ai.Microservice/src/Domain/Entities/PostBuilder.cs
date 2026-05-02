@@ -12,6 +12,8 @@ public sealed class PostBuilder
 
     public Guid? WorkspaceId { get; set; }
 
+    public string? OriginKind { get; set; }
+
     public string? PostType { get; set; }
 
     [Column(TypeName = "jsonb")]

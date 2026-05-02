@@ -20,6 +20,7 @@ public sealed record ChatWebPostRequest(
 
 public sealed record ChatWebPostResult(
     Guid PostId,
+    Guid PostBuilderId,
     string? Title,
     string RetrievalMode,
     IReadOnlyList<string> SourceUrls,

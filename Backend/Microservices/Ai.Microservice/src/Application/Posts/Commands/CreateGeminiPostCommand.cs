@@ -23,6 +23,7 @@ public sealed class CreateGeminiPostCommandHandler
     : IRequestHandler<CreateGeminiPostCommand, Result<FacebookDraftPostResponse>>
 {
     private readonly IPostRepository _postRepository;
+    private readonly IPostBuilderRepository _postBuilderRepository;
     private readonly IWorkspaceRepository _workspaceRepository;
     private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
@@ -30,12 +31,14 @@ public sealed class CreateGeminiPostCommandHandler
 
     public CreateGeminiPostCommandHandler(
         IPostRepository postRepository,
+        IPostBuilderRepository postBuilderRepository,
         IWorkspaceRepository workspaceRepository,
         IUserConfigService userConfigService,
         IUserResourceService userResourceService,
         IGeminiCaptionService geminiCaptionService)
     {
         _postRepository = postRepository;
+        _postBuilderRepository = postBuilderRepository;
         _workspaceRepository = workspaceRepository;
         _userConfigService = userConfigService;
         _userResourceService = userResourceService;
@@ -157,9 +160,22 @@ public sealed class CreateGeminiPostCommandHandler
             PostType = resolvedPostType
         };
 
+        var postBuilder = new PostBuilder
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = request.UserId,
+            WorkspaceId = workspaceId,
+            OriginKind = PostBuilderOriginKinds.AiGeminiDraft,
+            PostType = resolvedPostType,
+            ResourceIds = GeminiDraftPostHelper.SerializeResourceIds(resourceIds),
+            CreatedAt = DateTimeExtensions.PostgreSqlUtcNow,
+            UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow
+        };
+
         var post = new Post
         {
             Id = Guid.CreateVersion7(),
+            PostBuilderId = postBuilder.Id,
             UserId = request.UserId,
             WorkspaceId = workspaceId,
             Title = string.IsNullOrWhiteSpace(title) ? null : title,
@@ -168,11 +184,13 @@ public sealed class CreateGeminiPostCommandHandler
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
+        await _postBuilderRepository.AddAsync(postBuilder, cancellationToken);
         await _postRepository.AddAsync(post, cancellationToken);
         await _postRepository.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new FacebookDraftPostResponse(
             post.Id,
+            postBuilder.Id,
             post.Status ?? "draft",
             resolvedPostType,
             caption ?? string.Empty,

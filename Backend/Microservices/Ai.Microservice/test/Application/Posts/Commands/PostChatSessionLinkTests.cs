@@ -17,7 +17,14 @@ public sealed class PostChatSessionLinkTests
         var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
         var chatSessionId = Guid.NewGuid();
+        PostBuilder? addedBuilder = null;
         Post? addedPost = null;
+
+        var postBuilderRepository = new Mock<IPostBuilderRepository>(MockBehavior.Strict);
+        postBuilderRepository
+            .Setup(repository => repository.AddAsync(It.IsAny<PostBuilder>(), It.IsAny<CancellationToken>()))
+            .Callback<PostBuilder, CancellationToken>((builder, _) => addedBuilder = builder)
+            .Returns(Task.CompletedTask);
 
         var postRepository = new Mock<IPostRepository>(MockBehavior.Strict);
         postRepository
@@ -45,6 +52,7 @@ public sealed class PostChatSessionLinkTests
 
         var handler = new CreatePostCommandHandler(
             postRepository.Object,
+            postBuilderRepository.Object,
             workspaceRepository.Object,
             chatSessionRepository.Object,
             CreatePostResponseBuilder());
@@ -63,10 +71,16 @@ public sealed class PostChatSessionLinkTests
         result.IsSuccess.Should().BeTrue();
         result.Value.ChatSessionId.Should().Be(chatSessionId);
         result.Value.WorkspaceId.Should().Be(workspaceId);
+        result.Value.PostBuilderId.Should().NotBeNull();
+        addedBuilder.Should().NotBeNull();
+        addedBuilder!.OriginKind.Should().Be(PostBuilderOriginKinds.UserCreated);
+        addedBuilder.WorkspaceId.Should().Be(workspaceId);
         addedPost.Should().NotBeNull();
+        addedPost!.PostBuilderId.Should().Be(addedBuilder.Id);
         addedPost!.ChatSessionId.Should().Be(chatSessionId);
         addedPost.WorkspaceId.Should().Be(workspaceId);
 
+        postBuilderRepository.VerifyAll();
         postRepository.VerifyAll();
         workspaceRepository.VerifyAll();
         chatSessionRepository.VerifyAll();

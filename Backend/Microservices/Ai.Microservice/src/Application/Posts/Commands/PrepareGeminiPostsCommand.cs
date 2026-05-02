@@ -127,6 +127,7 @@ public sealed class PrepareGeminiPostsCommandHandler
             Id = Guid.CreateVersion7(),
             UserId = request.UserId,
             WorkspaceId = workspaceId,
+            OriginKind = PostBuilderOriginKinds.AiGeminiDraft,
             PostType = resolvedBuilderPostType,
             ResourceIds = GeminiDraftPostHelper.SerializeResourceIds(builderResourceIds),
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow

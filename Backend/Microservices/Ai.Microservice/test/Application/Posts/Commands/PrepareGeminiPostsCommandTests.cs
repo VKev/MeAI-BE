@@ -98,6 +98,7 @@ public sealed class PrepareGeminiPostsCommandTests
         postBuilderRepository.Verify(repository => repository.AddAsync(
             It.Is<PostBuilder>(builder =>
                 builder.Id == result.Value.PostBuilderId &&
+                builder.OriginKind == PostBuilderOriginKinds.AiGeminiDraft &&
                 builder.PostType == "posts" &&
                 builder.ResourceIds == "[\"" + resourceId + "\"]"),
             It.IsAny<CancellationToken>()), Times.Once);

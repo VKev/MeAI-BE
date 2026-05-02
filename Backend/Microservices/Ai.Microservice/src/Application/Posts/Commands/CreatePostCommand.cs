@@ -16,23 +16,27 @@ public sealed record CreatePostCommand(
     PostContent? Content,
     string? Status,
     Guid? PostBuilderId = null,
-    string? Platform = null) : IRequest<Result<PostResponse>>;
+    string? Platform = null,
+    string? NewPostBuilderOrigin = null) : IRequest<Result<PostResponse>>;
 
 public sealed class CreatePostCommandHandler
     : IRequestHandler<CreatePostCommand, Result<PostResponse>>
 {
     private readonly IPostRepository _postRepository;
+    private readonly IPostBuilderRepository _postBuilderRepository;
     private readonly IWorkspaceRepository _workspaceRepository;
     private readonly IChatSessionRepository _chatSessionRepository;
     private readonly PostResponseBuilder _postResponseBuilder;
 
     public CreatePostCommandHandler(
         IPostRepository postRepository,
+        IPostBuilderRepository postBuilderRepository,
         IWorkspaceRepository workspaceRepository,
         IChatSessionRepository chatSessionRepository,
         PostResponseBuilder postResponseBuilder)
     {
         _postRepository = postRepository;
+        _postBuilderRepository = postBuilderRepository;
         _workspaceRepository = workspaceRepository;
         _chatSessionRepository = chatSessionRepository;
         _postResponseBuilder = postResponseBuilder;
@@ -77,6 +81,24 @@ public sealed class CreatePostCommandHandler
         }
 
         var postBuilderId = NormalizeGuid(request.PostBuilderId);
+        if (!postBuilderId.HasValue)
+        {
+            var builder = new PostBuilder
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = request.UserId,
+                WorkspaceId = workspaceId,
+                OriginKind = NormalizePostBuilderOrigin(request.NewPostBuilderOrigin),
+                PostType = NormalizePostType(request.Content?.PostType),
+                ResourceIds = GeminiDraftPostHelper.SerializeResourceIds(GetResourceIds(request.Content)),
+                CreatedAt = DateTimeExtensions.PostgreSqlUtcNow,
+                UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow
+            };
+
+            await _postBuilderRepository.AddAsync(builder, cancellationToken);
+            postBuilderId = builder.Id;
+        }
+
         var normalizedPlatform = NormalizePlatform(request.Platform);
         var normalizedPostType = NormalizePostType(request.Content?.PostType);
 
@@ -155,6 +177,36 @@ public sealed class CreatePostCommandHandler
     private static Guid? NormalizeGuid(Guid? value)
     {
         return value == Guid.Empty ? null : value;
+    }
+
+    private static IReadOnlyList<Guid> GetResourceIds(PostContent? content)
+    {
+        if (content?.ResourceList is null || content.ResourceList.Count == 0)
+        {
+            return Array.Empty<Guid>();
+        }
+
+        var ids = new List<Guid>();
+        foreach (var value in content.ResourceList)
+        {
+            if (Guid.TryParse(value, out var parsed) && parsed != Guid.Empty && !ids.Contains(parsed))
+            {
+                ids.Add(parsed);
+            }
+        }
+
+        return ids;
+    }
+
+    private static string NormalizePostBuilderOrigin(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            PostBuilderOriginKinds.AiGeminiDraft => PostBuilderOriginKinds.AiGeminiDraft,
+            PostBuilderOriginKinds.AiOther => PostBuilderOriginKinds.AiOther,
+            _ => PostBuilderOriginKinds.UserCreated
+        };
     }
 
     // FE uses `thread` (no s); DB has both `thread` and `threads`. Instagram also has
