@@ -20,6 +20,7 @@ public sealed record CreateChatImageCommand(
     Guid ChatSessionId,
     string Prompt,
     IReadOnlyList<Guid> ResourceIds,
+    Guid? LinkedPostId,
     string? Model,
     string? AspectRatio,
     string? Resolution,
@@ -36,6 +37,7 @@ public sealed class CreateChatImageCommandHandler
 {
     private readonly IChatRepository _chatRepository;
     private readonly IChatSessionRepository _chatSessionRepository;
+    private readonly IPostRepository _postRepository;
     private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
     private readonly ICoinPricingService _pricingService;
@@ -46,6 +48,7 @@ public sealed class CreateChatImageCommandHandler
     public CreateChatImageCommandHandler(
         IChatRepository chatRepository,
         IChatSessionRepository chatSessionRepository,
+        IPostRepository postRepository,
         IUserConfigService userConfigService,
         IUserResourceService userResourceService,
         ICoinPricingService pricingService,
@@ -55,6 +58,7 @@ public sealed class CreateChatImageCommandHandler
     {
         _chatRepository = chatRepository;
         _chatSessionRepository = chatSessionRepository;
+        _postRepository = postRepository;
         _userConfigService = userConfigService;
         _userResourceService = userResourceService;
         _pricingService = pricingService;
@@ -81,6 +85,26 @@ public sealed class CreateChatImageCommandHandler
         if (session.UserId != request.UserId)
         {
             return Result.Failure<ChatImageResponse>(ChatSessionErrors.Unauthorized);
+        }
+
+        var linkedPostId = request.LinkedPostId == Guid.Empty ? null : request.LinkedPostId;
+        if (linkedPostId.HasValue)
+        {
+            var linkedPost = await _postRepository.GetByIdAsync(linkedPostId.Value, cancellationToken);
+            if (linkedPost is null || linkedPost.DeletedAt.HasValue)
+            {
+                return Result.Failure<ChatImageResponse>(new Error("Post.NotFound", "Linked post not found."));
+            }
+
+            if (linkedPost.UserId != request.UserId)
+            {
+                return Result.Failure<ChatImageResponse>(new Error("Post.Unauthorized", "You are not authorized to link this post."));
+            }
+
+            if (linkedPost.WorkspaceId.HasValue && linkedPost.WorkspaceId.Value != session.WorkspaceId)
+            {
+                return Result.Failure<ChatImageResponse>(new Error("Post.WorkspaceMismatch", "Linked post does not belong to the current chat session workspace."));
+            }
         }
 
         var resourceIds = request.ResourceIds?
@@ -191,6 +215,7 @@ public sealed class CreateChatImageCommandHandler
             outputFormat,
             numberOfVariances,
             expectedResultCount,
+            linkedPostId,
             socialTargets is { Count: > 0 } ? socialTargets : null);
 
         var chat = new Chat
@@ -270,6 +295,7 @@ public sealed class CreateChatImageCommandHandler
         string OutputFormat,
         int NumberOfVariances,
         int ExpectedResultCount,
+        Guid? LinkedPostId,
         List<SocialTargetDto>? SocialTargets);
 
     private static IReadOnlyList<AiSpendRecord> BuildSpendRecords(

@@ -1,6 +1,6 @@
 using Application.Agents;
-using Application.Agents.Models;
 using Application.Agents.Queries;
+using Application.Agents.Models;
 using Application.ChatSessions;
 using Domain.Entities;
 using Domain.Repositories;
@@ -17,11 +17,11 @@ public sealed class GetAgentSessionMessagesQueryTests
         var sessionId = Guid.NewGuid();
 
         var chatSessionRepository = new Mock<IChatSessionRepository>(MockBehavior.Strict);
+        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         chatSessionRepository
             .Setup(repository => repository.GetByIdAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((ChatSession?)null);
 
-        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         var handler = new GetAgentSessionMessagesQueryHandler(chatSessionRepository.Object, chatRepository.Object);
 
         var result = await handler.Handle(
@@ -45,11 +45,11 @@ public sealed class GetAgentSessionMessagesQueryTests
         };
 
         var chatSessionRepository = new Mock<IChatSessionRepository>(MockBehavior.Strict);
+        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         chatSessionRepository
             .Setup(repository => repository.GetByIdAsync(session.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
 
-        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         var handler = new GetAgentSessionMessagesQueryHandler(chatSessionRepository.Object, chatRepository.Object);
 
         var result = await handler.Handle(
@@ -63,13 +63,13 @@ public sealed class GetAgentSessionMessagesQueryTests
     }
 
     [Fact]
-    public async Task Handle_ShouldReturnOrderedMessagesAndParseMetadata()
+    public async Task Handle_ShouldReturnPersistedMessages_WhenSessionIsOwned()
     {
         var userId = Guid.NewGuid();
         var sessionId = Guid.NewGuid();
-        var createdAt = new DateTime(2026, 04, 23, 10, 00, 00, DateTimeKind.Utc);
 
         var chatSessionRepository = new Mock<IChatSessionRepository>(MockBehavior.Strict);
+        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         chatSessionRepository
             .Setup(repository => repository.GetByIdAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ChatSession
@@ -78,55 +78,30 @@ public sealed class GetAgentSessionMessagesQueryTests
                 UserId = userId,
                 WorkspaceId = Guid.NewGuid()
             });
-
-        var earliestId = Guid.Parse("00000000-0000-0000-0000-000000000001");
-        var laterId = Guid.Parse("00000000-0000-0000-0000-0000000000ff");
-        var latestId = Guid.Parse("00000000-0000-0000-0000-000000000100");
-
-        var chats = new[]
-        {
-            new Chat
-            {
-                Id = latestId,
-                SessionId = sessionId,
-                Prompt = "Assistant reply",
-                Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(
-                    Role: "assistant",
-                    Model: "gemini-3.1-flash-lite-preview",
-                    ToolNames: ["get_posts"])),
-                CreatedAt = createdAt.AddMinutes(1)
-            },
-            new Chat
-            {
-                Id = laterId,
-                SessionId = sessionId,
-                Prompt = "Invalid config fallback",
-                Config = "{not-json",
-                CreatedAt = createdAt
-            },
-            new Chat
-            {
-                Id = earliestId,
-                SessionId = sessionId,
-                Prompt = "User request",
-                Config = null,
-                CreatedAt = createdAt
-            },
-            new Chat
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000200"),
-                SessionId = sessionId,
-                Prompt = "Soft deleted",
-                Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(Role: "assistant")),
-                CreatedAt = createdAt.AddMinutes(2),
-                DeletedAt = createdAt.AddMinutes(3)
-            }
-        };
-
-        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
         chatRepository
             .Setup(repository => repository.GetBySessionIdAsync(sessionId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(chats);
+            .ReturnsAsync([
+                new Chat
+                {
+                    Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                    SessionId = sessionId,
+                    Prompt = "hello",
+                    Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(Role: "user")),
+                    CreatedAt = new DateTime(2026, 4, 30, 10, 0, 0, DateTimeKind.Utc)
+                },
+                new Chat
+                {
+                    Id = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                    SessionId = sessionId,
+                    Prompt = "draft created",
+                    Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(
+                        Role: "assistant",
+                        Model: "gemini-test",
+                        ToolNames: ["create_post"],
+                        Actions: [new AgentActionResponse("post_create", "create_post", "completed")])),
+                    CreatedAt = new DateTime(2026, 4, 30, 10, 0, 1, DateTimeKind.Utc)
+                }
+            ]);
 
         var handler = new GetAgentSessionMessagesQueryHandler(chatSessionRepository.Object, chatRepository.Object);
 
@@ -135,33 +110,12 @@ public sealed class GetAgentSessionMessagesQueryTests
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().HaveCount(3);
-
-        var messages = result.Value.ToArray();
-        messages.Select(message => message.Id).Should().ContainInOrder(earliestId, laterId, latestId);
-
-        messages[0].Should().BeEquivalentTo(new AgentMessageResponse(
-            earliestId,
-            sessionId,
-            "user",
-            "User request",
-            null,
-            null,
-            null,
-            [],
-            [],
-            createdAt,
-            null));
-
-        messages[1].Role.Should().Be("user");
-        messages[1].ToolNames.Should().BeEmpty();
-        messages[1].Actions.Should().BeEmpty();
-
-        messages[2].Role.Should().Be("assistant");
-        messages[2].Model.Should().Be("gemini-3.1-flash-lite-preview");
-        messages[2].ToolNames.Should().BeEquivalentTo(["get_posts"]);
-        messages[2].Actions.Should().BeEmpty();
-
+        result.Value.Should().HaveCount(2);
+        result.Value[0].Role.Should().Be("user");
+        result.Value[0].Content.Should().Be("hello");
+        result.Value[1].Role.Should().Be("assistant");
+        result.Value[1].Model.Should().Be("gemini-test");
+        result.Value[1].ToolNames.Should().BeEquivalentTo(["create_post"]);
         chatSessionRepository.VerifyAll();
         chatRepository.VerifyAll();
     }

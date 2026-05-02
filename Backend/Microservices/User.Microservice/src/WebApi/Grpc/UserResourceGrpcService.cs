@@ -4,6 +4,8 @@ using Application.Configs.Queries;
 using Application.Users.Queries;
 using Grpc.Core;
 using MediatR;
+using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Common.Resources;
 using SharedLibrary.Grpc.UserResources;
 
 namespace WebApi.Grpc;
@@ -52,7 +54,11 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
             ResourceId = resource.Id.ToString(),
             PresignedUrl = resource.PresignedUrl,
             ContentType = resource.ContentType ?? string.Empty,
-            ResourceType = resource.ResourceType ?? string.Empty
+            ResourceType = resource.ResourceType ?? string.Empty,
+            OriginKind = resource.OriginKind ?? string.Empty,
+            OriginSourceUrl = resource.OriginSourceUrl ?? string.Empty,
+            OriginChatSessionId = resource.OriginChatSessionId?.ToString() ?? string.Empty,
+            OriginChatId = resource.OriginChatId?.ToString() ?? string.Empty
         }));
 
         return response;
@@ -88,7 +94,11 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
             ResourceId = resource.Id.ToString(),
             PresignedUrl = resource.PresignedUrl,
             ContentType = resource.ContentType ?? string.Empty,
-            ResourceType = resource.ResourceType ?? string.Empty
+            ResourceType = resource.ResourceType ?? string.Empty,
+            OriginKind = resource.OriginKind ?? string.Empty,
+            OriginSourceUrl = resource.OriginSourceUrl ?? string.Empty,
+            OriginChatSessionId = resource.OriginChatSessionId?.ToString() ?? string.Empty,
+            OriginChatId = resource.OriginChatId?.ToString() ?? string.Empty
         }));
 
         return response;
@@ -160,6 +170,7 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
 
         var status = string.IsNullOrWhiteSpace(request.Status) ? null : request.Status;
         var resourceType = string.IsNullOrWhiteSpace(request.ResourceType) ? null : request.ResourceType;
+        var originKind = string.IsNullOrWhiteSpace(request.OriginKind) ? null : request.OriginKind.Trim();
 
         Guid? workspaceId = null;
         if (!string.IsNullOrWhiteSpace(request.WorkspaceId))
@@ -175,12 +186,32 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
             }
         }
 
+        var originChatSessionId = ParseOptionalGuid(request.OriginChatSessionId, "originChatSessionId");
+        if (originChatSessionId.IsFailure)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, originChatSessionId.Error.Description));
+        }
+
+        var originChatId = ParseOptionalGuid(request.OriginChatId, "originChatId");
+        if (originChatId.IsFailure)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, originChatId.Error.Description));
+        }
+
+        var provenance = new ResourceProvenanceMetadata(
+            originKind,
+            originChatSessionId.Value,
+            originChatId.Value);
+
         var response = new CreateResourcesFromUrlsResponse();
 
         foreach (var url in request.Urls)
         {
             var result = await _mediator.Send(
-                new UploadResourceFromUrlCommand(userId, url, status, resourceType, workspaceId),
+                new UploadResourceFromUrlCommand(userId, url, status, resourceType, workspaceId, provenance with
+                {
+                    OriginSourceUrl = url
+                }),
                 context.CancellationToken);
 
             if (result.IsFailure)
@@ -193,11 +224,62 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
                 ResourceId = result.Value.Id.ToString(),
                 PresignedUrl = result.Value.Link ?? string.Empty,
                 ContentType = result.Value.ContentType ?? string.Empty,
-                ResourceType = result.Value.ResourceType ?? string.Empty
+                ResourceType = result.Value.ResourceType ?? string.Empty,
+                OriginKind = result.Value.OriginKind ?? string.Empty,
+                OriginSourceUrl = result.Value.OriginSourceUrl ?? string.Empty,
+                OriginChatSessionId = result.Value.OriginChatSessionId?.ToString() ?? string.Empty,
+                OriginChatId = result.Value.OriginChatId?.ToString() ?? string.Empty
             });
         }
 
         return response;
+    }
+
+    public override async Task<BackfillResourceProvenanceResponse> BackfillResourceProvenance(
+        BackfillResourceProvenanceRequest request,
+        ServerCallContext context)
+    {
+        var items = new List<Application.Resources.Commands.ResourceProvenanceBackfillItem>(request.Items.Count);
+        foreach (var item in request.Items)
+        {
+            if (!Guid.TryParse(item.ResourceId, out var resourceId) || resourceId == Guid.Empty)
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid resourceId."));
+            }
+
+            var originChatSessionId = ParseOptionalGuid(item.OriginChatSessionId, "originChatSessionId");
+            if (originChatSessionId.IsFailure)
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, originChatSessionId.Error.Description));
+            }
+
+            var originChatId = ParseOptionalGuid(item.OriginChatId, "originChatId");
+            if (originChatId.IsFailure)
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, originChatId.Error.Description));
+            }
+
+            items.Add(new Application.Resources.Commands.ResourceProvenanceBackfillItem(
+                resourceId,
+                string.IsNullOrWhiteSpace(item.OriginKind) ? null : item.OriginKind.Trim(),
+                string.IsNullOrWhiteSpace(item.OriginSourceUrl) ? null : item.OriginSourceUrl.Trim(),
+                originChatSessionId.Value,
+                originChatId.Value));
+        }
+
+        var result = await _mediator.Send(
+            new BackfillResourceProvenanceCommand(items),
+            context.CancellationToken);
+
+        if (result.IsFailure)
+        {
+            throw new RpcException(new Status(StatusCode.Internal, result.Error.Description));
+        }
+
+        return new BackfillResourceProvenanceResponse
+        {
+            UpdatedCount = result.Value
+        };
     }
 
     public override async Task<GetActiveConfigResponse> GetActiveConfig(
@@ -244,5 +326,22 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
             FullName = profile.FullName ?? string.Empty,
             AvatarUrl = profile.AvatarPresignedUrl ?? string.Empty
         };
+    }
+
+    private static Result<Guid?> ParseOptionalGuid(string value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return Result.Success<Guid?>(null);
+        }
+
+        if (!Guid.TryParse(value, out var parsedId))
+        {
+            return Result.Failure<Guid?>(new SharedLibrary.Common.ResponseModel.Error(
+                "Resource.InvalidGuid",
+                $"{fieldName} must be a valid GUID."));
+        }
+
+        return Result.Success<Guid?>(parsedId == Guid.Empty ? null : parsedId);
     }
 }

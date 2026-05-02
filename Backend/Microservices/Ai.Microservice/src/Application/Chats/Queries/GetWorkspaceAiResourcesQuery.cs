@@ -2,6 +2,7 @@ using Application.Abstractions.Resources;
 using Application.Chats.Models;
 using Domain.Repositories;
 using MediatR;
+using SharedLibrary.Common.Resources;
 using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Chats.Queries;
@@ -9,13 +10,20 @@ namespace Application.Chats.Queries;
 public sealed record GetWorkspaceAiResourcesQuery(
     Guid WorkspaceId,
     Guid UserId,
-    IReadOnlyList<string>? ResourceTypes)
+    IReadOnlyList<string>? ResourceTypes,
+    IReadOnlyList<string>? OriginKinds = null)
     : IRequest<Result<IEnumerable<WorkspaceAiResourceResponse>>>;
 
 public sealed class GetWorkspaceAiResourcesQueryHandler
     : IRequestHandler<GetWorkspaceAiResourcesQuery, Result<IEnumerable<WorkspaceAiResourceResponse>>>
 {
     private static readonly string[] AllowedTypes = ["image", "video"];
+    private static readonly string[] AllowedOriginKinds =
+    [
+        ResourceOriginKinds.UserUpload,
+        ResourceOriginKinds.AiGenerated,
+        ResourceOriginKinds.AiImportedUrl
+    ];
     private readonly IChatSessionRepository _chatSessionRepository;
     private readonly IChatRepository _chatRepository;
     private readonly IUserResourceService _userResourceService;
@@ -35,6 +43,7 @@ public sealed class GetWorkspaceAiResourcesQueryHandler
         CancellationToken cancellationToken)
     {
         var selectedTypes = NormalizeTypes(request.ResourceTypes);
+        var selectedOriginKinds = NormalizeOriginKinds(request.OriginKinds);
         if (selectedTypes.Count == 0)
         {
             return Result.Success<IEnumerable<WorkspaceAiResourceResponse>>(Array.Empty<WorkspaceAiResourceResponse>());
@@ -83,6 +92,7 @@ public sealed class GetWorkspaceAiResourcesQueryHandler
             .Where(pair => resourcesById.ContainsKey(pair.ResourceId))
             .Select(pair => ToResponse(pair, resourcesById[pair.ResourceId]))
             .Where(item => IsTypeAllowed(item.ResourceType, selectedTypes))
+            .Where(item => IsOriginKindAllowed(item.OriginKind, selectedOriginKinds))
             .OrderByDescending(item => item.ChatCreatedAt)
             .ToList();
 
@@ -100,6 +110,10 @@ public sealed class GetWorkspaceAiResourcesQueryHandler
             resource.PresignedUrl,
             resource.ContentType,
             resource.ResourceType,
+            resource.OriginKind,
+            resource.OriginSourceUrl,
+            resource.OriginChatSessionId,
+            resource.OriginChatId,
             pair.ChatCreatedAt);
     }
 
@@ -128,6 +142,35 @@ public sealed class GetWorkspaceAiResourcesQueryHandler
             .ToHashSet(StringComparer.Ordinal);
 
         return normalized.Count == 0 ? AllowedTypes.ToHashSet(StringComparer.Ordinal) : normalized;
+    }
+
+    private static bool IsOriginKindAllowed(string? originKind, IReadOnlySet<string> selectedOriginKinds)
+    {
+        if (selectedOriginKinds.Count == 0)
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(originKind))
+        {
+            return false;
+        }
+
+        return selectedOriginKinds.Contains(originKind.Trim().ToLowerInvariant());
+    }
+
+    private static HashSet<string> NormalizeOriginKinds(IReadOnlyList<string>? originKinds)
+    {
+        if (originKinds is null || originKinds.Count == 0)
+        {
+            return [];
+        }
+
+        return originKinds
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim().ToLowerInvariant())
+            .Where(value => AllowedOriginKinds.Contains(value, StringComparer.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private sealed record ChatResourcePair(

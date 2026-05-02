@@ -10,6 +10,7 @@ service UserResourceService {
   rpc GetPublicUserProfileByUsername (GetPublicUserProfileByUsernameRequest) returns (GetPublicUserProfileByUsernameResponse);
   rpc GetPublicUserProfilesByIds (GetPublicUserProfilesByIdsRequest) returns (GetPublicUserProfilesByIdsResponse);
   rpc CreateResourcesFromUrls (CreateResourcesFromUrlsRequest) returns (CreateResourcesFromUrlsResponse);
+  rpc BackfillResourceProvenance (BackfillResourceProvenanceRequest) returns (BackfillResourceProvenanceResponse);
   rpc GetActiveConfig (GetActiveConfigRequest) returns (GetActiveConfigResponse);
 }
 
@@ -38,6 +39,10 @@ message PresignedResource {
   string presigned_url = 2;
   string content_type = 3;
   string resource_type = 4;
+  string origin_kind = 5;
+  string origin_source_url = 6;
+  string origin_chat_session_id = 7;
+  string origin_chat_id = 8;
 }
 
 message GetPresignedResourcesResponse {
@@ -76,6 +81,9 @@ message CreateResourcesFromUrlsRequest {
   string status = 3;
   string resource_type = 4;
   string workspace_id = 5;
+  string origin_kind = 6;
+  string origin_chat_session_id = 7;
+  string origin_chat_id = 8;
 }
 
 message CreatedResource {
@@ -83,10 +91,30 @@ message CreatedResource {
   string presigned_url = 2;
   string content_type = 3;
   string resource_type = 4;
+  string origin_kind = 5;
+  string origin_source_url = 6;
+  string origin_chat_session_id = 7;
+  string origin_chat_id = 8;
 }
 
 message CreateResourcesFromUrlsResponse {
   repeated CreatedResource resources = 1;
+}
+
+message ResourceProvenanceBackfillItem {
+  string resource_id = 1;
+  string origin_kind = 2;
+  string origin_source_url = 3;
+  string origin_chat_session_id = 4;
+  string origin_chat_id = 5;
+}
+
+message BackfillResourceProvenanceRequest {
+  repeated ResourceProvenanceBackfillItem items = 1;
+}
+
+message BackfillResourceProvenanceResponse {
+  int32 updated_count = 1;
 }
 
 message GetActiveConfigRequest {

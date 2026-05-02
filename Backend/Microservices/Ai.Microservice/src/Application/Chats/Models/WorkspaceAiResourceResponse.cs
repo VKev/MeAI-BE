@@ -7,4 +7,8 @@ public sealed record WorkspaceAiResourceResponse(
     string PresignedUrl,
     string? ContentType,
     string? ResourceType,
+    string? OriginKind,
+    string? OriginSourceUrl,
+    Guid? OriginChatSessionId,
+    Guid? OriginChatId,
     DateTime? ChatCreatedAt);

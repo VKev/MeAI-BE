@@ -1,19 +1,20 @@
 using Application.Abstractions.Agents;
 using Application.Agents.Models;
 using Application.ChatSessions;
-using System.Collections.Concurrent;
 using Domain.Entities;
 using Domain.Repositories;
+using System.Collections.Concurrent;
 using MediatR;
-using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
+using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Agents.Commands;
 
 public sealed record SendAgentMessageCommand(
     Guid SessionId,
     Guid UserId,
-    string? Message) : IRequest<Result<AgentChatResponse>>;
+    string? Message,
+    AgentImageOptions? ImageOptions = null) : IRequest<Result<AgentChatResponse>>;
 
 public sealed class SendAgentMessageCommandHandler
     : IRequestHandler<SendAgentMessageCommand, Result<AgentChatResponse>>
@@ -72,34 +73,15 @@ public sealed class SendAgentMessageCommandHandler
             return Result.Failure<AgentChatResponse>(ChatSessionErrors.Unauthorized);
         }
 
-        var now = DateTimeExtensions.PostgreSqlUtcNow;
-        var existingChats = (await _chatRepository.GetBySessionIdAsync(session.Id, cancellationToken))
-            .OrderBy(chat => chat.CreatedAt ?? DateTime.MinValue)
-            .ThenBy(chat => chat.Id)
-            .ToList();
-
-        var duplicateResult = TryHandleDuplicateMessage(session.Id, normalizedMessage, existingChats, now);
-        if (duplicateResult is not null)
-        {
-            return duplicateResult;
-        }
-
-        var userChat = new Chat
-        {
-            Id = Guid.CreateVersion7(),
-            SessionId = session.Id,
-            Prompt = normalizedMessage,
-            Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(Role: "user")),
-            CreatedAt = now
-        };
-
-        await _chatRepository.AddAsync(userChat, cancellationToken);
-        session.UpdatedAt = now;
-        _chatSessionRepository.Update(session);
-        await _chatRepository.SaveChangesAsync(cancellationToken);
-
+        var assistantChatId = Guid.CreateVersion7();
         var completionResult = await _agentChatService.GenerateReplyAsync(
-            new AgentChatRequest(request.UserId, session.Id, session.WorkspaceId),
+            new AgentChatRequest(
+                request.UserId,
+                session.Id,
+                session.WorkspaceId,
+                normalizedMessage,
+                request.ImageOptions,
+                assistantChatId),
             cancellationToken);
 
         if (completionResult.IsFailure)
@@ -107,89 +89,83 @@ public sealed class SendAgentMessageCommandHandler
             return Result.Failure<AgentChatResponse>(completionResult.Error);
         }
 
-        var assistantChat = new Chat
+        var now = DateTimeExtensions.PostgreSqlUtcNow;
+        var userChat = new Chat
         {
             Id = Guid.CreateVersion7(),
             SessionId = session.Id,
-            Prompt = completionResult.Value.Content,
-            Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(
-                Role: "assistant",
-                Model: completionResult.Value.Model,
-                ToolNames: completionResult.Value.ToolNames,
-                Actions: completionResult.Value.Actions)),
-            CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
+            Prompt = normalizedMessage,
+            Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(Role: "user")),
+            Status = "completed",
+            CreatedAt = now,
+            UpdatedAt = now
         };
 
-        await _chatRepository.AddAsync(assistantChat, cancellationToken);
-        session.UpdatedAt = assistantChat.CreatedAt;
-        _chatSessionRepository.Update(session);
+        await _chatRepository.AddAsync(userChat, cancellationToken);
+
+        Chat? assistantChat = null;
+        var shouldPersistAssistant = !string.Equals(
+            completionResult.Value.Action,
+            "validation_failed",
+            StringComparison.Ordinal);
+
+        if (shouldPersistAssistant)
+        {
+            assistantChat = new Chat
+            {
+                Id = assistantChatId,
+                SessionId = session.Id,
+                Prompt = completionResult.Value.Content,
+                Config = AgentMessageConfigSerializer.Serialize(new AgentChatMetadata(
+                    Role: "assistant",
+                    Model: completionResult.Value.Model,
+                    ToolNames: completionResult.Value.ToolNames,
+                    Actions: completionResult.Value.Actions,
+                    RetrievalMode: completionResult.Value.RetrievalMode,
+                    SourceUrls: completionResult.Value.SourceUrls,
+                    ImportedResourceIds: completionResult.Value.ImportedResourceIds)),
+                Status = "completed",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            await _chatRepository.AddAsync(assistantChat, cancellationToken);
+        }
+
         await _chatRepository.SaveChangesAsync(cancellationToken);
+
+        var userMessage = AgentMessageConfigSerializer.ToResponse(userChat);
+        var assistantMessage = shouldPersistAssistant && assistantChat is not null
+            ? AgentMessageConfigSerializer.ToResponse(assistantChat)
+            : new AgentMessageResponse(
+                Guid.CreateVersion7(),
+                session.Id,
+                "assistant",
+                completionResult.Value.Content,
+                "completed",
+                null,
+                completionResult.Value.Model,
+                completionResult.Value.ToolNames,
+                completionResult.Value.Actions?.ToArray() ?? [],
+                completionResult.Value.RetrievalMode,
+                completionResult.Value.SourceUrls?.ToArray() ?? [],
+                completionResult.Value.ImportedResourceIds?.ToArray() ?? [],
+                DateTime.UtcNow,
+                null);
 
         return Result.Success(new AgentChatResponse(
             session.Id,
-            AgentMessageConfigSerializer.ToResponse(userChat),
-            AgentMessageConfigSerializer.ToResponse(assistantChat)));
-    }
-
-    private static Result<AgentChatResponse>? TryHandleDuplicateMessage(
-        Guid sessionId,
-        string normalizedMessage,
-        IReadOnlyList<Chat> existingChats,
-        DateTime now)
-    {
-        if (existingChats.Count == 0)
-        {
-            return null;
-        }
-
-        var latest = existingChats[^1];
-        var latestMetadata = AgentMessageConfigSerializer.Parse(latest.Config);
-
-        if (string.Equals(latestMetadata.Role, "user", StringComparison.OrdinalIgnoreCase) &&
-            IsSameRecentMessage(latest, normalizedMessage, now, TimeSpan.FromSeconds(30)))
-        {
-            return Result.Failure<AgentChatResponse>(AgentErrors.DuplicateMessageInProgress);
-        }
-
-        if (!string.Equals(latestMetadata.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var previousUser = existingChats
-            .Take(existingChats.Count - 1)
-            .LastOrDefault(chat =>
-                string.Equals(
-                    AgentMessageConfigSerializer.Parse(chat.Config).Role,
-                    "user",
-                    StringComparison.OrdinalIgnoreCase));
-
-        if (previousUser is null ||
-            !IsSameRecentMessage(previousUser, normalizedMessage, now, TimeSpan.FromMinutes(5)))
-        {
-            return null;
-        }
-
-        return Result.Success(new AgentChatResponse(
-            sessionId,
-            AgentMessageConfigSerializer.ToResponse(previousUser),
-            AgentMessageConfigSerializer.ToResponse(latest)));
-    }
-
-    private static bool IsSameRecentMessage(Chat chat, string normalizedMessage, DateTime now, TimeSpan window)
-    {
-        if (!string.Equals(NormalizeMessage(chat.Prompt), normalizedMessage, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (!chat.CreatedAt.HasValue)
-        {
-            return true;
-        }
-
-        var age = now - chat.CreatedAt.Value;
-        return age >= TimeSpan.Zero && age <= window;
+            userMessage,
+            assistantMessage,
+            completionResult.Value.Action,
+            completionResult.Value.ValidationError,
+            completionResult.Value.RevisedPrompt,
+            completionResult.Value.PostId,
+            completionResult.Value.ChatId,
+            completionResult.Value.CorrelationId,
+            completionResult.Value.RetrievalMode,
+            completionResult.Value.SourceUrls,
+            completionResult.Value.ImportedResourceIds));
     }
 
     private static string NormalizeMessage(string? message)

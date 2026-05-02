@@ -46,6 +46,9 @@ public static class AgentMessageConfigSerializer
             metadata.Model,
             metadata.ToolNames?.ToArray() ?? Array.Empty<string>(),
             metadata.Actions?.ToArray() ?? Array.Empty<AgentActionResponse>(),
+            metadata.RetrievalMode,
+            metadata.SourceUrls?.ToArray() ?? Array.Empty<string>(),
+            metadata.ImportedResourceIds?.ToArray() ?? Array.Empty<Guid>(),
             chat.CreatedAt,
             chat.UpdatedAt);
     }

@@ -12,6 +12,7 @@ Thư mục này chứa 2 workflow phục vụ `FR-U8`:
   - nhận request `web_search` trực tiếp từ Gemini tool;
   - gọi Brave Search;
   - trả normalized payload về `Ai.Microservice`.
+  - `Ai.Microservice` sẽ enrich tiếp bằng cách mở top URLs, lấy text từ trang, trích media URLs và có thể import ảnh/video về resource của user gọi AI.
 
 ## Cách dùng local
 
@@ -105,7 +106,8 @@ Response body:
 ## Ghi chú
 
 - Các workflow này cố tình giữ `Ai.Microservice` là source of truth.
-- `n8n` chỉ orchestration + web fetching, không publish social trực tiếp.
+- `n8n` chỉ orchestration + search discovery, không publish social trực tiếp.
+- Brave Search response chỉ là lớp discovery ban đầu. Sau khi `Ai.Microservice` nhận payload, service sẽ tự fetch nội dung trang thật từ top search results, rebuild `llmContext` từ page content và có thể tải media về User resource ownership bằng gRPC `CreateResourcesFromUrls`.
 - Compose hiện dùng service `n8n-import` với lệnh `import:workflow --separate --input=/workspace/n8n-local/workflows` rồi chạy `update:workflow --active=true` cho từng workflow trước khi `n8n` start.
 - Lý do cần bước activate riêng: `n8n import:workflow` trên CLI có thể tự đưa workflow về inactive dù JSON có `active: true`; nếu không activate lại, production webhook `/webhook/...` sẽ trả `404`.
 - Nếu import workflow mà `n8n` version khác nhau làm lệch một vài node option nhỏ, hãy giữ nguyên shape và contract của payload ở trên.

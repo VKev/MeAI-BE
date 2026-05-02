@@ -1,5 +1,5 @@
 {
-  "SeededAtUtc": "2026-04-25T08:06:08.8269288Z",
+  "SeededAtUtc": "2026-05-02T02:53:03.0382192Z",
   "Users": [
     {
       "Id": "333d8e07-ffc3-9879-58b7-8ffafd3a94cc",
@@ -154,7 +154,6 @@
       "RelativePath": "landscape.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 520490,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.gif"
     },
     {
@@ -164,7 +163,6 @@
       "RelativePath": "landscape.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 10608676,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.jpg"
     },
     {
@@ -174,7 +172,6 @@
       "RelativePath": "landscape2.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 2640044,
       "Link": "http://localhost:2406/api/User/seed-media/landscape2.jpg"
     },
     {
@@ -184,7 +181,6 @@
       "RelativePath": "landscapevideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 97104146,
       "Link": "http://localhost:2406/api/User/seed-media/landscapevideo.mp4"
     },
     {
@@ -194,7 +190,6 @@
       "RelativePath": "portailvideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 620035,
       "Link": "http://localhost:2406/api/User/seed-media/portailvideo.mp4"
     },
     {
@@ -204,7 +199,6 @@
       "RelativePath": "squaregif.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 895779,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif.gif"
     },
     {
@@ -214,7 +208,6 @@
       "RelativePath": "squaregif2.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 4320576,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif2.gif"
     },
     {
@@ -224,7 +217,6 @@
       "RelativePath": "landscape.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 520490,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.gif"
     },
     {
@@ -234,7 +226,6 @@
       "RelativePath": "landscape.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 10608676,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.jpg"
     },
     {
@@ -244,7 +235,6 @@
       "RelativePath": "landscape2.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 2640044,
       "Link": "http://localhost:2406/api/User/seed-media/landscape2.jpg"
     },
     {
@@ -254,7 +244,6 @@
       "RelativePath": "landscapevideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 97104146,
       "Link": "http://localhost:2406/api/User/seed-media/landscapevideo.mp4"
     },
     {
@@ -264,7 +253,6 @@
       "RelativePath": "portailvideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 620035,
       "Link": "http://localhost:2406/api/User/seed-media/portailvideo.mp4"
     },
     {
@@ -274,7 +262,6 @@
       "RelativePath": "squaregif.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 895779,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif.gif"
     },
     {
@@ -284,7 +271,6 @@
       "RelativePath": "squaregif2.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 4320576,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif2.gif"
     },
     {
@@ -294,7 +280,6 @@
       "RelativePath": "landscape.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 520490,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.gif"
     },
     {
@@ -304,7 +289,6 @@
       "RelativePath": "landscape.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 10608676,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.jpg"
     },
     {
@@ -314,7 +298,6 @@
       "RelativePath": "landscape2.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 2640044,
       "Link": "http://localhost:2406/api/User/seed-media/landscape2.jpg"
     },
     {
@@ -324,7 +307,6 @@
       "RelativePath": "landscapevideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 97104146,
       "Link": "http://localhost:2406/api/User/seed-media/landscapevideo.mp4"
     },
     {
@@ -334,7 +316,6 @@
       "RelativePath": "portailvideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 620035,
       "Link": "http://localhost:2406/api/User/seed-media/portailvideo.mp4"
     },
     {
@@ -344,7 +325,6 @@
       "RelativePath": "squaregif.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 895779,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif.gif"
     },
     {
@@ -354,7 +334,6 @@
       "RelativePath": "squaregif2.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 4320576,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif2.gif"
     },
     {
@@ -364,7 +343,6 @@
       "RelativePath": "landscape.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 520490,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.gif"
     },
     {
@@ -374,7 +352,6 @@
       "RelativePath": "landscape.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 10608676,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.jpg"
     },
     {
@@ -384,7 +361,6 @@
       "RelativePath": "landscape2.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 2640044,
       "Link": "http://localhost:2406/api/User/seed-media/landscape2.jpg"
     },
     {
@@ -394,7 +370,6 @@
       "RelativePath": "landscapevideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 97104146,
       "Link": "http://localhost:2406/api/User/seed-media/landscapevideo.mp4"
     },
     {
@@ -404,7 +379,6 @@
       "RelativePath": "portailvideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 620035,
       "Link": "http://localhost:2406/api/User/seed-media/portailvideo.mp4"
     },
     {
@@ -414,7 +388,6 @@
       "RelativePath": "squaregif.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 895779,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif.gif"
     },
     {
@@ -424,7 +397,6 @@
       "RelativePath": "squaregif2.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 4320576,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif2.gif"
     },
     {
@@ -434,7 +406,6 @@
       "RelativePath": "landscape.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 520490,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.gif"
     },
     {
@@ -444,7 +415,6 @@
       "RelativePath": "landscape.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 10608676,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.jpg"
     },
     {
@@ -454,7 +424,6 @@
       "RelativePath": "landscape2.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 2640044,
       "Link": "http://localhost:2406/api/User/seed-media/landscape2.jpg"
     },
     {
@@ -464,7 +433,6 @@
       "RelativePath": "landscapevideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 97104146,
       "Link": "http://localhost:2406/api/User/seed-media/landscapevideo.mp4"
     },
     {
@@ -474,7 +442,6 @@
       "RelativePath": "portailvideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 620035,
       "Link": "http://localhost:2406/api/User/seed-media/portailvideo.mp4"
     },
     {
@@ -484,7 +451,6 @@
       "RelativePath": "squaregif.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 895779,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif.gif"
     },
     {
@@ -494,7 +460,6 @@
       "RelativePath": "squaregif2.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 4320576,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif2.gif"
     },
     {
@@ -504,7 +469,6 @@
       "RelativePath": "landscape.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 520490,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.gif"
     },
     {
@@ -514,7 +478,6 @@
       "RelativePath": "landscape.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 10608676,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.jpg"
     },
     {
@@ -524,7 +487,6 @@
       "RelativePath": "landscape2.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 2640044,
       "Link": "http://localhost:2406/api/User/seed-media/landscape2.jpg"
     },
     {
@@ -534,7 +496,6 @@
       "RelativePath": "landscapevideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 97104146,
       "Link": "http://localhost:2406/api/User/seed-media/landscapevideo.mp4"
     },
     {
@@ -544,7 +505,6 @@
       "RelativePath": "portailvideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 620035,
       "Link": "http://localhost:2406/api/User/seed-media/portailvideo.mp4"
     },
     {
@@ -554,7 +514,6 @@
       "RelativePath": "squaregif.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 895779,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif.gif"
     },
     {
@@ -564,7 +523,6 @@
       "RelativePath": "squaregif2.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 4320576,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif2.gif"
     },
     {
@@ -574,7 +532,6 @@
       "RelativePath": "landscape.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 520490,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.gif"
     },
     {
@@ -584,7 +541,6 @@
       "RelativePath": "landscape.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 10608676,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.jpg"
     },
     {
@@ -594,7 +550,6 @@
       "RelativePath": "landscape2.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 2640044,
       "Link": "http://localhost:2406/api/User/seed-media/landscape2.jpg"
     },
     {
@@ -604,7 +559,6 @@
       "RelativePath": "landscapevideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 97104146,
       "Link": "http://localhost:2406/api/User/seed-media/landscapevideo.mp4"
     },
     {
@@ -614,7 +568,6 @@
       "RelativePath": "portailvideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 620035,
       "Link": "http://localhost:2406/api/User/seed-media/portailvideo.mp4"
     },
     {
@@ -624,7 +577,6 @@
       "RelativePath": "squaregif.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 895779,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif.gif"
     },
     {
@@ -634,7 +586,6 @@
       "RelativePath": "squaregif2.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 4320576,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif2.gif"
     },
     {
@@ -644,7 +595,6 @@
       "RelativePath": "landscape.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 520490,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.gif"
     },
     {
@@ -654,7 +604,6 @@
       "RelativePath": "landscape.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 10608676,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.jpg"
     },
     {
@@ -664,7 +613,6 @@
       "RelativePath": "landscape2.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 2640044,
       "Link": "http://localhost:2406/api/User/seed-media/landscape2.jpg"
     },
     {
@@ -674,7 +622,6 @@
       "RelativePath": "landscapevideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 97104146,
       "Link": "http://localhost:2406/api/User/seed-media/landscapevideo.mp4"
     },
     {
@@ -684,7 +631,6 @@
       "RelativePath": "portailvideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 620035,
       "Link": "http://localhost:2406/api/User/seed-media/portailvideo.mp4"
     },
     {
@@ -694,7 +640,6 @@
       "RelativePath": "squaregif.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 895779,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif.gif"
     },
     {
@@ -704,7 +649,6 @@
       "RelativePath": "squaregif2.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 4320576,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif2.gif"
     },
     {
@@ -714,7 +658,6 @@
       "RelativePath": "landscape.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 520490,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.gif"
     },
     {
@@ -724,7 +667,6 @@
       "RelativePath": "landscape.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 10608676,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.jpg"
     },
     {
@@ -734,7 +676,6 @@
       "RelativePath": "landscape2.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 2640044,
       "Link": "http://localhost:2406/api/User/seed-media/landscape2.jpg"
     },
     {
@@ -744,7 +685,6 @@
       "RelativePath": "landscapevideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 97104146,
       "Link": "http://localhost:2406/api/User/seed-media/landscapevideo.mp4"
     },
     {
@@ -754,7 +694,6 @@
       "RelativePath": "portailvideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 620035,
       "Link": "http://localhost:2406/api/User/seed-media/portailvideo.mp4"
     },
     {
@@ -764,7 +703,6 @@
       "RelativePath": "squaregif.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 895779,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif.gif"
     },
     {
@@ -774,7 +712,6 @@
       "RelativePath": "squaregif2.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 4320576,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif2.gif"
     },
     {
@@ -784,7 +721,6 @@
       "RelativePath": "landscape.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 520490,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.gif"
     },
     {
@@ -794,7 +730,6 @@
       "RelativePath": "landscape.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 10608676,
       "Link": "http://localhost:2406/api/User/seed-media/landscape.jpg"
     },
     {
@@ -804,7 +739,6 @@
       "RelativePath": "landscape2.jpg",
       "ResourceType": "image",
       "ContentType": "image/jpeg",
-      "FileSizeBytes": 2640044,
       "Link": "http://localhost:2406/api/User/seed-media/landscape2.jpg"
     },
     {
@@ -814,7 +748,6 @@
       "RelativePath": "landscapevideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 97104146,
       "Link": "http://localhost:2406/api/User/seed-media/landscapevideo.mp4"
     },
     {
@@ -824,7 +757,6 @@
       "RelativePath": "portailvideo.mp4",
       "ResourceType": "video",
       "ContentType": "video/mp4",
-      "FileSizeBytes": 620035,
       "Link": "http://localhost:2406/api/User/seed-media/portailvideo.mp4"
     },
     {
@@ -834,7 +766,6 @@
       "RelativePath": "squaregif.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 895779,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif.gif"
     },
     {
@@ -844,7 +775,6 @@
       "RelativePath": "squaregif2.gif",
       "ResourceType": "image",
       "ContentType": "image/gif",
-      "FileSizeBytes": 4320576,
       "Link": "http://localhost:2406/api/User/seed-media/squaregif2.gif"
     }
   ]

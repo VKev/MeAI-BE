@@ -8,6 +8,7 @@ using Application.Abstractions.Facebook;
 using Application.Abstractions.Feed;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Instagram;
+using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
 using Application.Abstractions.Workspaces;
@@ -25,6 +26,7 @@ using Infrastructure.Logic.Facebook;
 using Infrastructure.Logic.Feed;
 using Infrastructure.Logic.Gemini;
 using Infrastructure.Logic.Instagram;
+using Infrastructure.Logic.Rag;
 using Infrastructure.Logic.Threads;
 using Infrastructure.Logic.Resources;
 using Infrastructure.Logic.SocialMedias;
@@ -64,16 +66,24 @@ namespace Infrastructure
             services.AddHttpClient("Instagram");
             services.AddHttpClient("TikTok");
             services.AddHttpClient("n8n");
+            services.AddHttpClient("WebSearchContent", client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(12);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; MeAIWebSearch/1.0)");
+                client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9,vi;q=0.8");
+            });
             // Caption generation runs through Kie's GPT-5.4 Responses API. GeminiCaptionService
             // stays registered as a concrete class for future fallback / A-B; the interface
             // binding points at the Kie-backed implementation.
             services.AddScoped<IGeminiCaptionService, Infrastructure.Logic.Kie.KieCaptionService>();
             services.AddScoped<GeminiCaptionService>();
             services.AddScoped<IN8nWorkflowClient, N8nWorkflowClient>();
+            services.AddScoped<IWebSearchEnrichmentService, WebSearchEnrichmentService>();
             services.AddScoped<IAgenticRuntimeContentService, AgenticRuntimeContentService>();
             services.AddScoped<IFacebookContentService, FacebookContentService>();
             services.AddScoped<IGeminiContentModerationService, GeminiContentModerationService>();
             services.AddScoped<IAgentChatService, GeminiAgentChatService>();
+            services.AddScoped<IChatWebPostService, ChatWebPostService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
             services.AddScoped<IInstagramPublishService, InstagramPublishService>();
             services.AddScoped<IInstagramContentService, InstagramContentService>();
@@ -82,6 +92,52 @@ namespace Infrastructure
             services.AddHttpClient("Threads");
             services.AddScoped<IThreadsPublishService, ThreadsPublishService>();
             services.AddScoped<IThreadsContentService, ThreadsContentService>();
+
+            services.AddSingleton(sp =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var ingest = configuration["Rag:IngestQueue"]
+                             ?? configuration["RAG_INGEST_QUEUE"]
+                             ?? "meai.rag.ingest";
+                var query = configuration["Rag:QueryQueue"]
+                            ?? configuration["RAG_QUERY_QUEUE"]
+                            ?? "meai.rag.query";
+                var timeoutSeconds = int.TryParse(
+                    configuration["Rag:RpcTimeoutSeconds"] ?? configuration["RAG_RPC_TIMEOUT_SECONDS"],
+                    out var seconds)
+                    ? seconds
+                    : 30;
+                return new RagOptions
+                {
+                    IngestQueue = ingest,
+                    QueryQueue = query,
+                    RpcTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                };
+            });
+            services.AddSingleton<IRagClient, RabbitMqRagClient>();
+
+            services.AddSingleton(sp =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var timeoutSeconds = int.TryParse(
+                    configuration["Rag:MultimodalAnswerTimeoutSeconds"]
+                    ?? configuration["RAG_MULTIMODAL_ANSWER_TIMEOUT_SECONDS"],
+                    out var s) ? s : 60;
+                return new MultimodalLlmOptions
+                {
+                    BaseUrl = configuration["Rag:MultimodalLlmBaseUrl"]
+                              ?? configuration["RAG_MULTIMODAL_LLM_BASE_URL"]
+                              ?? "https://openrouter.ai/api/v1",
+                    ApiKey = configuration["Rag:MultimodalLlmApiKey"]
+                             ?? configuration["RAG_MULTIMODAL_LLM_API_KEY"]
+                             ?? string.Empty,
+                    Model = configuration["Rag:MultimodalLlmModel"]
+                            ?? configuration["RAG_MULTIMODAL_LLM_MODEL"]
+                            ?? "openai/gpt-4o-mini",
+                    Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+                };
+            });
+            services.AddHttpClient<IMultimodalLlmClient, OpenRouterMultimodalLlmClient>();
 
             services.AddGrpcClient<UserResourceService.UserResourceServiceClient>((sp, options) =>
             {
@@ -152,6 +208,7 @@ namespace Infrastructure
             services.AddScoped<PostResponseBuilder>();
             services.AddScoped<PublishingScheduleResponseBuilder>();
             services.AddScoped<ScheduledPostDispatchService>();
+            services.AddScoped<ResourceProvenanceBackfillService>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddHostedService<ScheduledPostPublishingWorker>();
 

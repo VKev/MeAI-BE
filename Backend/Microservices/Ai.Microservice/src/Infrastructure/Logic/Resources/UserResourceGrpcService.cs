@@ -1,6 +1,7 @@
 using Application.Abstractions.Resources;
 using Grpc.Core;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Common.Resources;
 using SharedLibrary.Grpc.UserResources;
 
 namespace Infrastructure.Logic.Resources;
@@ -39,7 +40,11 @@ public sealed class UserResourceGrpcService : IUserResourceService
                 Guid.Parse(resource.ResourceId),
                 resource.PresignedUrl,
                 string.IsNullOrWhiteSpace(resource.ContentType) ? null : resource.ContentType,
-                string.IsNullOrWhiteSpace(resource.ResourceType) ? null : resource.ResourceType)).ToList();
+                string.IsNullOrWhiteSpace(resource.ResourceType) ? null : resource.ResourceType,
+                string.IsNullOrWhiteSpace(resource.OriginKind) ? null : resource.OriginKind,
+                string.IsNullOrWhiteSpace(resource.OriginSourceUrl) ? null : resource.OriginSourceUrl,
+                ParseOptionalGuid(resource.OriginChatSessionId),
+                ParseOptionalGuid(resource.OriginChatId))).ToList();
 
             return Result.Success<IReadOnlyList<UserResourcePresignResult>>(result);
         }
@@ -56,7 +61,8 @@ public sealed class UserResourceGrpcService : IUserResourceService
         string? status,
         string? resourceType,
         CancellationToken cancellationToken,
-        Guid? workspaceId = null)
+        Guid? workspaceId = null,
+        ResourceProvenanceMetadata? provenance = null)
     {
         if (urls.Count == 0)
         {
@@ -69,7 +75,10 @@ public sealed class UserResourceGrpcService : IUserResourceService
             UserId = userId.ToString(),
             Status = status ?? string.Empty,
             ResourceType = resourceType ?? string.Empty,
-            WorkspaceId = workspaceId.HasValue ? workspaceId.Value.ToString() : string.Empty
+            WorkspaceId = workspaceId.HasValue ? workspaceId.Value.ToString() : string.Empty,
+            OriginKind = provenance?.OriginKind ?? string.Empty,
+            OriginChatSessionId = provenance?.OriginChatSessionId?.ToString() ?? string.Empty,
+            OriginChatId = provenance?.OriginChatId?.ToString() ?? string.Empty
         };
 
         request.Urls.AddRange(urls.Where(url => !string.IsNullOrWhiteSpace(url)));
@@ -87,13 +96,55 @@ public sealed class UserResourceGrpcService : IUserResourceService
                 Guid.Parse(resource.ResourceId),
                 resource.PresignedUrl,
                 string.IsNullOrWhiteSpace(resource.ContentType) ? null : resource.ContentType,
-                string.IsNullOrWhiteSpace(resource.ResourceType) ? null : resource.ResourceType)).ToList();
+                string.IsNullOrWhiteSpace(resource.ResourceType) ? null : resource.ResourceType,
+                string.IsNullOrWhiteSpace(resource.OriginKind) ? null : resource.OriginKind,
+                string.IsNullOrWhiteSpace(resource.OriginSourceUrl) ? null : resource.OriginSourceUrl,
+                ParseOptionalGuid(resource.OriginChatSessionId),
+                ParseOptionalGuid(resource.OriginChatId))).ToList();
 
             return Result.Success<IReadOnlyList<UserResourceCreatedResult>>(result);
         }
         catch (RpcException ex)
         {
             return Result.Failure<IReadOnlyList<UserResourceCreatedResult>>(
+                new Error("UserResources.GrpcError", ex.Status.Detail));
+        }
+    }
+
+    public async Task<Result<int>> BackfillResourceProvenanceAsync(
+        IReadOnlyList<ResourceProvenanceBackfillRequest> items,
+        CancellationToken cancellationToken)
+    {
+        if (items.Count == 0)
+        {
+            return Result.Success(0);
+        }
+
+        var request = new BackfillResourceProvenanceRequest();
+        request.Items.AddRange(items
+            .Where(item => item.ResourceId != Guid.Empty)
+            .Select(item => new SharedLibrary.Grpc.UserResources.ResourceProvenanceBackfillItem
+            {
+                ResourceId = item.ResourceId.ToString(),
+                OriginKind = item.OriginKind ?? string.Empty,
+                OriginSourceUrl = item.OriginSourceUrl ?? string.Empty,
+                OriginChatSessionId = item.OriginChatSessionId?.ToString() ?? string.Empty,
+                OriginChatId = item.OriginChatId?.ToString() ?? string.Empty
+            }));
+
+        if (request.Items.Count == 0)
+        {
+            return Result.Success(0);
+        }
+
+        try
+        {
+            var response = await _client.BackfillResourceProvenanceAsync(request, cancellationToken: cancellationToken);
+            return Result.Success(response.UpdatedCount);
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<int>(
                 new Error("UserResources.GrpcError", ex.Status.Detail));
         }
     }
@@ -137,5 +188,12 @@ public sealed class UserResourceGrpcService : IUserResourceService
             return Result.Failure<IReadOnlyDictionary<Guid, PublicUserProfileResult>>(
                 new Error("UserResources.GrpcError", ex.Status.Detail));
         }
+    }
+
+    private static Guid? ParseOptionalGuid(string value)
+    {
+        return Guid.TryParse(value, out var parsedId) && parsedId != Guid.Empty
+            ? parsedId
+            : null;
     }
 }

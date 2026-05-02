@@ -6,6 +6,7 @@ using Domain.Entities;
 using MediatR;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Common.Resources;
 using SharedLibrary.Extensions;
 
 namespace Application.Resources.Commands;
@@ -82,6 +83,7 @@ public sealed class UploadResourceFileCommandHandler
             Status = request.Status?.Trim(),
             ResourceType = request.ResourceType?.Trim(),
             ContentType = request.ContentType.Trim(),
+            OriginKind = ResourceOriginKinds.UserUpload,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 

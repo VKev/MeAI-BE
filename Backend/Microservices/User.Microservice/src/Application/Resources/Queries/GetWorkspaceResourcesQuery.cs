@@ -5,6 +5,7 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedLibrary.Common;
+using SharedLibrary.Common.Resources;
 using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Resources.Queries;
@@ -14,13 +15,20 @@ public sealed record GetWorkspaceResourcesQuery(
     Guid WorkspaceId,
     DateTime? CursorCreatedAt,
     Guid? CursorId,
-    int? Limit) : IRequest<Result<List<ResourceResponse>>>;
+    int? Limit,
+    IReadOnlyList<string>? OriginKinds = null) : IRequest<Result<List<ResourceResponse>>>;
 
 public sealed class GetWorkspaceResourcesQueryHandler
     : IRequestHandler<GetWorkspaceResourcesQuery, Result<List<ResourceResponse>>>
 {
     private const int DefaultPageSize = 50;
     private const int MaxPageSize = 100;
+    private static readonly string[] AllowedOriginKinds =
+    [
+        ResourceOriginKinds.UserUpload,
+        ResourceOriginKinds.AiGenerated,
+        ResourceOriginKinds.AiImportedUrl
+    ];
     private readonly IRepository<Resource> _repository;
     private readonly IObjectStorageService _objectStorageService;
 
@@ -41,6 +49,7 @@ public sealed class GetWorkspaceResourcesQueryHandler
         }
 
         var pageSize = Math.Clamp(request.Limit ?? DefaultPageSize, 1, MaxPageSize);
+        var selectedOriginKinds = NormalizeOriginKinds(request.OriginKinds);
 
         var query = _repository.GetAll()
             .AsNoTracking()
@@ -48,6 +57,13 @@ public sealed class GetWorkspaceResourcesQueryHandler
                 resource.UserId == request.UserId &&
                 resource.WorkspaceId == request.WorkspaceId &&
                 !resource.IsDeleted);
+
+        if (selectedOriginKinds.Count > 0)
+        {
+            query = query.Where(resource =>
+                resource.OriginKind != null &&
+                selectedOriginKinds.Contains(resource.OriginKind));
+        }
 
         if (request.CursorCreatedAt.HasValue && request.CursorId.HasValue)
         {
@@ -77,5 +93,19 @@ public sealed class GetWorkspaceResourcesQueryHandler
         }
 
         return Result.Success(response);
+    }
+
+    private static HashSet<string> NormalizeOriginKinds(IReadOnlyList<string>? originKinds)
+    {
+        if (originKinds is null || originKinds.Count == 0)
+        {
+            return [];
+        }
+
+        return originKinds
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim().ToLowerInvariant())
+            .Where(value => AllowedOriginKinds.Contains(value, StringComparer.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
     }
 }

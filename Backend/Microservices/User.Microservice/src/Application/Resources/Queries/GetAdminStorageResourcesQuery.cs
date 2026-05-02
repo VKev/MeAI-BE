@@ -5,6 +5,7 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using SharedLibrary.Common;
+using SharedLibrary.Common.Resources;
 using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Resources.Queries;
@@ -13,6 +14,7 @@ public sealed record GetAdminStorageResourcesQuery(
     Guid? UserId,
     Guid? WorkspaceId,
     string? ResourceType,
+    IReadOnlyList<string>? OriginKinds,
     bool IncludeDeleted,
     string? Namespace,
     DateTime? CursorCreatedAt,
@@ -25,6 +27,12 @@ public sealed class GetAdminStorageResourcesQueryHandler
 {
     private const int DefaultPageSize = 50;
     private const int MaxPageSize = 100;
+    private static readonly string[] AllowedOriginKinds =
+    [
+        ResourceOriginKinds.UserUpload,
+        ResourceOriginKinds.AiGenerated,
+        ResourceOriginKinds.AiImportedUrl
+    ];
     private readonly IRepository<Resource> _resourceRepository;
     private readonly IObjectStorageService _objectStorageService;
 
@@ -41,6 +49,7 @@ public sealed class GetAdminStorageResourcesQueryHandler
         CancellationToken cancellationToken)
     {
         var pageSize = Math.Clamp(request.Limit ?? DefaultPageSize, 1, MaxPageSize);
+        var selectedOriginKinds = NormalizeOriginKinds(request.OriginKinds);
 
         var query = _resourceRepository.GetAll()
             .AsNoTracking();
@@ -64,6 +73,13 @@ public sealed class GetAdminStorageResourcesQueryHandler
         {
             var normalizedResourceType = request.ResourceType.Trim();
             query = query.Where(resource => resource.ResourceType == normalizedResourceType);
+        }
+
+        if (selectedOriginKinds.Count > 0)
+        {
+            query = query.Where(resource =>
+                resource.OriginKind != null &&
+                selectedOriginKinds.Contains(resource.OriginKind));
         }
 
         if (!string.IsNullOrWhiteSpace(request.Namespace))
@@ -119,6 +135,10 @@ public sealed class GetAdminStorageResourcesQueryHandler
                 resource.StorageRegion,
                 resource.StorageNamespace,
                 string.IsNullOrWhiteSpace(resource.StorageKey) ? resource.Link : resource.StorageKey,
+                resource.OriginKind,
+                resource.OriginSourceUrl,
+                resource.OriginChatSessionId,
+                resource.OriginChatId,
                 resource.CreatedAt,
                 resource.UpdatedAt,
                 resource.DeletedAt,
@@ -127,5 +147,19 @@ public sealed class GetAdminStorageResourcesQueryHandler
         }
 
         return Result.Success<IReadOnlyList<AdminStorageResourceResponse>>(responses);
+    }
+
+    private static HashSet<string> NormalizeOriginKinds(IReadOnlyList<string>? originKinds)
+    {
+        if (originKinds is null || originKinds.Count == 0)
+        {
+            return [];
+        }
+
+        return originKinds
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim().ToLowerInvariant())
+            .Where(value => AllowedOriginKinds.Contains(value, StringComparer.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
     }
 }

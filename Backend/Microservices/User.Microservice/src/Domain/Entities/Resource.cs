@@ -34,6 +34,14 @@ public sealed class Resource
 
     public string? OriginalFileName { get; set; }
 
+    public string? OriginKind { get; set; }
+
+    public string? OriginSourceUrl { get; set; }
+
+    public Guid? OriginChatSessionId { get; set; }
+
+    public Guid? OriginChatId { get; set; }
+
     [Column(TypeName = "timestamp with time zone")]
     public DateTime? LastVerifiedAt { get; set; }
 

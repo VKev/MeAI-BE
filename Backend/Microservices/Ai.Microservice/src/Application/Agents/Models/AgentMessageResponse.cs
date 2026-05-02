@@ -10,5 +10,8 @@ public sealed record AgentMessageResponse(
     string? Model,
     IReadOnlyList<string> ToolNames,
     IReadOnlyList<AgentActionResponse> Actions,
+    string? RetrievalMode,
+    IReadOnlyList<string> SourceUrls,
+    IReadOnlyList<Guid> ImportedResourceIds,
     DateTime? CreatedAt,
     DateTime? UpdatedAt);

@@ -1,0 +1,204 @@
+{
+  "name": "MeAI Draft Post Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "meai/ai-agent",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-ai-agent",
+      "name": "Webhook AI Agent",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-1200, 240],
+      "webhookId": "meai-ai-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\nconst payload = typeof input.body === 'string' ? JSON.parse(input.body) : (input.body ?? input);\n\nconst socialMediaId = String(payload.socialMediaId ?? '').trim();\nconst userPrompt = String(payload.userPrompt ?? payload.prompt ?? '').trim();\nconst bearerToken = String(payload.bearerToken ?? payload.token ?? '').trim();\nconst topK = Math.min(Math.max(parseInt(payload.topK ?? 6, 10) || 6, 1), 20);\nconst maxReferenceImages = Math.min(Math.max(parseInt(payload.maxReferenceImages ?? 3, 10) || 3, 1), 4);\n\nif (!socialMediaId) throw new Error('socialMediaId is required');\nif (!userPrompt)    throw new Error('userPrompt is required');\nif (!bearerToken)   throw new Error('bearerToken is required (user JWT for /api/Ai/recommendations)');\n\nconst gatewayBaseUrl = $env.AI_GATEWAY_BASE_URL || 'http://api-gateway:8080';\nconst openRouterBaseUrl = $env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';\nconst openRouterKey = $env.OPENROUTER_API_KEY || '';\nif (!openRouterKey) throw new Error('OPENROUTER_API_KEY env var not set on n8n container');\n\nreturn [{ json: {\n  socialMediaId,\n  userPrompt,\n  bearerToken,\n  topK,\n  maxReferenceImages,\n  gatewayBaseUrl,\n  openRouterBaseUrl,\n  openRouterKey,\n  recommendationsUrl: `${gatewayBaseUrl}/api/Ai/recommendations/${socialMediaId}/query`,\n  openRouterChatUrl: `${openRouterBaseUrl}/chat/completions`\n} }];"
+      },
+      "id": "parse-input",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-960, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.recommendationsUrl}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{$json.bearerToken}}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query\": {{ JSON.stringify($json.userPrompt) }},\n  \"topK\": {{$json.topK}}\n}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "query-rag",
+      "name": "Query Recommendations RAG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-720, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Parse Input').first().json;\nconst rag = $json?.value ?? $json;\nconst answer = rag?.answer ?? '';\nconst references = Array.isArray(rag?.references) ? rag.references : [];\n\n// Pick top-N references that have a direct image URL (text+visual fused refs come first by score).\nconst refsWithImages = references.filter(r => r && typeof r.imageUrl === 'string' && r.imageUrl.length > 0);\nconst topRefs = refsWithImages.slice(0, input.maxReferenceImages);\n\nconst captionsBlock = references\n  .filter(r => r && r.caption)\n  .slice(0, 6)\n  .map((r, i) => `[${i + 1}] postId=${r.postId ?? 'n/a'} score=${(r.score ?? 0).toFixed(4)} caption=\"${String(r.caption).replace(/\\s+/g, ' ').slice(0, 240)}\"`)\n  .join('\\n');\n\nconst captionSystem = 'You are a social-media caption writer. You see (a) the user\\'s topic for the next post, (b) recent post captions from the same account so you can match voice and style, and (c) a few reference images from past posts. Write ONE caption for the next post in the SAME language and tone as the past captions. Match emoji density and hashtag style. Output the caption only — no preface, no numbering, no markdown headings.';\n\nconst captionUserText = `User's topic for the next post: ${input.userPrompt}\\n\\nRetrieved RAG recommendation summary:\\n${answer}\\n\\nRecent past captions from this account (for voice/style):\\n${captionsBlock || '(none retrieved)'}\\n\\nIf reference images are attached, use them as visual context — describe scenes consistent with them when relevant.`;\n\nconst captionUserContent = [\n  { type: 'text', text: captionUserText },\n  ...topRefs.map(r => ({ type: 'image_url', image_url: { url: r.imageUrl } }))\n];\n\nconst imageSystem = 'You are an image-generation assistant for social media. Produce ONE image that fits the user\\'s topic AND matches the visual style of the reference images attached (color palette, lighting, composition, mood, subject framing). Output an image, not text.';\n\nconst imageUserText = `Generate an image for a social media post on this topic: ${input.userPrompt}.\\n\\nMatch the visual style of the attached reference images: same palette, same lighting, similar composition. Keep it brand-consistent.`;\n\nconst imageUserContent = [\n  { type: 'text', text: imageUserText },\n  ...topRefs.map(r => ({ type: 'image_url', image_url: { url: r.imageUrl } }))\n];\n\nreturn [{ json: {\n  ...input,\n  ragAnswer: answer,\n  references,\n  topRefs,\n  captionPayload: {\n    model: 'openai/gpt-4o-mini',\n    temperature: 0.6,\n    messages: [\n      { role: 'system', content: captionSystem },\n      { role: 'user', content: captionUserContent }\n    ]\n  },\n  imagePayload: {\n    model: 'openai/gpt-5.4-image-2',\n    modalities: ['image', 'text'],\n    messages: [\n      { role: 'system', content: imageSystem },\n      { role: 'user', content: imageUserContent }\n    ]\n  }\n} }];"
+      },
+      "id": "prep-prompts",
+      "name": "Prepare Prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-480, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.openRouterChatUrl}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{$json.openRouterKey}}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "http://localhost:2406" },
+            { "name": "X-Title", "value": "MeAI Draft Post Agent (caption)" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.captionPayload) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "caption-gen",
+      "name": "Generate Caption (gpt-4o-mini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-220, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$('Prepare Prompts').first().json.openRouterChatUrl}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{$('Prepare Prompts').first().json.openRouterKey}}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "HTTP-Referer", "value": "http://localhost:2406" },
+            { "name": "X-Title", "value": "MeAI Draft Post Agent (image)" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prepare Prompts').first().json.imagePayload) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 180000
+        }
+      },
+      "id": "image-gen",
+      "name": "Generate Image (gpt-5.4-image-2)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-220, 380]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "merge-results",
+      "name": "Merge Caption + Image",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [40, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge gives us [{caption response merged with image response}]. We pull both via\n// $('Generate Caption (gpt-4o-mini)') and $('Generate Image (gpt-5.4-image-2)') for clarity.\nconst captionResp = $('Generate Caption (gpt-4o-mini)').first().json ?? {};\nconst imageResp = $('Generate Image (gpt-5.4-image-2)').first().json ?? {};\nconst prep = $('Prepare Prompts').first().json ?? {};\n\nconst caption = (captionResp.choices?.[0]?.message?.content ?? '').trim();\n\n// gpt-5.4-image-2 returns the generated image either as data URL inside\n// `choices[0].message.images[*].image_url.url` (newer OpenRouter shape) or\n// embedded in `choices[0].message.content`. Try both.\nconst msg = imageResp.choices?.[0]?.message ?? {};\nlet generatedImageUrl = null;\nif (Array.isArray(msg.images) && msg.images.length > 0) {\n  const first = msg.images[0];\n  generatedImageUrl = first?.image_url?.url ?? first?.url ?? null;\n} else if (typeof msg.content === 'string' && msg.content.startsWith('data:image/')) {\n  generatedImageUrl = msg.content;\n}\nconst imageRawText = typeof msg.content === 'string' ? msg.content : null;\n\nreturn [{ json: {\n  socialMediaId: prep.socialMediaId,\n  userPrompt: prep.userPrompt,\n  ragAnswer: prep.ragAnswer,\n  references: prep.references,\n  topRefs: prep.topRefs,\n  caption,\n  captionUsage: captionResp.usage ?? null,\n  generatedImageUrl,\n  imageRawText,\n  imageUsage: imageResp.usage ?? null,\n  imageError: imageResp.error ?? null\n} }];"
+      },
+      "id": "assemble-response",
+      "name": "Assemble Draft Post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [280, 240]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-ai-agent",
+      "name": "Respond AI Agent",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [540, 240]
+    }
+  ],
+  "connections": {
+    "Webhook AI Agent": {
+      "main": [[{ "node": "Parse Input", "type": "main", "index": 0 }]]
+    },
+    "Parse Input": {
+      "main": [[{ "node": "Query Recommendations RAG", "type": "main", "index": 0 }]]
+    },
+    "Query Recommendations RAG": {
+      "main": [[{ "node": "Prepare Prompts", "type": "main", "index": 0 }]]
+    },
+    "Prepare Prompts": {
+      "main": [[
+        { "node": "Generate Caption (gpt-4o-mini)", "type": "main", "index": 0 },
+        { "node": "Generate Image (gpt-5.4-image-2)", "type": "main", "index": 0 }
+      ]]
+    },
+    "Generate Caption (gpt-4o-mini)": {
+      "main": [[{ "node": "Merge Caption + Image", "type": "main", "index": 0 }]]
+    },
+    "Generate Image (gpt-5.4-image-2)": {
+      "main": [[{ "node": "Merge Caption + Image", "type": "main", "index": 1 }]]
+    },
+    "Merge Caption + Image": {
+      "main": [[{ "node": "Assemble Draft Post", "type": "main", "index": 0 }]]
+    },
+    "Assemble Draft Post": {
+      "main": [[{ "node": "Respond AI Agent", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": true,
+  "versionId": "b2c3d4e5-f6a7-4890-9bcd-ef0123456789",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "meai-ai-agent"
+}

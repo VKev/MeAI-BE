@@ -21,15 +21,18 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
 {
     private readonly IPublishingScheduleRepository _publishingScheduleRepository;
     private readonly IAgenticRuntimeContentService _runtimeContentService;
+    private readonly IWebSearchEnrichmentService _webSearchEnrichmentService;
     private readonly IMediator _mediator;
 
     public HandleAgentScheduleRuntimeResultCommandHandler(
         IPublishingScheduleRepository publishingScheduleRepository,
         IAgenticRuntimeContentService runtimeContentService,
+        IWebSearchEnrichmentService webSearchEnrichmentService,
         IMediator mediator)
     {
         _publishingScheduleRepository = publishingScheduleRepository;
         _runtimeContentService = runtimeContentService;
+        _webSearchEnrichmentService = webSearchEnrichmentService;
         _mediator = mediator;
     }
 
@@ -59,6 +62,14 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
             return Result.Success(true);
         }
 
+        var enrichedSearch = await _webSearchEnrichmentService.EnrichAsync(
+            request.Search,
+            schedule.UserId,
+            schedule.WorkspaceId,
+            null,
+            null,
+            cancellationToken);
+
         var now = DateTimeExtensions.PostgreSqlUtcNow;
         schedule.Status = PublishingScheduleState.StatusExecuting;
         schedule.LastExecutionAt = now;
@@ -67,9 +78,9 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
         {
             LastProcessedCallbackJobId = request.JobId,
             LastCallbackReceivedAtUtc = now,
-            LastQuery = request.Search.Query,
-            LastRetrievedAtUtc = request.Search.RetrievedAtUtc,
-            LastSearchPayload = request.Search
+            LastQuery = enrichedSearch.Query,
+            LastRetrievedAtUtc = enrichedSearch.RetrievedAtUtc,
+            LastSearchPayload = enrichedSearch
         });
         _publishingScheduleRepository.Update(schedule);
         await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
@@ -80,7 +91,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
                 schedule.Name,
                 schedule.AgentPrompt,
                 schedule.PlatformPreference,
-                request.Search),
+                enrichedSearch),
             cancellationToken);
 
         if (contentDraftResult.IsFailure)
@@ -94,6 +105,13 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
             return Result.Failure<bool>(contentDraftResult.Error);
         }
 
+        var importedResourceIds = enrichedSearch.ImportedResources?
+            .Select(item => item.ResourceId)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .Select(id => id.ToString())
+            .ToList() ?? [];
+
         var createPostResult = await _mediator.Send(
             new CreatePostCommand(
                 schedule.UserId,
@@ -106,7 +124,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
                     Content = contentDraftResult.Value.Content,
                     Hashtag = contentDraftResult.Value.Hashtag,
                     PostType = contentDraftResult.Value.PostType,
-                    ResourceList = []
+                    ResourceList = importedResourceIds
                 },
                 "draft",
                 null,
@@ -145,9 +163,9 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
             LastProcessedCallbackJobId = request.JobId,
             RuntimePostId = runtimePostId,
             LastCallbackReceivedAtUtc = now,
-            LastQuery = request.Search.Query,
-            LastRetrievedAtUtc = request.Search.RetrievedAtUtc,
-            LastSearchPayload = request.Search
+            LastQuery = enrichedSearch.Query,
+            LastRetrievedAtUtc = enrichedSearch.RetrievedAtUtc,
+            LastSearchPayload = enrichedSearch
         });
         schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         _publishingScheduleRepository.Update(schedule);

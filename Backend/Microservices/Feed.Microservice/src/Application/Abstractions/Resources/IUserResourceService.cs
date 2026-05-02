@@ -26,11 +26,14 @@ public sealed record UserResourcePresignResult(
     Guid ResourceId,
     string PresignedUrl,
     string ContentType,
-    string ResourceType);
+    string ResourceType,
+    string? OriginKind = null,
+    string? OriginSourceUrl = null,
+    Guid? OriginChatSessionId = null,
+    Guid? OriginChatId = null);
 
 public sealed record PublicUserProfileResult(
     Guid UserId,
     string Username,
     string? FullName,
     string? AvatarUrl);
-

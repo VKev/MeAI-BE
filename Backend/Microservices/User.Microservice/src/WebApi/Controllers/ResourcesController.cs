@@ -92,6 +92,7 @@ public sealed class ResourcesController : ApiController
             [FromQuery] DateTime? cursorCreatedAt,
             [FromQuery] Guid? cursorId,
             [FromQuery] int? limit,
+            [FromQuery] string[]? originKinds,
             CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -100,7 +101,7 @@ public sealed class ResourcesController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetResourcesQuery(userId, cursorCreatedAt, cursorId, limit),
+            new GetResourcesQuery(userId, cursorCreatedAt, cursorId, limit, originKinds),
             cancellationToken);
 
         if (result.IsFailure)
@@ -120,6 +121,7 @@ public sealed class ResourcesController : ApiController
         [FromQuery] DateTime? cursorCreatedAt,
         [FromQuery] Guid? cursorId,
         [FromQuery] int? limit,
+        [FromQuery] string[]? originKinds,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -128,7 +130,7 @@ public sealed class ResourcesController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetWorkspaceResourcesQuery(userId, workspaceId, cursorCreatedAt, cursorId, limit),
+            new GetWorkspaceResourcesQuery(userId, workspaceId, cursorCreatedAt, cursorId, limit, originKinds),
             cancellationToken);
 
         if (result.IsFailure)

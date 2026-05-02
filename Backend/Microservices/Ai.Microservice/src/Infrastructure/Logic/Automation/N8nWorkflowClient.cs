@@ -19,17 +19,20 @@ public sealed class N8nWorkflowClient : IN8nWorkflowClient
     private readonly HttpClient _httpClient;
     private readonly N8nOptions _options;
     private readonly IApiCredentialProvider _credentialProvider;
+    private readonly IWebSearchEnrichmentService _webSearchEnrichmentService;
     private readonly ILogger<N8nWorkflowClient> _logger;
 
     public N8nWorkflowClient(
         IHttpClientFactory httpClientFactory,
         IOptions<N8nOptions> options,
         IApiCredentialProvider credentialProvider,
+        IWebSearchEnrichmentService webSearchEnrichmentService,
         ILogger<N8nWorkflowClient> logger)
     {
         _httpClient = httpClientFactory.CreateClient("n8n");
         _options = options.Value;
         _credentialProvider = credentialProvider;
+        _webSearchEnrichmentService = webSearchEnrichmentService;
         _logger = logger;
     }
 
@@ -136,15 +139,37 @@ public sealed class N8nWorkflowClient : IN8nWorkflowClient
                     new Error("N8n.WebSearchInvalidResponse", "n8n web search response could not be parsed."));
             }
 
-            return Result.Success(new N8nWebSearchResponse(
+            var responsePayload = new N8nWebSearchResponse(
                 parsed.Query ?? request.QueryTemplate,
                 parsed.RetrievedAtUtc ?? DateTime.UtcNow,
                 parsed.Results?.Select(item => new N8nWebSearchResultItem(
                     item.Title,
                     item.Url,
                     item.Description,
-                    item.Source)).ToList() ?? [],
-                parsed.LlmContext));
+                    item.Source,
+                    item.PageTitle,
+                    item.PageContent,
+                    item.MediaUrls ?? [])).ToList() ?? [],
+                parsed.LlmContext,
+                parsed.ImportedResources?.Select(item => new N8nImportedResourceItem(
+                    item.ResourceId is null ? Guid.Empty : item.ResourceId.Value,
+                    item.PresignedUrl ?? string.Empty,
+                    item.ContentType,
+                    item.ResourceType,
+                    item.SourceUrl ?? string.Empty,
+                    item.SourcePageUrl))
+                    .Where(item => item.ResourceId != Guid.Empty && !string.IsNullOrWhiteSpace(item.SourceUrl))
+                    .ToList());
+
+            var enrichedResponse = await _webSearchEnrichmentService.EnrichAsync(
+                responsePayload,
+                request.UserId,
+                request.WorkspaceId,
+                request.OriginChatSessionId,
+                request.OriginChatId,
+                requestCts.Token);
+
+            return Result.Success(enrichedResponse);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -214,6 +239,8 @@ public sealed class N8nWorkflowClient : IN8nWorkflowClient
         public List<N8nWebSearchResultPayload>? Results { get; set; }
 
         public string? LlmContext { get; set; }
+
+        public List<N8nImportedResourcePayload>? ImportedResources { get; set; }
     }
 
     private sealed class N8nWebSearchResultPayload
@@ -225,5 +252,26 @@ public sealed class N8nWorkflowClient : IN8nWorkflowClient
         public string? Description { get; set; }
 
         public string? Source { get; set; }
+
+        public string? PageTitle { get; set; }
+
+        public string? PageContent { get; set; }
+
+        public List<string>? MediaUrls { get; set; }
+    }
+
+    private sealed class N8nImportedResourcePayload
+    {
+        public Guid? ResourceId { get; set; }
+
+        public string? PresignedUrl { get; set; }
+
+        public string? ContentType { get; set; }
+
+        public string? ResourceType { get; set; }
+
+        public string? SourceUrl { get; set; }
+
+        public string? SourcePageUrl { get; set; }
     }
 }

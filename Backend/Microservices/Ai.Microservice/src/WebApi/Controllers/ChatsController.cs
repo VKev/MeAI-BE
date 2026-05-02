@@ -69,6 +69,7 @@ public sealed class ChatsController : ApiController
     public async Task<IActionResult> GetWorkspaceResources(
         Guid workspaceId,
         [FromQuery] string[]? resourceTypes,
+        [FromQuery] string[]? originKinds,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -77,7 +78,7 @@ public sealed class ChatsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetWorkspaceAiResourcesQuery(workspaceId, userId, resourceTypes),
+            new GetWorkspaceAiResourcesQuery(workspaceId, userId, resourceTypes, originKinds),
             cancellationToken);
 
         if (result.IsFailure)
@@ -94,6 +95,7 @@ public sealed class ChatsController : ApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetAllResources(
         [FromQuery] string[]? resourceTypes,
+        [FromQuery] string[]? originKinds,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -102,7 +104,7 @@ public sealed class ChatsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetAllAiResourcesQuery(userId, resourceTypes),
+            new GetAllAiResourcesQuery(userId, resourceTypes, originKinds),
             cancellationToken);
 
         if (result.IsFailure)
@@ -332,6 +334,7 @@ public sealed class ChatsController : ApiController
             ChatSessionId: chatSessionId,
             Prompt: request.Prompt ?? string.Empty,
             ResourceIds: resourceIdsResult.Value,
+            LinkedPostId: null,
             Model: request.Model,
             AspectRatio: request.AspectRatio,
             Resolution: request.Resolution,

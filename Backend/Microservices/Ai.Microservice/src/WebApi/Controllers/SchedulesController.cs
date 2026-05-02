@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Application.PublishingSchedules;
 using Application.PublishingSchedules.Commands;
 using Application.PublishingSchedules.Models;
 using Application.PublishingSchedules.Queries;
@@ -82,20 +83,7 @@ public sealed class SchedulesController : ApiController
         Result<PublishingScheduleResponse> result;
         if (IsAgenticMode(request.Mode))
         {
-            result = await _mediator.Send(
-                new CreateAgenticPublishingScheduleCommand(
-                    userId,
-                    request.WorkspaceId,
-                    request.Name,
-                    request.Mode,
-                    request.ExecuteAtUtc,
-                    request.Timezone,
-                    request.IsPrivate,
-                    request.PlatformPreference,
-                    request.AgentPrompt,
-                    request.Search,
-                    request.Targets),
-                cancellationToken);
+            return HandleFailure(Result.Failure<PublishingScheduleResponse>(PublishingScheduleErrors.UnsupportedMode));
         }
         else
         {
@@ -138,21 +126,7 @@ public sealed class SchedulesController : ApiController
         Result<PublishingScheduleResponse> result;
         if (IsAgenticMode(request.Mode))
         {
-            result = await _mediator.Send(
-                new UpdateAgenticPublishingScheduleCommand(
-                    scheduleId,
-                    userId,
-                    request.WorkspaceId,
-                    request.Name,
-                    request.Mode,
-                    request.ExecuteAtUtc,
-                    request.Timezone,
-                    request.IsPrivate,
-                    request.PlatformPreference,
-                    request.AgentPrompt,
-                    request.Search,
-                    request.Targets),
-                cancellationToken);
+            return HandleFailure(Result.Failure<PublishingScheduleResponse>(PublishingScheduleErrors.UnsupportedMode));
         }
         else
         {

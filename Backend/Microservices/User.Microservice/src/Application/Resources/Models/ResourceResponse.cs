@@ -8,5 +8,9 @@ public sealed record ResourceResponse(
     string? ResourceType,
     string? ContentType,
     long? SizeBytes,
+    string? OriginKind,
+    string? OriginSourceUrl,
+    Guid? OriginChatSessionId,
+    Guid? OriginChatId,
     DateTime? CreatedAt,
     DateTime? UpdatedAt);
