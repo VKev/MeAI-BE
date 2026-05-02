@@ -8,7 +8,9 @@ internal static class ChatMapping
     public static ChatResponse ToResponse(
         Chat chat,
         IReadOnlyList<string>? referenceResourceUrls = null,
-        IReadOnlyList<string>? resultResourceUrls = null)
+        IReadOnlyList<string>? resultResourceUrls = null,
+        IReadOnlyList<ChatResourceInfo>? referenceResources = null,
+        IReadOnlyList<ChatResourceInfo>? resultResources = null)
     {
         return new ChatResponse(
             chat.Id,
@@ -22,6 +24,8 @@ internal static class ChatMapping
             chat.Status,
             chat.ErrorMessage,
             chat.CreatedAt,
-            chat.UpdatedAt);
+            chat.UpdatedAt,
+            referenceResources,
+            resultResources);
     }
 }
