@@ -352,12 +352,42 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
                 _logger.LogWarning(
                     "Refund failed for video chat {ChatId}: {Code} {Message}",
                     chat.Id, refund.Error.Code, refund.Error.Description);
+                return;
             }
+
+            await MarkSpendRecordsRefundedAsync(
+                CoinReferenceTypes.ChatVideo,
+                chat.Id.ToString(),
+                cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error refunding video chat {ChatId}", chat.Id);
         }
+    }
+
+    private async Task MarkSpendRecordsRefundedAsync(
+        string referenceType,
+        string referenceId,
+        CancellationToken cancellationToken)
+    {
+        var records = await _dbContext.AiSpendRecords
+            .Where(record => record.ReferenceType == referenceType && record.ReferenceId == referenceId)
+            .ToListAsync(cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            record.Status = AiSpendStatuses.Refunded;
+            record.UpdatedAt = updatedAt;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static string ParseVideoModel(string? configJson)

@@ -16,7 +16,8 @@ public sealed record VideoTaskStatusResponse(
     int? ErrorCode,
     string? ErrorMessage,
     DateTime CreatedAt,
-    DateTime? CompletedAt);
+    DateTime? CompletedAt,
+    string ResourceType = "video");
 
 public sealed class GetVideoStatusQueryHandler
     : IRequestHandler<GetVideoStatusQuery, Result<VideoTaskStatusResponse>>
@@ -54,6 +55,7 @@ public sealed class GetVideoStatusQueryHandler
             ErrorCode: task.ErrorCode,
             ErrorMessage: task.ErrorMessage,
             CreatedAt: task.CreatedAt,
-            CompletedAt: task.CompletedAt));
+            CompletedAt: task.CompletedAt,
+            ResourceType: "video"));
     }
 }

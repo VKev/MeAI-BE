@@ -39,6 +39,7 @@ public sealed class CreateChatVideoCommandHandler
     private readonly IUserResourceService _userResourceService;
     private readonly ICoinPricingService _pricingService;
     private readonly IBillingClient _billingClient;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
     private readonly IBus _bus;
 
     public CreateChatVideoCommandHandler(
@@ -48,6 +49,7 @@ public sealed class CreateChatVideoCommandHandler
         IUserResourceService userResourceService,
         ICoinPricingService pricingService,
         IBillingClient billingClient,
+        IAiSpendRecordRepository aiSpendRecordRepository,
         IBus bus)
     {
         _chatRepository = chatRepository;
@@ -56,6 +58,7 @@ public sealed class CreateChatVideoCommandHandler
         _userResourceService = userResourceService;
         _pricingService = pricingService;
         _billingClient = billingClient;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
         _bus = bus;
     }
 
@@ -156,10 +159,31 @@ public sealed class CreateChatVideoCommandHandler
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
-        await _chatRepository.AddAsync(chat, cancellationToken);
-        await _chatRepository.SaveChangesAsync(cancellationToken);
-
         var workspaceId = session.WorkspaceId == Guid.Empty ? (Guid?)null : session.WorkspaceId;
+        var messageCreatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+
+        await _chatRepository.AddAsync(chat, cancellationToken);
+        await _aiSpendRecordRepository.AddAsync(
+            new AiSpendRecord
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = request.UserId,
+                WorkspaceId = workspaceId,
+                Provider = AiSpendProviders.Kie,
+                ActionType = CoinActionTypes.VideoGeneration,
+                Model = model,
+                Variant = null,
+                Unit = videoQuoteResult.Value.Unit,
+                Quantity = 1,
+                UnitCostCoins = videoQuoteResult.Value.UnitCostCoins,
+                TotalCoins = videoQuoteResult.Value.TotalCoins,
+                ReferenceType = CoinReferenceTypes.ChatVideo,
+                ReferenceId = chatId.ToString(),
+                Status = AiSpendStatuses.Debited,
+                CreatedAt = messageCreatedAt
+            },
+            cancellationToken);
+        await _chatRepository.SaveChangesAsync(cancellationToken);
 
         var message = new VideoGenerationStarted
         {
@@ -173,7 +197,7 @@ public sealed class CreateChatVideoCommandHandler
             Seeds = request.Seeds,
             EnableTranslation = enableTranslation,
             Watermark = request.Watermark,
-            CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
+            CreatedAt = messageCreatedAt
         };
 
         await _bus.Publish(message, cancellationToken);

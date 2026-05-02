@@ -751,12 +751,42 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
                 _logger.LogWarning(
                     "Refund failed for chat {ChatId}: {Code} {Message}",
                     chat.Id, refund.Error.Code, refund.Error.Description);
+                return;
             }
+
+            await MarkSpendRecordsRefundedAsync(
+                CoinReferenceTypes.ChatImage,
+                chat.Id.ToString(),
+                cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error refunding chat {ChatId}", chat.Id);
         }
+    }
+
+    private async Task MarkSpendRecordsRefundedAsync(
+        string referenceType,
+        string referenceId,
+        CancellationToken cancellationToken)
+    {
+        var records = await _dbContext.AiSpendRecords
+            .Where(record => record.ReferenceType == referenceType && record.ReferenceId == referenceId)
+            .ToListAsync(cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            record.Status = AiSpendStatuses.Refunded;
+            record.UpdatedAt = updatedAt;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static (string Model, string? Resolution, int ExpectedResultCount) ParseImageConfig(string? configJson)
@@ -771,6 +801,15 @@ public class ImageFailedConsumer : IConsumer<ImageGenerationFailed>
         {
             var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(configJson);
             if (raw is null) return (model, resolution, expected);
+
+            if (raw.TryGetValue("Model", out var modelEl) || raw.TryGetValue("model", out modelEl))
+            {
+                if (modelEl.ValueKind == JsonValueKind.String &&
+                    !string.IsNullOrWhiteSpace(modelEl.GetString()))
+                {
+                    model = modelEl.GetString()!.Trim();
+                }
+            }
 
             if (raw.TryGetValue("Resolution", out var resEl) || raw.TryGetValue("resolution", out resEl))
             {

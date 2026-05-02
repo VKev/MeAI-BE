@@ -17,7 +17,8 @@ public sealed record ImageTaskStatusResponse(
     int? ErrorCode,
     string? ErrorMessage,
     DateTime CreatedAt,
-    DateTime? CompletedAt);
+    DateTime? CompletedAt,
+    string ResourceType = "image");
 
 public sealed class GetImageStatusQueryHandler
     : IRequestHandler<GetImageStatusQuery, Result<ImageTaskStatusResponse>>
@@ -56,6 +57,7 @@ public sealed class GetImageStatusQueryHandler
             ErrorCode: task.ErrorCode,
             ErrorMessage: task.ErrorMessage,
             CreatedAt: task.CreatedAt,
-            CompletedAt: task.CompletedAt));
+            CompletedAt: task.CompletedAt,
+            ResourceType: "image"));
     }
 }

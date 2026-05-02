@@ -12,6 +12,10 @@ public static class NotificationTypes
 
     public const string AiVideoExtensionSubmitted = "ai.video_extension.submitted";
 
+    public const string AiDraftPostGenerationSubmitted = "ai.draft_post_generation.submitted";
+    public const string AiDraftPostGenerationCompleted = "ai.draft_post_generation.completed";
+    public const string AiDraftPostGenerationFailed = "ai.draft_post_generation.failed";
+
     public const string UserSubscriptionActivated = "user.subscription.activated";
     public const string UserSubscriptionRenewed = "user.subscription.renewed";
     public const string UserSubscriptionStatusChanged = "user.subscription.status_changed";

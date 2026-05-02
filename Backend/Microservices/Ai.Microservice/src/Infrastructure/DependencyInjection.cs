@@ -8,6 +8,7 @@ using Application.Abstractions.Facebook;
 using Application.Abstractions.Feed;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Instagram;
+using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
 using Application.Abstractions.Workspaces;
@@ -25,6 +26,7 @@ using Infrastructure.Logic.Facebook;
 using Infrastructure.Logic.Feed;
 using Infrastructure.Logic.Gemini;
 using Infrastructure.Logic.Instagram;
+using Infrastructure.Logic.Rag;
 using Infrastructure.Logic.Threads;
 using Infrastructure.Logic.Resources;
 using Infrastructure.Logic.SocialMedias;
@@ -55,6 +57,7 @@ namespace Infrastructure
             services.AddScoped<ApiCredentialSyncSeeder>();
             services.AddHttpClient<IVeoVideoService, VeoVideoService>();
             services.AddHttpClient<IKieImageService, KieImageService>();
+            services.AddHttpClient<IKieAccountService, KieAccountService>();
             services.AddHttpClient<IKieFallbackCallbackService, KieFallbackCallbackService>();
             services.AddSingleton<IAiFallbackTemplateService, AiFallbackTemplateService>();
             services.AddHttpClient("Gemini");
@@ -89,6 +92,78 @@ namespace Infrastructure
             services.AddHttpClient("Threads");
             services.AddScoped<IThreadsPublishService, ThreadsPublishService>();
             services.AddScoped<IThreadsContentService, ThreadsContentService>();
+
+            services.AddSingleton(sp =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var ingest = configuration["Rag:IngestQueue"]
+                             ?? configuration["RAG_INGEST_QUEUE"]
+                             ?? "meai.rag.ingest";
+                var query = configuration["Rag:QueryQueue"]
+                            ?? configuration["RAG_QUERY_QUEUE"]
+                            ?? "meai.rag.query";
+                var timeoutSeconds = int.TryParse(
+                    configuration["Rag:RpcTimeoutSeconds"] ?? configuration["RAG_RPC_TIMEOUT_SECONDS"],
+                    out var seconds)
+                    ? seconds
+                    : 30;
+                return new RagOptions
+                {
+                    IngestQueue = ingest,
+                    QueryQueue = query,
+                    RpcTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                };
+            });
+            services.AddSingleton<IRagClient, RabbitMqRagClient>();
+
+            services.AddSingleton(sp =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var timeoutSeconds = int.TryParse(
+                    configuration["Rag:MultimodalAnswerTimeoutSeconds"]
+                    ?? configuration["RAG_MULTIMODAL_ANSWER_TIMEOUT_SECONDS"],
+                    out var s) ? s : 60;
+                return new MultimodalLlmOptions
+                {
+                    BaseUrl = configuration["Rag:MultimodalLlmBaseUrl"]
+                              ?? configuration["RAG_MULTIMODAL_LLM_BASE_URL"]
+                              ?? "https://openrouter.ai/api/v1",
+                    ApiKey = configuration["Rag:MultimodalLlmApiKey"]
+                             ?? configuration["RAG_MULTIMODAL_LLM_API_KEY"]
+                             ?? string.Empty,
+                    Model = configuration["Rag:MultimodalLlmModel"]
+                            ?? configuration["RAG_MULTIMODAL_LLM_MODEL"]
+                            ?? "openai/gpt-4o-mini",
+                    Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+                };
+            });
+            services.AddHttpClient<IMultimodalLlmClient, OpenRouterMultimodalLlmClient>();
+
+            services.AddSingleton(sp =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var timeoutSeconds = int.TryParse(
+                    configuration["Rag:ImageGenTimeoutSeconds"]
+                    ?? configuration["RAG_IMAGE_GEN_TIMEOUT_SECONDS"],
+                    out var s) ? s : 300;
+                return new ImageGenerationOptions
+                {
+                    BaseUrl = configuration["Rag:ImageGenBaseUrl"]
+                              ?? configuration["RAG_IMAGE_GEN_BASE_URL"]
+                              ?? "https://openrouter.ai/api/v1",
+                    ApiKey = configuration["Rag:ImageGenApiKey"]
+                             ?? configuration["RAG_IMAGE_GEN_API_KEY"]
+                             ?? configuration["Rag:MultimodalLlmApiKey"]
+                             ?? string.Empty,
+                    Model = configuration["Rag:ImageGenModel"]
+                            ?? configuration["RAG_IMAGE_GEN_MODEL"]
+                            ?? "openai/gpt-5.4-image-2",
+                    Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+                };
+            });
+            services.AddHttpClient<IImageGenerationClient, OpenRouterImageGenerationClient>();
+
+            services.AddScoped<IDraftPostTaskRepository, DraftPostTaskRepository>();
 
             services.AddGrpcClient<UserResourceService.UserResourceServiceClient>((sp, options) =>
             {
@@ -143,6 +218,7 @@ namespace Infrastructure
 
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
             services.AddScoped<IImageTaskRepository, ImageTaskRepository>();
+            services.AddScoped<IAiSpendRecordRepository, AiSpendRecordRepository>();
             services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
             services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();
@@ -196,6 +272,9 @@ namespace Infrastructure
                 x.AddConsumer<PublishToTargetConsumer>();
                 x.AddConsumer<UnpublishFromTargetConsumer>();
                 x.AddConsumer<UpdatePublishedTargetConsumer>();
+
+                // Async draft-post generation: index → RAG query → caption → image → S3 → PostBuilder → notify
+                x.AddConsumer<DraftPostGenerationConsumer>();
 
                 x.AddSagaStateMachine<VideoTaskStateMachine, VideoTaskState>()
                     .RedisRepository(r =>

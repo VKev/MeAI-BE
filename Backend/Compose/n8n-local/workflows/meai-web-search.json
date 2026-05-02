@@ -35,16 +35,14 @@
       "parameters": {
         "method": "GET",
         "url": "={{$json.braveSearchUrl}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Accept",
               "value": "application/json"
-            },
-            {
-              "name": "X-Subscription-Token",
-              "value": "={{$env.BRAVE_SEARCH_API_KEY}}"
             }
           ]
         },
@@ -63,7 +61,13 @@
       "position": [
         -300,
         240
-      ]
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "meai-brave-credential",
+          "name": "Brave Search"
+        }
+      }
     },
     {
       "parameters": {
