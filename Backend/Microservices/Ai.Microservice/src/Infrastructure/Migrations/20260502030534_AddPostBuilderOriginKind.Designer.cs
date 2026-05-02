@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(MyDbContext))]
-    partial class MyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260502030534_AddPostBuilderOriginKind")]
+    partial class AddPostBuilderOriginKind
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,106 +24,6 @@ namespace Infrastructure.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("Domain.Entities.AiSpendRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("ActionType")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("action_type");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Model")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("model");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("provider");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer")
-                        .HasColumnName("quantity");
-
-                    b.Property<string>("ReferenceId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("reference_id");
-
-                    b.Property<string>("ReferenceType")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("reference_type");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("status");
-
-                    b.Property<decimal>("TotalCoins")
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("total_coins");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("unit");
-
-                    b.Property<decimal>("UnitCostCoins")
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("unit_cost_coins");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.Property<string>("Variant")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("variant");
-
-                    b.Property<Guid?>("WorkspaceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("workspace_id");
-
-                    b.HasKey("Id")
-                        .HasName("ai_spend_records_pkey");
-
-                    b.HasIndex("CreatedAt")
-                        .HasDatabaseName("ix_ai_spend_records_created_at");
-
-                    b.HasIndex("ReferenceType", "ReferenceId")
-                        .HasDatabaseName("ix_ai_spend_records_reference");
-
-                    b.HasIndex("UserId", "CreatedAt")
-                        .HasDatabaseName("ix_ai_spend_records_user_created_at");
-
-                    b.HasIndex("ActionType", "Model", "CreatedAt")
-                        .HasDatabaseName("ix_ai_spend_records_action_model_created_at");
-
-                    b.ToTable("ai_spend_records", (string)null);
-                });
 
             modelBuilder.Entity("Domain.Entities.ApiCredential", b =>
                 {
@@ -355,109 +258,6 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("ix_coin_pricing_catalog_lookup");
 
                     b.ToTable("coin_pricing_catalog", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.DraftPostTask", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<Guid>("CorrelationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("correlation_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("ErrorCode")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("error_code");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasColumnType("text")
-                        .HasColumnName("error_message");
-
-                    b.Property<int>("MaxRagPosts")
-                        .HasColumnType("integer")
-                        .HasColumnName("max_rag_posts");
-
-                    b.Property<int>("MaxReferenceImages")
-                        .HasColumnType("integer")
-                        .HasColumnName("max_reference_images");
-
-                    b.Property<string>("ResultCaption")
-                        .HasColumnType("text")
-                        .HasColumnName("result_caption");
-
-                    b.Property<Guid?>("ResultPostBuilderId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("result_post_builder_id");
-
-                    b.Property<Guid?>("ResultPostId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("result_post_id");
-
-                    b.Property<string>("ResultPresignedUrl")
-                        .HasColumnType("text")
-                        .HasColumnName("result_presigned_url");
-
-                    b.Property<string>("ResultReferencesJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("result_references");
-
-                    b.Property<Guid?>("ResultResourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("result_resource_id");
-
-                    b.Property<Guid>("SocialMediaId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("social_media_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("status");
-
-                    b.Property<int>("TopK")
-                        .HasColumnType("integer")
-                        .HasColumnName("top_k");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.Property<string>("UserPrompt")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("user_prompt");
-
-                    b.Property<Guid?>("WorkspaceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("workspace_id");
-
-                    b.HasKey("Id")
-                        .HasName("draft_post_tasks_pkey");
-
-                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "ix_draft_post_tasks_user_created_at")
-                        .IsDescending(false, true);
-
-                    b.HasIndex(new[] { "CorrelationId" }, "ux_draft_post_tasks_correlation_id")
-                        .IsUnique();
-
-                    b.ToTable("draft_post_tasks", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.ImageTask", b =>

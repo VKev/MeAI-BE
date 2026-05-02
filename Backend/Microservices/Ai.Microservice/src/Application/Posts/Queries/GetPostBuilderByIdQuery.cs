@@ -108,6 +108,7 @@ public sealed class GetPostBuilderByIdQueryHandler
         return Result.Success(new PostBuilderDetailsResponse(
             postBuilder.Id,
             postBuilder.WorkspaceId,
+            postBuilder.OriginKind,
             postBuilder.PostType,
             GeminiDraftPostHelper.ParseResourceIds(postBuilder.ResourceIds),
             finalizedGroups,

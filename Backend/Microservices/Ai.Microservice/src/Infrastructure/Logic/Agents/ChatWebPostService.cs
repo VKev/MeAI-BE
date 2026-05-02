@@ -121,7 +121,10 @@ public sealed partial class ChatWebPostService : IChatWebPostService
                     PostType = NormalizePostType(request.SuggestedPostType, draftResult.Value.PostType),
                     ResourceList = importedResourceIds.Select(id => id.ToString()).ToList()
                 },
-                "draft"),
+                "draft",
+                null,
+                null,
+                PostBuilderOriginKinds.AiOther),
             cancellationToken);
 
         if (postResult.IsFailure)
@@ -138,6 +141,7 @@ public sealed partial class ChatWebPostService : IChatWebPostService
 
         return Result.Success(new ChatWebPostResult(
             postResult.Value.Id,
+            postResult.Value.PostBuilderId ?? Guid.Empty,
             postResult.Value.Title,
             retrievalMode,
             sourceUrls,

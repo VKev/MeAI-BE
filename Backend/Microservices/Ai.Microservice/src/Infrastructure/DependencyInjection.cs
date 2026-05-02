@@ -139,6 +139,32 @@ namespace Infrastructure
             });
             services.AddHttpClient<IMultimodalLlmClient, OpenRouterMultimodalLlmClient>();
 
+            services.AddSingleton(sp =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var timeoutSeconds = int.TryParse(
+                    configuration["Rag:ImageGenTimeoutSeconds"]
+                    ?? configuration["RAG_IMAGE_GEN_TIMEOUT_SECONDS"],
+                    out var s) ? s : 300;
+                return new ImageGenerationOptions
+                {
+                    BaseUrl = configuration["Rag:ImageGenBaseUrl"]
+                              ?? configuration["RAG_IMAGE_GEN_BASE_URL"]
+                              ?? "https://openrouter.ai/api/v1",
+                    ApiKey = configuration["Rag:ImageGenApiKey"]
+                             ?? configuration["RAG_IMAGE_GEN_API_KEY"]
+                             ?? configuration["Rag:MultimodalLlmApiKey"]
+                             ?? string.Empty,
+                    Model = configuration["Rag:ImageGenModel"]
+                            ?? configuration["RAG_IMAGE_GEN_MODEL"]
+                            ?? "openai/gpt-5.4-image-2",
+                    Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+                };
+            });
+            services.AddHttpClient<IImageGenerationClient, OpenRouterImageGenerationClient>();
+
+            services.AddScoped<IDraftPostTaskRepository, DraftPostTaskRepository>();
+
             services.AddGrpcClient<UserResourceService.UserResourceServiceClient>((sp, options) =>
             {
                 var configuration = sp.GetRequiredService<IConfiguration>();
@@ -246,6 +272,9 @@ namespace Infrastructure
                 x.AddConsumer<PublishToTargetConsumer>();
                 x.AddConsumer<UnpublishFromTargetConsumer>();
                 x.AddConsumer<UpdatePublishedTargetConsumer>();
+
+                // Async draft-post generation: index → RAG query → caption → image → S3 → PostBuilder → notify
+                x.AddConsumer<DraftPostGenerationConsumer>();
 
                 x.AddSagaStateMachine<VideoTaskStateMachine, VideoTaskState>()
                     .RedisRepository(r =>

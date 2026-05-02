@@ -128,7 +128,8 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
                 },
                 "draft",
                 null,
-                schedule.PlatformPreference),
+                schedule.PlatformPreference,
+                PostBuilderOriginKinds.AiOther),
             cancellationToken);
 
         if (createPostResult.IsFailure)

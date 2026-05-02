@@ -124,6 +124,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                     command.UserId == userId &&
                     command.WorkspaceId == workspaceId &&
                     command.Platform == "facebook" &&
+                    command.NewPostBuilderOrigin == PostBuilderOriginKinds.AiOther &&
                     command.Content != null &&
                     command.Content.PostType == "posts" &&
                     command.Content.ResourceList != null &&
@@ -135,6 +136,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 "user",
                 null,
                 workspaceId,
+                Guid.NewGuid(),
                 null,
                 null,
                 "KQXS Miền Bắc",

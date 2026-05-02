@@ -8,6 +8,7 @@ public sealed record PostResponse(
     string Username,
     string? AvatarUrl,
     Guid? WorkspaceId,
+    Guid? PostBuilderId,
     Guid? ChatSessionId,
     Guid? SocialMediaId,
     string? Title,
