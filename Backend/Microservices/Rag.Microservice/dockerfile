@@ -1,0 +1,45 @@
+FROM python:3.10-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Minimal: no OpenCV / mineru / paddle / libreoffice — we only do image+text RAG.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY service/requirements.txt /app/service/requirements.txt
+
+# Pre-install everything LightRAG's pipmaster might try to "ensure" at runtime.
+# pipmaster (used by lightrag-hku) hangs the process if it has to install a
+# package on first import; pre-installing avoids that.
+RUN pip install --upgrade pip \
+    && pip install \
+        "lightrag-hku>=1.4" \
+        "openai>=1.30" \
+        "tenacity" \
+        "tiktoken" \
+        "nano-vectordb" \
+        "networkx" \
+        "aiohttp" \
+        "xxhash" \
+        "Pillow>=10.0.0" \
+    && pip install -r /app/service/requirements.txt
+
+# Block runtime pip from hitting PyPI. If pipmaster tries another install, it
+# fails fast instead of hanging the worker.
+ENV PIP_NO_INDEX=true \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+COPY service /app/service
+
+RUN mkdir -p /data/rag_storage
+ENV WORKING_DIR=/data/rag_storage \
+    PYTHONPATH=/app
+
+EXPOSE 8000
+
+CMD ["python", "-m", "service.main"]
