@@ -78,10 +78,16 @@ public sealed class PostRepository : IPostRepository
         DateTime? cursorCreatedAt,
         Guid? cursorId,
         int limit,
+        string? status,
         CancellationToken cancellationToken)
     {
         var query = _dbSet.AsNoTracking()
             .Where(p => p.UserId == userId && p.DeletedAt == null);
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(p => p.Status == status);
+        }
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
         {
@@ -114,12 +120,18 @@ public sealed class PostRepository : IPostRepository
         DateTime? cursorCreatedAt,
         Guid? cursorId,
         int limit,
+        string? status,
         CancellationToken cancellationToken)
     {
         var query = _dbSet.AsNoTracking()
             .Where(p => p.UserId == userId &&
                         p.WorkspaceId == workspaceId &&
                         p.DeletedAt == null);
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(p => p.Status == status);
+        }
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
         {
@@ -143,12 +155,18 @@ public sealed class PostRepository : IPostRepository
         DateTime? cursorCreatedAt,
         Guid? cursorId,
         int limit,
+        string? status,
         CancellationToken cancellationToken)
     {
         var query = _dbSet.AsNoTracking()
             .Where(p => p.UserId == userId &&
                         p.ChatSessionId == chatSessionId &&
                         p.DeletedAt == null);
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(p => p.Status == status);
+        }
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
         {

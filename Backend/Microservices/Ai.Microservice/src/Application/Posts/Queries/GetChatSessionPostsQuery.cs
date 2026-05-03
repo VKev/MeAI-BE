@@ -11,7 +11,8 @@ public sealed record GetChatSessionPostsQuery(
     Guid UserId,
     DateTime? CursorCreatedAt,
     Guid? CursorId,
-    int? Limit) : IRequest<Result<IEnumerable<PostResponse>>>;
+    int? Limit,
+    string? Status = null) : IRequest<Result<IEnumerable<PostResponse>>>;
 
 public sealed class GetChatSessionPostsQueryHandler
     : IRequestHandler<GetChatSessionPostsQuery, Result<IEnumerable<PostResponse>>>
@@ -55,6 +56,7 @@ public sealed class GetChatSessionPostsQueryHandler
             request.CursorCreatedAt,
             request.CursorId,
             limit,
+            request.Status,
             cancellationToken);
 
         var response = await _postResponseBuilder.BuildManyAsync(request.UserId, posts, cancellationToken);

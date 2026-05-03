@@ -28,6 +28,7 @@ public sealed class PostsController : ApiController
         [FromQuery] DateTime? cursorCreatedAt,
         [FromQuery] Guid? cursorId,
         [FromQuery] int? limit,
+        [FromQuery] string? status,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -36,7 +37,7 @@ public sealed class PostsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetUserPostsQuery(userId, cursorCreatedAt, cursorId, limit),
+            new GetUserPostsQuery(userId, cursorCreatedAt, cursorId, limit, status),
             cancellationToken);
 
         return Ok(result);
@@ -51,6 +52,7 @@ public sealed class PostsController : ApiController
         [FromQuery] DateTime? cursorCreatedAt,
         [FromQuery] Guid? cursorId,
         [FromQuery] int? limit,
+        [FromQuery] string? status,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -59,7 +61,7 @@ public sealed class PostsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetWorkspacePostsQuery(workspaceId, userId, cursorCreatedAt, cursorId, limit),
+            new GetWorkspacePostsQuery(workspaceId, userId, cursorCreatedAt, cursorId, limit, status),
             cancellationToken);
 
         if (result.IsFailure)
@@ -79,6 +81,7 @@ public sealed class PostsController : ApiController
         [FromQuery] DateTime? cursorCreatedAt,
         [FromQuery] Guid? cursorId,
         [FromQuery] int? limit,
+        [FromQuery] string? status,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -87,7 +90,7 @@ public sealed class PostsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetChatSessionPostsQuery(chatSessionId, userId, cursorCreatedAt, cursorId, limit),
+            new GetChatSessionPostsQuery(chatSessionId, userId, cursorCreatedAt, cursorId, limit, status),
             cancellationToken);
 
         if (result.IsFailure)

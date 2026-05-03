@@ -10,7 +10,8 @@ public sealed record GetWorkspacePostsQuery(
     Guid UserId,
     DateTime? CursorCreatedAt,
     Guid? CursorId,
-    int? Limit) : IRequest<Result<IEnumerable<PostResponse>>>;
+    int? Limit,
+    string? Status = null) : IRequest<Result<IEnumerable<PostResponse>>>;
 
 public sealed class GetWorkspacePostsQueryHandler
     : IRequestHandler<GetWorkspacePostsQuery, Result<IEnumerable<PostResponse>>>
@@ -52,6 +53,7 @@ public sealed class GetWorkspacePostsQueryHandler
             request.CursorCreatedAt,
             request.CursorId,
             pageSize,
+            request.Status,
             cancellationToken);
 
         var response = await _postResponseBuilder.BuildManyAsync(request.UserId, posts, cancellationToken);
