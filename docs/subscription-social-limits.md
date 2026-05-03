@@ -1,15 +1,22 @@
 # Subscription Social Limits
 
-## Mục tiêu nghiệp vụ
+## Trạng thái triển khai
 
-Feature này bổ sung khả năng hiển thị entitlement social account theo subscription hiện tại của user mà không thay đổi rule enforcement đang tồn tại ở các OAuth/link flow. Mục tiêu là để frontend và admin có thể đọc được giới hạn `max/current/remaining social accounts` một cách rõ ràng, đồng thời giữ nguyên contract của các API subscription cũ.
+Tài liệu này mô tả trạng thái backend hiện tại của entitlement social account theo subscription trong `User.Microservice`.
 
-## Endpoint entitlement mới
+### API đã triển khai
 
-- `GET /api/User/subscriptions/current/entitlements`
-- Auth: user phải đăng nhập
-- Unauthorized contract giữ nguyên: `401` với body `MessageResponse("Unauthorized")`
-- Success contract:
+- [x] `GET /api/User/subscriptions/current/entitlements`
+
+### Contract hiện tại
+
+- [x] Unauthorized trả `MessageResponse("Unauthorized")`.
+- [x] Response là `Result<T>`.
+- [x] Không đổi contract của `GET /api/User/subscriptions/current`.
+
+## Entitlement hiện tại
+
+Response hiện có:
 
 ```json
 {
@@ -29,52 +36,56 @@ Feature này bổ sung khả năng hiển thị entitlement social account theo 
 }
 ```
 
-## Cách tính max/current/remaining social accounts
+## Cách tính
 
 - `maxSocialAccounts`
-  - lấy từ `SubscriptionLimits.NumberOfSocialAccounts` nếu user có active subscription + active plan
-  - fallback sang free-tier default nếu user chưa có active subscription
+  - lấy từ `SubscriptionLimits.NumberOfSocialAccounts`
+  - nếu user chưa có active subscription thì fallback free tier
 - `currentSocialAccounts`
-  - đếm số `SocialMedia.Type` distinct của chính user
-  - chỉ tính record `!IsDeleted`
+  - đếm social media record đang active của user
 - `remainingSocialAccounts`
-  - tính bằng `max(0, maxSocialAccounts - currentSocialAccounts)`
+  - `max(0, maxSocialAccounts - currentSocialAccounts)`
 - `maxPagesPerSocialAccount`
-  - lấy từ entitlement hiện tại để FE biết page cap cho Facebook
+  - lấy từ entitlement hiện tại
 - `currentWorkspaceCount`
-  - đếm `Workspace` của chính user với `!IsDeleted`
+  - đếm workspace đang active của user
 - `maxWorkspaces`
-  - lấy từ entitlement hiện tại hoặc fallback free-tier hiện hành
+  - lấy từ entitlement hiện tại hoặc fallback free tier
 
-## Free-tier defaults và paid-plan behavior
+## Free tier hiện tại
 
-- Free tier hiện tiếp tục dùng default sẵn có:
-  - `maxSocialAccounts = 2`
-  - `maxPagesPerSocialAccount = 5`
-  - `maxWorkspaces = int.MaxValue`
-- Paid plan dùng dữ liệu từ `Subscription.Limits`
-- Nếu plan cấu hình `maxSocialAccounts = 0` thì user không được link thêm social account nào
+- `maxSocialAccounts = 2`
+- `maxPagesPerSocialAccount = 5`
+- `maxWorkspaces = int.MaxValue`
 
-## Error cases khi user vượt limit
+## Enforcement
 
-Flow link hiện tại không đổi error code:
+User bị chặn ở các OAuth/link flow hiện có khi vượt limit:
 
-- Nếu plan không cho phép social linking:
-  - `SocialMedia.LimitUnavailable`
-- Nếu user đã đạt giới hạn social account:
-  - `SocialMedia.LimitExceeded`
-- Nếu Facebook page count vượt `MaxPagesPerSocialAccount`:
-  - `SocialMedia.PageLimitExceeded`
+- `InitiateFacebookOAuthCommand`
+- `CompleteFacebookOAuthCommand`
+- `InitiateInstagramOAuthCommand`
+- `CompleteInstagramOAuthCommand`
+- `InitiateTikTokOAuthCommand`
+- `CompleteTikTokOAuthCommand`
+- `InitiateThreadsOAuthCommand`
+- `CompleteThreadsOAuthCommand`
 
-Enforcement tiếp tục chạy ở:
-- các `Initiate*OAuth` command
-- `CompleteFacebookOAuthCommand` để chặn race giữa bước initiate và complete
+## Admin chỉnh sửa
 
-## Backward compatibility cho FE
+Admin có thể chỉnh các giá trị limit thông qua subscription admin APIs vì `Subscription.Limits` được map trực tiếp trong:
 
-- Không thay đổi contract của:
-  - `GET /api/User/subscriptions/current`
-  - `GET /api/User/admin/subscriptions`
-  - các error response hiện có của OAuth/link flow
-- FE nên gọi endpoint entitlement mới thay vì suy luận social limit từ response plan/subscription cũ
-- Response mới chỉ expose user-facing entitlement cần thiết, không trả admin-only fields
+- `POST /api/User/admin/subscriptions`
+- `PUT /api/User/admin/subscriptions/{id}`
+- `PATCH /api/User/admin/subscriptions/{id}`
+
+### Field limit liên quan
+
+- `number_of_social_accounts`
+- `max_pages_per_social_account`
+- `number_of_workspaces`
+
+## Ghi chú
+
+- FE nên gọi endpoint entitlement mới thay vì suy luận limit từ subscription response cũ.
+- `MaxPagesPerSocialAccount` chủ yếu dùng cho Facebook page cap.

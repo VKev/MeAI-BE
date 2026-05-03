@@ -1,10 +1,37 @@
 # AI Enhance Existing Posts
 
-## Endpoint
+## Trạng thái triển khai
 
-- `POST /api/Ai/posts/{postId}/enhance`
+Tài liệu này mô tả trạng thái backend hiện tại của feature enhance post trong `Ai.Microservice`.
 
-## Request Contract
+### API đã triển khai
+
+- [x] `POST /api/Ai/posts/{postId}/enhance`
+
+### Contract hiện tại
+
+- [x] Request có các field `platform`, `resourceIds`, `language`, `instruction`, `suggestionCount`.
+- [x] `platform` bắt buộc.
+- [x] `resourceIds` là tùy chọn.
+- [x] `suggestionCount` mặc định `3`.
+- [x] `suggestionCount` bị chặn tối đa `6`.
+- [x] Response vẫn dùng envelope `Result<T>`.
+- [x] Response trả `bestSuggestion` và `alternatives`.
+
+### Giới hạn hiện tại
+
+- [x] `bestSuggestion` là suggestion đầu tiên của model output.
+- [x] `alternatives` chứa các suggestion còn lại.
+- [x] V1 chỉ làm suggestion, không tự ghi đè post đã lưu.
+- [x] Resource context có thể fallback sang nội dung của post hiện có khi request không truyền `resourceIds`.
+
+## Mục tiêu
+
+Feature này cho phép người dùng yêu cầu AI cải thiện một post hiện có theo từng nền tảng.
+
+## Request/Response
+
+Request:
 
 ```json
 {
@@ -16,16 +43,7 @@
 }
 ```
 
-### Request Notes
-
-- `platform` is required.
-- `suggestionCount` defaults to `3` when omitted.
-- `suggestionCount` is clamped to a maximum of `6`.
-- `resourceIds` is optional.
-
-## Response Contract
-
-Success responses preserve the existing `Result<T>` envelope:
+Response:
 
 ```json
 {
@@ -52,65 +70,27 @@ Success responses preserve the existing `Result<T>` envelope:
 }
 ```
 
-### Response Notes
+## Resource context
 
-- `bestSuggestion` is always the first suggestion returned by the AI model.
-- `alternatives` contains the remaining suggestions.
-- When only one suggestion is requested, `alternatives` is an empty array.
-- `platform` is normalized to the existing internal platform values (`facebook`, `tiktok`, `ig`, `threads`).
+Thứ tự resolve resource context:
 
-## Resource Context Resolution
+1. `resourceIds` từ request nếu có.
+2. `post.Content.ResourceList` của post hiện có nếu request không truyền `resourceIds`.
+3. Text-only enhancement nếu không có resource nào để dùng.
 
-Resource context is resolved in this order:
+## Billing
 
-1. Request `resourceIds` override, if provided and non-empty.
-2. Existing post `content.resource_list`, if the request omits `resourceIds`.
-3. Text-only enhancement using the post title/content when no resources are available.
+- Billing dùng action type `post_enhancement`.
+- Coin được debit trước khi gọi AI.
+- Nếu AI fail sau debit thì hệ thống refund toàn bộ đúng một lần.
 
-This means v1 still supports enhancement for posts without media.
-
-## Billing And Refund Behavior
-
-- Billing uses the new action type: `post_enhancement`.
-- Pricing follows the same default per-platform model as caption generation.
-- Coins are debited before the AI call starts.
-- If the AI call fails after debit, the system refunds the full amount exactly once.
-- Spend records are tracked separately from caption batch generation so admin/user usage views can distinguish the feature.
-
-## Validation And Errors
-
-Validation and business errors preserve the existing `ProblemDetails` response flow.
-
-Expected errors include:
+## Validation và lỗi
 
 - `Post.NotFound`
 - `Post.Unauthorized`
 - `SocialMedia.InvalidType`
 - `Billing.InsufficientFunds`
 
-Additional request validation:
+## Frontend behavior
 
-- Missing request body returns `Post.EnhanceInvalidRequest`.
-- Missing/blank platform returns `SocialMedia.InvalidType`.
-
-## Out Of Scope For V1
-
-The following capabilities are intentionally not included:
-
-- Re-generate media
-- Reframe image
-- Suggest schedule
-- Multi-step optimization suite
-- Auto-writing suggestions back into the stored post
-
-## Frontend Integration Guidance
-
-Frontend should treat this endpoint as a suggestion generator only:
-
-1. Call the enhance endpoint for the target post.
-2. Show `bestSuggestion` first and optionally list `alternatives`.
-3. Let the user choose a suggestion.
-4. Apply the selected fields into the existing draft/post edit flow already used for post updates.
-5. Persist the chosen text through the normal post update endpoint.
-
-The enhance endpoint does not mutate the stored post by itself.
+FE nên dùng endpoint này như một generator suggestion, sau đó áp suggestion đã chọn vào flow update post hiện có.

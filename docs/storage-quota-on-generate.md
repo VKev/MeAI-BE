@@ -1,25 +1,34 @@
 # Storage Quota On Generate
 
-## Pre-check principle
+## Trạng thái triển khai
 
-AI image/video generation now performs a storage quota pre-check before the job is submitted. The handler estimates the expected output size, calls the internal User service quota RPC, and stops immediately when the estimate would exceed either the user quota or the system quota.
+Tài liệu này mô tả trạng thái backend hiện tại của pre-check storage quota trước khi AI generate resource mới.
 
-This happens before any of these side effects:
+### API và RPC đã triển khai
 
-- coin debit
-- chat persistence
-- spend-record persistence
-- bus publish / generation submission
+- [x] gRPC `UserResourceService.CheckStorageQuota`
+- [x] AI service gọi quota check qua `IUserResourceService.CheckStorageQuotaAsync(...)`
 
-## Internal quota API
+### Phạm vi hiện tại
 
-The feature adds an internal gRPC RPC on `UserResourceService`:
+- [x] Áp dụng cho image generation.
+- [x] Áp dụng cho video generation.
+- [x] Không áp dụng cho caption-only flow.
 
-```proto
-rpc CheckStorageQuota (CheckStorageQuotaRequest) returns (CheckStorageQuotaResponse);
-```
+## Pre-check flow
 
-Request fields:
+AI generation sẽ estimate dung lượng cần dùng trước khi submit job.
+
+Nếu estimate vượt quota:
+
+- dừng ngay
+- chưa debit coin
+- chưa persist chat
+- chưa publish bus message
+
+## Request/response của quota RPC
+
+Request:
 
 - `user_id`
 - `requested_bytes`
@@ -27,7 +36,7 @@ Request fields:
 - `estimated_file_count`
 - `workspace_id`
 
-Response fields:
+Response:
 
 - `allowed`
 - `quota_bytes`
@@ -39,51 +48,27 @@ Response fields:
 - `error_code`
 - `error_message`
 
-There is still no public REST endpoint for this in v1. AI service uses the new RPC through `IUserResourceService.CheckStorageQuotaAsync(...)`.
-
 ## Estimate policy
 
-The AI service resolves estimates through `GenerationStorageEstimates` configuration instead of hard-coding values in handlers.
-
-### Images
-
-Per-result estimate by resolution:
+### Image
 
 - `1K` = `5 MB`
 - `2K` = `12 MB`
 
-Image requested bytes = `per-result estimate * expectedResultCount`
-
-For image generation with social targets, `expectedResultCount` is:
-
-- `1` source image
-- plus each distinct extra target ratio that differs from the chosen source ratio
-
-### Videos
-
-Per-video estimate by model:
+### Video
 
 - `veo3_fast` = `150 MB`
 - `veo3` = `250 MB`
 - `veo3_quality` = `350 MB`
 
-Video requested bytes is always the configured model estimate for a single output in v1.
+## Khi quota không đủ
 
-## Error payload when quota is insufficient
+Error code hiện có:
 
-The implementation preserves the existing business error codes and overall ProblemDetails flow.
+- `Resource.StorageQuotaExceeded`
+- `Resource.SystemStorageQuotaExceeded`
 
-### User quota exceeded
-
-- error code: `Resource.StorageQuotaExceeded`
-
-### System quota exceeded
-
-- error code: `Resource.SystemStorageQuotaExceeded`
-
-### Metadata attached by AI pre-check failures
-
-When the pre-check fails, the returned error metadata includes:
+Metadata hiện được enrich thêm:
 
 - `quotaBytes`
 - `usedBytes`
@@ -92,33 +77,11 @@ When the pre-check fails, the returned error metadata includes:
 - `availableBytes`
 - `estimatedBytes`
 - `estimatedFileCount`
-
-Additionally, system quota failures also include:
-
 - `systemStorageQuotaBytes`
 
-This keeps the response contract compatible while giving FE enough information to explain why generate was blocked.
+## Hạn chế hiện tại
 
-## Relationship with upload-time enforcement
-
-The pre-check is only the first barrier.
-
-The existing upload-time quota enforcement remains active in User service when callback consumers later call `CreateResourcesFromUrlsAsync`. That means:
-
-1. AI generation can be blocked early when the estimate is already too large.
-2. If the estimate passes but the actual generated asset is larger than expected, User service can still reject the final upload.
-3. Existing failure/refund behavior on callback-side upload failure stays in place.
-
-This preserves defense in depth and avoids weakening existing quota enforcement.
-
-## V1 limitations
-
-This version intentionally does not reserve quota.
-
-Known limitations:
-
-- `reservedBytes` is still `0` because there is no reservation table yet.
-- Two concurrent generations can both pass pre-check and still race with later uploads.
-- Final upload can still fail if actual output size is larger than the estimate.
-- `purpose` is carried through the gRPC contract for future logging/audit use, but it does not alter quota rules in v1.
-- The feature applies only to AI generation flows that create new resources, not caption-only flows.
+- Chưa có reservation table thật.
+- `reservedBytes` vẫn là `0`.
+- Hai job đồng thời vẫn có thể cùng pass pre-check rồi fail ở bước upload thực tế.
+- Upload-time quota enforcement trong User service vẫn giữ nguyên.

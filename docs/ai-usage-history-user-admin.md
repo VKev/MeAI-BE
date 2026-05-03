@@ -1,20 +1,23 @@
 # AI Usage History For User And Admin
 
-## Endpoints
+## Trạng thái triển khai
 
-### User
-- `GET /api/Ai/usage/history`
-- Requires authenticated user.
-- User scope is always forced to the current authenticated user, regardless of any client intent.
+Tài liệu này mô tả trạng thái backend hiện tại của lịch sử usage AI chi tiết cho user và admin trong `Ai.Microservice`.
 
-### Admin
-- `GET /api/Ai/admin/spending/ai/history`
-- Requires existing admin authorization on the admin AI spending controller.
-- Supports the same filters as the user endpoint plus `userId`.
+### API đã triển khai
 
-## Response Contract
+- [x] `GET /api/Ai/usage/history`
+- [x] `GET /api/Ai/admin/spending/ai/history`
 
-Both endpoints return the existing success envelope shape:
+### Nguồn dữ liệu
+
+- [x] Dữ liệu lấy từ `AiSpendRecord`.
+- [x] Admin overview aggregate `GET /api/Ai/admin/spending/ai` vẫn giữ nguyên.
+- [x] User endpoint chỉ xem record của chính user hiện tại.
+
+## Response contract
+
+Response dùng envelope `Result<T>`.
 
 ```json
 {
@@ -49,36 +52,14 @@ Both endpoints return the existing success envelope shape:
 }
 ```
 
-## Usage Item Fields
+## Query và filter
 
-Each usage item is sourced from `AiSpendRecord`, with optional timing enrichment:
-- `spendRecordId`: `AiSpendRecord.Id`
-- `userId`: `AiSpendRecord.UserId`
-- `workspaceId`: `AiSpendRecord.WorkspaceId`
-- `provider`: AI provider persisted in spend record
-- `actionType`: usage action type such as image/video/caption generation
-- `model`: model name from spend record
-- `variant`: optional model variant
-- `unit`: charging unit
-- `quantity`: usage quantity
-- `unitCostCoins`: per-unit coin cost
-- `totalCoins`: total coin cost for the record
-- `status`: persisted spend status
-- `referenceType`: persisted spend reference type
-- `referenceId`: persisted spend reference id
-- `createdAt`: spend record creation timestamp
-- `updatedAt`: spend record update timestamp
-- `startedAtUtc`: optional resolved task start time
-- `completedAtUtc`: optional resolved task completion time
-- `processingDurationSeconds`: optional computed duration in seconds
+### User
 
-## Filters
-
-Supported query parameters for both endpoints:
-- `fromUtc` inclusive
-- `toUtc` exclusive
+- `fromUtc`
+- `toUtc`
 - `actionType`
-- `status` (case-insensitive match)
+- `status`
 - `workspaceId`
 - `provider`
 - `model`
@@ -87,50 +68,34 @@ Supported query parameters for both endpoints:
 - `cursorId`
 - `limit`
 
-Admin-only query parameter:
+### Admin
+
+Tất cả filter của user, cộng thêm:
+
 - `userId`
 
-Validation rules:
-- `fromUtc` must be earlier than `toUtc`
-- `limit` defaults to `20`
-- `limit` must be greater than `0`
-- `limit` must be less than or equal to `100`
-- `cursorCreatedAt` requires `cursorId`
-- `cursorId` requires `cursorCreatedAt`
-- GUID/date/integer query values must parse successfully
+## Quy tắc hiện tại
 
-Validation and business failures continue to flow through the existing `HandleFailure(result)` contract.
+- Sort giảm dần theo `CreatedAt`, tie-break bằng `Id`.
+- `fromUtc` inclusive.
+- `toUtc` exclusive.
+- `limit` mặc định `20`.
+- `limit` tối đa `100`.
+- `status` match case-insensitive.
+- `cursorCreatedAt` và `cursorId` phải đi cùng nhau.
 
-## Cursor Pagination
+## Authorization
 
-History uses descending order by:
-1. `CreatedAt`
-2. `Id` as stable tie-breaker
+- User endpoint yêu cầu đăng nhập.
+- Admin endpoint tiếp tục dùng authorization admin hiện có.
+- Unauthorized response của user endpoint giữ nguyên contract hiện tại.
 
-Cursor pagination uses the pair:
-- `cursorCreatedAt`
-- `cursorId`
+## Timing enrichment
 
-The response returns:
-- `nextCursorCreatedAt`
-- `nextCursorId`
+Khi dữ liệu phù hợp, item history có thể được enrich thêm:
 
-Clients should pass both returned values together to request the next page.
+- `startedAtUtc`
+- `completedAtUtc`
+- `processingDurationSeconds`
 
-## Authorization Rules
-
-- User endpoint requires authentication and always resolves history for the authenticated user only.
-- Admin endpoint stays under the existing admin controller and keeps its current admin authorization requirement.
-- User endpoint preserves the current unauthorized response shape already used by the controller.
-
-## Overview vs History
-
-- `GET /api/Ai/admin/spending/ai` remains the aggregate overview endpoint.
-- History endpoints return row-level usage detail for browsing, filtering, and pagination.
-- This feature does not replace or change the existing overview contract.
-
-## Data Source Notes
-
-- Primary source of truth is `AiSpendRecord`.
-- No schema migration is required for this feature.
-- Timing fields are enriched from related image/video task correlation data when available; otherwise those timing fields remain `null`.
+Xem chi tiết logic timing trong `docs/ai-spending-time.md`.

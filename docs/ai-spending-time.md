@@ -1,76 +1,70 @@
 # AI spending time
 
-## Exposed timing fields
+## Trạng thái triển khai
 
-`AiUsageHistoryItemResponse` now includes these nullable fields on existing AI usage history responses:
+Tài liệu này mô tả trạng thái backend hiện tại của timing enrichment cho lịch sử usage AI trong `Ai.Microservice`.
 
-- `startedAtUtc`
-- `completedAtUtc`
-- `processingDurationSeconds`
+### API đã được mở rộng
 
-## Timing resolution rules
+- [x] `GET /api/Ai/usage/history`
+- [x] `GET /api/Ai/admin/spending/ai/history`
+
+### Field timing đã thêm vào response
+
+- [x] `startedAtUtc`
+- [x] `completedAtUtc`
+- [x] `processingDurationSeconds`
+
+### Phạm vi timing hiện tại
+
+- [x] Image generation có timing enrichment.
+- [x] Video generation có timing enrichment.
+- [x] Caption generation trả `null` cho cả 3 field timing.
+
+## Cách resolve timing
 
 ### Image generation
 
-For records where `referenceType = "chat_image"`:
+Với record có `referenceType = "chat_image"`:
 
-1. Parse `referenceId` as `Chat.Id`.
-2. Load the matching `Chat` row in batch.
-3. Read `Chat.Config` and parse `CorrelationId` / `correlationId`.
-4. Batch load `ImageTask` rows by correlation id.
+1. Parse `referenceId` thành `Chat.Id`.
+2. Batch load `Chat`.
+3. Đọc `Chat.Config` để lấy `correlationId`.
+4. Batch load `ImageTask` theo correlation id.
 5. Map:
    - `startedAtUtc = ImageTask.CreatedAt`
    - `completedAtUtc = ImageTask.CompletedAt`
-   - `processingDurationSeconds = floor((completedAtUtc - startedAtUtc).TotalSeconds)` when `completedAtUtc` exists and is later than `startedAtUtc`.
+   - `processingDurationSeconds = floor((completedAtUtc - startedAtUtc).TotalSeconds)` khi `CompletedAt` tồn tại
 
 ### Video generation
 
-For records where `referenceType = "chat_video"`:
+Với record có `referenceType = "chat_video"`:
 
-1. Parse `referenceId` as `Chat.Id`.
-2. Load the matching `Chat` row in batch.
-3. Read `Chat.Config` and parse `CorrelationId` / `correlationId`.
-4. Batch load `VideoTask` rows by correlation id.
+1. Parse `referenceId` thành `Chat.Id`.
+2. Batch load `Chat`.
+3. Đọc `Chat.Config` để lấy `correlationId`.
+4. Batch load `VideoTask` theo correlation id.
 5. Map:
    - `startedAtUtc = VideoTask.CreatedAt`
    - `completedAtUtc = VideoTask.CompletedAt`
-   - `processingDurationSeconds = floor((completedAtUtc - startedAtUtc).TotalSeconds)` when `completedAtUtc` exists and is later than `startedAtUtc`.
+   - `processingDurationSeconds = floor((completedAtUtc - startedAtUtc).TotalSeconds)` khi `CompletedAt` tồn tại
 
-## Why caption generation has no timing in v1
+## Quy tắc trả `null`
 
-Caption generation still returns `null` for all three timing fields in v1 because that flow does not currently have a dedicated task entity with standardized started/completed timestamps that can be joined reliably from read side history records.
+Ba field timing được trả `null` khi:
 
-## Null return rules
+- reference type không hỗ trợ timing enrichment
+- `referenceId` không parse được thành chat id
+- chat không tồn tại
+- `Chat.Config` không hợp lệ hoặc không đọc được correlation id
+- task image/video không tìm thấy
 
-All three timing fields are returned as `null` when:
+## Hạn chế hiện tại
 
-- the usage record reference type is unsupported for timing enrichment
-- `referenceId` cannot be parsed as a chat id
-- the chat row is missing
-- `Chat.Config` is missing or invalid JSON
-- the correlation id cannot be parsed from chat config
-- the related image/video task row cannot be found
+- Timing chỉ là read-side join, không được lưu ngược vào `AiSpendRecord`.
+- Nếu config chat thay đổi sau này, timing join phụ thuộc vào dữ liệu hiện tại đang lưu.
+- Caption generation chưa có nguồn timing chuẩn nên vẫn trả `null`.
 
-For incomplete tasks:
+## Hiệu năng
 
-- `startedAtUtc` is returned from the task row
-- `completedAtUtc` is `null`
-- `processingDurationSeconds` is `null`
-
-## Performance note
-
-History enrichment is resolved in batches per page to avoid N+1 queries:
-
-1. materialize the spend record page
-2. group supported records by reference type
-3. batch load chats by chat ids
-4. extract correlation ids in memory
-5. batch load image tasks and video tasks by correlation ids
-6. map timing back onto response items in memory
-
-## Known limitations
-
-- This is a read-side join only; timing is not persisted to `AiSpendRecord` in v1.
-- If chat config is changed after record creation, the join depends on the current stored config content.
-- The join relies on `referenceId` pointing to `Chat.Id` instead of directly storing task correlation ids.
-- Caption generation remains unresolved until that flow exposes a stable task/timing source.
+Enrichment được xử lý theo batch theo page dữ liệu để tránh N+1 query.
