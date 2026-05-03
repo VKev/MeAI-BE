@@ -40,6 +40,7 @@ public sealed class CreateChatImageCommandHandler
     private readonly IPostRepository _postRepository;
     private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
+    private readonly IAiGenerationStorageEstimator _storageEstimator;
     private readonly ICoinPricingService _pricingService;
     private readonly IBillingClient _billingClient;
     private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
@@ -51,6 +52,7 @@ public sealed class CreateChatImageCommandHandler
         IPostRepository postRepository,
         IUserConfigService userConfigService,
         IUserResourceService userResourceService,
+        IAiGenerationStorageEstimator storageEstimator,
         ICoinPricingService pricingService,
         IBillingClient billingClient,
         IAiSpendRecordRepository aiSpendRecordRepository,
@@ -61,6 +63,7 @@ public sealed class CreateChatImageCommandHandler
         _postRepository = postRepository;
         _userConfigService = userConfigService;
         _userResourceService = userResourceService;
+        _storageEstimator = storageEstimator;
         _pricingService = pricingService;
         _billingClient = billingClient;
         _aiSpendRecordRepository = aiSpendRecordRepository;
@@ -176,6 +179,27 @@ public sealed class CreateChatImageCommandHandler
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Count();
             expectedResultCount = 1 + distinctExtraRatios;
+        }
+
+        var estimatedBytes = _storageEstimator.EstimateImageGenerationBytes(model, resolution, expectedResultCount);
+        var quotaResult = await _userResourceService.CheckStorageQuotaAsync(
+            request.UserId,
+            estimatedBytes,
+            "ai.generate.image",
+            expectedResultCount,
+            cancellationToken,
+            session.WorkspaceId == Guid.Empty ? null : session.WorkspaceId);
+        if (quotaResult.IsFailure)
+        {
+            return Result.Failure<ChatImageResponse>(quotaResult.Error);
+        }
+
+        if (!quotaResult.Value.Allowed)
+        {
+            return Result.Failure<ChatImageResponse>(BuildQuotaError(
+                quotaResult.Value,
+                estimatedBytes,
+                expectedResultCount));
         }
 
         // Quote + charge coins BEFORE we persist the chat / enqueue the Kie job. Cost scales
@@ -354,6 +378,33 @@ public sealed class CreateChatImageCommandHandler
         }
 
         return records;
+    }
+
+    private static Error BuildQuotaError(
+        StorageQuotaCheckResult quota,
+        long estimatedBytes,
+        int estimatedFileCount)
+    {
+        var metadata = new Dictionary<string, object?>
+        {
+            ["quotaBytes"] = quota.QuotaBytes,
+            ["usedBytes"] = quota.UsedBytes,
+            ["reservedBytes"] = quota.ReservedBytes,
+            ["requestedBytes"] = estimatedBytes,
+            ["availableBytes"] = quota.AvailableBytes,
+            ["estimatedBytes"] = estimatedBytes,
+            ["estimatedFileCount"] = estimatedFileCount
+        };
+
+        if (string.Equals(quota.ErrorCode, "Resource.SystemStorageQuotaExceeded", StringComparison.Ordinal))
+        {
+            metadata["systemStorageQuotaBytes"] = quota.SystemStorageQuotaBytes;
+        }
+
+        return new Error(
+            quota.ErrorCode ?? "Resource.StorageQuotaExceeded",
+            string.IsNullOrWhiteSpace(quota.ErrorMessage) ? "Storage quota exceeded." : quota.ErrorMessage,
+            metadata);
     }
 
     private async Task<UserAiConfig?> TryGetActiveConfigAsync(CancellationToken cancellationToken)

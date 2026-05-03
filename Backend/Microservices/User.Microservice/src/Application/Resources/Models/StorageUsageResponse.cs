@@ -10,4 +10,5 @@ public sealed record StorageUsageResponse(
     long? AvailableBytes,
     decimal? UsagePercent,
     long? MaxUploadFileBytes,
+    long? SystemStorageQuotaBytes,
     bool IsOverQuota);

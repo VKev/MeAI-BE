@@ -1,4 +1,6 @@
-using System.Text.Json;
+using Application.Billing.Commands;
+using Application.Billing.Models;
+using Application.Billing.Queries;
 using Application.Configs.Commands;
 using Application.SocialMedias.Commands;
 using Application.Subscriptions.Commands;
@@ -29,6 +31,9 @@ public sealed class MappingProfile : Profile
         CreateMap<PurchaseSubscriptionRequest, PurchaseSubscriptionCommand>()
             .ForCtorParam("SubscriptionId", opt => opt.MapFrom(_ => Guid.Empty))
             .ForCtorParam("UserId", opt => opt.MapFrom(_ => Guid.Empty));
+        CreateMap<UpsertCoinPackageRequest, CreateCoinPackageCommand>();
+        CreateMap<UpsertCoinPackageRequest, UpdateCoinPackageCommand>()
+            .ForCtorParam("Id", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<UpdateSubscriptionRequest, UpdateSubscriptionCommand>()
             .ForCtorParam("Id", opt => opt.MapFrom(_ => Guid.Empty));
         CreateMap<PatchSubscriptionRequest, PatchSubscriptionCommand>()

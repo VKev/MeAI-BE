@@ -128,6 +128,41 @@ public sealed class StripePaymentService : IStripePaymentService
         return ToRecurringResult(subscription);
     }
 
+    public async Task<StripeOneTimePaymentResult> CreateCoinPackagePaymentIntentAsync(
+        string stripeCustomerId,
+        string? customerEmail,
+        string? customerName,
+        decimal amount,
+        string currency,
+        string description,
+        IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default)
+    {
+        var paymentIntent = await CreatePaymentIntentService().CreateAsync(
+            new PaymentIntentCreateOptions
+            {
+                Customer = stripeCustomerId,
+                Amount = ToMinorAmount(amount),
+                Currency = currency.Trim().ToLowerInvariant(),
+                Description = description,
+                ReceiptEmail = customerEmail,
+                Metadata = metadata.Count == 0 ? null : new Dictionary<string, string>(metadata),
+                AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
+                {
+                    Enabled = true
+                },
+                SetupFutureUsage = "off_session"
+            },
+            cancellationToken: cancellationToken);
+
+        return new StripeOneTimePaymentResult(
+            paymentIntent.Id,
+            paymentIntent.ClientSecret ?? string.Empty,
+            NormalizeCheckoutStatus(null, null, paymentIntent.Status),
+            paymentIntent.Currency ?? currency.Trim().ToLowerInvariant(),
+            ToMajorAmount(paymentIntent.Amount));
+    }
+
     public async Task<StripeRecurringSubscriptionResult> UpgradeSubscriptionAsync(
         string stripeSubscriptionId,
         string stripePriceId,
@@ -290,6 +325,25 @@ public sealed class StripePaymentService : IStripePaymentService
         }
 
         throw new InvalidOperationException("Stripe payment identifiers are missing.");
+    }
+
+    public async Task<StripeCheckoutStatusResult> GetCoinPackageCheckoutStatusAsync(
+        string paymentIntentId,
+        CancellationToken cancellationToken = default)
+    {
+        var paymentIntent = await CreatePaymentIntentService().GetAsync(
+            paymentIntentId,
+            cancellationToken: cancellationToken);
+
+        var status = NormalizeCheckoutStatus(null, null, paymentIntent.Status);
+
+        return new StripeCheckoutStatusResult(
+            status,
+            IsSuccessStatus(status),
+            IsTerminalStatus(status),
+            paymentIntent.Id,
+            paymentIntent.Id,
+            null);
     }
 
     public async Task<StripeSubscriptionSnapshotResult> GetSubscriptionSnapshotAsync(

@@ -1,4 +1,5 @@
 using Application.Abstractions.SocialMedias;
+using Application.Abstractions.Feed;
 using Application.Posts.Commands;
 using Domain.Entities;
 using Domain.Repositories;
@@ -67,6 +68,11 @@ public sealed class PublishPostsCommandTests
                 new UserSocialMediaResult(instagramId, "instagram", "{}")
             ]));
 
+        var feedPostPublishService = new Mock<IFeedPostPublishService>();
+        feedPostPublishService
+            .Setup(service => service.PublishAiPostToFeedAsync(It.IsAny<FeedDirectPublishRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new FeedDirectPublishResult(Guid.NewGuid(), DateTime.UtcNow)));
+
         var publishedMessages = new List<PublishToTargetRequested>();
         var bus = new Mock<IBus>();
         bus
@@ -78,6 +84,7 @@ public sealed class PublishPostsCommandTests
             postRepository.Object,
             postPublicationRepository.Object,
             userSocialMediaService.Object,
+            feedPostPublishService.Object,
             bus.Object);
 
         var result = await handler.Handle(
@@ -128,17 +135,85 @@ public sealed class PublishPostsCommandTests
     }
 
     [Fact]
-    public async Task Handle_ShouldFailWhenTargetsAreMissing()
+    public async Task Handle_ShouldPublishToMeAiFeedOnlyWithoutCreatingExternalPlaceholders()
     {
+        var userId = Guid.NewGuid();
+        var postId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        var feedPostId = Guid.NewGuid();
+
+        var post = CreatePost(postId, userId, workspaceId);
+
         var postRepository = new Mock<IPostRepository>();
+        postRepository
+            .Setup(repository => repository.GetByIdForUpdateAsync(postId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(post);
+        postRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
         var postPublicationRepository = new Mock<IPostPublicationRepository>();
+        postPublicationRepository
+            .Setup(repository => repository.GetByPostIdForUpdateAsync(postId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<PostPublication>());
+
         var userSocialMediaService = new Mock<IUserSocialMediaService>();
+        var feedPostPublishService = new Mock<IFeedPostPublishService>();
+        feedPostPublishService
+            .Setup(service => service.PublishAiPostToFeedAsync(
+                It.Is<FeedDirectPublishRequest>(request =>
+                    request.UserId == userId &&
+                    request.WorkspaceId == workspaceId &&
+                    request.SourceAiPostId == postId),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new FeedDirectPublishResult(feedPostId, DateTime.UtcNow)));
+
         var bus = new Mock<IBus>();
 
         var handler = new PublishPostsCommandHandler(
             postRepository.Object,
             postPublicationRepository.Object,
             userSocialMediaService.Object,
+            feedPostPublishService.Object,
+            bus.Object);
+
+        var result = await handler.Handle(
+            new PublishPostsCommand(
+                userId,
+                [new PublishPostTargetInput(postId, [], null, null, true)]),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Posts.Should().ContainSingle();
+        result.Value.Posts[0].Status.Should().Be("published");
+        result.Value.Posts[0].Results.Should().ContainSingle();
+        result.Value.Posts[0].Results[0].SocialMediaId.Should().BeNull();
+        result.Value.Posts[0].Results[0].SocialMediaType.Should().Be("meai_feed");
+        result.Value.Posts[0].Results[0].InternalTargetKey.Should().Be("meai_feed");
+        result.Value.Posts[0].Results[0].ExternalPostId.Should().Be(feedPostId.ToString());
+        result.Value.Posts[0].Results[0].PublishStatus.Should().Be("published");
+
+        postPublicationRepository.Verify(
+            repository => repository.AddRangeAsync(It.IsAny<IEnumerable<PostPublication>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        bus.Verify(instance => instance.Publish(It.IsAny<PublishToTargetRequested>(), It.IsAny<CancellationToken>()), Times.Never);
+        userSocialMediaService.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Handle_ShouldFailWhenTargetsAreMissing()
+    {
+        var postRepository = new Mock<IPostRepository>();
+        var postPublicationRepository = new Mock<IPostPublicationRepository>();
+        var userSocialMediaService = new Mock<IUserSocialMediaService>();
+        var feedPostPublishService = new Mock<IFeedPostPublishService>();
+        var bus = new Mock<IBus>();
+
+        var handler = new PublishPostsCommandHandler(
+            postRepository.Object,
+            postPublicationRepository.Object,
+            userSocialMediaService.Object,
+            feedPostPublishService.Object,
             bus.Object);
 
         var result = await handler.Handle(

@@ -379,6 +379,45 @@ public sealed class PostsController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("{postId:guid}/enhance")]
+    [ProducesResponseType(typeof(Result<EnhanceExistingPostResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Enhance(
+        Guid postId,
+        [FromBody] EnhanceExistingPostRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        if (request is null)
+        {
+            return HandleFailure(Result.Failure<EnhanceExistingPostResponse>(
+                new Error("Post.EnhanceInvalidRequest", "Request body is required.")));
+        }
+
+        var result = await _mediator.Send(
+            new EnhanceExistingPostCommand(
+                userId,
+                postId,
+                request.Platform ?? string.Empty,
+                request.ResourceIds,
+                request.Language,
+                request.Instruction,
+                request.SuggestionCount),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpDelete("{postId:guid}")]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -737,7 +776,9 @@ public sealed class PostsController : ApiController
             }
         }
 
-        if (socialMediaIds.Count == 0)
+        var publishToMeAiFeed = GetBooleanProperty(item, "publishToMeAiFeed", "publish_to_me_ai_feed") ?? false;
+
+        if (socialMediaIds.Count == 0 && !publishToMeAiFeed)
         {
             return Result.Failure<PublishPostTargetInput>(
                 new Error("Post.PublishMissingSocialMedia", "Each publish target must include at least one social media id."));
@@ -746,7 +787,9 @@ public sealed class PostsController : ApiController
         return Result.Success(new PublishPostTargetInput(
             postId.Value,
             socialMediaIds,
-            GetBooleanProperty(item, "isPrivate", "is_private")));
+            GetBooleanProperty(item, "isPrivate", "is_private"),
+            null,
+            publishToMeAiFeed));
     }
 
     private static Result<IReadOnlyList<Guid>> GetGuidListProperty(JsonElement element, params string[] propertyNames)
@@ -889,6 +932,13 @@ public sealed record SchedulePostRequest(
     string? Timezone,
     IReadOnlyList<Guid>? SocialMediaIds,
     bool? IsPrivate);
+
+public sealed record EnhanceExistingPostRequest(
+    string? Platform,
+    IReadOnlyList<Guid>? ResourceIds,
+    string? Language,
+    string? Instruction,
+    int? SuggestionCount);
 
 sealed record PublishPostsRequestPayload(
     IReadOnlyList<PublishPostTargetInput> Targets,

@@ -460,6 +460,70 @@ namespace Infrastructure.Migrations
                     b.ToTable("draft_post_tasks", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.FormulaGenerationLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FormulaKeySnapshot")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("formula_key_snapshot");
+
+                    b.Property<Guid?>("FormulaTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("formula_template_id");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("model");
+
+                    b.Property<string>("OutputType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("output_type");
+
+                    b.Property<string>("RenderedPrompt")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("rendered_prompt");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("VariablesJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("variables_json");
+
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_formula_generation_logs_created_at");
+
+                    b.HasIndex("FormulaTemplateId", "CreatedAt")
+                        .HasDatabaseName("ix_formula_generation_logs_formula_created_at");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("ix_formula_generation_logs_user_created_at");
+
+                    b.ToTable("formula_generation_logs", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.ImageTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -914,6 +978,69 @@ namespace Infrastructure.Migrations
                     b.HasIndex("PostId");
 
                     b.ToTable("post_resources", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.PromptFormulaTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DefaultInstruction")
+                        .HasColumnType("text")
+                        .HasColumnName("default_instruction");
+
+                    b.Property<string>("DefaultLanguage")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("default_language");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("OutputType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("output_type");
+
+                    b.Property<string>("Template")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("template");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique()
+                        .HasDatabaseName("ix_prompt_formula_templates_key");
+
+                    b.HasIndex("OutputType", "IsActive")
+                        .HasDatabaseName("ix_prompt_formula_templates_output_type_active");
+
+                    b.ToTable("prompt_formula_templates", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.PublishingSchedule", b =>

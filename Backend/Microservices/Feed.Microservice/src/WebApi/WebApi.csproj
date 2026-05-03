@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <Protobuf Include="..\..\..\SharedLibrary\Protos\feed_analytics.proto" GrpcServices="Server" />
+    <Protobuf Include="..\..\..\SharedLibrary\Protos\feed_posts.proto" GrpcServices="Server" />
   </ItemGroup>
 
 </Project>

@@ -36,6 +36,17 @@ public sealed class StorageUsageService : IStorageUsageService
         long requestedBytes,
         CancellationToken cancellationToken)
     {
+        var (usage, error) = await CheckQuotaAsync(userId, requestedBytes, cancellationToken);
+        return error is null
+            ? Result.Success(usage)
+            : Result.Failure<StorageUsageResponse>(error);
+    }
+
+    public async Task<(StorageUsageResponse Usage, Error? Error)> CheckQuotaAsync(
+        Guid userId,
+        long requestedBytes,
+        CancellationToken cancellationToken)
+    {
         if (requestedBytes < 0)
         {
             requestedBytes = 0;
@@ -45,32 +56,30 @@ public sealed class StorageUsageService : IStorageUsageService
 
         if (usage.MaxUploadFileBytes.HasValue && requestedBytes > usage.MaxUploadFileBytes.Value)
         {
-            return Result.Failure<StorageUsageResponse>(
-                new Error(
-                    "Resource.FileTooLarge",
-                    "File size exceeds the current plan upload limit.",
-                    new Dictionary<string, object?>
-                    {
-                        ["maxUploadFileBytes"] = usage.MaxUploadFileBytes.Value,
-                        ["requestedBytes"] = requestedBytes
-                    }));
+            return (usage, new Error(
+                "Resource.FileTooLarge",
+                "File size exceeds the current plan upload limit.",
+                new Dictionary<string, object?>
+                {
+                    ["maxUploadFileBytes"] = usage.MaxUploadFileBytes.Value,
+                    ["requestedBytes"] = requestedBytes
+                }));
         }
 
         if (usage.QuotaBytes.HasValue && usage.UsedBytes + usage.ReservedBytes + requestedBytes > usage.QuotaBytes.Value)
         {
             var availableBytes = Math.Max(0L, usage.QuotaBytes.Value - usage.UsedBytes - usage.ReservedBytes);
-            return Result.Failure<StorageUsageResponse>(
-                new Error(
-                    "Resource.StorageQuotaExceeded",
-                    "Storage quota exceeded.",
-                    new Dictionary<string, object?>
-                    {
-                        ["quotaBytes"] = usage.QuotaBytes.Value,
-                        ["usedBytes"] = usage.UsedBytes,
-                        ["reservedBytes"] = usage.ReservedBytes,
-                        ["requestedBytes"] = requestedBytes,
-                        ["availableBytes"] = availableBytes
-                    }));
+            return (usage with { AvailableBytes = availableBytes }, new Error(
+                "Resource.StorageQuotaExceeded",
+                "Storage quota exceeded.",
+                new Dictionary<string, object?>
+                {
+                    ["quotaBytes"] = usage.QuotaBytes.Value,
+                    ["usedBytes"] = usage.UsedBytes,
+                    ["reservedBytes"] = usage.ReservedBytes,
+                    ["requestedBytes"] = requestedBytes,
+                    ["availableBytes"] = availableBytes
+                }));
         }
 
         var systemQuotaBytes = await GetSystemStorageQuotaBytesAsync(cancellationToken);
@@ -83,21 +92,20 @@ public sealed class StorageUsageService : IStorageUsageService
 
             if (systemUsedBytes + requestedBytes > systemQuotaBytes.Value)
             {
-                return Result.Failure<StorageUsageResponse>(
-                    new Error(
-                        "Resource.SystemStorageQuotaExceeded",
-                        "System storage quota exceeded.",
-                        new Dictionary<string, object?>
-                        {
-                            ["systemStorageQuotaBytes"] = systemQuotaBytes.Value,
-                            ["usedBytes"] = systemUsedBytes,
-                            ["requestedBytes"] = requestedBytes,
-                            ["availableBytes"] = Math.Max(0L, systemQuotaBytes.Value - systemUsedBytes)
-                        }));
+                return (usage with { SystemStorageQuotaBytes = systemQuotaBytes }, new Error(
+                    "Resource.SystemStorageQuotaExceeded",
+                    "System storage quota exceeded.",
+                    new Dictionary<string, object?>
+                    {
+                        ["systemStorageQuotaBytes"] = systemQuotaBytes.Value,
+                        ["usedBytes"] = systemUsedBytes,
+                        ["requestedBytes"] = requestedBytes,
+                        ["availableBytes"] = Math.Max(0L, systemQuotaBytes.Value - systemUsedBytes)
+                    }));
             }
         }
 
-        return Result.Success(usage);
+        return (usage with { SystemStorageQuotaBytes = systemQuotaBytes }, null);
     }
 
     private async Task<StorageUsageResponse> BuildUsageAsync(
@@ -129,6 +137,7 @@ public sealed class StorageUsageService : IStorageUsageService
             availableBytes,
             usagePercent,
             entitlement.MaxUploadFileBytes,
+            null,
             quotaBytes.HasValue && usedBytes > quotaBytes.Value);
     }
 

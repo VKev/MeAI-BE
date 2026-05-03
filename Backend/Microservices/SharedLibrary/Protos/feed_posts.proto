@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option csharp_namespace = "SharedLibrary.Grpc.FeedPosts";
+
+package feedposts;
+
+service FeedPostPublishService {
+  rpc PublishAiPostToFeed (PublishAiPostToFeedRequest) returns (PublishAiPostToFeedResponse);
+}
+
+message PublishAiPostToFeedRequest {
+  string user_id = 1;
+  string workspace_id = 2;
+  string source_ai_post_id = 3;
+  string content = 4;
+  repeated string resource_ids = 5;
+  string media_type = 6;
+}
+
+message PublishAiPostToFeedResponse {
+  string feed_post_id = 1;
+  string created_at = 2;
+}

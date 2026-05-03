@@ -10,6 +10,14 @@ public interface IUserResourceService
         IReadOnlyList<Guid> resourceIds,
         CancellationToken cancellationToken);
 
+    Task<Result<StorageQuotaCheckResult>> CheckStorageQuotaAsync(
+        Guid userId,
+        long requestedBytes,
+        string purpose,
+        int estimatedFileCount,
+        CancellationToken cancellationToken,
+        Guid? workspaceId = null);
+
     Task<Result<IReadOnlyList<UserResourceCreatedResult>>> CreateResourcesFromUrlsAsync(
         Guid userId,
         IReadOnlyList<string> urls,
@@ -47,6 +55,17 @@ public sealed record UserResourceCreatedResult(
     string? OriginSourceUrl = null,
     Guid? OriginChatSessionId = null,
     Guid? OriginChatId = null);
+
+public sealed record StorageQuotaCheckResult(
+    bool Allowed,
+    long? QuotaBytes,
+    long UsedBytes,
+    long ReservedBytes,
+    long AvailableBytes,
+    long? MaxUploadFileBytes,
+    long? SystemStorageQuotaBytes,
+    string? ErrorCode,
+    string? ErrorMessage);
 
 public sealed record ResourceProvenanceBackfillRequest(
     Guid ResourceId,

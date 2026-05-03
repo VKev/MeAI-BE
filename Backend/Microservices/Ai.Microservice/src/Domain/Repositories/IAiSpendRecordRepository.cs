@@ -21,4 +21,8 @@ public interface IAiSpendRecordRepository
         string referenceType,
         string referenceId,
         CancellationToken cancellationToken);
+
+    Task<AiSpendRecordHistoryPage> GetHistoryAsync(
+        AiSpendRecordHistoryQuery query,
+        CancellationToken cancellationToken);
 }

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Application.Subscriptions.Models;
 using Application.Users.Models;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -142,6 +143,70 @@ public sealed class UserAuthApiTests(UserAuthApiFixture fixture) : IClassFixture
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         var message = await ReadJsonAsync<MessageResponse>(response);
         message.Message.Should().Be("Missing refresh token");
+    }
+
+    [Fact]
+    public async Task GetCurrentEntitlements_WhenAuthenticated_ReturnsCurrentUserEntitlementsOnly()
+    {
+        using var client = fixture.CreateClient();
+        var registration = CreateRegistration();
+
+        var registerPayload = await RegisterAsync(client, registration);
+
+        await fixture.ExecuteDbContextAsync(async dbContext =>
+        {
+            dbContext.SocialMedias.AddRange(
+                new Domain.Entities.SocialMedia
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = registerPayload.Value.UserId,
+                    Type = "facebook",
+                    CreatedAt = DateTime.UtcNow.AddDays(-1)
+                },
+                new Domain.Entities.SocialMedia
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = registerPayload.Value.UserId,
+                    Type = "instagram",
+                    CreatedAt = DateTime.UtcNow.AddHours(-12)
+                },
+                new Domain.Entities.SocialMedia
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = Guid.NewGuid(),
+                    Type = "threads",
+                    CreatedAt = DateTime.UtcNow
+                });
+            await dbContext.SaveChangesAsync();
+            return true;
+        });
+
+        var response = await client.GetAsync("/api/User/subscriptions/current/entitlements");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await ReadJsonAsync<ApiResultContract<CurrentSubscriptionEntitlementsResponse>>(response);
+        payload.IsSuccess.Should().BeTrue();
+        payload.Value.HasActivePlan.Should().BeFalse();
+        payload.Value.CurrentSubscriptionId.Should().BeNull();
+        payload.Value.CurrentPlanId.Should().BeNull();
+        payload.Value.CurrentPlanName.Should().BeNull();
+        payload.Value.MaxSocialAccounts.Should().Be(2);
+        payload.Value.CurrentSocialAccounts.Should().Be(2);
+        payload.Value.RemainingSocialAccounts.Should().Be(0);
+        payload.Value.MaxPagesPerSocialAccount.Should().Be(5);
+        payload.Value.CurrentWorkspaceCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetCurrentEntitlements_WithoutAuthentication_ReturnsUnauthorizedMessage()
+    {
+        using var client = fixture.CreateClient();
+
+        var response = await client.GetAsync("/api/User/subscriptions/current/entitlements");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        var message = await ReadJsonAsync<MessageResponse>(response);
+        message.Message.Should().Be("Unauthorized");
     }
 
     [Fact]

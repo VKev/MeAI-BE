@@ -19,4 +19,7 @@ public interface IImageTaskRepository
     Task<ImageTask?> GetByKieTaskIdAsync(string kieTaskId, CancellationToken cancellationToken);
 
     Task<IEnumerable<ImageTask>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ImageTask>> GetByCorrelationIdsAsync(IReadOnlyList<Guid> correlationIds, CancellationToken cancellationToken);
 }
+

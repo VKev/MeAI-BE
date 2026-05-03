@@ -1,3 +1,6 @@
+using Application.Abstractions.Formulas;
+using Application.Usage;
+using Application.Usage.Models;
 using Application.Abstractions;
 using Application.Abstractions.Agents;
 using Application.Abstractions.ApiCredentials;
@@ -24,6 +27,7 @@ using Infrastructure.Logic.ApiCredentials;
 using Infrastructure.Logic.Configs;
 using Infrastructure.Logic.Facebook;
 using Infrastructure.Logic.Feed;
+using Infrastructure.Logic.Formulas;
 using Infrastructure.Logic.Gemini;
 using Infrastructure.Logic.Instagram;
 using Infrastructure.Logic.Rag;
@@ -42,6 +46,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SharedLibrary.Authentication;
 using SharedLibrary.Configs;
 using SharedLibrary.Grpc.FeedAnalytics;
+using SharedLibrary.Grpc.FeedPosts;
 using SharedLibrary.Grpc.UserResources;
 using StackExchange.Redis;
 
@@ -77,6 +82,8 @@ namespace Infrastructure
             // binding points at the Kie-backed implementation.
             services.AddScoped<IGeminiCaptionService, Infrastructure.Logic.Kie.KieCaptionService>();
             services.AddScoped<GeminiCaptionService>();
+            services.AddScoped<IFormulaTemplateRenderer, FormulaTemplateRenderer>();
+            services.AddScoped<IFormulaGenerationService, FormulaGenerationService>();
             services.AddScoped<IN8nWorkflowClient, N8nWorkflowClient>();
             services.AddScoped<IWebSearchEnrichmentService, WebSearchEnrichmentService>();
             services.AddScoped<IAgenticRuntimeContentService, AgenticRuntimeContentService>();
@@ -174,6 +181,7 @@ namespace Infrastructure
                 options.Address = new Uri(grpcUrl);
             });
             services.AddScoped<IUserResourceService, UserResourceGrpcService>();
+            services.AddScoped<IAiGenerationStorageEstimator, AiGenerationStorageEstimator>();
             services.AddScoped<IUserConfigService, UserConfigGrpcService>();
 
             services.AddGrpcClient<UserSocialMediaService.UserSocialMediaServiceClient>((sp, options) =>
@@ -216,9 +224,22 @@ namespace Infrastructure
             });
             services.AddScoped<IFeedAnalyticsService, FeedAnalyticsGrpcClient>();
 
+            services.AddGrpcClient<FeedPostPublishService.FeedPostPublishServiceClient>((sp, options) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var grpcUrl = configuration["FeedService:GrpcUrl"]
+                              ?? configuration["FeedService__GrpcUrl"]
+                              ?? "http://feed-microservice:5008";
+                options.Address = new Uri(grpcUrl);
+            });
+            services.AddScoped<IFeedPostPublishService, FeedPostPublishGrpcClient>();
+
             services.AddScoped<IVideoTaskRepository, VideoTaskRepository>();
             services.AddScoped<IImageTaskRepository, ImageTaskRepository>();
+            services.AddScoped<IAiUsageTimingResolver, AiUsageTimingResolver>();
             services.AddScoped<IAiSpendRecordRepository, AiSpendRecordRepository>();
+            services.AddScoped<IPromptFormulaTemplateRepository, PromptFormulaTemplateRepository>();
+            services.AddScoped<IFormulaGenerationLogRepository, FormulaGenerationLogRepository>();
             services.AddScoped<IChatSessionRepository, ChatSessionRepository>();
             services.AddScoped<IWorkspaceRepository, WorkspaceRepository>();
             services.AddScoped<IChatRepository, ChatRepository>();
