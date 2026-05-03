@@ -60,6 +60,27 @@ public sealed class SubscriptionsController : ApiController
         return Ok(result);
     }
 
+    [HttpGet("current/entitlements")]
+    [Authorize]
+    [ProducesResponseType(typeof(Result<CurrentSubscriptionEntitlementsResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetCurrentEntitlements(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(new GetCurrentSubscriptionEntitlementsQuery(userId), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpGet("mine")]
     [Authorize]
     [ProducesResponseType(typeof(Result<List<CurrentUserSubscriptionResponse>>), StatusCodes.Status200OK)]

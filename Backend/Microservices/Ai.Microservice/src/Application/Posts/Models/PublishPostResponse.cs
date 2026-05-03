@@ -9,9 +9,10 @@ public sealed record PublishPostResponse(
     IReadOnlyList<PublishPostDestinationResult> Results);
 
 public sealed record PublishPostDestinationResult(
-    Guid SocialMediaId,
+    Guid? SocialMediaId,
     string SocialMediaType,
     string PageId,
     string ExternalPostId,
     Guid? PublicationId = null,
-    string? PublishStatus = null);
+    string? PublishStatus = null,
+    string? InternalTargetKey = null);

@@ -32,6 +32,8 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<SocialMedia> SocialMedias { get; set; }
 
+    public virtual DbSet<CoinPackage> CoinPackages { get; set; }
+
     public virtual DbSet<Transaction> Transactions { get; set; }
 
     public virtual DbSet<CoinTransaction> CoinTransactions { get; set; }

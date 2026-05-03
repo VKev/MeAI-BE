@@ -1,5 +1,6 @@
 using Application.Admin.Models;
 using Application.Admin.Queries;
+using Application.Usage.Models;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using SharedLibrary.Attributes;
@@ -28,6 +29,30 @@ public sealed class AdminAiSpendingController : ApiController
         CancellationToken cancellationToken)
     {
         var result = await _mediator.Send(new GetAdminAiSpendOverviewQuery(period), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("history")]
+    [ProducesResponseType(typeof(Result<AiUsageHistoryResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetHistory(
+        [FromQuery] AiUsageHistoryQueryParameters parameters,
+        CancellationToken cancellationToken)
+    {
+        var filterResult = parameters.ToFilter();
+        if (filterResult.IsFailure)
+        {
+            return HandleFailure(filterResult);
+        }
+
+        var result = await _mediator.Send(new GetAdminAiUsageHistoryQuery(filterResult.Value), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);

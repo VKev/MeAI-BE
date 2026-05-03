@@ -55,6 +55,20 @@ public sealed class VideoTaskRepository : IVideoTaskRepository
     {
         return await _dbSet.AsNoTracking().Where(t => t.UserId == userId).ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<VideoTask>> GetByCorrelationIdsAsync(
+        IReadOnlyList<Guid> correlationIds,
+        CancellationToken cancellationToken)
+    {
+        if (correlationIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _dbSet.AsNoTracking()
+            .Where(task => correlationIds.Contains(task.CorrelationId))
+            .ToListAsync(cancellationToken);
+    }
 }
 
 

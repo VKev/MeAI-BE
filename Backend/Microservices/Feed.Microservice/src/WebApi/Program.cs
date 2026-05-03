@@ -82,6 +82,7 @@ app.MapScalarApiReference("docs", opts =>
 });
 
 app.MapGrpcService<FeedAnalyticsGrpcService>();
+app.MapGrpcService<FeedPostPublishGrpcService>();
 app.MapControllers();
 
 app.Run();

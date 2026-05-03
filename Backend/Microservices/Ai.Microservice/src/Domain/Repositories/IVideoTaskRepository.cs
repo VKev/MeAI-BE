@@ -19,6 +19,8 @@ public interface IVideoTaskRepository
     Task<VideoTask?> GetByVeoTaskIdAsync(string veoTaskId, CancellationToken cancellationToken);
 
     Task<IEnumerable<VideoTask>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<VideoTask>> GetByCorrelationIdsAsync(IReadOnlyList<Guid> correlationIds, CancellationToken cancellationToken);
 }
 
 

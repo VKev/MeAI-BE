@@ -235,6 +235,57 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
         return response;
     }
 
+    public override async Task<CheckStorageQuotaResponse> CheckStorageQuota(
+        CheckStorageQuotaRequest request,
+        ServerCallContext context)
+    {
+        if (!Guid.TryParse(request.UserId, out var userId))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid userId."));
+        }
+
+        Guid? workspaceId = null;
+        if (!string.IsNullOrWhiteSpace(request.WorkspaceId))
+        {
+            if (!Guid.TryParse(request.WorkspaceId, out var parsedWorkspaceId))
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid workspaceId."));
+            }
+
+            if (parsedWorkspaceId != Guid.Empty)
+            {
+                workspaceId = parsedWorkspaceId;
+            }
+        }
+
+        var result = await _mediator.Send(
+            new CheckStorageQuotaQuery(
+                userId,
+                request.RequestedBytes,
+                string.IsNullOrWhiteSpace(request.Purpose) ? null : request.Purpose.Trim(),
+                Math.Max(0, request.EstimatedFileCount),
+                workspaceId),
+            context.CancellationToken);
+
+        if (result.IsFailure)
+        {
+            throw new RpcException(new Status(StatusCode.Internal, result.Error.Description));
+        }
+
+        return new CheckStorageQuotaResponse
+        {
+            Allowed = result.Value.Allowed,
+            QuotaBytes = result.Value.QuotaBytes ?? 0,
+            UsedBytes = result.Value.UsedBytes,
+            ReservedBytes = result.Value.ReservedBytes,
+            AvailableBytes = result.Value.AvailableBytes ?? 0,
+            MaxUploadFileBytes = result.Value.MaxUploadFileBytes ?? 0,
+            SystemStorageQuotaBytes = result.Value.SystemStorageQuotaBytes ?? 0,
+            ErrorCode = result.Value.Error?.Code ?? string.Empty,
+            ErrorMessage = result.Value.Error?.Description ?? string.Empty
+        };
+    }
+
     public override async Task<BackfillResourceProvenanceResponse> BackfillResourceProvenance(
         BackfillResourceProvenanceRequest request,
         ServerCallContext context)

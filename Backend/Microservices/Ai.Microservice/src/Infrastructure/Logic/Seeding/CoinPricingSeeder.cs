@@ -38,7 +38,14 @@ public sealed class CoinPricingSeeder
         // spend so refunds stay whole-number and we absorb small FX drift.
         (CoinActionTypes.CaptionGeneration, "gpt-5-4", null, "per_platform", 3m),
         (CoinActionTypes.CaptionGeneration, "gpt-5-2", null, "per_platform", 2m),
-        (CoinActionTypes.CaptionGeneration, "*", null, "per_platform", 3m)
+        (CoinActionTypes.CaptionGeneration, "*", null, "per_platform", 3m),
+        // Enhance-existing-post v1 reuses the same caption engine + price model as batch
+        // caption generation, but tracks spend separately so usage/billing can distinguish it.
+        (CoinActionTypes.PostEnhancement, "gpt-5-4", null, "per_platform", 3m),
+        (CoinActionTypes.PostEnhancement, "gpt-5-2", null, "per_platform", 2m),
+        (CoinActionTypes.PostEnhancement, "*", null, "per_platform", 3m),
+        (CoinActionTypes.FormulaGeneration, "gpt-5-4", null, "per_variant", 2m),
+        (CoinActionTypes.FormulaGeneration, "*", null, "per_variant", 2m)
     };
 
     private readonly MyDbContext _dbContext;

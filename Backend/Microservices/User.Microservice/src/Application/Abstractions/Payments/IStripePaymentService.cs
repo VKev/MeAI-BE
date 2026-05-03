@@ -24,6 +24,16 @@ public interface IStripePaymentService
         IDictionary<string, string> metadata,
         CancellationToken cancellationToken = default);
 
+    Task<StripeOneTimePaymentResult> CreateCoinPackagePaymentIntentAsync(
+        string stripeCustomerId,
+        string? customerEmail,
+        string? customerName,
+        decimal amount,
+        string currency,
+        string description,
+        IDictionary<string, string> metadata,
+        CancellationToken cancellationToken = default);
+
     Task<StripeRecurringSubscriptionResult> UpgradeSubscriptionAsync(
         string stripeSubscriptionId,
         string stripePriceId,
@@ -41,6 +51,10 @@ public interface IStripePaymentService
     Task<StripeCheckoutStatusResult> GetCheckoutStatusAsync(
         string? paymentIntentId,
         string? stripeSubscriptionId,
+        CancellationToken cancellationToken = default);
+
+    Task<StripeCheckoutStatusResult> GetCoinPackageCheckoutStatusAsync(
+        string paymentIntentId,
         CancellationToken cancellationToken = default);
 
     Task<StripeSubscriptionSnapshotResult> GetSubscriptionSnapshotAsync(
@@ -88,6 +102,13 @@ public sealed record StripeRecurringSubscriptionResult(
     decimal AmountDue,
     DateTime? CurrentPeriodStart,
     DateTime? CurrentPeriodEnd);
+
+public sealed record StripeOneTimePaymentResult(
+    string PaymentIntentId,
+    string ClientSecret,
+    string Status,
+    string Currency,
+    decimal AmountDue);
 
 public sealed record StripeCatalogPriceResult(
     string StripeProductId,

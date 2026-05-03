@@ -48,6 +48,8 @@ builder.ConfigureSerilogLogging();
 builder.Services.AddSingleton<EnvironmentConfig>();
 builder.Services.Configure<VeoOptions>(
     builder.Configuration.GetSection(VeoOptions.SectionName));
+builder.Services.Configure<GenerationStorageEstimates>(
+    builder.Configuration.GetSection(GenerationStorageEstimates.SectionName));
 builder.Services.Configure<N8nOptions>(
     builder.Configuration.GetSection(N8nOptions.SectionName));
 builder.Services.Configure<SampleSeedOptions>(
