@@ -10,7 +10,9 @@ public sealed record GetUserPostsQuery(
     DateTime? CursorCreatedAt,
     Guid? CursorId,
     int? Limit,
-    string? Status = null) : IRequest<Result<IEnumerable<PostResponse>>>;
+    string? Status = null,
+    Guid? SocialMediaId = null,
+    string? Platform = null) : IRequest<Result<IEnumerable<PostResponse>>>;
 
 public sealed class GetUserPostsQueryHandler
     : IRequestHandler<GetUserPostsQuery, Result<IEnumerable<PostResponse>>>
@@ -37,6 +39,8 @@ public sealed class GetUserPostsQueryHandler
             request.CursorId,
             pageSize,
             request.Status,
+            request.SocialMediaId,
+            request.Platform,
             cancellationToken);
 
         var response = await _postResponseBuilder.BuildManyAsync(request.UserId, posts, cancellationToken);

@@ -29,6 +29,10 @@ public sealed class PostsController : ApiController
         [FromQuery] Guid? cursorId,
         [FromQuery] int? limit,
         [FromQuery] string? status,
+        [FromQuery] Guid? socialMediaId,
+        [FromQuery(Name = "accountId")] Guid? accountId,
+        [FromQuery] string? platform,
+        [FromQuery(Name = "social")] string? social,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -37,7 +41,7 @@ public sealed class PostsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetUserPostsQuery(userId, cursorCreatedAt, cursorId, limit, status),
+            new GetUserPostsQuery(userId, cursorCreatedAt, cursorId, limit, status, socialMediaId ?? accountId, platform ?? social),
             cancellationToken);
 
         return Ok(result);
@@ -53,6 +57,10 @@ public sealed class PostsController : ApiController
         [FromQuery] Guid? cursorId,
         [FromQuery] int? limit,
         [FromQuery] string? status,
+        [FromQuery] Guid? socialMediaId,
+        [FromQuery(Name = "accountId")] Guid? accountId,
+        [FromQuery] string? platform,
+        [FromQuery(Name = "social")] string? social,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -61,7 +69,7 @@ public sealed class PostsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetWorkspacePostsQuery(workspaceId, userId, cursorCreatedAt, cursorId, limit, status),
+            new GetWorkspacePostsQuery(workspaceId, userId, cursorCreatedAt, cursorId, limit, status, socialMediaId ?? accountId, platform ?? social),
             cancellationToken);
 
         if (result.IsFailure)
@@ -82,6 +90,10 @@ public sealed class PostsController : ApiController
         [FromQuery] Guid? cursorId,
         [FromQuery] int? limit,
         [FromQuery] string? status,
+        [FromQuery] Guid? socialMediaId,
+        [FromQuery(Name = "accountId")] Guid? accountId,
+        [FromQuery] string? platform,
+        [FromQuery(Name = "social")] string? social,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -90,7 +102,7 @@ public sealed class PostsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetChatSessionPostsQuery(chatSessionId, userId, cursorCreatedAt, cursorId, limit, status),
+            new GetChatSessionPostsQuery(chatSessionId, userId, cursorCreatedAt, cursorId, limit, status, socialMediaId ?? accountId, platform ?? social),
             cancellationToken);
 
         if (result.IsFailure)
