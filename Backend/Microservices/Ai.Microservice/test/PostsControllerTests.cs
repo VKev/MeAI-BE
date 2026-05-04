@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Application.Posts.Commands;
 using Application.Posts.Models;
+using Application.Posts.Queries;
 using FluentAssertions;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -85,6 +86,40 @@ public sealed class PostsControllerTests
         var problem = badRequest.Value.Should().BeOfType<ProblemDetails>().Subject;
         problem.Status.Should().Be(StatusCodes.Status400BadRequest);
         problem.Type.Should().Be("Post.EnhanceInvalidRequest");
+    }
+
+    [Fact]
+    public async Task GetAll_ShouldMapAccountAndSocialAliases_ToPostFilters()
+    {
+        var userId = Guid.NewGuid();
+        var accountId = Guid.NewGuid();
+        var mediator = new Mock<IMediator>();
+
+        mediator
+            .Setup(x => x.Send(
+                It.Is<GetUserPostsQuery>(query =>
+                    query.UserId == userId &&
+                    query.Status == "draft" &&
+                    query.SocialMediaId == accountId &&
+                    query.Platform == "facebook"),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success<IEnumerable<PostResponse>>(Array.Empty<PostResponse>()));
+
+        var controller = CreateController(mediator.Object, userId);
+
+        var result = await controller.GetAll(
+            cursorCreatedAt: null,
+            cursorId: null,
+            limit: 20,
+            status: "draft",
+            socialMediaId: null,
+            accountId: accountId,
+            platform: null,
+            social: "facebook",
+            cancellationToken: CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+        mediator.VerifyAll();
     }
 
     private static PostsController CreateController(IMediator mediator, Guid userId)

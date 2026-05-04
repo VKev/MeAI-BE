@@ -12,7 +12,9 @@ public sealed record GetChatSessionPostsQuery(
     DateTime? CursorCreatedAt,
     Guid? CursorId,
     int? Limit,
-    string? Status = null) : IRequest<Result<IEnumerable<PostResponse>>>;
+    string? Status = null,
+    Guid? SocialMediaId = null,
+    string? Platform = null) : IRequest<Result<IEnumerable<PostResponse>>>;
 
 public sealed class GetChatSessionPostsQueryHandler
     : IRequestHandler<GetChatSessionPostsQuery, Result<IEnumerable<PostResponse>>>
@@ -57,6 +59,8 @@ public sealed class GetChatSessionPostsQueryHandler
             request.CursorId,
             limit,
             request.Status,
+            request.SocialMediaId,
+            request.Platform,
             cancellationToken);
 
         var response = await _postResponseBuilder.BuildManyAsync(request.UserId, posts, cancellationToken);
