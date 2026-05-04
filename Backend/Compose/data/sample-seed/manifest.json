@@ -157,5 +157,284 @@
         "01962400-5b96-70e4-a111-16b24b010014"
       ]
     }
+  ],
+  "posts": [
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b020101",
+      "platform": "facebook",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020001",
+      "title": "Quiet product update draft",
+      "status": "draft",
+      "createdMinutesAgo": 900,
+      "updatedMinutesAgo": 860,
+      "content": {
+        "content": "A clean baseline draft with one image, one short paragraph, and no layout tricks.",
+        "hashtag": "#product #update #baseline",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010003"
+        ],
+        "post_type": "posts"
+      }
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b020102",
+      "platform": "instagram",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020002",
+      "title": "Draft title with an absurdly long unbroken token OVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCK",
+      "status": "draft",
+      "createdMinutesAgo": 840,
+      "updatedMinutesAgo": 838,
+      "content": {
+        "content": "This caption contains one very long token to probe text wrapping: OVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCKOVERFLOWBLOCK.",
+        "hashtag": "#overflow #nowrap #layout #card #frontend",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010004"
+        ],
+        "post_type": "posts"
+      }
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b020103",
+      "platform": "threads",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020003",
+      "title": "Draft with many line breaks",
+      "status": "draft",
+      "createdMinutesAgo": 780,
+      "updatedMinutesAgo": 770,
+      "content": {
+        "content": "Line one introduces the idea.\n\nLine two is intentionally separated.\n\n- bullet one with a little more detail\n- bullet two with a little more detail\n- bullet three with a little more detail\n\nFinal line to test collapsed whitespace and vertical rhythm.",
+        "hashtag": "#multiline #spacing #composer",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010005",
+          "01962400-5b96-70e4-a111-16b24b010006"
+        ],
+        "post_type": "posts"
+      }
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b020104",
+      "platform": "facebook",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020001",
+      "title": "",
+      "status": "draft",
+      "createdMinutesAgo": 720,
+      "updatedMinutesAgo": 719,
+      "content": {
+        "content": "An intentionally blank title with repeated media ids to test duplicate thumbnail handling.",
+        "hashtag": "#duplicate #media #draft",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010007",
+          "01962400-5b96-70e4-a111-16b24b010007",
+          "01962400-5b96-70e4-a111-16b24b010008"
+        ],
+        "post_type": "posts"
+      }
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b020105",
+      "platform": "instagram",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020002",
+      "title": "Draft with a very long URL inside the caption",
+      "status": "draft",
+      "createdMinutesAgo": 660,
+      "updatedMinutesAgo": 650,
+      "content": {
+        "content": "Preview the landing page here: https://example.com/campaign/spring-preview?utm_source=seed&utm_medium=frontend&utm_campaign=overflow-check&token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA and note how the composer renders a very long query string.",
+        "hashtag": "#url #preview #rendering",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010009"
+        ],
+        "post_type": "reels"
+      }
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b020106",
+      "platform": "threads",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020003",
+      "title": null,
+      "status": "draft",
+      "createdMinutesAgo": 600,
+      "updatedMinutesAgo": 590,
+      "content": {
+        "content": null,
+        "hashtag": "#titleless #mediaonly #draft",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010010",
+          "01962400-5b96-70e4-a111-16b24b010011"
+        ],
+        "post_type": "posts"
+      }
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b020107",
+      "platform": "facebook",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020001",
+      "title": "Failed publish after moderation review",
+      "status": "failed",
+      "createdMinutesAgo": 540,
+      "updatedMinutesAgo": 520,
+      "content": {
+        "content": "Copy looked normal, but the publish pipeline rejected it after review.",
+        "hashtag": "#failed #moderation",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010012"
+        ],
+        "post_type": "posts"
+      },
+      "publications": [
+        {
+          "id": "01962400-5b96-70e4-a111-16b24b020201",
+          "socialMediaId": "01962400-5b96-70e4-a111-16b24b020001",
+          "socialMediaType": "facebook",
+          "destinationOwnerId": "fb-page-main",
+          "externalContentId": "fb-failed-001",
+          "externalContentIdType": "post_id",
+          "contentType": "posts",
+          "publishStatus": "failed",
+          "createdMinutesAgo": 538,
+          "updatedMinutesAgo": 520
+        }
+      ]
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b020108",
+      "platform": "instagram",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020002",
+      "title": "Failed reel with mixed media",
+      "status": "failed",
+      "createdMinutesAgo": 500,
+      "updatedMinutesAgo": 470,
+      "content": {
+        "content": "A failed reel entry with both image and video resources attached to stress preview selection.",
+        "hashtag": "#failed #reel #mixedmedia",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010009",
+          "01962400-5b96-70e4-a111-16b24b01000f"
+        ],
+        "post_type": "reels"
+      },
+      "publications": [
+        {
+          "id": "01962400-5b96-70e4-a111-16b24b020202",
+          "socialMediaId": "01962400-5b96-70e4-a111-16b24b020002",
+          "socialMediaType": "instagram",
+          "destinationOwnerId": "ig-business-main",
+          "externalContentId": "ig-failed-001",
+          "externalContentIdType": "publish_id",
+          "contentType": "reels",
+          "publishStatus": "failed",
+          "createdMinutesAgo": 498,
+          "updatedMinutesAgo": 470
+        }
+      ]
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b020109",
+      "platform": "threads",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020003",
+      "title": "Failed draft with dense hashtags",
+      "status": "failed",
+      "createdMinutesAgo": 460,
+      "updatedMinutesAgo": 430,
+      "content": {
+        "content": "This post intentionally front-loads hashtags to test clamping and wrapping in compact cards.",
+        "hashtag": "#dense #denseagain #denseagainagain #reallylonghashtagfortestingwrapping #anotherverylonghashtagfortestingwrapping #failed",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010006"
+        ],
+        "post_type": "posts"
+      },
+      "publications": [
+        {
+          "id": "01962400-5b96-70e4-a111-16b24b020203",
+          "socialMediaId": "01962400-5b96-70e4-a111-16b24b020003",
+          "socialMediaType": "threads",
+          "destinationOwnerId": "threads-profile-main",
+          "externalContentId": "threads-failed-001",
+          "externalContentIdType": "post_id",
+          "contentType": "posts",
+          "publishStatus": "failed",
+          "createdMinutesAgo": 458,
+          "updatedMinutesAgo": 430
+        }
+      ]
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b02010a",
+      "platform": "facebook",
+      "socialMediaId": null,
+      "title": "Draft without target account",
+      "status": "draft",
+      "createdMinutesAgo": 400,
+      "updatedMinutesAgo": 395,
+      "attachToChatSession": false,
+      "content": {
+        "content": "This draft is intentionally detached from any social target so the frontend handles missing destination metadata.",
+        "hashtag": "#untargeted #draft",
+        "resource_list": [],
+        "post_type": "posts"
+      }
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b02010b",
+      "platform": "instagram",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020002",
+      "title": "Scheduled reel for a normal happy-path card",
+      "status": "scheduled",
+      "createdMinutesAgo": 320,
+      "updatedMinutesAgo": 315,
+      "content": {
+        "content": "A normal scheduled reel that should look clean and unsurprising in the frontend.",
+        "hashtag": "#scheduled #happyPath",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010013"
+        ],
+        "post_type": "reels"
+      },
+      "schedule": {
+        "groupId": "01962400-5b96-70e4-a111-16b24b020301",
+        "scheduledMinutesFromNow": 180,
+        "timezone": "Asia/Ho_Chi_Minh",
+        "socialMediaIds": [
+          "01962400-5b96-70e4-a111-16b24b020002"
+        ],
+        "isPrivate": false
+      }
+    },
+    {
+      "id": "01962400-5b96-70e4-a111-16b24b02010c",
+      "platform": "facebook",
+      "socialMediaId": "01962400-5b96-70e4-a111-16b24b020001",
+      "title": "Published baseline post",
+      "status": "published",
+      "createdMinutesAgo": 240,
+      "updatedMinutesAgo": 210,
+      "content": {
+        "content": "A normal published post with straightforward copy and a small carousel.",
+        "hashtag": "#published #baseline",
+        "resource_list": [
+          "01962400-5b96-70e4-a111-16b24b010003",
+          "01962400-5b96-70e4-a111-16b24b010004",
+          "01962400-5b96-70e4-a111-16b24b010005"
+        ],
+        "post_type": "posts"
+      },
+      "publications": [
+        {
+          "id": "01962400-5b96-70e4-a111-16b24b020204",
+          "socialMediaId": "01962400-5b96-70e4-a111-16b24b020001",
+          "socialMediaType": "facebook",
+          "destinationOwnerId": "fb-page-main",
+          "externalContentId": "fb-published-001",
+          "externalContentIdType": "post_id",
+          "contentType": "posts",
+          "publishStatus": "published",
+          "publishedMinutesAgo": 210,
+          "lastMetricsSyncMinutesAgo": 30,
+          "createdMinutesAgo": 238,
+          "updatedMinutesAgo": 35
+        }
+      ]
+    }
   ]
 }

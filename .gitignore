@@ -11,3 +11,4 @@ Tools/DesignAnalyzer/bin
 Tools/DesignAnalyzer/obj
 artifacts/
 AGENTS.md
+Backend/Microservices/build.binlog
