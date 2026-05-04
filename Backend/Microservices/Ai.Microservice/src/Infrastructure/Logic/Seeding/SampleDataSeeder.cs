@@ -120,13 +120,146 @@ public sealed class SampleDataSeeder
             existingChat.UpdatedAt = now;
         }
 
+        await UpsertPostsAsync(manifest, state, now, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Seeded AI sample chat session {SessionId} with {ChatCount} chats for user {UserId}.",
+            "Seeded AI sample chat session {SessionId} with {ChatCount} chats and {PostCount} posts for user {UserId}.",
             manifest.ChatSession.Id,
             manifest.Chats.Count,
+            manifest.Posts.Count,
             state.UserId);
+    }
+
+    private async Task UpsertPostsAsync(
+        SampleSeedManifest manifest,
+        SampleSeedState state,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        if (manifest.Posts.Count == 0)
+        {
+            return;
+        }
+
+        var postIds = manifest.Posts
+            .Select(item => item.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        var existingPosts = await _dbContext.Posts
+            .Where(post => postIds.Contains(post.Id))
+            .ToDictionaryAsync(post => post.Id, cancellationToken);
+
+        var publicationIds = manifest.Posts
+            .SelectMany(item => item.Publications)
+            .Select(item => item.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        var existingPublications = publicationIds.Count == 0
+            ? new Dictionary<Guid, PostPublication>()
+            : await _dbContext.PostPublications
+                .Where(publication => publicationIds.Contains(publication.Id))
+                .ToDictionaryAsync(publication => publication.Id, cancellationToken);
+
+        for (var index = 0; index < manifest.Posts.Count; index++)
+        {
+            var postItem = manifest.Posts[index];
+            var createdAt = postItem.CreatedMinutesAgo.HasValue
+                ? now.AddMinutes(-postItem.CreatedMinutesAgo.Value)
+                : now.AddMinutes(-(manifest.Posts.Count - index + 10));
+            var updatedAt = postItem.UpdatedMinutesAgo.HasValue
+                ? now.AddMinutes(-postItem.UpdatedMinutesAgo.Value)
+                : createdAt;
+
+            if (!existingPosts.TryGetValue(postItem.Id, out var existingPost))
+            {
+                existingPost = new Post
+                {
+                    Id = postItem.Id
+                };
+
+                _dbContext.Posts.Add(existingPost);
+                existingPosts[postItem.Id] = existingPost;
+            }
+
+            existingPost.UserId = state.UserId;
+            existingPost.WorkspaceId = manifest.Workspace.Id;
+            existingPost.ChatSessionId = postItem.AttachToChatSession ? manifest.ChatSession.Id : null;
+            existingPost.SocialMediaId = NormalizeGuid(postItem.SocialMediaId);
+            existingPost.Platform = postItem.Platform;
+            existingPost.Title = postItem.Title;
+            existingPost.Content = postItem.Content;
+            existingPost.Status = postItem.Status;
+            existingPost.PostBuilderId = null;
+            existingPost.CreatedAt = createdAt;
+            existingPost.UpdatedAt = updatedAt;
+            existingPost.DeletedAt = null;
+
+            if (postItem.Schedule is not null)
+            {
+                existingPost.ScheduleGroupId = postItem.Schedule.GroupId;
+                existingPost.ScheduledAtUtc = now.AddMinutes(postItem.Schedule.ScheduledMinutesFromNow);
+                existingPost.ScheduleTimezone = postItem.Schedule.Timezone;
+                existingPost.ScheduledSocialMediaIds = postItem.Schedule.SocialMediaIds
+                    .Where(id => id != Guid.Empty)
+                    .Distinct()
+                    .ToArray();
+                existingPost.ScheduledIsPrivate = postItem.Schedule.IsPrivate;
+            }
+            else
+            {
+                existingPost.ScheduleGroupId = null;
+                existingPost.ScheduledAtUtc = null;
+                existingPost.ScheduleTimezone = null;
+                existingPost.ScheduledSocialMediaIds = Array.Empty<Guid>();
+                existingPost.ScheduledIsPrivate = null;
+            }
+
+            for (var publicationIndex = 0; publicationIndex < postItem.Publications.Count; publicationIndex++)
+            {
+                var publicationItem = postItem.Publications[publicationIndex];
+                var publicationCreatedAt = publicationItem.CreatedMinutesAgo.HasValue
+                    ? now.AddMinutes(-publicationItem.CreatedMinutesAgo.Value)
+                    : createdAt.AddMinutes(publicationIndex + 1);
+                var publicationUpdatedAt = publicationItem.UpdatedMinutesAgo.HasValue
+                    ? now.AddMinutes(-publicationItem.UpdatedMinutesAgo.Value)
+                    : publicationCreatedAt;
+
+                if (!existingPublications.TryGetValue(publicationItem.Id, out var existingPublication))
+                {
+                    existingPublication = new PostPublication
+                    {
+                        Id = publicationItem.Id
+                    };
+
+                    _dbContext.PostPublications.Add(existingPublication);
+                    existingPublications[publicationItem.Id] = existingPublication;
+                }
+
+                existingPublication.PostId = existingPost.Id;
+                existingPublication.WorkspaceId = manifest.Workspace.Id;
+                existingPublication.SocialMediaId = publicationItem.SocialMediaId;
+                existingPublication.SocialMediaType = publicationItem.SocialMediaType;
+                existingPublication.DestinationOwnerId = publicationItem.DestinationOwnerId;
+                existingPublication.ExternalContentId = publicationItem.ExternalContentId;
+                existingPublication.ExternalContentIdType = publicationItem.ExternalContentIdType;
+                existingPublication.ContentType = publicationItem.ContentType;
+                existingPublication.PublishStatus = publicationItem.PublishStatus;
+                existingPublication.PublishedAt = publicationItem.PublishedMinutesAgo.HasValue
+                    ? now.AddMinutes(-publicationItem.PublishedMinutesAgo.Value)
+                    : null;
+                existingPublication.LastMetricsSyncAt = publicationItem.LastMetricsSyncMinutesAgo.HasValue
+                    ? now.AddMinutes(-publicationItem.LastMetricsSyncMinutesAgo.Value)
+                    : null;
+                existingPublication.CreatedAt = publicationCreatedAt;
+                existingPublication.UpdatedAt = publicationUpdatedAt;
+                existingPublication.DeletedAt = null;
+            }
+        }
     }
 
     private async Task<SampleSeedState?> WaitForStateAsync(
@@ -202,6 +335,8 @@ public sealed class SampleDataSeeder
         public List<SampleSeedResource> Resources { get; set; } = [];
 
         public List<SampleSeedChat> Chats { get; set; } = [];
+
+        public List<SampleSeedPost> Posts { get; set; } = [];
     }
 
     public sealed class SampleSeedWorkspace
@@ -232,6 +367,71 @@ public sealed class SampleDataSeeder
         public List<Guid> ResultResourceIds { get; set; } = [];
     }
 
+    public sealed class SampleSeedPost
+    {
+        public Guid Id { get; set; }
+
+        public string? Platform { get; set; }
+
+        public Guid? SocialMediaId { get; set; }
+
+        public string? Title { get; set; }
+
+        public PostContent? Content { get; set; }
+
+        public string? Status { get; set; }
+
+        public bool AttachToChatSession { get; set; } = true;
+
+        public int? CreatedMinutesAgo { get; set; }
+
+        public int? UpdatedMinutesAgo { get; set; }
+
+        public SampleSeedPostSchedule? Schedule { get; set; }
+
+        public List<SampleSeedPostPublication> Publications { get; set; } = [];
+    }
+
+    public sealed class SampleSeedPostSchedule
+    {
+        public Guid GroupId { get; set; }
+
+        public int ScheduledMinutesFromNow { get; set; }
+
+        public string? Timezone { get; set; }
+
+        public List<Guid> SocialMediaIds { get; set; } = [];
+
+        public bool? IsPrivate { get; set; }
+    }
+
+    public sealed class SampleSeedPostPublication
+    {
+        public Guid Id { get; set; }
+
+        public Guid SocialMediaId { get; set; }
+
+        public required string SocialMediaType { get; set; }
+
+        public required string DestinationOwnerId { get; set; }
+
+        public required string ExternalContentId { get; set; }
+
+        public required string ExternalContentIdType { get; set; }
+
+        public required string ContentType { get; set; }
+
+        public required string PublishStatus { get; set; }
+
+        public int? PublishedMinutesAgo { get; set; }
+
+        public int? LastMetricsSyncMinutesAgo { get; set; }
+
+        public int? CreatedMinutesAgo { get; set; }
+
+        public int? UpdatedMinutesAgo { get; set; }
+    }
+
     public sealed class SampleSeedState
     {
         public Guid UserId { get; set; }
@@ -241,5 +441,10 @@ public sealed class SampleDataSeeder
         public List<Guid> ResourceIds { get; set; } = [];
 
         public DateTime SeededAtUtc { get; set; }
+    }
+
+    private static Guid? NormalizeGuid(Guid? value)
+    {
+        return value == Guid.Empty ? null : value;
     }
 }
