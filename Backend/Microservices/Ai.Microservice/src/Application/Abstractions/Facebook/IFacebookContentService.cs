@@ -76,7 +76,41 @@ public sealed record FacebookPageInsights(
     string PageId,
     string? Name,
     long? Followers,
-    long? Fans);
+    long? Fans,
+    /// <summary>
+    /// One-line page tagline shown under the name. Often empty.
+    /// </summary>
+    string? About = null,
+    /// <summary>
+    /// The full multi-line "Giới thiệu" / "About" text from the page profile.
+    /// Used by the recommendation/draft RAG to ground generated content in what
+    /// the page is actually about.
+    /// </summary>
+    string? Description = null,
+    /// <summary>
+    /// Comma-joined category list (e.g. "Digital content creator, Education").
+    /// </summary>
+    string? Category = null,
+    string? Website = null,
+    string? Email = null,
+    string? Phone = null,
+    /// <summary>
+    /// Comma-joined location string (street, city, country).
+    /// </summary>
+    string? Location = null,
+    /// <summary>
+    /// Short bio (some page types only).
+    /// </summary>
+    string? Bio = null,
+    /// <summary>
+    /// Mission / company-overview / founded — joined free-form for richness when present.
+    /// </summary>
+    string? CompanyOverview = null,
+    /// <summary>
+    /// Page profile picture URL (often the brand logo). Used by the RAG ingest
+    /// to describe the visual identity and to register a visual reference.
+    /// </summary>
+    string? PageProfilePictureUrl = null);
 
 public sealed record SocialPlatformCommentItem(
     string Id,

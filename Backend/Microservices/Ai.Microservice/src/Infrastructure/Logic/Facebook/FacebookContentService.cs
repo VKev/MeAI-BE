@@ -13,7 +13,11 @@ public sealed class FacebookContentService : IFacebookContentService
         "id,message,story,created_time,permalink_url,full_picture,shares,attachments{media_type,type,url,title,description,media,target{id},subattachments{media_type,type,url,title,description,media,target{id}}}";
     private const string PostInsightMetrics =
         "post_impressions_unique,post_reactions_by_type_total,post_activity_by_action_type";
-    private const string PageInsightFields = "id,name,followers_count,fan_count";
+    private const string PageInsightFields =
+        "id,name,followers_count,fan_count," +
+        "about,description,category,category_list," +
+        "website,emails,phone,bio,founded,mission,company_overview," +
+        "location{street,city,country,zip},single_line_address";
     private const string CommentFields = "id,message,created_time,like_count,comment_count,permalink_url,from{id,name}";
 
     private readonly HttpClient _httpClient;
@@ -201,11 +205,65 @@ public sealed class FacebookContentService : IFacebookContentService
                 continue;
             }
 
+            // Pull category list (FB returns either a single `category` string or
+            // a structured `category_list` array with name+id; combine both for
+            // a clean comma-joined display).
+            string? categoryDisplay = null;
+            var nestedCategories = response.Value.CategoryList?
+                .Select(c => c.Name?.Trim())
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Cast<string>()
+                .ToList();
+            if (nestedCategories is { Count: > 0 })
+            {
+                categoryDisplay = string.Join(", ", nestedCategories);
+            }
+            else if (!string.IsNullOrWhiteSpace(response.Value.Category))
+            {
+                categoryDisplay = response.Value.Category;
+            }
+
+            string? emailJoined = null;
+            if (response.Value.Emails is { Length: > 0 })
+            {
+                emailJoined = string.Join(", ", response.Value.Emails.Where(e => !string.IsNullOrWhiteSpace(e)));
+            }
+
+            string? locationDisplay = response.Value.SingleLineAddress;
+            if (string.IsNullOrWhiteSpace(locationDisplay) && response.Value.Location is not null)
+            {
+                var parts = new[]
+                {
+                    response.Value.Location.Street,
+                    response.Value.Location.City,
+                    response.Value.Location.Zip,
+                    response.Value.Location.Country,
+                }.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+                if (parts.Count > 0) locationDisplay = string.Join(", ", parts);
+            }
+
+            // Combine longer narrative fields when present — gives the LLM more
+            // context without requiring per-field handling downstream.
+            var overviewParts = new[]
+            {
+                response.Value.Mission, response.Value.CompanyOverview, response.Value.Founded,
+            }.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+            var companyOverview = overviewParts.Count > 0 ? string.Join(" — ", overviewParts) : null;
+
             return Result.Success(new FacebookPageInsights(
                 PageId: response.Value.Id!,
                 Name: response.Value.Name,
                 Followers: response.Value.FollowersCount,
-                Fans: response.Value.FanCount));
+                Fans: response.Value.FanCount,
+                About: response.Value.About,
+                Description: response.Value.Description,
+                Category: categoryDisplay,
+                Website: response.Value.Website,
+                Email: emailJoined,
+                Phone: response.Value.Phone,
+                Location: locationDisplay,
+                Bio: response.Value.Bio,
+                CompanyOverview: companyOverview));
         }
 
         return Result.Failure<FacebookPageInsights>(
@@ -367,6 +425,10 @@ public sealed class FacebookContentService : IFacebookContentService
             return Result.Failure<FacebookPostPageResult>(response.Error);
         }
 
+        // Note: we used to enrich video posts with `?fields=source` here so MediaUrl
+        // pointed at the direct mp4. That was abandoned because FB serves reels as
+        // DASH (video-only stream); the rag-microservice now uses yt-dlp on the
+        // viewer URL (`facebook.com/reel/...`) which resolves DASH + audio properly.
         var posts = (response.Value.Data ?? Array.Empty<FacebookPostDto>())
             .Where(item => !string.IsNullOrWhiteSpace(item.Id))
             .Select(item => MapPost(pageId, item))
@@ -947,17 +1009,39 @@ public sealed class FacebookContentService : IFacebookContentService
 
     private sealed class FacebookPageInsightsDto
     {
-        [JsonPropertyName("id")]
-        public string? Id { get; set; }
+        [JsonPropertyName("id")] public string? Id { get; set; }
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("followers_count")] public long? FollowersCount { get; set; }
+        [JsonPropertyName("fan_count")] public long? FanCount { get; set; }
 
-        [JsonPropertyName("name")]
-        public string? Name { get; set; }
+        // Profile / introduction fields
+        [JsonPropertyName("about")] public string? About { get; set; }
+        [JsonPropertyName("description")] public string? Description { get; set; }
+        [JsonPropertyName("category")] public string? Category { get; set; }
+        [JsonPropertyName("category_list")] public FacebookCategoryDto[]? CategoryList { get; set; }
+        [JsonPropertyName("website")] public string? Website { get; set; }
+        [JsonPropertyName("emails")] public string[]? Emails { get; set; }
+        [JsonPropertyName("phone")] public string? Phone { get; set; }
+        [JsonPropertyName("bio")] public string? Bio { get; set; }
+        [JsonPropertyName("founded")] public string? Founded { get; set; }
+        [JsonPropertyName("mission")] public string? Mission { get; set; }
+        [JsonPropertyName("company_overview")] public string? CompanyOverview { get; set; }
+        [JsonPropertyName("location")] public FacebookLocationDto? Location { get; set; }
+        [JsonPropertyName("single_line_address")] public string? SingleLineAddress { get; set; }
+    }
 
-        [JsonPropertyName("followers_count")]
-        public long? FollowersCount { get; set; }
+    private sealed class FacebookCategoryDto
+    {
+        [JsonPropertyName("id")] public string? Id { get; set; }
+        [JsonPropertyName("name")] public string? Name { get; set; }
+    }
 
-        [JsonPropertyName("fan_count")]
-        public long? FanCount { get; set; }
+    private sealed class FacebookLocationDto
+    {
+        [JsonPropertyName("street")] public string? Street { get; set; }
+        [JsonPropertyName("city")] public string? City { get; set; }
+        [JsonPropertyName("country")] public string? Country { get; set; }
+        [JsonPropertyName("zip")] public string? Zip { get; set; }
     }
 
     private sealed class FacebookPostDto

@@ -1,0 +1,25 @@
+# Service-only deps. The LightRAG engine is installed separately in the Dockerfile.
+aio-pika>=9.4
+fastapi>=0.110
+uvicorn[standard]>=0.29
+qdrant-client>=1.9
+# Synchronous batch-ingest gRPC server. ai-microservice's indexer needs ingest
+# to block until rag-microservice has actually finished writing to Qdrant —
+# the prior fire-and-forget AMQP publish raced with downstream queries.
+grpcio>=1.60
+grpcio-tools>=1.60
+# VideoRAG path
+requests>=2.31
+boto3>=1.34
+moviepy>=1.0.3,<2.0
+Pillow>=10.0
+numpy>=1.26
+networkx>=3.2
+tqdm>=4.66
+nano-vectordb>=0.0.2
+tiktoken>=0.7
+tenacity>=8.2
+# yt-dlp resolves Facebook/Instagram DASH (separate video+audio tracks) into a
+# single muxed mp4. Direct GETs on FB's `?fields=source` URL return video-only
+# DASH init segments for reels.
+yt-dlp>=2025.1.15

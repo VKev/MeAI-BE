@@ -1,19 +1,22 @@
-"""Qdrant collection for multimodal (image + caption) vectors.
+"""Qdrant collection for multimodal (image + caption) vectors —
+implements `VisualStorePort`.
 
-Lives alongside LightRAG's text collections in the same Qdrant instance.
-Bypasses LightRAG entirely — image vectors don't fit its document/graph model.
-
+Bypasses LightRAG entirely (image vectors don't fit its document/graph model).
 Each post can produce up to two points:
-  - vec:image    → embedding of the image (with caption fused if provided)
+  - vec:image    → embedding of the image
   - vec:caption  → embedding of the caption text in the same model space
 
 Both share a `scope` payload field so we can filter by account at query time.
+
+Logic preserved from `service/qdrant_visual_store.py`; the `presign` callable
+is now passed in via constructor so this module doesn't depend on
+`image_mirror.py` directly (clean-arch dependency inversion).
 """
 from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, Callable
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as qm
@@ -28,15 +31,20 @@ def _point_id(document_id: str, kind: str) -> str:
 
 
 class QdrantVisualStore:
+    """Implements `VisualStorePort`."""
+
     def __init__(
         self,
+        *,
         url: str,
         api_key: str | None,
         collection: str,
+        presigner: Callable[[str | None], str | None],
     ) -> None:
         self.url = url
         self.api_key = api_key
         self.collection = collection
+        self._presign = presigner
         self._client: AsyncQdrantClient | None = None
         self._dim: int | None = None
 
@@ -50,8 +58,6 @@ class QdrantVisualStore:
                 vectors_config=qm.VectorParams(size=dim, distance=qm.Distance.COSINE),
             )
             logger.info("Created Qdrant visual collection '%s' (dim=%d)", self.collection, dim)
-
-            # Index the scope field so prefix queries are fast.
             await self._client.create_payload_index(
                 collection_name=self.collection,
                 field_name="scope",
@@ -71,7 +77,8 @@ class QdrantVisualStore:
                     f"but embedder produces {dim}; recreate the collection or change the model."
                 )
             logger.info(
-                "Reusing Qdrant visual collection '%s' (dim=%d)", self.collection, current_dim
+                "Reusing Qdrant visual collection '%s' (dim=%d)",
+                self.collection, current_dim,
             )
 
     async def upsert_point(
@@ -126,21 +133,22 @@ class QdrantVisualStore:
             query_filter=flt,
             with_payload=True,
         )
+
         hits: list[dict[str, Any]] = []
         for p in result.points:
             payload = p.payload or {}
-            hits.append(
-                {
-                    "documentId": payload.get("document_id"),
-                    "kind": payload.get("kind"),
-                    "scope": payload.get("scope"),
-                    "imageUrl": payload.get("image_url"),
-                    "caption": payload.get("caption"),
-                    "postId": payload.get("post_id"),
-                    "fingerprint": payload.get("fingerprint"),
-                    "score": p.score,
-                }
-            )
+            mirror_key = payload.get("mirror_s3_key")
+            hits.append({
+                "documentId": payload.get("document_id"),
+                "kind": payload.get("kind"),
+                "scope": payload.get("scope"),
+                "imageUrl": payload.get("image_url"),
+                "mirroredImageUrl": self._presign(mirror_key),
+                "caption": payload.get("caption"),
+                "postId": payload.get("post_id"),
+                "fingerprint": payload.get("fingerprint"),
+                "score": p.score,
+            })
         return hits
 
     async def close(self) -> None:

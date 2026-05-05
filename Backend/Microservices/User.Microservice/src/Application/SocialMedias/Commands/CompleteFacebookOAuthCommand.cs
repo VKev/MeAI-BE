@@ -160,26 +160,12 @@ public sealed class CompleteFacebookOAuthCommandHandler
 
         if (!string.IsNullOrWhiteSpace(profile.Email))
         {
-            var normalizedEmail = NormalizeEmail(profile.Email);
-            if (shouldUpdateUser && !string.Equals(user.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
-            {
-                var emailExists = await _userRepository.GetAll()
-                    .AsNoTracking()
-                    .AnyAsync(
-                        u => u.Email.ToLower() == normalizedEmail && u.Id != user.Id,
-                        cancellationToken);
-
-                if (emailExists)
-                {
-                    return Result.Failure<SocialMediaResponse>(
-                        new Error("User.EmailTaken", "Email is already registered"));
-                }
-
-                user.Email = normalizedEmail;
-                userUpdated = true;
-            }
-
-            resolvedEmail = normalizedEmail;
+            // Resolve the FB profile email for downstream use (Stripe, notifications,
+            // social_medias.metadata) but do NOT overwrite `user.Email`. The user's
+            // primary email is their auth identity — silently changing it on social
+            // link breaks future logins and password resets. The FB email is already
+            // captured in social_medias.metadata; nothing else needs it on the user row.
+            resolvedEmail = NormalizeEmail(profile.Email);
         }
 
         if (shouldUpdateUser && userUpdated)

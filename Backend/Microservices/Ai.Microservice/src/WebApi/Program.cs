@@ -41,6 +41,7 @@ builder.Services.AddOpenApi(options =>
 {
     options.AddOperationTransformer(AiGenerationOpenApiTransformers.TransformAsync);
     options.AddOperationTransformer(PostsOpenApiTransformers.TransformAsync);
+    options.AddOperationTransformer(RecommendationsOpenApiTransformers.TransformAsync);
 });
 var corsPolicyName = builder.AddCorsPolicy();
 

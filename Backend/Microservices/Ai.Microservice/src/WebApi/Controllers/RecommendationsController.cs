@@ -102,6 +102,7 @@ public sealed class RecommendationsController : ApiController
                 UserId: userId,
                 SocialMediaId: socialMediaId,
                 UserPrompt: request.UserPrompt,
+                Style: request.Style,
                 WorkspaceId: request.WorkspaceId,
                 TopK: request.TopK,
                 MaxReferenceImages: request.MaxReferenceImages,

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SharedLibrary.Configs;
+using SharedLibrary.Grpc.Rag;
 
 namespace Infrastructure.Logic.Rag;
 
@@ -18,6 +19,7 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
 
     private readonly RagOptions _options;
     private readonly EnvironmentConfig _env;
+    private readonly RagIngestService.RagIngestServiceClient _grpcIngest;
     private readonly ILogger<RabbitMqRagClient> _logger;
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private IConnection? _connection;
@@ -26,10 +28,12 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
     public RabbitMqRagClient(
         RagOptions options,
         EnvironmentConfig env,
+        RagIngestService.RagIngestServiceClient grpcIngest,
         ILogger<RabbitMqRagClient> logger)
     {
         _options = options;
         _env = env;
+        _grpcIngest = grpcIngest;
         _logger = logger;
     }
 
@@ -76,6 +80,78 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
         }
     }
 
+    public async Task<IReadOnlyList<RagIngestResult>> IngestBatchSyncAsync(
+        IReadOnlyCollection<RagIngestMessage> messages,
+        CancellationToken cancellationToken)
+    {
+        if (messages.Count == 0)
+        {
+            return Array.Empty<RagIngestResult>();
+        }
+
+        var request = new IngestBatchRequest();
+        foreach (var m in messages)
+        {
+            request.Documents.Add(new IngestDocument
+            {
+                Kind = m.Kind ?? string.Empty,
+                DocumentId = m.DocumentId ?? string.Empty,
+                Fingerprint = m.Fingerprint ?? string.Empty,
+                Content = m.Content ?? string.Empty,
+                ImageUrl = m.ImageUrl ?? string.Empty,
+                Caption = m.Caption ?? string.Empty,
+                DescribePrompt = m.DescribePrompt ?? string.Empty,
+                Scope = m.Scope ?? string.Empty,
+                PostId = m.PostId ?? string.Empty,
+                Platform = m.Platform ?? string.Empty,
+                SocialMediaId = m.SocialMediaId ?? string.Empty,
+                VideoUrl = m.VideoUrl ?? string.Empty,
+            });
+        }
+
+        var deadline = DateTime.UtcNow.Add(_options.GrpcIngestTimeout);
+        _logger.LogInformation(
+            "RAG gRPC IngestBatch starting: {DocCount} docs, deadline={DeadlineSec}s",
+            request.Documents.Count, _options.GrpcIngestTimeout.TotalSeconds);
+
+        IngestBatchResponse response;
+        try
+        {
+            response = await _grpcIngest
+                .IngestBatchAsync(request, deadline: deadline, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Grpc.Core.RpcException ex)
+        {
+            _logger.LogError(
+                ex,
+                "RAG gRPC IngestBatch failed: status={Status} detail={Detail}",
+                ex.StatusCode, ex.Status.Detail);
+            throw new InvalidOperationException(
+                $"RAG synchronous ingest failed: {ex.StatusCode} {ex.Status.Detail}", ex);
+        }
+
+        var results = new List<RagIngestResult>(response.Results.Count);
+        var failed = 0;
+        foreach (var r in response.Results)
+        {
+            if (string.Equals(r.Status, "failed", StringComparison.OrdinalIgnoreCase))
+            {
+                failed++;
+                _logger.LogWarning(
+                    "RAG ingest doc failed: docId={DocId} error={Error}", r.DocumentId, r.Error);
+            }
+            results.Add(new RagIngestResult(r.DocumentId, r.Status, r.Fingerprint,
+                string.IsNullOrEmpty(r.Error) ? null : r.Error));
+        }
+
+        _logger.LogInformation(
+            "RAG gRPC IngestBatch done: {Total} docs, {Failed} failed",
+            results.Count, failed);
+
+        return results;
+    }
+
     public async Task<RagQueryResponse> QueryAsync(RagQueryRequest request, CancellationToken cancellationToken)
     {
         var raw = await SendRpcAsync(request, cancellationToken).ConfigureAwait(false);
@@ -117,7 +193,9 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
             Query: request.Query,
             DocumentIdPrefix: request.DocumentIdPrefix,
             TopK: request.TopK,
-            Modes: request.Modes ?? new[] { "text", "visual" });
+            Modes: request.Modes ?? new[] { "text", "visual" },
+            Platform: request.Platform,
+            SocialMediaId: request.SocialMediaId);
 
         var raw = await SendRpcAsync(payload, cancellationToken).ConfigureAwait(false);
         using var doc = JsonDocument.Parse(raw);
@@ -160,12 +238,41 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
                     PostId: ReadString(hit, "postId"),
                     Score: hit.TryGetProperty("score", out var sc) && sc.ValueKind == JsonValueKind.Number
                         ? sc.GetDouble()
-                        : 0d));
+                        : 0d,
+                    MirroredImageUrl: ReadString(hit, "mirroredImageUrl")));
             }
         }
 
         var visualError = root.TryGetProperty("visualError", out var veNode) && veNode.ValueKind == JsonValueKind.String
             ? veNode.GetString()
+            : null;
+
+        var videoHits = new List<RagVideoSegmentHit>();
+        if (root.TryGetProperty("video", out var videoNode) && videoNode.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var hit in videoNode.EnumerateArray())
+            {
+                videoHits.Add(new RagVideoSegmentHit(
+                    VideoName: ReadString(hit, "videoName") ?? ReadString(hit, "__video_name__"),
+                    PostId: ReadString(hit, "postId"),
+                    Index: ReadString(hit, "index") ?? ReadString(hit, "__index__"),
+                    Time: ReadString(hit, "time"),
+                    Caption: ReadString(hit, "caption"),
+                    Transcript: ReadString(hit, "transcript"),
+                    Score: hit.TryGetProperty("distance", out var dist) && dist.ValueKind == JsonValueKind.Number
+                        ? dist.GetDouble()
+                        : (hit.TryGetProperty("score", out var sc) && sc.ValueKind == JsonValueKind.Number ? sc.GetDouble() : 0d),
+                    // Frame-level fields — populated when the segment store has per-frame
+                    // vectors (frame_url is the S3 URL of the highest-scoring sampled frame).
+                    FrameUrl: ReadString(hit, "frameUrl") ?? ReadString(hit, "frame_url"),
+                    FrameIndex: hit.TryGetProperty("frameIndex", out var fi) && fi.ValueKind == JsonValueKind.Number
+                        ? fi.GetInt32()
+                        : (hit.TryGetProperty("frame_index", out var fi2) && fi2.ValueKind == JsonValueKind.Number ? fi2.GetInt32() : (int?)null)));
+            }
+        }
+
+        var videoError = root.TryGetProperty("videoError", out var vidErrNode) && vidErrNode.ValueKind == JsonValueKind.String
+            ? vidErrNode.GetString()
             : null;
 
         return new RagMultimodalQueryResponse(
@@ -174,7 +281,9 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
             DocumentIdPrefix: ReadString(root, "documentIdPrefix") ?? request.DocumentIdPrefix,
             Text: textResults,
             Visual: visualHits,
-            VisualError: visualError);
+            VisualError: visualError,
+            Video: videoHits,
+            VideoError: videoError);
     }
 
     private static string? ReadString(JsonElement element, string property)
@@ -186,7 +295,29 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
         return null;
     }
 
-    private async Task<byte[]> SendRpcAsync(object payload, CancellationToken cancellationToken)
+    public async Task WaitForRagReadyAsync(CancellationToken cancellationToken)
+    {
+        var payload = new { op = "wait_ready" };
+        _logger.LogInformation(
+            "RAG WaitForReady: awaiting rag-microservice knowledge bootstrap (timeout={Sec}s)",
+            _options.WaitReadyTimeout.TotalSeconds);
+        var raw = await SendRpcAsync(payload, cancellationToken, _options.WaitReadyTimeout)
+            .ConfigureAwait(false);
+        using var doc = JsonDocument.Parse(raw);
+        var ready = doc.RootElement.TryGetProperty("ready", out var r) && r.ValueKind == JsonValueKind.True;
+        if (!ready)
+        {
+            throw new InvalidOperationException(
+                "RAG WaitForReady returned non-ready payload: "
+                + System.Text.Encoding.UTF8.GetString(raw));
+        }
+        _logger.LogInformation("RAG WaitForReady: ready");
+    }
+
+    private async Task<byte[]> SendRpcAsync(
+        object payload,
+        CancellationToken cancellationToken,
+        TimeSpan? timeoutOverride = null)
     {
         await using var channel = await CreateChannelAsync(cancellationToken).ConfigureAwait(false);
 
@@ -241,12 +372,13 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
             body: body,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
+        var effectiveTimeout = timeoutOverride ?? _options.RpcTimeout;
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(_options.RpcTimeout);
+        timeoutCts.CancelAfter(effectiveTimeout);
 
         await using var registration = timeoutCts.Token.Register(() =>
             tcs.TrySetException(new TimeoutException(
-                $"RAG RPC timed out after {_options.RpcTimeout.TotalSeconds:F0}s on queue '{_options.QueryQueue}'.")));
+                $"RAG RPC timed out after {effectiveTimeout.TotalSeconds:F0}s on queue '{_options.QueryQueue}'.")));
 
         return await tcs.Task.ConfigureAwait(false);
     }
@@ -333,7 +465,9 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
         [property: JsonPropertyName("query")] string Query,
         [property: JsonPropertyName("documentIdPrefix")] string DocumentIdPrefix,
         [property: JsonPropertyName("topK")] int TopK,
-        [property: JsonPropertyName("modes")] IReadOnlyList<string> Modes)
+        [property: JsonPropertyName("modes")] IReadOnlyList<string> Modes,
+        [property: JsonPropertyName("platform")] string? Platform,
+        [property: JsonPropertyName("socialMediaId")] string? SocialMediaId)
     {
         [JsonPropertyName("op")]
         public string Op => "multimodal_query";

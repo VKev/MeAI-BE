@@ -385,6 +385,12 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("error_message");
 
+                    b.Property<bool>("IsAutoTopic")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_auto_topic");
+
                     b.Property<int>("MaxRagPosts")
                         .HasColumnType("integer")
                         .HasColumnName("max_rag_posts");
@@ -426,6 +432,14 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("status");
+
+                    b.Property<string>("Style")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("branded")
+                        .HasColumnName("style");
 
                     b.Property<int>("TopK")
                         .HasColumnType("integer")
