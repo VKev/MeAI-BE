@@ -122,7 +122,6 @@ public sealed class GetPostBuilderByIdQueryHandler
             postBuilder.WorkspaceId,
             postBuilder.OriginKind,
             postBuilder.PostType,
-            builderResourceIds,
             builderResources,
             finalizedGroups,
             postBuilder.CreatedAt,
