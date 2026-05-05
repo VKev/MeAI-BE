@@ -55,6 +55,44 @@ public sealed class UserResourceGrpcService : IUserResourceService
         }
     }
 
+    public async Task<Result<StorageQuotaCheckResult>> CheckStorageQuotaAsync(
+        Guid userId,
+        long requestedBytes,
+        string purpose,
+        int estimatedFileCount,
+        CancellationToken cancellationToken,
+        Guid? workspaceId = null)
+    {
+        var request = new CheckStorageQuotaRequest
+        {
+            UserId = userId.ToString(),
+            RequestedBytes = requestedBytes,
+            Purpose = purpose ?? string.Empty,
+            EstimatedFileCount = estimatedFileCount,
+            WorkspaceId = workspaceId?.ToString() ?? string.Empty
+        };
+
+        try
+        {
+            var response = await _client.CheckStorageQuotaAsync(request, cancellationToken: cancellationToken);
+            return Result.Success(new StorageQuotaCheckResult(
+                response.Allowed,
+                response.QuotaBytes == 0 ? null : response.QuotaBytes,
+                response.UsedBytes,
+                response.ReservedBytes,
+                response.AvailableBytes,
+                response.MaxUploadFileBytes == 0 ? null : response.MaxUploadFileBytes,
+                response.SystemStorageQuotaBytes == 0 ? null : response.SystemStorageQuotaBytes,
+                string.IsNullOrWhiteSpace(response.ErrorCode) ? null : response.ErrorCode,
+                string.IsNullOrWhiteSpace(response.ErrorMessage) ? null : response.ErrorMessage));
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<StorageQuotaCheckResult>(
+                new Error("UserResources.GrpcError", ex.Status.Detail));
+        }
+    }
+
     public async Task<Result<IReadOnlyList<UserResourceCreatedResult>>> CreateResourcesFromUrlsAsync(
         Guid userId,
         IReadOnlyList<string> urls,

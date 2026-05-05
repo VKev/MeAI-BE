@@ -78,10 +78,15 @@ public sealed class PostRepository : IPostRepository
         DateTime? cursorCreatedAt,
         Guid? cursorId,
         int limit,
+        string? status,
+        Guid? socialMediaId,
+        string? platform,
         CancellationToken cancellationToken)
     {
         var query = _dbSet.AsNoTracking()
             .Where(p => p.UserId == userId && p.DeletedAt == null);
+
+        query = ApplyFilters(query, status, socialMediaId, platform);
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
         {
@@ -114,12 +119,17 @@ public sealed class PostRepository : IPostRepository
         DateTime? cursorCreatedAt,
         Guid? cursorId,
         int limit,
+        string? status,
+        Guid? socialMediaId,
+        string? platform,
         CancellationToken cancellationToken)
     {
         var query = _dbSet.AsNoTracking()
             .Where(p => p.UserId == userId &&
                         p.WorkspaceId == workspaceId &&
                         p.DeletedAt == null);
+
+        query = ApplyFilters(query, status, socialMediaId, platform);
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
         {
@@ -143,12 +153,17 @@ public sealed class PostRepository : IPostRepository
         DateTime? cursorCreatedAt,
         Guid? cursorId,
         int limit,
+        string? status,
+        Guid? socialMediaId,
+        string? platform,
         CancellationToken cancellationToken)
     {
         var query = _dbSet.AsNoTracking()
             .Where(p => p.UserId == userId &&
                         p.ChatSessionId == chatSessionId &&
                         p.DeletedAt == null);
+
+        query = ApplyFilters(query, status, socialMediaId, platform);
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
         {
@@ -263,5 +278,50 @@ public sealed class PostRepository : IPostRepository
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(post => post.Status, FailedStatus)
                 .SetProperty(post => post.UpdatedAt, now), cancellationToken);
+    }
+
+    private static IQueryable<Post> ApplyFilters(
+        IQueryable<Post> query,
+        string? status,
+        Guid? socialMediaId,
+        string? platform)
+    {
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(post => post.Status == status);
+        }
+
+        if (socialMediaId.HasValue && socialMediaId.Value != Guid.Empty)
+        {
+            query = query.Where(post => post.SocialMediaId == socialMediaId.Value);
+        }
+
+        var platformAliases = GetPlatformAliases(platform);
+        if (platformAliases.Length > 0)
+        {
+            query = query.Where(post =>
+                post.Platform != null &&
+                platformAliases.Contains(post.Platform.Trim().ToLower()));
+        }
+
+        return query;
+    }
+
+    private static string[] GetPlatformAliases(string? platform)
+    {
+        if (string.IsNullOrWhiteSpace(platform))
+        {
+            return Array.Empty<string>();
+        }
+
+        var normalized = platform.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "facebook" or "fb" => ["facebook", "fb"],
+            "instagram" or "ig" => ["instagram", "ig"],
+            "threads" or "thread" => ["threads", "thread"],
+            "tiktok" => ["tiktok"],
+            _ => [normalized]
+        };
     }
 }

@@ -112,6 +112,62 @@ namespace Infrastructure.Migrations
                     b.ToTable("api_credentials", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.CoinPackage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("BonusCoins")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("bonus_coins");
+
+                    b.Property<decimal>("CoinAmount")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("coin_amount");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("currency");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("display_order");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("price");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("coin_packages_pkey");
+
+                    b.HasIndex("IsActive", "DisplayOrder")
+                        .HasDatabaseName("ix_coin_packages_active_display_order");
+
+                    b.ToTable("coin_packages", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.CoinTransaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -398,10 +454,6 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("link");
 
-                    b.Property<string>("OriginalFileName")
-                        .HasColumnType("text")
-                        .HasColumnName("original_file_name");
-
                     b.Property<Guid?>("OriginChatId")
                         .HasColumnType("uuid")
                         .HasColumnName("origin_chat_id");
@@ -417,6 +469,10 @@ namespace Infrastructure.Migrations
                     b.Property<string>("OriginSourceUrl")
                         .HasColumnType("text")
                         .HasColumnName("origin_source_url");
+
+                    b.Property<string>("OriginalFileName")
+                        .HasColumnType("text")
+                        .HasColumnName("original_file_name");
 
                     b.Property<string>("ResourceType")
                         .HasColumnType("text")

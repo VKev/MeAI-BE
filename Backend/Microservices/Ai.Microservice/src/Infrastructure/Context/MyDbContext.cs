@@ -44,6 +44,10 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<AiSpendRecord> AiSpendRecords { get; set; }
 
+    public virtual DbSet<PromptFormulaTemplate> PromptFormulaTemplates { get; set; }
+
+    public virtual DbSet<FormulaGenerationLog> FormulaGenerationLogs { get; set; }
+
     public virtual DbSet<DraftPostTask> DraftPostTasks { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

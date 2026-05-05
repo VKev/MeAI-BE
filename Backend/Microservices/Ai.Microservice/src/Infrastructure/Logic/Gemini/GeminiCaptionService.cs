@@ -118,11 +118,12 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
     {
         var hasInlineTemplate = request.InlineTemplateResource is { Content.Length: > 0 };
         var hasResources = request.Resources.Count > 0;
+        var hasTextHints = request.ResourceHints.Any(hint => !string.IsNullOrWhiteSpace(hint));
 
-        if (!hasInlineTemplate && !hasResources)
+        if (!hasInlineTemplate && !hasResources && !hasTextHints)
         {
             return Result.Failure<IReadOnlyList<GeminiGeneratedCaption>>(
-                new Error("Gemini.TemplateResourceMissing", "At least one template resource is required."));
+                new Error("Gemini.TemplateResourceMissing", "At least one template resource or text hint is required."));
         }
 
         if (request.CaptionCount <= 0)
@@ -499,7 +500,7 @@ public sealed class GeminiCaptionService : IGeminiCaptionService
         };
 
         return
-            $"You are a senior social media copywriter. Analyze the attached template resource and create {captionCount} distinct {platformName} caption options. " +
+            $"You are a senior social media copywriter. Analyze the provided post context and any attached template resources, then create {captionCount} distinct {platformName} caption options. " +
             "Return valid JSON only. Do not use markdown, code fences, headings, or commentary. " +
             "Use exactly this shape: " +
             "{\"captions\":[{\"caption\":\"string\",\"hashtags\":[\"#tag\"],\"trendingHashtags\":[\"#trend\"],\"callToAction\":\"string\"}]}. " +

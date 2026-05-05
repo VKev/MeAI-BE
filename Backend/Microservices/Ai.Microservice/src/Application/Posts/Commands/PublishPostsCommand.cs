@@ -1,4 +1,5 @@
 using Application.Abstractions.SocialMedias;
+using Application.Abstractions.Feed;
 using Application.Posts.Models;
 using Domain.Entities;
 using Domain.Repositories;
@@ -18,7 +19,8 @@ public sealed record PublishPostTargetInput(
     Guid PostId,
     IReadOnlyList<Guid> SocialMediaIds,
     bool? IsPrivate = null,
-    Guid? PublishingScheduleId = null);
+    Guid? PublishingScheduleId = null,
+    bool PublishToMeAiFeed = false);
 
 public sealed class PublishPostsCommandHandler
     : IRequestHandler<PublishPostsCommand, Result<PublishPostsResponse>>
@@ -29,21 +31,26 @@ public sealed class PublishPostsCommandHandler
     private const string ThreadsType = "threads";
     private const string PostsType = "posts";
     private const string ProcessingStatus = "processing";
+    private const string MeAiFeedType = "meai_feed";
+    private const string MeAiFeedKey = "meai_feed";
 
     private readonly IPostRepository _postRepository;
     private readonly IPostPublicationRepository _postPublicationRepository;
     private readonly IUserSocialMediaService _userSocialMediaService;
+    private readonly IFeedPostPublishService _feedPostPublishService;
     private readonly IBus _bus;
 
     public PublishPostsCommandHandler(
         IPostRepository postRepository,
         IPostPublicationRepository postPublicationRepository,
         IUserSocialMediaService userSocialMediaService,
+        IFeedPostPublishService feedPostPublishService,
         IBus bus)
     {
         _postRepository = postRepository;
         _postPublicationRepository = postPublicationRepository;
         _userSocialMediaService = userSocialMediaService;
+        _feedPostPublishService = feedPostPublishService;
         _bus = bus;
     }
 
@@ -123,6 +130,35 @@ public sealed class PublishPostsCommandHandler
 
             var destinationResults = new List<PublishPostDestinationResult>();
             var placeholders = new List<PostPublication>();
+            var createdFeedTarget = false;
+
+            if (target.PublishToMeAiFeed)
+            {
+                var feedPublishResult = await _feedPostPublishService.PublishAiPostToFeedAsync(
+                    new FeedDirectPublishRequest(
+                        request.UserId,
+                        post.WorkspaceId!.Value,
+                        post.Id,
+                        post.Content?.Content,
+                        GetResourceIds(post),
+                        ResolveFeedMediaType(post)),
+                    cancellationToken);
+
+                if (feedPublishResult.IsFailure)
+                {
+                    return Result.Failure<PublishPostsResponse>(feedPublishResult.Error);
+                }
+
+                destinationResults.Add(new PublishPostDestinationResult(
+                    null,
+                    MeAiFeedType,
+                    MeAiFeedKey,
+                    feedPublishResult.Value.FeedPostId.ToString(),
+                    null,
+                    "published",
+                    MeAiFeedKey));
+                createdFeedTarget = true;
+            }
 
             foreach (var socialMediaId in target.SocialMediaIds)
             {
@@ -153,7 +189,8 @@ public sealed class PublishPostsCommandHandler
                     string.Empty,
                     string.Empty,
                     publicationId,
-                    ProcessingStatus));
+                    ProcessingStatus,
+                    null));
 
                 messagesToPublish.Add(new PublishToTargetRequested
                 {
@@ -171,16 +208,23 @@ public sealed class PublishPostsCommandHandler
                 });
             }
 
-            await _postPublicationRepository.AddRangeAsync(placeholders, cancellationToken);
+            if (placeholders.Count > 0)
+            {
+                await _postPublicationRepository.AddRangeAsync(placeholders, cancellationToken);
+            }
 
             ClearSchedule(post);
-            post.Status = ProcessingStatus;
+            post.Status = messagesToPublish.Count > 0 && target.SocialMediaIds.Count > 0
+                ? ProcessingStatus
+                : createdFeedTarget
+                    ? "published"
+                    : ProcessingStatus;
             post.UpdatedAt = now;
             _postRepository.Update(post);
 
             responses.Add(new PublishPostResponse(
                 post.Id,
-                ProcessingStatus,
+                post.Status,
                 destinationResults));
         }
 
@@ -203,6 +247,11 @@ public sealed class PublishPostsCommandHandler
             .SelectMany(target => target.SocialMediaIds)
             .Distinct()
             .ToList();
+
+        if (allSocialMediaIds.Count == 0)
+        {
+            return Result.Success<IReadOnlyDictionary<Guid, UserSocialMediaResult>>(new Dictionary<Guid, UserSocialMediaResult>());
+        }
 
         var socialMediasResult = await _userSocialMediaService.GetSocialMediasAsync(
             userId,
@@ -266,7 +315,7 @@ public sealed class PublishPostsCommandHandler
                 .Distinct()
                 .ToList();
 
-            if (socialMediaIds.Count == 0)
+            if (socialMediaIds.Count == 0 && !target.PublishToMeAiFeed)
             {
                 return Result.Failure<IReadOnlyList<PublishPostTargetInput>>(
                     new Error("Post.PublishMissingSocialMedia", "Each publish target must include at least one social media id."));
@@ -292,12 +341,20 @@ public sealed class PublishPostsCommandHandler
 
             if (!normalizedByPostId.TryGetValue(target.PostId, out existing))
             {
-                existing = new NormalizedPublishTarget(target.IsPrivate, target.PublishingScheduleId);
+                existing = new NormalizedPublishTarget(target.IsPrivate, target.PublishingScheduleId, target.PublishToMeAiFeed);
                 normalizedByPostId[target.PostId] = existing;
             }
-            else if (!existing.IsPrivate.HasValue && target.IsPrivate.HasValue)
+            else
             {
-                existing.IsPrivate = target.IsPrivate.Value;
+                if (!existing.IsPrivate.HasValue && target.IsPrivate.HasValue)
+                {
+                    existing.IsPrivate = target.IsPrivate.Value;
+                }
+
+                if (target.PublishToMeAiFeed)
+                {
+                    existing.PublishToMeAiFeed = true;
+                }
             }
 
             if (!existing.PublishingScheduleId.HasValue && target.PublishingScheduleId.HasValue)
@@ -317,16 +374,18 @@ public sealed class PublishPostsCommandHandler
                     item.Key,
                     item.Value.SocialMediaIds.ToList(),
                     item.Value.IsPrivate,
-                    item.Value.PublishingScheduleId))
+                    item.Value.PublishingScheduleId,
+                    item.Value.PublishToMeAiFeed))
                 .ToList());
     }
 
     private sealed class NormalizedPublishTarget
     {
-        public NormalizedPublishTarget(bool? isPrivate, Guid? publishingScheduleId)
+        public NormalizedPublishTarget(bool? isPrivate, Guid? publishingScheduleId, bool publishToMeAiFeed)
         {
             IsPrivate = isPrivate;
             PublishingScheduleId = publishingScheduleId;
+            PublishToMeAiFeed = publishToMeAiFeed;
         }
 
         public HashSet<Guid> SocialMediaIds { get; } = [];
@@ -334,6 +393,38 @@ public sealed class PublishPostsCommandHandler
         public bool? IsPrivate { get; set; }
 
         public Guid? PublishingScheduleId { get; set; }
+
+        public bool PublishToMeAiFeed { get; set; }
+    }
+
+    private static IReadOnlyList<Guid> GetResourceIds(Post post)
+    {
+        if (post.Content?.ResourceList is null || post.Content.ResourceList.Count == 0)
+        {
+            return Array.Empty<Guid>();
+        }
+
+        var ids = new List<Guid>(post.Content.ResourceList.Count);
+        foreach (var value in post.Content.ResourceList)
+        {
+            if (Guid.TryParse(value, out var parsed) && parsed != Guid.Empty)
+            {
+                ids.Add(parsed);
+            }
+        }
+
+        return ids;
+    }
+
+    private static string? ResolveFeedMediaType(Post post)
+    {
+        if (!string.IsNullOrWhiteSpace(post.Content?.PostType) &&
+            !string.Equals(post.Content.PostType, PostsType, StringComparison.OrdinalIgnoreCase))
+        {
+            return post.Content.PostType;
+        }
+
+        return GetResourceIds(post).Count > 0 ? "media" : PostsType;
     }
 
     private static void ClearSchedule(Post post)

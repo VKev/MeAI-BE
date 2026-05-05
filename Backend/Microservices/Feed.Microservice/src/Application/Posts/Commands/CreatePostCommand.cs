@@ -16,7 +16,9 @@ public sealed record CreatePostCommand(
     Guid UserId,
     string? Content,
     IReadOnlyCollection<Guid>? ResourceIds,
-    string? MediaType) : ICommand<PostResponse>;
+    string? MediaType,
+    Guid? AiPostId = null,
+    bool SkipAiMirror = false) : ICommand<PostResponse>;
 
 public sealed class CreatePostCommandHandler : ICommandHandler<CreatePostCommand, PostResponse>
 {
@@ -72,6 +74,24 @@ public sealed class CreatePostCommandHandler : ICommandHandler<CreatePostCommand
         var media = resources.FirstOrDefault();
         var hashtags = FeedPostSupport.ExtractHashtags(normalizedContent);
         var now = DateTimeExtensions.PostgreSqlUtcNow;
+
+        if (request.AiPostId.HasValue)
+        {
+            var alreadyPublished = await _unitOfWork.Repository<Post>()
+                .GetAll()
+                .AnyAsync(
+                    item =>
+                        item.AiPostId == request.AiPostId.Value &&
+                        !item.IsDeleted &&
+                        item.DeletedAt == null,
+                    cancellationToken);
+
+            if (alreadyPublished)
+            {
+                return Result.Failure<PostResponse>(FeedErrors.PostAlreadyPublishedToFeed);
+            }
+        }
+
         var post = new Post
         {
             Id = Guid.CreateVersion7(),
@@ -82,6 +102,7 @@ public sealed class CreatePostCommandHandler : ICommandHandler<CreatePostCommand
             MediaType = normalizedMediaType ?? media?.ResourceType ?? media?.ContentType,
             LikesCount = 0,
             CommentsCount = 0,
+            AiPostId = request.AiPostId,
             CreatedAt = now,
             UpdatedAt = now,
             IsDeleted = false
@@ -129,22 +150,25 @@ public sealed class CreatePostCommandHandler : ICommandHandler<CreatePostCommand
             .Distinct()
             .ToListAsync(cancellationToken);
 
-        var mirrorResult = await _aiFeedPostService.CreateMirrorPostAsync(
-            new CreateAiMirrorPostRequest(
-                request.UserId,
-                WorkspaceId: null,
-                SocialMediaId: null,
-                Title: null,
-                Content: normalizedContent,
-                HashtagText: FeedPostSupport.BuildHashtagText(hashtags),
-                ResourceIds: normalizedResourceIds,
-                PostType: normalizedMediaType ?? (normalizedResourceIds.Count > 0 ? "media" : "text"),
-                Status: "published"),
-            cancellationToken);
-
-        if (mirrorResult.IsFailure)
+        if (!request.SkipAiMirror)
         {
-            return Result.Failure<PostResponse>(mirrorResult.Error);
+            var mirrorResult = await _aiFeedPostService.CreateMirrorPostAsync(
+                new CreateAiMirrorPostRequest(
+                    request.UserId,
+                    WorkspaceId: null,
+                    SocialMediaId: null,
+                    Title: null,
+                    Content: normalizedContent,
+                    HashtagText: FeedPostSupport.BuildHashtagText(hashtags),
+                    ResourceIds: normalizedResourceIds,
+                    PostType: normalizedMediaType ?? (normalizedResourceIds.Count > 0 ? "media" : "text"),
+                    Status: "published"),
+                cancellationToken);
+
+            if (mirrorResult.IsFailure)
+            {
+                return Result.Failure<PostResponse>(mirrorResult.Error);
+            }
         }
 
         await _feedNotificationService.NotifyNewPostAsync(

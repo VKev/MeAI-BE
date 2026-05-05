@@ -7,6 +7,7 @@ namespace WebApi.OpenApi;
 internal static class PostsOpenApiTransformers
 {
     private const string PublishPath = "api/Ai/posts/publish";
+    private const string EnhancePath = "api/Ai/posts/{postId:guid}/enhance";
 
     private const string PublishExample =
         """
@@ -28,11 +29,45 @@ internal static class PostsOpenApiTransformers
         ]
         """;
 
+    private const string EnhanceExample =
+        """
+        {
+          "platform": "instagram",
+          "resourceIds": [
+            "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          ],
+          "language": "vi",
+          "instruction": "giọng thân thiện, ngắn gọn",
+          "suggestionCount": 3
+        }
+        """;
+
     internal static Task TransformAsync(
         Microsoft.OpenApi.OpenApiOperation operation,
         OpenApiOperationTransformerContext context,
         CancellationToken cancellationToken)
     {
+        if (string.Equals(context.Description.RelativePath, EnhancePath, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(context.Description.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
+        {
+            if (operation.RequestBody?.Content is not { Count: > 0 })
+            {
+                return Task.CompletedTask;
+            }
+
+            if (operation.RequestBody.Content.TryGetValue("application/json", out var enhanceMediaType))
+            {
+                enhanceMediaType.Example = JsonNode.Parse(EnhanceExample);
+            }
+
+            if (operation.RequestBody.Content.TryGetValue("application/*+json", out var enhanceExtendedJsonMediaType))
+            {
+                enhanceExtendedJsonMediaType.Example = JsonNode.Parse(EnhanceExample);
+            }
+
+            return Task.CompletedTask;
+        }
+
         if (!string.Equals(context.Description.RelativePath, PublishPath, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(context.Description.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
         {

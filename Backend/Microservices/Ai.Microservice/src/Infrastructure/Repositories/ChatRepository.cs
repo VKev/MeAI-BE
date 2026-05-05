@@ -73,6 +73,20 @@ public sealed class ChatRepository : IChatRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Chat>> GetByIdsAsync(
+        IReadOnlyList<Guid> ids,
+        CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await _dbSet.AsNoTracking()
+            .Where(chat => ids.Contains(chat.Id))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Chat>> GetCreatedBetweenAsync(
         DateTime startInclusive,
         DateTime endExclusive,

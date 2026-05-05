@@ -37,6 +37,7 @@ public sealed class CreateChatVideoCommandHandler
     private readonly IChatSessionRepository _chatSessionRepository;
     private readonly IUserConfigService _userConfigService;
     private readonly IUserResourceService _userResourceService;
+    private readonly IAiGenerationStorageEstimator _storageEstimator;
     private readonly ICoinPricingService _pricingService;
     private readonly IBillingClient _billingClient;
     private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
@@ -47,6 +48,7 @@ public sealed class CreateChatVideoCommandHandler
         IChatSessionRepository chatSessionRepository,
         IUserConfigService userConfigService,
         IUserResourceService userResourceService,
+        IAiGenerationStorageEstimator storageEstimator,
         ICoinPricingService pricingService,
         IBillingClient billingClient,
         IAiSpendRecordRepository aiSpendRecordRepository,
@@ -56,6 +58,7 @@ public sealed class CreateChatVideoCommandHandler
         _chatSessionRepository = chatSessionRepository;
         _userConfigService = userConfigService;
         _userResourceService = userResourceService;
+        _storageEstimator = storageEstimator;
         _pricingService = pricingService;
         _billingClient = billingClient;
         _aiSpendRecordRepository = aiSpendRecordRepository;
@@ -113,6 +116,23 @@ public sealed class CreateChatVideoCommandHandler
         var enableTranslation = request.EnableTranslation ?? true;
 
         var correlationId = Guid.CreateVersion7();
+        var estimatedBytes = _storageEstimator.EstimateVideoGenerationBytes(model);
+        var quotaResult = await _userResourceService.CheckStorageQuotaAsync(
+            request.UserId,
+            estimatedBytes,
+            "ai.generate.video",
+            1,
+            cancellationToken,
+            session.WorkspaceId == Guid.Empty ? null : session.WorkspaceId);
+        if (quotaResult.IsFailure)
+        {
+            return Result.Failure<ChatVideoResponse>(quotaResult.Error);
+        }
+
+        if (!quotaResult.Value.Allowed)
+        {
+            return Result.Failure<ChatVideoResponse>(BuildQuotaError(quotaResult.Value, estimatedBytes));
+        }
 
         // Quote + charge coins BEFORE we persist the chat / enqueue the Kie Veo job.
         // Video generation is expensive — veo3_fast 8s = 90 coins, veo3 quality = 540
@@ -234,6 +254,30 @@ public sealed class CreateChatVideoCommandHandler
         int? Seeds,
         bool EnableTranslation,
         string? Watermark);
+
+    private static Error BuildQuotaError(StorageQuotaCheckResult quota, long estimatedBytes)
+    {
+        var metadata = new Dictionary<string, object?>
+        {
+            ["quotaBytes"] = quota.QuotaBytes,
+            ["usedBytes"] = quota.UsedBytes,
+            ["reservedBytes"] = quota.ReservedBytes,
+            ["requestedBytes"] = estimatedBytes,
+            ["availableBytes"] = quota.AvailableBytes,
+            ["estimatedBytes"] = estimatedBytes,
+            ["estimatedFileCount"] = 1
+        };
+
+        if (string.Equals(quota.ErrorCode, "Resource.SystemStorageQuotaExceeded", StringComparison.Ordinal))
+        {
+            metadata["systemStorageQuotaBytes"] = quota.SystemStorageQuotaBytes;
+        }
+
+        return new Error(
+            quota.ErrorCode ?? "Resource.StorageQuotaExceeded",
+            string.IsNullOrWhiteSpace(quota.ErrorMessage) ? "Storage quota exceeded." : quota.ErrorMessage,
+            metadata);
+    }
 
     private async Task<UserAiConfig?> TryGetActiveConfigAsync(CancellationToken cancellationToken)
     {

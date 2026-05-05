@@ -4,6 +4,7 @@ using Application.Posts.Models;
 using Grpc.Core;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Grpc.FeedAnalytics;
+using SharedLibrary.Grpc.FeedPosts;
 
 namespace Infrastructure.Logic.Feed;
 

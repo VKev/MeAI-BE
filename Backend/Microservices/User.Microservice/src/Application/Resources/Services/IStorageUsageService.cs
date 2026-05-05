@@ -13,4 +13,9 @@ public interface IStorageUsageService
         Guid userId,
         long requestedBytes,
         CancellationToken cancellationToken);
+
+    Task<(StorageUsageResponse Usage, Error? Error)> CheckQuotaAsync(
+        Guid userId,
+        long requestedBytes,
+        CancellationToken cancellationToken);
 }

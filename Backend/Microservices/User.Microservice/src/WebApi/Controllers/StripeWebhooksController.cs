@@ -1,3 +1,4 @@
+using Application.Billing.Commands;
 using Application.Subscriptions.Commands;
 using Application.Abstractions.ApiCredentials;
 using Infrastructure.Configs;
@@ -130,13 +131,39 @@ public sealed class StripeWebhooksController : ApiController
         string? status,
         CancellationToken cancellationToken)
     {
+        var normalizedStatus = string.IsNullOrWhiteSpace(status) ? "succeeded" : status.Trim();
+
+        if (TryParseCoinPackageMetadata(metadata, out var coinPackageUserId, out var packageId, out var coinPackageTransactionId))
+        {
+            if (string.IsNullOrWhiteSpace(providerReferenceId))
+            {
+                return Result.Failure<bool>(
+                    new Error("Stripe.WebhookPaymentIntentMissing", "Stripe payment intent id is missing for the coin package webhook."));
+            }
+
+            var confirmCoinPackageResult = await _mediator.Send(
+                new ConfirmCoinPackagePaymentCommand(
+                    coinPackageUserId,
+                    packageId,
+                    coinPackageTransactionId,
+                    providerReferenceId,
+                    normalizedStatus),
+                cancellationToken);
+
+            if (confirmCoinPackageResult.IsFailure)
+            {
+                return Result.Failure<bool>(confirmCoinPackageResult.Error);
+            }
+
+            return Result.Success(true);
+        }
+
         if (!TryParseMetadata(metadata, out var userId, out var subscriptionId, out var transactionId, out var renew))
         {
             return Result.Failure<bool>(
                 new Error("Stripe.WebhookMetadataMissing", "Webhook metadata is missing user_id or subscription_id."));
         }
 
-        var normalizedStatus = string.IsNullOrWhiteSpace(status) ? "succeeded" : status.Trim();
         var command = new ConfirmSubscriptionPaymentCommand(
             userId,
             subscriptionId,
@@ -157,6 +184,43 @@ public sealed class StripeWebhooksController : ApiController
     private static bool RequiresMetadata(IDictionary<string, string> metadata)
     {
         return !metadata.ContainsKey("user_id") || !metadata.ContainsKey("subscription_id");
+    }
+
+    private static bool TryParseCoinPackageMetadata(
+        IDictionary<string, string> metadata,
+        out Guid userId,
+        out Guid? packageId,
+        out Guid? transactionId)
+    {
+        userId = Guid.Empty;
+        packageId = null;
+        transactionId = null;
+
+        if (!metadata.TryGetValue("flow_type", out var flowType) ||
+            !string.Equals(flowType, "coin_package", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!metadata.TryGetValue("user_id", out var userIdValue) ||
+            !Guid.TryParse(userIdValue, out userId))
+        {
+            return false;
+        }
+
+        if (metadata.TryGetValue("coin_package_id", out var packageIdValue) &&
+            Guid.TryParse(packageIdValue, out var parsedPackageId))
+        {
+            packageId = parsedPackageId;
+        }
+
+        if (metadata.TryGetValue("transaction_id", out var transactionIdValue) &&
+            Guid.TryParse(transactionIdValue, out var parsedTransactionId))
+        {
+            transactionId = parsedTransactionId;
+        }
+
+        return true;
     }
 
     private SubscriptionService CreateSubscriptionService()

@@ -13,6 +13,7 @@ internal static class FeedErrors
     public static readonly Error ReportNotFound = new("Feed.Report.NotFound", "The requested report was not found.");
     public static readonly Error UserNotFound = new("Feed.User.NotFound", "The requested user profile was not found.");
     public static readonly Error EmptyPost = new("Feed.Post.Empty", "A post must include content or at least one resource.");
+    public static readonly Error PostAlreadyPublishedToFeed = new("Feed.Post.AlreadyPublishedToFeed", "This Ai post has already been published to MeAI Feed.");
     public static readonly Error EmptyComment = new("Feed.Comment.Empty", "Comment content is required.");
     public static readonly Error CannotFollowYourself = new("Feed.Follow.Self", "You cannot follow yourself.");
     public static readonly Error AlreadyFollowing = new("Feed.Follow.Exists", "You are already following this user.");

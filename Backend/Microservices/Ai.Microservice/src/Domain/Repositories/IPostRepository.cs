@@ -16,6 +16,9 @@ public interface IPostRepository
         DateTime? cursorCreatedAt,
         Guid? cursorId,
         int limit,
+        string? status,
+        Guid? socialMediaId,
+        string? platform,
         CancellationToken cancellationToken);
     Task<IReadOnlyList<Post>> GetByUserIdAndWorkspaceIdAsync(
         Guid userId,
@@ -23,6 +26,9 @@ public interface IPostRepository
         DateTime? cursorCreatedAt,
         Guid? cursorId,
         int limit,
+        string? status,
+        Guid? socialMediaId,
+        string? platform,
         CancellationToken cancellationToken);
     Task<IReadOnlyList<Post>> GetByUserIdAndChatSessionIdAsync(
         Guid userId,
@@ -30,6 +36,9 @@ public interface IPostRepository
         DateTime? cursorCreatedAt,
         Guid? cursorId,
         int limit,
+        string? status,
+        Guid? socialMediaId,
+        string? platform,
         CancellationToken cancellationToken);
 
     // Tracked (not AsNoTracking) so the caller can mutate+save — used by CreatePostCommand

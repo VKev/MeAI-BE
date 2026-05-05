@@ -16,6 +16,7 @@ public sealed class PostPagingQueryTests
     public async Task GetUserPosts_ShouldPassCursorArgumentsToRepository_AndReturnPagedResults()
     {
         var userId = Guid.NewGuid();
+        var socialMediaId = Guid.NewGuid();
         var cursorCreatedAt = new DateTime(2026, 03, 20, 10, 00, 00, DateTimeKind.Utc);
         var cursorId = Guid.NewGuid();
         var post = CreatePost(userId, cursorCreatedAt.AddMinutes(-5));
@@ -27,13 +28,16 @@ public sealed class PostPagingQueryTests
                 cursorCreatedAt,
                 cursorId,
                 25,
+                "draft",
+                socialMediaId,
+                "facebook",
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Post> { post });
 
         var handler = new GetUserPostsQueryHandler(postRepository.Object, CreatePostResponseBuilder());
 
         var result = await handler.Handle(
-            new GetUserPostsQuery(userId, cursorCreatedAt, cursorId, 25),
+            new GetUserPostsQuery(userId, cursorCreatedAt, cursorId, 25, "draft", socialMediaId, "facebook"),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -47,6 +51,7 @@ public sealed class PostPagingQueryTests
     {
         var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
+        var socialMediaId = Guid.NewGuid();
         var post = CreatePost(userId, new DateTime(2026, 03, 20, 9, 00, 00, DateTimeKind.Utc), workspaceId);
 
         var postRepository = new Mock<IPostRepository>();
@@ -57,6 +62,9 @@ public sealed class PostPagingQueryTests
                 null,
                 null,
                 100,
+                "scheduled",
+                socialMediaId,
+                "instagram",
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Post> { post });
 
@@ -71,7 +79,7 @@ public sealed class PostPagingQueryTests
             CreatePostResponseBuilder());
 
         var result = await handler.Handle(
-            new GetWorkspacePostsQuery(workspaceId, userId, null, null, 500),
+            new GetWorkspacePostsQuery(workspaceId, userId, null, null, 500, "scheduled", socialMediaId, "instagram"),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
