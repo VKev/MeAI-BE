@@ -314,6 +314,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     private readonly IRagClient _ragClient;
     private readonly IImageSearchClient _imageSearchClient;
     private readonly IRerankClient _rerankClient;
+    private readonly Application.Recommendations.Services.IQueryRewriter _queryRewriter;
     private readonly ILogger<DraftPostGenerationConsumer> _logger;
 
     public DraftPostGenerationConsumer(
@@ -326,6 +327,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         IRagClient ragClient,
         IImageSearchClient imageSearchClient,
         IRerankClient rerankClient,
+        Application.Recommendations.Services.IQueryRewriter queryRewriter,
         ILogger<DraftPostGenerationConsumer> logger)
     {
         _mediator = mediator;
@@ -337,6 +339,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         _ragClient = ragClient;
         _imageSearchClient = imageSearchClient;
         _rerankClient = rerankClient;
+        _queryRewriter = queryRewriter;
         _logger = logger;
     }
 
@@ -401,12 +404,47 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             var recommendationQuery = isAutoTopic
                 ? BuildAutoTopicRecommendationQuery(DateTime.UtcNow)
                 : msg.UserPrompt;
+
+            // Step 1.5 — query rewriter. ONE LLM call up-front; outputs feed every
+            // retrieval/rerank query in QueryAccountRecommendationsQuery handler AND
+            // the downstream style-knowledge fetch (Step 3.4) + image-pool rerank
+            // (Step 3.35). Threaded into the query via PrecomputedRewrite so the
+            // handler doesn't repeat the LLM call.
+            var rewriteResult = await _queryRewriter.RewriteAsync(
+                new Application.Recommendations.Services.QueryRewriteRequest(
+                    UserPrompt: recommendationQuery,
+                    PageProfileSnippet: null,         // handler will be called next; we
+                                                       // could fetch profile here first but
+                                                       // it adds an extra round-trip. Hand
+                                                       // off without profile — handler does
+                                                       // the rewrite+intent classification
+                                                       // adequately on prompt+platform alone.
+                    Platform: null,                   // handler resolves platform via gRPC
+                    Style: style),
+                ct);
+            var rewrite = rewriteResult.IsSuccess
+                ? rewriteResult.Value
+                : new Application.Recommendations.Services.QueryRewriteResult(
+                    Language: "en",
+                    Intent: "informational",
+                    PrimaryQuery: recommendationQuery,
+                    AltQueries: Array.Empty<string>(),
+                    VisualQuery: recommendationQuery,
+                    KeyTerms: Array.Empty<string>());
+            _logger.LogInformation(
+                "DraftPost {Id}: rewriter lang={Lang} intent={Intent} primary={Primary} visual={Visual} keyTerms=[{KeyTerms}]",
+                task.Id, rewrite.Language, rewrite.Intent,
+                Truncate(rewrite.PrimaryQuery, 180),
+                Truncate(rewrite.VisualQuery, 180),
+                string.Join(", ", rewrite.KeyTerms));
+
             _logger.LogDebug(
                 "DraftPost {Id}: querying RAG (autoTopic={Auto}, queryLen={Len})...",
                 task.Id, isAutoTopic, recommendationQuery.Length);
             var queryResult = await _mediator.Send(
                 new QueryAccountRecommendationsQuery(
-                    msg.UserId, msg.SocialMediaId, recommendationQuery, msg.TopK), ct);
+                    msg.UserId, msg.SocialMediaId, recommendationQuery, msg.TopK,
+                    PrecomputedRewrite: rewrite), ct);
             if (queryResult.IsFailure)
             {
                 throw new InvalidOperationException(
@@ -561,6 +599,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 candidates: rerankCandidates,
                 topic: refImageQuery,
                 caption: caption,
+                visualQuery: rewrite.VisualQuery,                  // ← K4 enhancement
+                keyTerms: rewrite.KeyTerms,                        // ← K4 enhancement
                 cap: msg.MaxReferenceImages,
                 cancellationToken: ct);
             // Surface freshRefImageUrls for downstream logs that distinguish the two sources.
@@ -569,7 +609,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             // Step 3.4 — fetch style-specific design rules from the knowledge base.
             // Each style maps 1:1 to a knowledge namespace (knowledge:image-design-{style}:)
             // bootstrapped at rag-microservice startup from service/knowledge/*.md.
-            var styleKnowledge = await FetchStyleKnowledgeAsync(style, ct);
+            var styleKnowledge = await FetchStyleKnowledgeAsync(style, rewrite.Language, ct);
             _logger.LogInformation(
                 "DraftPost {Id}: style-knowledge[{Style}] fetched ({Len} chars)",
                 task.Id, style, styleKnowledge.Length);
@@ -1046,6 +1086,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         IReadOnlyList<ImageRefCandidate> candidates,
         string? topic,
         string caption,
+        string? visualQuery,                    // ← K4 enhancement: rewriter's visual_query
+        IReadOnlyList<string>? keyTerms,        // ← K4 enhancement: rewriter's key_terms
         int cap,
         CancellationToken cancellationToken)
     {
@@ -1058,13 +1100,21 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         // Compose the rerank query. Topic alone is too thin; the caption gives the
         // reranker the actual content the post is about, so it can match e.g. "smartphone
         // gimbal" candidates even when the user prompt was just "DJI Osmo".
+        // Plus visual_query (English visually-descriptive) gives the cross-encoder
+        // anchors specific to the IMAGE rather than the text — Jina-m0 scores against
+        // pixel content, so visual nouns dominate.
         var queryParts = new List<string>();
         if (!string.IsNullOrWhiteSpace(topic)) queryParts.Add($"Topic: {topic}");
+        if (!string.IsNullOrWhiteSpace(visualQuery)) queryParts.Add($"Visual: {visualQuery}");
         if (!string.IsNullOrWhiteSpace(caption))
         {
             var captionForQuery = caption.Replace('\n', ' ').Replace('\r', ' ');
             if (captionForQuery.Length > 800) captionForQuery = captionForQuery[..800] + "…";
             queryParts.Add($"Caption: {captionForQuery}");
+        }
+        if (keyTerms is { Count: > 0 })
+        {
+            queryParts.Add("Key terms: " + string.Join(", ", keyTerms.Take(6)));
         }
         var query = string.Join("\n", queryParts);
 
@@ -1140,14 +1190,15 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     /// — a missing knowledge fetch must NOT drop the pipeline; the per-style addendum
     /// in the brief system prompt already encodes the most important rules.
     /// </summary>
-    private async Task<string> FetchStyleKnowledgeAsync(string style, CancellationToken cancellationToken)
+    private async Task<string> FetchStyleKnowledgeAsync(string style, string language, CancellationToken cancellationToken)
     {
         try
         {
             var prefix = $"knowledge:image-design-{style}:";
+            var query = LocalizedStyleDesignLiteral(language, style);
             var resp = await _ragClient.QueryAsync(
                 new RagQueryRequest(
-                    Query: $"image design rules for {style} style social media post",
+                    Query: query,
                     DocumentIdPrefix: prefix,
                     Mode: "naive",
                     TopK: 8,
@@ -1327,5 +1378,28 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         {
             return "[]";
         }
+    }
+
+    /// <summary>
+    /// Localized literal for the style-design knowledge query (R7). Same pattern as
+    /// the profile / platform-formulas literals in QueryAccountRecommendationsQueryHandler.
+    /// Falls back to English when there's no template entry.
+    /// </summary>
+    private static string LocalizedStyleDesignLiteral(string language, string style)
+    {
+        return language switch
+        {
+            "vi" => $"quy tắc thiết kế hình ảnh cho phong cách {style} trên mạng xã hội",
+            "ja" => $"ソーシャルメディア投稿の{style}スタイル画像デザインルール",
+            "ko" => $"소셜 미디어 게시물의 {style} 스타일 이미지 디자인 규칙",
+            "th" => $"กฎการออกแบบภาพสำหรับสไตล์ {style} ในโซเชียลมีเดีย",
+            "zh" => $"社交媒体帖子的 {style} 风格图像设计规则",
+            "es" => $"reglas de diseño de imagen para estilo {style} en redes sociales",
+            "pt" => $"regras de design de imagem para estilo {style} em redes sociais",
+            "fr" => $"règles de conception d'image pour style {style} sur les réseaux sociaux",
+            "de" => $"Bilddesign-Regeln für {style}-Stil in sozialen Medien",
+            "id" => $"aturan desain gambar untuk gaya {style} di media sosial",
+            _ => $"image design rules for {style} style social media post",
+        };
     }
 }
