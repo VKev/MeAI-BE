@@ -1,5 +1,0 @@
-# Service-only deps. The LightRAG engine is installed separately in the Dockerfile.
-aio-pika>=9.4
-fastapi>=0.110
-uvicorn[standard]>=0.29
-qdrant-client>=1.9

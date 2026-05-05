@@ -18,7 +18,10 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
     private const string OAuthTokenEndpoint = "https://graph.facebook.com/v24.0/oauth/access_token";
     private const string DefaultScopes = "email,public_profile";
     private const string ProfileFields = "id,name,email,picture.type(large)";
-    private const string PageFields = "id,name,access_token,fan_count,followers_count,posts.limit(0).summary(true)";
+    private const string PageFields =
+        "id,name,access_token,fan_count,followers_count,posts.limit(0).summary(true)," +
+        "username,about,description,category,bio,website,emails,phone," +
+        "location{street,city,country,zip},single_line_address,picture.type(large)";
 
     private readonly string _redirectUri;
     private readonly string _scopes;
@@ -210,6 +213,21 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
                 profile.PageLikeCount = selectedPage.FanCount;
                 profile.PageFollowerCount = selectedPage.FollowersCount;
                 profile.PagePostCount = selectedPage.Posts?.Summary?.TotalCount;
+
+                // Profile-fields extension — populated when the page has set them.
+                profile.PageUsername = selectedPage.Username;
+                profile.PageAbout = selectedPage.About;
+                profile.PageDescription = selectedPage.Description;
+                profile.PageCategory = selectedPage.Category;
+                profile.PageBio = selectedPage.Bio;
+                profile.PageWebsite = selectedPage.Website;
+                profile.PagePhone = selectedPage.Phone;
+                profile.PageEmail = selectedPage.Emails is { Length: > 0 }
+                    ? string.Join(", ", selectedPage.Emails.Where(e => !string.IsNullOrWhiteSpace(e)))
+                    : null;
+                profile.PageLocation = selectedPage.SingleLineAddress
+                                       ?? FormatLocation(selectedPage.Location);
+                profile.PageProfilePictureUrl = selectedPage.Picture?.Data?.Url;
             }
 
             return Result.Success(profile);
@@ -388,6 +406,15 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
         [property: JsonPropertyName("error_user_msg")] string? ErrorUserMessage,
         [property: JsonPropertyName("fbtrace_id")] string? FbTraceId);
 
+    private static string? FormatLocation(FacebookPageLocationResponse? loc)
+    {
+        if (loc is null) return null;
+        var parts = new[] { loc.Street, loc.City, loc.Zip, loc.Country }
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .ToList();
+        return parts.Count == 0 ? null : string.Join(", ", parts);
+    }
+
     private sealed record FacebookPagesResponse(
         [property: JsonPropertyName("data")] List<FacebookPageDataResponse>? Data);
 
@@ -397,7 +424,26 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
         [property: JsonPropertyName("access_token")] string? AccessToken,
         [property: JsonPropertyName("fan_count")] int? FanCount,
         [property: JsonPropertyName("followers_count")] int? FollowersCount,
-        [property: JsonPropertyName("posts")] FacebookPagePostsResponse? Posts);
+        [property: JsonPropertyName("posts")] FacebookPagePostsResponse? Posts,
+        // Profile-fields extension. All optional — FB returns null/missing when the
+        // page hasn't filled them in.
+        [property: JsonPropertyName("username")] string? Username = null,
+        [property: JsonPropertyName("about")] string? About = null,
+        [property: JsonPropertyName("description")] string? Description = null,
+        [property: JsonPropertyName("category")] string? Category = null,
+        [property: JsonPropertyName("bio")] string? Bio = null,
+        [property: JsonPropertyName("website")] string? Website = null,
+        [property: JsonPropertyName("emails")] string[]? Emails = null,
+        [property: JsonPropertyName("phone")] string? Phone = null,
+        [property: JsonPropertyName("location")] FacebookPageLocationResponse? Location = null,
+        [property: JsonPropertyName("single_line_address")] string? SingleLineAddress = null,
+        [property: JsonPropertyName("picture")] FacebookProfilePictureResponse? Picture = null);
+
+    private sealed record FacebookPageLocationResponse(
+        [property: JsonPropertyName("street")] string? Street,
+        [property: JsonPropertyName("city")] string? City,
+        [property: JsonPropertyName("country")] string? Country,
+        [property: JsonPropertyName("zip")] string? Zip);
 
     private sealed record FacebookPagePostsResponse(
         [property: JsonPropertyName("summary")] FacebookPagePostsSummaryResponse? Summary);

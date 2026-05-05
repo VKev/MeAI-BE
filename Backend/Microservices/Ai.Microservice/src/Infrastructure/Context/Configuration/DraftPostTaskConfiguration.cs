@@ -20,6 +20,8 @@ public sealed class DraftPostTaskConfiguration : IEntityTypeConfiguration<DraftP
         entity.Property(e => e.SocialMediaId).HasColumnName("social_media_id");
         entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
         entity.Property(e => e.UserPrompt).HasColumnName("user_prompt").HasColumnType("text").IsRequired();
+        entity.Property(e => e.IsAutoTopic).HasColumnName("is_auto_topic").IsRequired().HasDefaultValue(false);
+        entity.Property(e => e.Style).HasColumnName("style").HasMaxLength(32).IsRequired().HasDefaultValue(DraftPostStyles.Branded);
         entity.Property(e => e.TopK).HasColumnName("top_k");
         entity.Property(e => e.MaxReferenceImages).HasColumnName("max_reference_images");
         entity.Property(e => e.MaxRagPosts).HasColumnName("max_rag_posts");

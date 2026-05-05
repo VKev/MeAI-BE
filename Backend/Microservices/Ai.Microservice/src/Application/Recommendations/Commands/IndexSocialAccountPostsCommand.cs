@@ -1,6 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
+using Application.Abstractions.Facebook;
 using Application.Abstractions.Rag;
+using Application.Abstractions.SocialMedias;
+using Application.Posts;
 using Application.Posts.Models;
 using Application.Posts.Queries;
 using Application.Recommendations.Models;
@@ -29,15 +32,21 @@ public sealed class IndexSocialAccountPostsCommandHandler
 
     private readonly IMediator _mediator;
     private readonly IRagClient _ragClient;
+    private readonly IUserSocialMediaService _userSocialMediaService;
+    private readonly IFacebookContentService _facebookContentService;
     private readonly ILogger<IndexSocialAccountPostsCommandHandler> _logger;
 
     public IndexSocialAccountPostsCommandHandler(
         IMediator mediator,
         IRagClient ragClient,
+        IUserSocialMediaService userSocialMediaService,
+        IFacebookContentService facebookContentService,
         ILogger<IndexSocialAccountPostsCommandHandler> logger)
     {
         _mediator = mediator;
         _ragClient = ragClient;
+        _userSocialMediaService = userSocialMediaService;
+        _facebookContentService = facebookContentService;
         _logger = logger;
     }
 
@@ -105,6 +114,30 @@ public sealed class IndexSocialAccountPostsCommandHandler
         var unchangedPosts = 0;
         var queuedText = 0;
         var queuedImage = 0;
+        var queuedVideo = 0;
+        var queuedProfile = 0;
+
+        // Page profile (the "Giới thiệu" / About section + category + website + location).
+        // Ingested as a single text doc per account so the recommendation/draft LLM can
+        // ground generated content in what the page is actually about — not just past
+        // posts. Fingerprint-skipped on subsequent /index calls when the profile hasn't changed.
+        var profileDoc = await BuildPageProfileDocAsync(platform, request, cancellationToken);
+        if (profileDoc is not null)
+        {
+            var profileDocId = $"{prefix}profile";
+            var profileStatus = Classify(existing, profileDocId, profileDoc.Value.Fingerprint);
+            if (profileStatus != DocStatus.Unchanged)
+            {
+                docsToQueue.Add(new RagIngestMessage
+                {
+                    Kind = "text",
+                    DocumentId = profileDocId,
+                    Fingerprint = profileDoc.Value.Fingerprint,
+                    Content = profileDoc.Value.Content,
+                });
+                queuedProfile++;
+            }
+        }
 
         foreach (var post in posts)
         {
@@ -183,17 +216,72 @@ public sealed class IndexSocialAccountPostsCommandHandler
                     queuedImage++;
                 }
             }
+
+            // Path 3: VideoRAG — only fires when the post is a video. Heavier
+            // than image_native (download + ffmpeg + multi-frame Gemini calls)
+            // so we gate strictly on MediaType + a fetchable MediaUrl.
+            var videoUrl = SelectVideoUrl(post);
+            if (videoUrl is not null)
+            {
+                var videoDocId = $"{prefix}{post.PlatformPostId}:vid:0";
+                var videoFingerprint = ComputeFingerprint(videoUrl);
+                var videoStatus = Classify(existing, videoDocId, videoFingerprint);
+
+                if (videoStatus != DocStatus.Unchanged)
+                {
+                    docsToQueue.Add(new RagIngestMessage
+                    {
+                        Kind = "video",
+                        DocumentId = videoDocId,
+                        Fingerprint = videoFingerprint,
+                        VideoUrl = videoUrl,
+                        Platform = platform,
+                        SocialMediaId = request.SocialMediaId.ToString("N"),
+                        PostId = post.PlatformPostId,
+                        Scope = prefix,
+                    });
+                    queuedVideo++;
+                }
+            }
         }
 
         if (docsToQueue.Count > 0)
         {
-            await _ragClient.PublishIngestBatchAsync(docsToQueue, cancellationToken);
+            // Synchronous batch ingest via gRPC. Blocks until rag-microservice has
+            // actually embedded + upserted every doc into Qdrant + the fingerprint
+            // registry — so the recommendation/draft query that runs immediately
+            // after IS guaranteed to see the page profile and post embeddings. The
+            // earlier fire-and-forget path (PublishIngestBatchAsync via RabbitMQ)
+            // raced with the downstream query and left RAG context empty.
             _logger.LogInformation(
-                "Queued {DocCount} RAG ingest documents for socialMediaId={SocialMediaId} (text={Text}, image={Image})",
+                "Submitting {DocCount} RAG ingest documents (sync gRPC) for socialMediaId={SocialMediaId} (text={Text}, image={Image}, video={Video}, profile={Profile})",
                 docsToQueue.Count,
                 request.SocialMediaId,
                 queuedText,
-                queuedImage);
+                queuedImage,
+                queuedVideo,
+                queuedProfile);
+
+            var ingestResults = await _ragClient.IngestBatchSyncAsync(docsToQueue, cancellationToken);
+
+            var ingested = 0; var unchanged = 0; var failed = 0;
+            foreach (var r in ingestResults)
+            {
+                switch ((r.Status ?? string.Empty).ToLowerInvariant())
+                {
+                    case "ingested":
+                    case "updated":  ingested++; break;
+                    case "unchanged": unchanged++; break;
+                    case "failed":
+                        failed++;
+                        _logger.LogWarning(
+                            "RAG ingest failed for {DocId}: {Error}", r.DocumentId, r.Error);
+                        break;
+                }
+            }
+            _logger.LogInformation(
+                "RAG sync ingest completed: ingested/updated={Ingested}, unchanged={Unchanged}, failed={Failed}",
+                ingested, unchanged, failed);
         }
         else
         {
@@ -212,7 +300,117 @@ public sealed class IndexSocialAccountPostsCommandHandler
             UpdatedPosts: updatedPosts,
             UnchangedPosts: unchangedPosts,
             QueuedTextDocuments: queuedText,
-            QueuedImageDocuments: queuedImage));
+            QueuedImageDocuments: queuedImage,
+            QueuedVideoDocuments: queuedVideo,
+            QueuedProfileDocuments: queuedProfile));
+    }
+
+    /// <summary>
+    /// Fetches the page profile (About / category / website / location / bio) for the
+    /// given account and renders it as a single fingerprinted text doc. Returns null
+    /// for unsupported platforms or when the profile fetch fails — RAG ingest of
+    /// posts/images still proceeds without it.
+    /// </summary>
+    private async Task<(string Content, string Fingerprint)?> BuildPageProfileDocAsync(
+        string platform,
+        IndexSocialAccountPostsCommand request,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(platform, "facebook", StringComparison.OrdinalIgnoreCase))
+        {
+            // Instagram / TikTok / Threads: their profile data is in social_medias.metadata
+            // (set at OAuth link time). A future extension can plumb those through the same
+            // shape; for now only Facebook ships rich Graph-API profile data.
+            return null;
+        }
+
+        var socialMediaResult = await _userSocialMediaService.GetSocialMediasAsync(
+            request.UserId, new[] { request.SocialMediaId }, cancellationToken);
+        if (socialMediaResult.IsFailure || socialMediaResult.Value.Count == 0)
+        {
+            return null;
+        }
+
+        using var metadata = SocialMediaMetadataHelper.Parse(socialMediaResult.Value[0].MetadataJson);
+        if (metadata is null)
+        {
+            return null;
+        }
+
+        var userAccessToken = SocialMediaMetadataHelper.GetString(metadata, "user_access_token")
+                              ?? SocialMediaMetadataHelper.GetString(metadata, "access_token");
+        if (string.IsNullOrWhiteSpace(userAccessToken))
+        {
+            return null;
+        }
+
+        var insightsResult = await _facebookContentService.GetPageInsightsAsync(
+            new FacebookPageInsightsRequest(
+                UserAccessToken: userAccessToken,
+                PreferredPageId: SocialMediaMetadataHelper.GetString(metadata, "page_id"),
+                PreferredPageAccessToken: SocialMediaMetadataHelper.GetString(metadata, "page_access_token")),
+            cancellationToken);
+        if (insightsResult.IsFailure)
+        {
+            _logger.LogWarning(
+                "Page profile fetch failed for socialMediaId={SocialMediaId}: {Code} {Description}",
+                request.SocialMediaId, insightsResult.Error.Code, insightsResult.Error.Description);
+            return null;
+        }
+
+        var p = insightsResult.Value;
+        var sb = new StringBuilder();
+        sb.AppendLine($"[Page profile — facebook account {request.SocialMediaId:N}]");
+        if (!string.IsNullOrWhiteSpace(p.Name))         sb.AppendLine($"Name: {p.Name}");
+        if (!string.IsNullOrWhiteSpace(p.Category))     sb.AppendLine($"Category: {p.Category}");
+        if (p.Followers.HasValue)                        sb.AppendLine($"Followers: {p.Followers.Value:N0}");
+        if (p.Fans.HasValue)                             sb.AppendLine($"Likes (fans): {p.Fans.Value:N0}");
+        if (!string.IsNullOrWhiteSpace(p.About))        sb.AppendLine($"Tagline: {p.About}");
+        if (!string.IsNullOrWhiteSpace(p.Description))
+        {
+            sb.AppendLine("Introduction (Giới thiệu):");
+            sb.AppendLine(p.Description.Trim());
+        }
+        if (!string.IsNullOrWhiteSpace(p.Bio))           sb.AppendLine($"Bio: {p.Bio.Trim()}");
+        if (!string.IsNullOrWhiteSpace(p.CompanyOverview)) sb.AppendLine($"Company / mission: {p.CompanyOverview}");
+        if (!string.IsNullOrWhiteSpace(p.Website))       sb.AppendLine($"Website: {p.Website}");
+        if (!string.IsNullOrWhiteSpace(p.Email))         sb.AppendLine($"Email: {p.Email}");
+        if (!string.IsNullOrWhiteSpace(p.Phone))         sb.AppendLine($"Phone: {p.Phone}");
+        if (!string.IsNullOrWhiteSpace(p.Location))      sb.AppendLine($"Location: {p.Location}");
+
+        var content = sb.ToString().Trim();
+        // Sanity floor: if FB returned literally nothing useful (just the page name),
+        // skip the doc — wastes RAG storage and gives the LLM a useless context block.
+        if (content.Length < 50)
+        {
+            return null;
+        }
+        return (content, ComputeFingerprint(content));
+    }
+
+    private static string? SelectVideoUrl(SocialPlatformPostSummaryResponse post)
+    {
+        // Posts whose MediaType is text/image are skipped — VideoRAG is heavy.
+        if (string.IsNullOrWhiteSpace(post.MediaType))
+        {
+            return null;
+        }
+        var mt = post.MediaType.ToLowerInvariant();
+        var looksLikeVideo = mt.Contains("video", StringComparison.Ordinal)
+            || mt.Contains("reel", StringComparison.Ordinal);
+        if (!looksLikeVideo)
+        {
+            return null;
+        }
+
+        // The rag-microservice resolves the URL via yt-dlp, which handles both
+        // direct CDN mp4s AND viewer pages (facebook.com/reel/..., /watch/, /videos/),
+        // including DASH split-track muxing. So any http(s) URL is acceptable here.
+        if (!Uri.TryCreate(post.MediaUrl, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+        return uri.Scheme is "http" or "https" ? post.MediaUrl : null;
     }
 
     private static string BuildPrefix(string platform, Guid socialMediaId)

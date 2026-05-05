@@ -157,18 +157,26 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
         }
 
         var profile = result.Value;
-        var pageProfilePictureUrl = !string.IsNullOrWhiteSpace(profile.PageId)
-            ? $"https://graph.facebook.com/v24.0/{profile.PageId}/picture?type=large"
-            : null;
+        // Prefer the picture URL we already fetched explicitly (CDN URL with token);
+        // fall back to the unauthenticated Graph redirect endpoint when the explicit
+        // picture call wasn't included for this page.
+        var pageProfilePictureUrl = profile.PageProfilePictureUrl
+                                    ?? (!string.IsNullOrWhiteSpace(profile.PageId)
+                                        ? $"https://graph.facebook.com/v24.0/{profile.PageId}/picture?type=large"
+                                        : null);
 
+        // For a Facebook page connection, the user-visible "username" and "bio" are
+        // really the page's vanity handle and About text — those are what any frontend
+        // would want to render. Surface them here instead of forcing every consumer to
+        // dig through metadataJson to find them.
         return Result.Success(new SocialMediaUserProfile(
             UserId: profile.Id,
-            Username: null,
+            Username: profile.PageUsername,
             DisplayName: profile.Name,
             ProfilePictureUrl: profile.ProfilePictureUrl,
-            Bio: null,
+            Bio: FirstNonEmpty(profile.PageDescription, profile.PageAbout, profile.PageBio),
             FollowerCount: profile.PageFollowerCount,
-            FollowingCount: null,
+            FollowingCount: null,  // FB pages don't follow other accounts
             PostCount: profile.PagePostCount,
             PageLikeCount: profile.PageLikeCount,
             PageId: profile.PageId,

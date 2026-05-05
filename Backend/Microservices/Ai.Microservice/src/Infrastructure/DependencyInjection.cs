@@ -114,12 +114,37 @@ namespace Infrastructure
                     out var seconds)
                     ? seconds
                     : 30;
+                var grpcUrl = configuration["Rag:GrpcUrl"]
+                              ?? configuration["RAG_GRPC_URL"]
+                              ?? "http://rag-microservice:5006";
+                var grpcIngestTimeoutSeconds = int.TryParse(
+                    configuration["Rag:GrpcIngestTimeoutSeconds"] ?? configuration["RAG_GRPC_INGEST_TIMEOUT_SECONDS"],
+                    out var grpcSeconds)
+                    ? grpcSeconds
+                    : 300;
+                var waitReadyTimeoutSeconds = int.TryParse(
+                    configuration["Rag:WaitReadyTimeoutSeconds"] ?? configuration["RAG_WAIT_READY_TIMEOUT_SECONDS"],
+                    out var waitSeconds)
+                    ? waitSeconds
+                    : 1800;
                 return new RagOptions
                 {
                     IngestQueue = ingest,
                     QueryQueue = query,
                     RpcTimeout = TimeSpan.FromSeconds(timeoutSeconds),
+                    GrpcUrl = grpcUrl,
+                    GrpcIngestTimeout = TimeSpan.FromSeconds(grpcIngestTimeoutSeconds),
+                    WaitReadyTimeout = TimeSpan.FromSeconds(waitReadyTimeoutSeconds),
                 };
+            });
+
+            // gRPC client to rag-microservice for synchronous batch ingest. The
+            // existing AMQP-RPC query path stays on RabbitMQ; only the synchronous
+            // ingest path uses gRPC.
+            services.AddGrpcClient<SharedLibrary.Grpc.Rag.RagIngestService.RagIngestServiceClient>((sp, options) =>
+            {
+                var ragOpts = sp.GetRequiredService<RagOptions>();
+                options.Address = new Uri(ragOpts.GrpcUrl);
             });
             services.AddSingleton<IRagClient, RabbitMqRagClient>();
 
@@ -130,6 +155,14 @@ namespace Infrastructure
                     configuration["Rag:MultimodalAnswerTimeoutSeconds"]
                     ?? configuration["RAG_MULTIMODAL_ANSWER_TIMEOUT_SECONDS"],
                     out var s) ? s : 60;
+                var webMax = int.TryParse(
+                    configuration["Rag:WebSearchMaxResults"]
+                    ?? configuration["RAG_WEB_SEARCH_MAX_RESULTS"],
+                    out var w) ? w : 5;
+                var webEnabled = !string.Equals(
+                    configuration["Rag:WebSearchEnabled"]
+                    ?? configuration["RAG_WEB_SEARCH_ENABLED"]
+                    ?? "true", "false", StringComparison.OrdinalIgnoreCase);
                 return new MultimodalLlmOptions
                 {
                     BaseUrl = configuration["Rag:MultimodalLlmBaseUrl"]
@@ -142,8 +175,90 @@ namespace Infrastructure
                             ?? configuration["RAG_MULTIMODAL_LLM_MODEL"]
                             ?? "openai/gpt-4o-mini",
                     Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+                    WebSearchEnabled = webEnabled,
+                    WebSearchMaxResults = webMax,
                 };
             });
+
+            // Brave Search backend for the `web_search` tool exposed by the
+            // OpenRouter multimodal client. If no API key is configured, the
+            // BraveSearchClient gracefully returns empty results — model still
+            // sees the tool but every invocation returns nothing.
+            services.AddSingleton(sp =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                return new Infrastructure.Logic.Search.BraveSearchOptions
+                {
+                    BaseUrl = configuration["Rag:BraveSearchBaseUrl"]
+                              ?? configuration["RAG_BRAVE_SEARCH_BASE_URL"]
+                              ?? "https://api.search.brave.com/res/v1/web/search",
+                    ApiKey = configuration["Rag:BraveSearchApiKey"]
+                             ?? configuration["RAG_BRAVE_SEARCH_API_KEY"]
+                             ?? string.Empty,
+                    Timeout = TimeSpan.FromSeconds(10),
+                };
+            });
+            services.AddHttpClient<Application.Abstractions.Search.IWebSearchClient,
+                                   Infrastructure.Logic.Search.BraveSearchClient>();
+
+            // Brave image search — separate endpoint, same subscription key. Used at
+            // draft-generation time to fetch a fresh real-world reference image of the
+            // topic so the image-gen model has a concrete subject anchor (e.g. an actual
+            // DJI Osmo product shot) alongside the brand's past-post images.
+            services.AddSingleton(sp =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                return new Infrastructure.Logic.Search.BraveImageSearchOptions
+                {
+                    BaseUrl = configuration["Rag:BraveImageSearchBaseUrl"]
+                              ?? configuration["RAG_BRAVE_IMAGE_SEARCH_BASE_URL"]
+                              ?? "https://api.search.brave.com/res/v1/images/search",
+                    ApiKey = configuration["Rag:BraveImageSearchApiKey"]
+                             ?? configuration["RAG_BRAVE_IMAGE_SEARCH_API_KEY"]
+                             // Fall back to the text-search key by default — same Brave
+                             // account, same subscription. The override exists if the
+                             // user wants to point image search at a different plan/key.
+                             ?? configuration["Rag:BraveSearchApiKey"]
+                             ?? configuration["RAG_BRAVE_SEARCH_API_KEY"]
+                             ?? string.Empty,
+                    Country = configuration["Rag:BraveImageSearchCountry"]
+                              ?? configuration["RAG_BRAVE_IMAGE_SEARCH_COUNTRY"]
+                              ?? "us",
+                    SafeSearch = configuration["Rag:BraveImageSearchSafe"]
+                                 ?? configuration["RAG_BRAVE_IMAGE_SEARCH_SAFE"]
+                                 ?? "strict",
+                    Timeout = TimeSpan.FromSeconds(10),
+                };
+            });
+            services.AddHttpClient<Application.Abstractions.Search.IImageSearchClient,
+                                   Infrastructure.Logic.Search.BraveImageSearchClient>();
+
+            // Jina-reranker-m0 — true multimodal cross-encoder. Each candidate is sent
+            // as either {"image": url} (Jina fetches and scores pixel content) or
+            // {"text": "..."}; image-and-text combined collapses to text-only scoring,
+            // so we pick one field per candidate. Verified against the live API:
+            // unlike Cohere /v2/rerank (text-only despite accepting image_url field),
+            // Jina genuinely fetches images and produces pixel-aware scores.
+            services.AddSingleton(sp =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                return new RerankOptions
+                {
+                    BaseUrl = configuration["Rag:RerankBaseUrl"]
+                              ?? configuration["RAG_RERANK_BASE_URL"]
+                              ?? "https://api.jina.ai/v1/rerank",
+                    ApiKey = configuration["Rag:RerankApiKey"]
+                             ?? configuration["RAG_RERANK_API_KEY"]
+                             ?? string.Empty,
+                    Model = configuration["Rag:RerankModel"]
+                            ?? configuration["RAG_RERANK_MODEL"]
+                            ?? "jina-reranker-m0",
+                    Timeout = TimeSpan.FromSeconds(20),
+                };
+            });
+            services.AddHttpClient<Application.Abstractions.Rag.IRerankClient,
+                                   Infrastructure.Logic.Rag.JinaRerankClient>();
+
             services.AddHttpClient<IMultimodalLlmClient, OpenRouterMultimodalLlmClient>();
 
             services.AddSingleton(sp =>

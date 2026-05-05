@@ -69,6 +69,20 @@ public sealed class FacebookProfileResponse
     [JsonIgnore]
     public int? PagePostCount { get; set; }
 
+    // Page profile fields — populated for the selected page. Surfaced via
+    // SocialMediaProfileService so /api/User/social-medias responses no longer
+    // return null for username/bio/etc when the FB page actually has them set.
+    [JsonIgnore] public string? PageUsername { get; set; }     // vanity URL handle (e.g. "meai.digital")
+    [JsonIgnore] public string? PageAbout { get; set; }        // short tagline (1 line)
+    [JsonIgnore] public string? PageDescription { get; set; }  // long About / Giới thiệu text
+    [JsonIgnore] public string? PageCategory { get; set; }
+    [JsonIgnore] public string? PageBio { get; set; }
+    [JsonIgnore] public string? PageWebsite { get; set; }
+    [JsonIgnore] public string? PageEmail { get; set; }
+    [JsonIgnore] public string? PagePhone { get; set; }
+    [JsonIgnore] public string? PageLocation { get; set; }
+    [JsonIgnore] public string? PageProfilePictureUrl { get; set; }
+
     [JsonIgnore]
     public IReadOnlyList<FacebookPageProfile> Pages { get; set; } = [];
 }

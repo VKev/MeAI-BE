@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+option csharp_namespace = "SharedLibrary.Grpc.Rag";
+
+package rag;
+
+// RagIngestService — synchronous, streaming-free, batch ingest into the
+// rag-microservice. The pre-existing async ingest path (RabbitMQ publish via
+// IRagClient.PublishIngestBatchAsync) returns as soon as the message is queued,
+// which races against the recommendation/draft query that runs immediately
+// after. This service blocks until every document in the batch has actually
+// been embedded + upserted into Qdrant + the fingerprint registry, so a
+// downstream query is guaranteed to see the new content.
+service RagIngestService {
+  // Ingest a batch of documents synchronously. The call returns when every
+  // document has been processed (or its individual ingest has failed and is
+  // reported in the per-doc result). For video docs the call may take minutes.
+  rpc IngestBatch (IngestBatchRequest) returns (IngestBatchResponse);
+}
+
+message IngestDocument {
+  // Discriminator: "text" | "image" | "image_native" | "video"
+  string kind = 1;
+  string document_id = 2;
+  string fingerprint = 3;
+
+  // text path
+  string content = 4;
+
+  // image / image_native path
+  string image_url = 5;
+  string caption = 6;
+  string describe_prompt = 7;
+  string scope = 8;
+  string post_id = 9;
+
+  // video path
+  string platform = 10;
+  string social_media_id = 11;
+  string video_url = 12;
+}
+
+message IngestBatchRequest {
+  repeated IngestDocument documents = 1;
+}
+
+message IngestResult {
+  string document_id = 1;
+  // "ingested" | "updated" | "unchanged" | "failed"
+  string status = 2;
+  string fingerprint = 3;
+  // Populated only when status = "failed".
+  string error = 4;
+}
+
+message IngestBatchResponse {
+  repeated IngestResult results = 1;
+}

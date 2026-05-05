@@ -50,6 +50,7 @@ public sealed class OpenRouterImageGenerationClient : IImageGenerationClient
         CancellationToken cancellationToken)
     {
         var userParts = new List<object> { new TextPart(request.Prompt) };
+        var includedImages = 0;
         if (request.ReferenceImageUrls != null)
         {
             foreach (var url in request.ReferenceImageUrls)
@@ -57,9 +58,16 @@ public sealed class OpenRouterImageGenerationClient : IImageGenerationClient
                 if (!string.IsNullOrWhiteSpace(url))
                 {
                     userParts.Add(new ImagePart(new ImageUrl(url)));
+                    includedImages++;
                 }
             }
         }
+        _logger.LogInformation(
+            "OpenRouter image-gen call: model={Model} promptLen={PromptLen} systemPromptLen={SysLen} refImages={ImageCount}",
+            _options.Model,
+            request.Prompt?.Length ?? 0,
+            request.SystemPrompt?.Length ?? 0,
+            includedImages);
 
         var messages = new List<object>();
         if (!string.IsNullOrWhiteSpace(request.SystemPrompt))

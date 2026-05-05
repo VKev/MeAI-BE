@@ -4,14 +4,17 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Minimal: no OpenCV / mineru / paddle / libreoffice — we only do image+text RAG.
+# ffmpeg is required by VideoRAG to split video segments and extract audio.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY service/requirements.txt /app/service/requirements.txt
+# Build context is `../Microservices` (the parent of Rag.Microservice), so
+# everything we COPY is relative to that. This lets us also pull in
+# SharedLibrary/Protos for gRPC stub generation below.
+COPY Rag.Microservice/requirements.txt /app/requirements.txt
 
 # Pre-install everything LightRAG's pipmaster might try to "ensure" at runtime.
 # pipmaster (used by lightrag-hku) hangs the process if it has to install a
@@ -27,19 +30,40 @@ RUN pip install --upgrade pip \
         "aiohttp" \
         "xxhash" \
         "Pillow>=10.0.0" \
-    && pip install -r /app/service/requirements.txt
+    && pip install -r /app/requirements.txt
 
 # Block runtime pip from hitting PyPI. If pipmaster tries another install, it
 # fails fast instead of hanging the worker.
 ENV PIP_NO_INDEX=true \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-COPY service /app/service
+# ── Application code (clean-architecture layout under `src/`) ──────────────
+# Includes:
+#   - src/domain, src/application, src/infrastructure, src/transport, src/composition
+#   - src/infrastructure/video_rag/_lib/ (was repo-root `videorag/`, vendored
+#     research-fork library — wrapped by adapter.py)
+#   - src/knowledge/ (was repo-root `knowledge/`, content markdown files,
+#     read by FilesystemKnowledgeLoader)
+COPY Rag.Microservice/src /app/src
 
-RUN mkdir -p /data/rag_storage
+# gRPC proto from SharedLibrary/Protos. Generates Python stubs into
+# `src/transport/grpc/grpc_gen/` which the gRPC servicer imports at runtime.
+COPY SharedLibrary/Protos/rag_service.proto /app/protos/rag_service.proto
+
+RUN mkdir -p /app/src/transport/grpc/grpc_gen \
+    && touch /app/src/transport/grpc/grpc_gen/__init__.py \
+    && python -m grpc_tools.protoc \
+        --proto_path=/app/protos \
+        --python_out=/app/src/transport/grpc/grpc_gen \
+        --grpc_python_out=/app/src/transport/grpc/grpc_gen \
+        /app/protos/rag_service.proto \
+    && sed -i 's/^import rag_service_pb2/from . import rag_service_pb2/' /app/src/transport/grpc/grpc_gen/rag_service_pb2_grpc.py
+
+RUN mkdir -p /data/rag_storage /data/rag_storage/videorag
 ENV WORKING_DIR=/data/rag_storage \
+    KNOWLEDGE_DIR=/app/src/knowledge \
     PYTHONPATH=/app
 
-EXPOSE 8000
+EXPOSE 8000 5006
 
-CMD ["python", "-m", "service.main"]
+CMD ["python", "-m", "src.composition.entrypoint"]

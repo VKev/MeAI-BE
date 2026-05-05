@@ -1,12 +1,16 @@
-"""Multimodal embedder client.
+"""Multimodal embedder client — implements `MultimodalEmbedderPort`.
 
 Wraps OpenRouter's /v1/embeddings endpoint for models that accept the nested
 content-array form (text + image_url parts). Confirmed working with
-nvidia/llama-nemotron-embed-vl-1b-v2:free.
+nvidia/llama-nemotron-embed-vl-1b-v2:free and Gemini Embedding 2 Preview.
+
+Logic preserved from the original `service/multimodal_embedder.py` — just
+moved into the infrastructure layer + namespaced.
 """
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import logging
 from typing import Any
 
@@ -15,25 +19,12 @@ import aiohttp
 logger = logging.getLogger("rag-service.multimodal-embedder")
 
 
-class MultimodalEmbedder:
-    """Async client for OpenRouter multimodal embeddings.
-
-    Request shape (per the working probe + the nvidia model's example):
-        POST {base_url}/embeddings
-        {
-          "model": "nvidia/llama-nemotron-embed-vl-1b-v2:free",
-          "input": [
-            { "content": [
-                { "type": "text", "text": "..." },
-                { "type": "image_url", "image_url": { "url": "..." } }
-            ] }
-          ],
-          "encoding_format": "float"
-        }
-    """
+class OpenRouterMultimodalEmbedder:
+    """Async client. Implements `MultimodalEmbedderPort`."""
 
     def __init__(
         self,
+        *,
         base_url: str,
         api_key: str,
         model: str,
@@ -56,17 +47,14 @@ class MultimodalEmbedder:
         embeddings = await self._embed([item])
         return embeddings[0]
 
-    async def embed_image(self, image_url: str, caption: str | None = None) -> list[float]:
+    async def embed_image(
+        self, image_url: str, caption: str | None = None
+    ) -> list[float]:
         # First try with the URL — provider fetches it. Cheaper if it works.
         try:
             return await self._embed_image_with_url(image_url, caption)
         except Exception as ex:
             err_text = str(ex)
-            # Gemini Embedding 2 Preview (Vertex backend) rejects data URLs outright with
-            # "Provided image is not valid", so falling back to base64 is pointless. Vertex
-            # also permanently refuses URLs blocked by robots.txt (e.g. Facebook CDN). Detect
-            # both and fail fast — no fallback, no retries-on-fallback, just bail out so the
-            # caller can record "image embed unavailable for this URL" and move on.
             permanent_markers = (
                 "URL_ROBOTED",
                 "ROBOTED_DENIED",
@@ -100,9 +88,7 @@ class MultimodalEmbedder:
         import base64
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=20.0),
-            headers={
-                "User-Agent": "Mozilla/5.0 (compatible; MeAIRag/1.0)",
-            },
+            headers={"User-Agent": "Mozilla/5.0 (compatible; MeAIRag/1.0)"},
         ) as session:
             async with session.get(image_url) as resp:
                 if resp.status != 200:
@@ -137,9 +123,6 @@ class MultimodalEmbedder:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        # Free tier on OpenRouter (and NVIDIA's NIM trial under it) returns
-        # transient "No successful provider responses" / 5xx flakes. Retry
-        # with exponential backoff so a single embedding doesn't drop the message.
         max_attempts = 4
         backoff_seconds = [1.0, 2.5, 6.0]
 
@@ -159,13 +142,10 @@ class MultimodalEmbedder:
                                 raise RuntimeError(
                                     f"HTTP {resp.status} body={text[:400]}"
                                 )
-                            import json as _json
                             data = _json.loads(text)
 
                     rows = data.get("data") or []
                     if not rows:
-                        # OpenRouter returns 200 with `{"error": ...}` on upstream
-                        # provider flakes. Treat as transient.
                         raise RuntimeError(
                             f"Embedding response had no data: {data}"
                         )
@@ -174,14 +154,11 @@ class MultimodalEmbedder:
                         self._dim = len(embeddings[0])
                         logger.info(
                             "Multimodal embedder ready (model=%s dim=%d)",
-                            self.model,
-                            self._dim,
+                            self.model, self._dim,
                         )
                     return embeddings
                 except Exception as ex:
                     err_text = str(ex)
-                    # Permanent provider rejections (URL fetch denied by robots.txt, invalid
-                    # image data, malformed input) won't recover by retrying. Bail immediately.
                     permanent_markers = (
                         "URL_ROBOTED",
                         "ROBOTED_DENIED",
@@ -198,16 +175,13 @@ class MultimodalEmbedder:
                     if attempt + 1 >= max_attempts:
                         logger.error(
                             "Multimodal embed gave up after %d attempts: %s",
-                            attempt + 1,
-                            err_text[:240],
+                            attempt + 1, err_text[:240],
                         )
                         raise
                     delay = backoff_seconds[attempt]
                     logger.warning(
                         "Multimodal embed attempt %d failed (%s); retrying in %.1fs",
-                        attempt + 1,
-                        err_text[:240],
-                        delay,
+                        attempt + 1, err_text[:240], delay,
                     )
                     await asyncio.sleep(delay)
 
