@@ -1,0 +1,1216 @@
+{
+  "knowledge:content-formulas:fab-formula": {
+    "entity_names": [
+      "FAB Formula",
+      "Product Descriptions",
+      "Facebook Conversion Posts",
+      "Instagram Product Captions",
+      "Sales Pages",
+      "Advantages",
+      "Benefits",
+      "Features",
+      "Product Launch Campaigns",
+      "E-Commerce Posts"
+    ],
+    "count": 10,
+    "create_time": 1778002104,
+    "update_time": 1778002104,
+    "_id": "knowledge:content-formulas:fab-formula"
+  },
+  "knowledge:content-formulas:fas-formula": {
+    "entity_names": [
+      "Agitate",
+      "Problem",
+      "Core Psychology",
+      "Best Use Cases",
+      "FAS Formula",
+      "Content Growth System",
+      "Solve"
+    ],
+    "count": 7,
+    "create_time": 1778002119,
+    "update_time": 1778002119,
+    "_id": "knowledge:content-formulas:fas-formula"
+  },
+  "knowledge:content-formulas:bab-formula": {
+    "entity_names": [
+      "After",
+      "Reels/TikTok Transformation Content",
+      "Bridge",
+      "Budget Tracking App",
+      "Before",
+      "SaaS Case Studies",
+      "BAB Formula"
+    ],
+    "count": 7,
+    "create_time": 1778002133,
+    "update_time": 1778002133,
+    "_id": "knowledge:content-formulas:bab-formula"
+  },
+  "knowledge:content-formulas:4c-formula": {
+    "entity_names": [
+      "Concise",
+      "Brand Communication",
+      "4C Formula",
+      "Clear",
+      "Content Writing",
+      "Compelling",
+      "Website Copy",
+      "Credible"
+    ],
+    "count": 8,
+    "create_time": 1778002150,
+    "update_time": 1778002150,
+    "_id": "knowledge:content-formulas:4c-formula"
+  },
+  "knowledge:content-formulas:4u-formula": {
+    "entity_names": [
+      "Ultra-specific",
+      "Useful",
+      "Best Use Cases",
+      "Core Psychology",
+      "Unique",
+      "Urgent",
+      "4U Formula"
+    ],
+    "count": 7,
+    "create_time": 1778002163,
+    "update_time": 1778002163,
+    "_id": "knowledge:content-formulas:4u-formula"
+  },
+  "knowledge:content-formulas:a-forest-formula": {
+    "entity_names": [
+      "Statistics",
+      "Repetition",
+      "Threes",
+      "FOREST Formula",
+      "Examples",
+      "Alliteration",
+      "Opinions",
+      "Core Psychology",
+      "Facts"
+    ],
+    "count": 9,
+    "create_time": 1778002180,
+    "update_time": 1778002180,
+    "_id": "knowledge:content-formulas:a-forest-formula"
+  },
+  "knowledge:content-formulas:aida-formula": {
+    "entity_names": [
+      "Desire",
+      "Attention",
+      "Reels Scripts",
+      "Sales Pages",
+      "AIDA Formula",
+      "Interest",
+      "Product Pages",
+      "CTAs",
+      "Best Use Cases",
+      "Action",
+      "Ads"
+    ],
+    "count": 11,
+    "create_time": 1778002197,
+    "update_time": 1778002197,
+    "_id": "knowledge:content-formulas:aida-formula"
+  },
+  "knowledge:content-formulas:5-objections-formula": {
+    "entity_names": [
+      "Objections Formula",
+      "Facebook Conversion Posts",
+      "Buying Resistance",
+      "FAQ Content",
+      "Objection Handling Posts",
+      "Sales Copy",
+      "Core Psychology",
+      "Landing Pages"
+    ],
+    "count": 8,
+    "create_time": 1778002212,
+    "update_time": 1778002212,
+    "_id": "knowledge:content-formulas:5-objections-formula"
+  },
+  "knowledge:content-formulas:3-reasons-why-formula": {
+    "entity_names": [
+      "Short-Form Video",
+      "Comparison Ads",
+      "Carousel Posts",
+      "Threads Arguments",
+      "Formula",
+      "Product Pages",
+      "Core Psychology",
+      "Best Use Cases"
+    ],
+    "count": 8,
+    "create_time": 1778002229,
+    "update_time": 1778002229,
+    "_id": "knowledge:content-formulas:3-reasons-why-formula"
+  },
+  "knowledge:content-formulas:4p-formula": {
+    "entity_names": [
+      "Facebook Ads",
+      "Prove",
+      "Sales Posts",
+      "Landing Pages",
+      "Picture",
+      "Promise",
+      "Product Launches",
+      "4P Formula",
+      "Push"
+    ],
+    "count": 9,
+    "create_time": 1778002249,
+    "update_time": 1778002249,
+    "_id": "knowledge:content-formulas:4p-formula"
+  },
+  "knowledge:content-formulas:3s-formula": {
+    "entity_names": [
+      "Story",
+      "Solution",
+      "Star",
+      "Core Psychology",
+      "3S Formula",
+      "Best Use Cases"
+    ],
+    "count": 6,
+    "create_time": 1778002263,
+    "update_time": 1778002263,
+    "_id": "knowledge:content-formulas:3s-formula"
+  },
+  "knowledge:content-formulas:4a-formula": {
+    "entity_names": [
+      "Brand Campaigns",
+      "Loyalty Marketing",
+      "Retention Strategy",
+      "CRM Content",
+      "Attitude",
+      "Repeat Action",
+      "4A Formula",
+      "Action",
+      "Awareness"
+    ],
+    "count": 9,
+    "create_time": 1778002283,
+    "update_time": 1778002283,
+    "_id": "knowledge:content-formulas:4a-formula"
+  },
+  "knowledge:content-formulas:5a-formula": {
+    "entity_names": [
+      "Social Proof Systems",
+      "Philip Kotler",
+      "Community Building",
+      "Appeal",
+      "Full Funnel Campaigns",
+      "Ask",
+      "Brand Ecosystems",
+      "5A Formula",
+      "Action",
+      "Advocate",
+      "Awareness"
+    ],
+    "count": 11,
+    "create_time": 1778002303,
+    "update_time": 1778002303,
+    "_id": "knowledge:content-formulas:5a-formula"
+  },
+  "knowledge:content-formulas:app-formula": {
+    "entity_names": [
+      "Preview",
+      "Threads",
+      "Blog",
+      "Email",
+      "APP Formula",
+      "TikTok",
+      "Reels",
+      "Promise",
+      "Agree",
+      "Core Psychology",
+      "Structure"
+    ],
+    "count": 11,
+    "create_time": 1778002324,
+    "update_time": 1778002324,
+    "_id": "knowledge:content-formulas:app-formula"
+  },
+  "knowledge:content-formulas:platform-mapping-tiktok": {
+    "entity_names": [
+      "FAB",
+      "4U",
+      "AIDA",
+      "3 Reasons Why",
+      "3S",
+      "BAB",
+      "Hooks",
+      "Fast Education",
+      "APP",
+      "FAS",
+      "Retention",
+      "Viral Short-Form Content",
+      "Platform Mapping TikTok"
+    ],
+    "count": 13,
+    "create_time": 1778002334,
+    "update_time": 1778002334,
+    "_id": "knowledge:content-formulas:platform-mapping-tiktok"
+  },
+  "knowledge:content-formulas:platform-mapping-facebook-post": {
+    "entity_names": [
+      "FAB",
+      "4P",
+      "Sales Posts",
+      "3S",
+      "3 Reasons Why",
+      "Trust Building",
+      "BAB",
+      "AIDA",
+      "5 Objections",
+      "APP",
+      "FAS",
+      "4C",
+      "Storytelling",
+      "Community Engagement"
+    ],
+    "count": 14,
+    "create_time": 1778002345,
+    "update_time": 1778002345,
+    "_id": "knowledge:content-formulas:platform-mapping-facebook-post"
+  },
+  "knowledge:content-formulas:platform-mapping-facebook-reel": {
+    "entity_names": [
+      "Platform Mapping Facebook Reel",
+      "4U",
+      "3S",
+      "3 Reasons Why",
+      "AIDA",
+      "BAB",
+      "Product Demo Reels",
+      "APP",
+      "Fast Conversions",
+      "FAS",
+      "Relatable Short Videos"
+    ],
+    "count": 11,
+    "create_time": 1778002355,
+    "update_time": 1778002355,
+    "_id": "knowledge:content-formulas:platform-mapping-facebook-reel"
+  },
+  "knowledge:content-formulas:platform-mapping-instagram-post": {
+    "entity_names": [
+      "FAB",
+      "4P",
+      "Platform Mapping Instagram Post",
+      "AIDA",
+      "3 Reasons Why",
+      "BAB",
+      "Saveable Content",
+      "Brand Identity",
+      "APP",
+      "Product Showcase",
+      "4C",
+      "5A",
+      "FAS",
+      "Carousel Education"
+    ],
+    "count": 14,
+    "create_time": 1778002366,
+    "update_time": 1778002366,
+    "_id": "knowledge:content-formulas:platform-mapping-instagram-post"
+  },
+  "knowledge:content-formulas:platform-mapping-instagram-reel": {
+    "entity_names": [
+      "Aesthetic Reels",
+      "Transformation Content",
+      "FAB",
+      "4U",
+      "AIDA",
+      "3S",
+      "3 Reasons Why",
+      "BAB",
+      "Growth Content",
+      "Tips",
+      "APP",
+      "FAS",
+      "Platform Mapping Instagram Reel"
+    ],
+    "count": 13,
+    "create_time": 1778002377,
+    "update_time": 1778002377,
+    "_id": "knowledge:content-formulas:platform-mapping-instagram-reel"
+  },
+  "knowledge:content-formulas:platform-mapping-threads-post": {
+    "entity_names": [
+      "Community Discussions",
+      "4U",
+      "AIDA",
+      "3 Reasons Why",
+      "3S",
+      "Platform Mapping Threads Post",
+      "BAB",
+      "Opinions",
+      "FAS",
+      "Relatable Thoughts",
+      "4C",
+      "APP",
+      "Mini Storytelling"
+    ],
+    "count": 13,
+    "create_time": 1778002388,
+    "update_time": 1778002388,
+    "_id": "knowledge:content-formulas:platform-mapping-threads-post"
+  },
+  "knowledge:content-formulas:category-cross-platform-high-performance": {
+    "entity_names": [
+      "4U",
+      "FAB",
+      "AIDA",
+      "BAB",
+      "APP"
+    ],
+    "count": 5,
+    "create_time": 1778002394,
+    "update_time": 1778002394,
+    "_id": "knowledge:content-formulas:category-cross-platform-high-performance"
+  },
+  "knowledge:content-formulas:category-hook-viral": {
+    "entity_names": [
+      "Category Hook Viral",
+      "3 Reasons Why",
+      "APP",
+      "4U"
+    ],
+    "count": 4,
+    "create_time": 1778002404,
+    "update_time": 1778002404,
+    "_id": "knowledge:content-formulas:category-hook-viral"
+  },
+  "knowledge:content-formulas:category-storytelling-trust": {
+    "entity_names": [
+      "3S",
+      "BAB",
+      "Storytelling Trust"
+    ],
+    "count": 3,
+    "create_time": 1778002416,
+    "update_time": 1778002416,
+    "_id": "knowledge:content-formulas:category-storytelling-trust"
+  },
+  "knowledge:content-formulas:category-conversion-sales": {
+    "entity_names": [
+      "FAB",
+      "4P",
+      "AIDA",
+      "5 Objections",
+      "FAS"
+    ],
+    "count": 5,
+    "create_time": 1778002429,
+    "update_time": 1778002429,
+    "_id": "knowledge:content-formulas:category-conversion-sales"
+  },
+  "knowledge:content-formulas:category-branding-audience-growth": {
+    "entity_names": [
+      "5A",
+      "Category Branding Audience Growth",
+      "4A",
+      "4C"
+    ],
+    "count": 4,
+    "create_time": 1778002435,
+    "update_time": 1778002435,
+    "_id": "knowledge:content-formulas:category-branding-audience-growth"
+  },
+  "knowledge:content-formulas:category-low-priority-short-social": {
+    "entity_names": [
+      "5A",
+      "A Forest",
+      "4A",
+      "Category Low Priority Short Social"
+    ],
+    "count": 4,
+    "create_time": 1778002445,
+    "update_time": 1778002445,
+    "_id": "knowledge:content-formulas:category-low-priority-short-social"
+  },
+  "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait": {
+    "entity_names": [
+      "Post Lifespan",
+      "Comment-Bait",
+      "comment-bait",
+      "Save-Bait",
+      "Algorithms",
+      "share-bait",
+      "Share-Bait",
+      "Engagement Types"
+    ],
+    "count": 8,
+    "create_time": 1778002460,
+    "update_time": 1778002460,
+    "_id": "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait"
+  },
+  "knowledge:engagement-triggers:question-ending": {
+    "entity_names": [
+      "Marketing Advice",
+      "Question-Ending",
+      "Carousel Posts",
+      "Long Captions",
+      "Threads",
+      "Specific Questions",
+      "Vague Open-Ended Prompts",
+      "Concrete Forced-Choice Questions"
+    ],
+    "count": 8,
+    "create_time": 1778002478,
+    "update_time": 1778002478,
+    "_id": "knowledge:engagement-triggers:question-ending"
+  },
+  "knowledge:engagement-triggers:vulnerability-posts": {
+    "entity_names": [
+      "Vulnerability Posts",
+      "Coaches",
+      "Thought Leadership",
+      "Founders",
+      "Personal Brand Accounts",
+      "Creators",
+      "Social Media Norm"
+    ],
+    "count": 7,
+    "create_time": 1778002492,
+    "update_time": 1778002492,
+    "_id": "knowledge:engagement-triggers:vulnerability-posts"
+  },
+  "knowledge:engagement-triggers:controversial-but-positive": {
+    "entity_names": [
+      "Cold Outreach",
+      "Controversial-but-Positive",
+      "Morning Routines",
+      "Established Accounts",
+      "Productivity Theater"
+    ],
+    "count": 5,
+    "create_time": 1778002504,
+    "update_time": 1778002504,
+    "_id": "knowledge:engagement-triggers:controversial-but-positive"
+  },
+  "knowledge:engagement-triggers:insider-knowledge": {
+    "entity_names": [
+      "Educational Content",
+      "Saveable Carousels",
+      "VCs",
+      "Viral Creator",
+      "Why It Works",
+      "When to Use",
+      "Example",
+      "Insider Knowledge"
+    ],
+    "count": 8,
+    "create_time": 1778002520,
+    "update_time": 1778002520,
+    "_id": "knowledge:engagement-triggers:insider-knowledge"
+  },
+  "knowledge:engagement-triggers:listicle-carousel-anatomy": {
+    "entity_names": [
+      "Educational Content",
+      "LinkedIn",
+      "Listicle / Carousel Anatomy",
+      "CTA Slide",
+      "Swipe",
+      "Swipe-Through-Rate",
+      "Facebook",
+      "Instagram"
+    ],
+    "count": 8,
+    "create_time": 1778002536,
+    "update_time": 1778002536,
+    "_id": "knowledge:engagement-triggers:listicle-carousel-anatomy"
+  },
+  "knowledge:engagement-triggers:algorithm-friendly-cadence": {
+    "entity_names": [
+      "LinkedIn",
+      "Threads",
+      "Algorithm-Friendly Cadence",
+      "TikTok",
+      "Facebook",
+      "Instagram"
+    ],
+    "count": 6,
+    "create_time": 1778002550,
+    "update_time": 1778002550,
+    "_id": "knowledge:engagement-triggers:algorithm-friendly-cadence"
+  },
+  "knowledge:engagement-triggers:golden-hour": {
+    "entity_names": [
+      "Audience",
+      "Comments",
+      "Post Boosting",
+      "Engagement Velocity",
+      "Golden Hour",
+      "Analytics Tab"
+    ],
+    "count": 6,
+    "create_time": 1778002563,
+    "update_time": 1778002563,
+    "_id": "knowledge:engagement-triggers:golden-hour"
+  },
+  "knowledge:image-design-branded:when-to-use-branded-style": {
+    "entity_names": [
+      "Marketing Style",
+      "Branded Style",
+      "Tip / Advice Posts",
+      "Industry Insights",
+      "Visuals",
+      "Posts",
+      "Engagement-Bait Questions",
+      "Creative Style",
+      "Storytelling Posts",
+      "News / Updates / Announcements"
+    ],
+    "count": 10,
+    "create_time": 1778002575,
+    "update_time": 1778002575,
+    "_id": "knowledge:image-design-branded:when-to-use-branded-style"
+  },
+  "knowledge:image-design-branded:branded-composition-rules": {
+    "entity_names": [
+      "Branded Composition Rules",
+      "Rule of Thirds",
+      "Mobile-First",
+      "Aspect Ratio",
+      "Headline-Safe Area",
+      "Hero Subject"
+    ],
+    "count": 6,
+    "create_time": 1778002586,
+    "update_time": 1778002586,
+    "_id": "knowledge:image-design-branded:branded-composition-rules"
+  },
+  "knowledge:image-design-branded:branded-text-rules": {
+    "entity_names": [
+      "Headline",
+      "Subhead",
+      "Type Hierarchy",
+      "Contact Info",
+      "Body Copy",
+      "CTA Buttons",
+      "Branded Text Rules",
+      "Contrast"
+    ],
+    "count": 8,
+    "create_time": 1778002594,
+    "update_time": 1778002594,
+    "_id": "knowledge:image-design-branded:branded-text-rules"
+  },
+  "knowledge:image-design-branded:branded-brand-presence": {
+    "entity_names": [
+      "Brand Color Accent",
+      "Brand Consistency Check",
+      "Tagline Lockup",
+      "Branded Brand Presence",
+      "Handle",
+      "Wordmark or Logo"
+    ],
+    "count": 6,
+    "create_time": 1778002607,
+    "update_time": 1778002607,
+    "_id": "knowledge:image-design-branded:branded-brand-presence"
+  },
+  "knowledge:image-design-branded:branded-color-lighting": {
+    "entity_names": [
+      "Lighting",
+      "Branded Post",
+      "Palette",
+      "Branded Color & Lighting",
+      "Headline Color",
+      "Background"
+    ],
+    "count": 6,
+    "create_time": 1778002620,
+    "update_time": 1778002620,
+    "_id": "knowledge:image-design-branded:branded-color-lighting"
+  },
+  "knowledge:image-design-branded:branded-layout-patterns": {
+    "entity_names": [
+      "Pattern C",
+      "Pattern A",
+      "Branded Layout Patterns",
+      "Pattern B"
+    ],
+    "count": 4,
+    "create_time": 1778002630,
+    "update_time": 1778002630,
+    "_id": "knowledge:image-design-branded:branded-layout-patterns"
+  },
+  "knowledge:image-design-creative:when-to-use-creative-style": {
+    "entity_names": [
+      "Marketing Style",
+      "Behind-the-Scenes Glimpses",
+      "Creative Style",
+      "Photography-Led Brands",
+      "Lifestyle Imagery",
+      "Brand Vibe Posts",
+      "Trending-Format Participation"
+    ],
+    "count": 7,
+    "create_time": 1778002644,
+    "update_time": 1778002644,
+    "_id": "knowledge:image-design-creative:when-to-use-creative-style"
+  },
+  "knowledge:image-design-creative:creative-composition-rules": {
+    "entity_names": [
+      "Natural Lighting",
+      "Creative Composition Rules",
+      "Rule of Thirds",
+      "Negative Space",
+      "Aspect Ratio",
+      "Single Hero Subject",
+      "Cinematic Framing"
+    ],
+    "count": 7,
+    "create_time": 1778002658,
+    "update_time": 1778002658,
+    "_id": "knowledge:image-design-creative:creative-composition-rules"
+  },
+  "knowledge:image-design-creative:creative-text-rules": {
+    "entity_names": [
+      "Image Content",
+      "Creative Text Rules",
+      "Artistic Typography",
+      "Marketing",
+      "Text Constraint"
+    ],
+    "count": 5,
+    "create_time": 1778002670,
+    "update_time": 1778002670,
+    "_id": "knowledge:image-design-creative:creative-text-rules"
+  },
+  "knowledge:image-design-creative:creative-color-mood": {
+    "entity_names": [
+      "Tech Brand",
+      "Palette",
+      "High Saturation",
+      "Creative Color & Mood",
+      "Wellness Brand",
+      "Brand Mood",
+      "RAG'd Reference Images",
+      "Desaturated / Muted",
+      "Cool Tones",
+      "Warm Tones"
+    ],
+    "count": 10,
+    "create_time": 1778002681,
+    "update_time": 1778002681,
+    "_id": "knowledge:image-design-creative:creative-color-mood"
+  },
+  "knowledge:image-design-creative:creative-brand-presence": {
+    "entity_names": [
+      "Brand",
+      "Marketing Patterns",
+      "Signature Elements",
+      "Palette",
+      "Visual Style",
+      "Creative Brand Presence"
+    ],
+    "count": 6,
+    "create_time": 1778002694,
+    "update_time": 1778002694,
+    "_id": "knowledge:image-design-creative:creative-brand-presence"
+  },
+  "knowledge:image-design-marketing:when-to-use-marketing-style": {
+    "entity_names": [
+      "Marketing Style",
+      "Branded Style",
+      "Sales/Discounts",
+      "Direct-Response Posts",
+      "Event Announcements",
+      "B2B Service Ads",
+      "Creative Style",
+      "Lead Magnets",
+      "Product Launches",
+      "Service Offerings"
+    ],
+    "count": 10,
+    "create_time": 1778002715,
+    "update_time": 1778002715,
+    "_id": "knowledge:image-design-marketing:when-to-use-marketing-style"
+  },
+  "knowledge:image-design-marketing:marketing-composition-rules": {
+    "entity_names": [
+      "Headline",
+      "Safe Area",
+      "Call To Action (CTA)",
+      "Hero Visual",
+      "Marketing Composition Rules",
+      "Supporting Copy",
+      "Mobile-First",
+      "Visual Hierarchy",
+      "Aspect Ratio",
+      "F-Pattern Reading Order"
+    ],
+    "count": 10,
+    "create_time": 1778002725,
+    "update_time": 1778002725,
+    "_id": "knowledge:image-design-marketing:marketing-composition-rules"
+  },
+  "knowledge:image-design-marketing:marketing-text-rules": {
+    "entity_names": [
+      "CTA Button",
+      "Headline",
+      "Contact Line",
+      "Subhead",
+      "Total Text Limit",
+      "Marketing Text Rules"
+    ],
+    "count": 6,
+    "create_time": 1778002739,
+    "update_time": 1778002739,
+    "_id": "knowledge:image-design-marketing:marketing-text-rules"
+  },
+  "knowledge:image-design-marketing:marketing-brand-presence": {
+    "entity_names": [
+      "Brand Colors",
+      "Tagline",
+      "Call to Action (CTA)",
+      "Frame Width",
+      "Brand Logo",
+      "Marketing Brand Presence",
+      "Marketing Campaign",
+      "Brand Logo Lockup"
+    ],
+    "count": 8,
+    "create_time": 1778002754,
+    "update_time": 1778002754,
+    "_id": "knowledge:image-design-marketing:marketing-brand-presence"
+  },
+  "knowledge:image-design-marketing:marketing-visual-anchors": {
+    "entity_names": [
+      "Outcome Shot",
+      "Product Shot",
+      "Stock Photography",
+      "Marketing Visual Anchors",
+      "Before/After",
+      "Discount Badge / Sticker"
+    ],
+    "count": 6,
+    "create_time": 1778002769,
+    "update_time": 1778002769,
+    "_id": "knowledge:image-design-marketing:marketing-visual-anchors"
+  },
+  "knowledge:image-design-marketing:marketing-color-contrast": {
+    "entity_names": [
+      "CTA Button",
+      "Color Contrast",
+      "Marketing Color & Contrast",
+      "Brand Color Discipline",
+      "WCAG AAA",
+      "Pastel Palettes",
+      "High Contrast"
+    ],
+    "count": 7,
+    "create_time": 1778002779,
+    "update_time": 1778002779,
+    "_id": "knowledge:image-design-marketing:marketing-color-contrast"
+  },
+  "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons": {
+    "entity_names": [
+      "Call to Action (CTA)",
+      "Social Proof",
+      "Guarantee",
+      "Authority",
+      "Scarcity",
+      "Marketing Trust Signals"
+    ],
+    "count": 6,
+    "create_time": 1778002794,
+    "update_time": 1778002794,
+    "_id": "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons"
+  },
+  "knowledge:platform-algorithm-signals:facebook": {
+    "entity_names": [
+      "FB Reels",
+      "Organic Reach",
+      "Recency",
+      "Engagement Velocity",
+      "Tactical Takeaways",
+      "Group Posts",
+      "Facebook",
+      "Meaningful Interactions"
+    ],
+    "count": 8,
+    "create_time": 1778002811,
+    "update_time": 1778002811,
+    "_id": "knowledge:platform-algorithm-signals:facebook"
+  },
+  "knowledge:platform-algorithm-signals:instagram": {
+    "entity_names": [
+      "Hashtags",
+      "Shares",
+      "Saves",
+      "Account-Level Signals",
+      "Account Quality Score",
+      "Reels",
+      "Tactical Takeaways",
+      "Stories",
+      "Instagram"
+    ],
+    "count": 9,
+    "create_time": 1778002829,
+    "update_time": 1778002829,
+    "_id": "knowledge:platform-algorithm-signals:instagram"
+  },
+  "knowledge:platform-algorithm-signals:tiktok": {
+    "entity_names": [
+      "Rewatches",
+      "Long Videos",
+      "Watermarks",
+      "Trending Audio",
+      "Comments",
+      "Shares",
+      "TikTok",
+      "Tactical Takeaways",
+      "Velocity in First Hour",
+      "Completion Rate",
+      "Banned Audio/Music"
+    ],
+    "count": 11,
+    "create_time": 1778002852,
+    "update_time": 1778002852,
+    "_id": "knowledge:platform-algorithm-signals:tiktok"
+  },
+  "knowledge:platform-algorithm-signals:threads": {
+    "entity_names": [
+      "Account Follow Growth",
+      "Threads",
+      "Reposts of Twitter/X Content",
+      "Reply-Rate",
+      "Reply-Thread Depth",
+      "Quote-Replies",
+      "Long Monologues",
+      "Negative Engagement",
+      "Trending-Topic Association",
+      "Self-Promotion"
+    ],
+    "count": 10,
+    "create_time": 1778002871,
+    "update_time": 1778002871,
+    "_id": "knowledge:platform-algorithm-signals:threads"
+  },
+  "knowledge:platform-algorithm-signals:youtube-for-future-expansion": {
+    "entity_names": [
+      "YouTube",
+      "Drop-Off Curves",
+      "Average View Duration",
+      "First-30-Second Retention",
+      "Watch-Minutes",
+      "Click-Through Rate (CTR)",
+      "Session Time",
+      "Thumbnail + Title Combination",
+      "Duplicate Audio/Video",
+      "Next Video Recommendation",
+      "Misleading Thumbnails/Titles",
+      "Subscribers Gained Per Video",
+      "Reused TikTok/Reels Content"
+    ],
+    "count": 13,
+    "create_time": 1778002900,
+    "update_time": 1778002900,
+    "_id": "knowledge:platform-algorithm-signals:youtube-for-future-expansion"
+  },
+  "knowledge:viral-hooks:3-second-rule": {
+    "entity_names": [
+      "Algorithm",
+      "Shorts",
+      "3-Second Rule",
+      "TikTok",
+      "Reels",
+      "Stories"
+    ],
+    "count": 6,
+    "create_time": 1778002913,
+    "update_time": 1778002913,
+    "_id": "knowledge:viral-hooks:3-second-rule"
+  },
+  "knowledge:viral-hooks:pattern-interrupt": {
+    "entity_names": [
+      "Educational Content",
+      "Abrupt Cut",
+      "Contradiction",
+      "Visual Content",
+      "Pattern Interrupt",
+      "Creator-Growth Feed",
+      "Instagram"
+    ],
+    "count": 7,
+    "create_time": 1778002928,
+    "update_time": 1778002928,
+    "_id": "knowledge:viral-hooks:pattern-interrupt"
+  },
+  "knowledge:viral-hooks:curiosity-gap": {
+    "entity_names": [
+      "7-Figure Business",
+      "Tutorial Content",
+      "Listicle Content",
+      "Marketing Tactic",
+      "Zeigarnik Effect",
+      "[Thing] Used for 30 Days",
+      "Behind-the-Scenes Videos",
+      "Thing Used for 30 Days",
+      "3 Things I Wish I Knew",
+      "Curiosity Gap"
+    ],
+    "count": 10,
+    "create_time": 1778002946,
+    "update_time": 1778002946,
+    "_id": "knowledge:viral-hooks:curiosity-gap"
+  },
+  "knowledge:viral-hooks:open-loop": {
+    "entity_names": [
+      "Story-Based Posts",
+      "Educational Reels",
+      "Short-Form Platforms",
+      "Long-ish Videos",
+      "Curiosity Gap",
+      "Open Loop"
+    ],
+    "count": 6,
+    "create_time": 1778002959,
+    "update_time": 1778002959,
+    "_id": "knowledge:viral-hooks:open-loop"
+  },
+  "knowledge:viral-hooks:before-after-tease": {
+    "entity_names": [
+      "Fitness",
+      "Beauty",
+      "Before/After Tease",
+      "Carousel Post",
+      "Split-Screen Image",
+      "Productivity",
+      "Finance",
+      "Playbook",
+      "Design"
+    ],
+    "count": 9,
+    "create_time": 1778002975,
+    "update_time": 1778002975,
+    "_id": "knowledge:viral-hooks:before-after-tease"
+  },
+  "knowledge:viral-hooks:high-contrast-cold-open": {
+    "entity_names": [
+      "TikToks",
+      "Brand Content",
+      "Reels",
+      "Mobile Autoplay",
+      "High-Contrast Cold Open",
+      "Vibrant Product Shot"
+    ],
+    "count": 6,
+    "create_time": 1778002989,
+    "update_time": 1778002989,
+    "_id": "knowledge:viral-hooks:high-contrast-cold-open"
+  },
+  "knowledge:viral-hooks:direct-address": {
+    "entity_names": [
+      "Direct Address",
+      "Ideal Customer Profile",
+      "Cold Outreach Style Content",
+      "Freelancer",
+      "Zone 2 Cardio",
+      "Founders",
+      "Niche Content",
+      "Educational Posts"
+    ],
+    "count": 8,
+    "create_time": 1778003002,
+    "update_time": 1778003002,
+    "_id": "knowledge:viral-hooks:direct-address"
+  },
+  "knowledge:viral-hooks:counterintuitive-claim": {
+    "entity_names": [
+      "Meaning",
+      "Thought-Leadership Content",
+      "Mild Outrage",
+      "Threads",
+      "Long-Form Caption Posts",
+      "Curiosity",
+      "LinkedIn-Style Posts",
+      "Counterintuitive Claim"
+    ],
+    "count": 8,
+    "create_time": 1778003015,
+    "update_time": 1778003015,
+    "_id": "knowledge:viral-hooks:counterintuitive-claim"
+  },
+  "knowledge:viral-hooks:numbered-promise": {
+    "entity_names": [
+      "Numbered Promise",
+      "Blog/Email Subject Lines",
+      "Carousel Slide",
+      "Ultra-Specific Numbers",
+      "Specific Number Claims",
+      "Listicle"
+    ],
+    "count": 6,
+    "create_time": 1778003028,
+    "update_time": 1778003028,
+    "_id": "knowledge:viral-hooks:numbered-promise"
+  },
+  "knowledge:viral-hooks:stakes-first": {
+    "entity_names": [
+      "Warning Content",
+      "Loss-Aversion",
+      "Cognitive Bias",
+      "High-Cost Decisions",
+      "Stakes-First"
+    ],
+    "count": 5,
+    "create_time": 1778003039,
+    "update_time": 1778003039,
+    "_id": "knowledge:viral-hooks:stakes-first"
+  },
+  "knowledge:visual-design:rule-of-thirds": {
+    "entity_names": [
+      "Rule of Thirds",
+      "Photo Composition",
+      "Image-Generation Prompts",
+      "Reel Framing",
+      "Grid"
+    ],
+    "count": 5,
+    "create_time": 1778003050,
+    "update_time": 1778003050,
+    "_id": "knowledge:visual-design:rule-of-thirds"
+  },
+  "knowledge:visual-design:f-pattern-reading": {
+    "entity_names": [
+      "F-Pattern Reading",
+      "Nielsen Norman Group",
+      "Static Images",
+      "Eye-Tracking Findings",
+      "Text-Heavy Images"
+    ],
+    "count": 5,
+    "create_time": 1778003062,
+    "update_time": 1778003062,
+    "_id": "knowledge:visual-design:f-pattern-reading"
+  },
+  "knowledge:visual-design:mobile-first-9-16": {
+    "entity_names": [
+      "Short-Form Video",
+      "IGTV",
+      "FB Reels",
+      "Vertical Video",
+      "Mobile-First",
+      "YouTube Shorts"
+    ],
+    "count": 6,
+    "create_time": 1778003074,
+    "update_time": 1778003074,
+    "_id": "knowledge:visual-design:mobile-first-9-16"
+  },
+  "knowledge:visual-design:square-1-1-for-feed": {
+    "entity_names": [
+      "1080×1350",
+      "Square (1:1) Format",
+      "1080×1080",
+      "Portrait (4:5) Format",
+      "Carousel Slides",
+      "Facebook",
+      "Instagram"
+    ],
+    "count": 7,
+    "create_time": 1778003089,
+    "update_time": 1778003089,
+    "_id": "knowledge:visual-design:square-1-1-for-feed"
+  },
+  "knowledge:visual-design:text-overlay-rules": {
+    "entity_names": [
+      "Size",
+      "Reel Cover Text",
+      "Image with Overlaid Copy",
+      "Tactics",
+      "Text Overlay Rules",
+      "Placement",
+      "Carousel Slide Headlines",
+      "Length",
+      "Contrast",
+      "Font"
+    ],
+    "count": 10,
+    "create_time": 1778003110,
+    "update_time": 1778003110,
+    "_id": "knowledge:visual-design:text-overlay-rules"
+  },
+  "knowledge:visual-design:brand-color-discipline": {
+    "entity_names": [
+      "Accent Color",
+      "Highlight Color",
+      "Color Palette",
+      "Figma",
+      "Color Shifts",
+      "Dominant Color",
+      "Canva",
+      "Brand Color Discipline"
+    ],
+    "count": 8,
+    "create_time": 1778003127,
+    "update_time": 1778003127,
+    "_id": "knowledge:visual-design:brand-color-discipline"
+  },
+  "knowledge:visual-design:font-pairing": {
+    "entity_names": [
+      "Roboto",
+      "Inter Regular",
+      "Body Font",
+      "Bebas Neue",
+      "Inter Bold",
+      "Poppins Bold",
+      "Display Font",
+      "Font Pairing"
+    ],
+    "count": 8,
+    "create_time": 1778003141,
+    "update_time": 1778003141,
+    "_id": "knowledge:visual-design:font-pairing"
+  },
+  "knowledge:visual-design:carousel-pacing": {
+    "entity_names": [
+      "LinkedIn",
+      "Social Media Platforms",
+      "Facebook",
+      "CTA",
+      "Slide Structure",
+      "Carousel Completion Rate",
+      "Carousel Pacing",
+      "Instagram"
+    ],
+    "count": 8,
+    "create_time": 1778003159,
+    "update_time": 1778003159,
+    "_id": "knowledge:visual-design:carousel-pacing"
+  },
+  "knowledge:visual-design:thumbnail-optimization": {
+    "entity_names": [
+      "Thumbnail Optimization",
+      "Reel Covers",
+      "Thumbnail",
+      "Carousel Slide 1",
+      "Static Feed Images"
+    ],
+    "count": 5,
+    "create_time": 1778003171,
+    "update_time": 1778003171,
+    "_id": "knowledge:visual-design:thumbnail-optimization"
+  },
+  "knowledge:visual-design:negative-space": {
+    "entity_names": [
+      "Visual Design",
+      "Apple",
+      "Negative Space",
+      "High-End Fashion Ads",
+      "Minimal-Text Quote Graphics",
+      "Photo Posts"
+    ],
+    "count": 6,
+    "create_time": 1778003185,
+    "update_time": 1778003185,
+    "_id": "knowledge:visual-design:negative-space"
+  }
+}

@@ -1,0 +1,1080 @@
+{
+  "chunk-376ce19608fd6f7974cce021cf830faf": {
+    "tokens": 140,
+    "content": "## 1. FAB Formula\n\n**Meaning:** Highlight product/service value through features, advantages, and benefits.\n\n### Structure\n\n- **F – Features:** What the product/service has.\n- **A – Advantages:** What makes it better than competitors.\n- **B – Benefits:** What positive outcomes customers receive.\n\n### Best Use Cases\n\n- Product descriptions\n- Sales pages\n- E-commerce posts\n- Product launch campaigns\n- Instagram product captions\n- Facebook conversion posts\n\n### Core Psychology\n\nCustomers care more about benefits than features.\n\n### Example\n\n- Feature: Waterproof smartwatch\n- Advantage: Lasts 10 days on one charge\n- Benefit: No need to charge daily while traveling\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:fab-formula",
+    "file_path": "knowledge:content-formulas:fab-formula",
+    "llm_cache_list": [
+      "default:extract:dc35f0339837314ece2bd61b4fafead9",
+      "default:extract:c711850faf9e1064f5e7b831edfa448f"
+    ],
+    "create_time": 1778002078,
+    "update_time": 1778002096,
+    "_id": "chunk-376ce19608fd6f7974cce021cf830faf"
+  },
+  "chunk-23228893e740a725d6889fc2eaf5ba2b": {
+    "tokens": 134,
+    "content": "## 2. FAS Formula\n\n**Meaning:** Convert pain points into purchase intent by showing a solution.\n\n### Structure\n\n- **F / P – Problem:** Identify customer pain point\n- **A – Agitate:** Intensify the pain/problem\n- **S – Solve:** Present the solution\n\n### Best Use Cases\n\n- Ads\n- TikTok hooks\n- Facebook sales posts\n- Landing pages\n- Service marketing\n\n### Core Psychology\n\nPeople act faster to remove pain than to gain pleasure.\n\n### Example\n\n- Problem: Low engagement on social media\n- Agitate: Your brand looks invisible online\n- Solve: Use our content growth system\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:fas-formula",
+    "file_path": "knowledge:content-formulas:fas-formula",
+    "llm_cache_list": [
+      "default:extract:40c8939a0e339e0a3c8ea53226b2ded0",
+      "default:extract:de6511adb1d0038cecee2cc34b62b498"
+    ],
+    "create_time": 1778002104,
+    "update_time": 1778002114,
+    "_id": "chunk-23228893e740a725d6889fc2eaf5ba2b"
+  },
+  "chunk-1618a62f66a5bf53d57a2a56aff4da25": {
+    "tokens": 115,
+    "content": "## 3. BAB Formula\n\n**Meaning:** Show transformation from before to after.\n\n### Structure\n\n- **B – Before:** Current painful state\n- **A – After:** Desired future state\n- **B – Bridge:** Your product/service bridges the gap\n\n### Best Use Cases\n\n- Beauty\n- Fitness\n- Coaching\n- SaaS case studies\n- Reels/TikTok transformation content\n\n### Core Psychology\n\nPeople buy results and progress.\n\n### Example\n\nBefore: Messy finances\nAfter: Full control of money\nBridge: Budget tracking app\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:bab-formula",
+    "file_path": "knowledge:content-formulas:bab-formula",
+    "llm_cache_list": [
+      "default:extract:515a9e5a4b0f11104d9ad99281e96bb3",
+      "default:extract:16710a96b536e69bb89a06e9bf28dfae"
+    ],
+    "create_time": 1778002119,
+    "update_time": 1778002129,
+    "_id": "chunk-1618a62f66a5bf53d57a2a56aff4da25"
+  },
+  "chunk-a674389a050a3af7d6ef86952824ee81": {
+    "tokens": 95,
+    "content": "## 4. 4C Formula\n\n**Meaning:** High-quality writing standards.\n\n### Structure\n\n- **Clear:** Easy to understand\n- **Concise:** Short and direct\n- **Compelling:** Persuasive and engaging\n- **Credible:** Trustworthy with proof\n\n### Best Use Cases\n\n- All content writing\n- Brand communication\n- Captions\n- Threads posts\n- Website copy\n\n### Core Psychology\n\nConfused people do not buy.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:4c-formula",
+    "file_path": "knowledge:content-formulas:4c-formula",
+    "llm_cache_list": [
+      "default:extract:1e09f903f79e2c2d4b720eb3b45d94b2",
+      "default:extract:4774764dd509444964c28f44e0d2f600"
+    ],
+    "create_time": 1778002133,
+    "update_time": 1778002143,
+    "_id": "chunk-a674389a050a3af7d6ef86952824ee81"
+  },
+  "chunk-2728fcb241855085169f04bf28e99dff": {
+    "tokens": 108,
+    "content": "## 5. 4U Formula\n\n**Meaning:** Create irresistible headlines/hooks.\n\n### Structure\n\n- **Useful:** Valuable to audience\n- **Urgent:** Time-sensitive or immediate need\n- **Unique:** Different from others\n- **Ultra-specific:** Specific and concrete\n\n### Best Use Cases\n\n- TikTok hooks\n- Reels titles\n- Ad headlines\n- Email subjects\n- Threads openers\n\n### Core Psychology\n\nSpecific promises outperform vague claims.\n\n### Example\n\n3 ways to grow followers in 7 days\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:4u-formula",
+    "file_path": "knowledge:content-formulas:4u-formula",
+    "llm_cache_list": [
+      "default:extract:14d4d3e5982c50e4ff178434cd1c98e1",
+      "default:extract:940ee79b4c66d752404b2934fdc97762"
+    ],
+    "create_time": 1778002150,
+    "update_time": 1778002158,
+    "_id": "chunk-2728fcb241855085169f04bf28e99dff"
+  },
+  "chunk-9a6353c288dc09841f67aafc96c3dd75": {
+    "tokens": 138,
+    "content": "## 6. A FOREST Formula\n\n**Meaning:** Persuasive writing framework using rhetorical devices.\n\n### Structure\n\n- **A – Alliteration:** Repeated sounds\n- **F – Facts:** Truth/data\n- **O – Opinions:** Arguments/viewpoints\n- **R – Repetition:** Repeat key ideas\n- **E – Examples:** Examples/case studies\n- **S – Statistics:** Numbers/data\n- **T – Threes:** Use groups of three\n\n### Best Use Cases\n\n- Long-form sales pages\n- Landing pages\n- Speeches\n- Persuasive copy\n- Educational content\n\n### Core Psychology\n\nRepetition + proof + rhythm improve persuasion.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:a-forest-formula",
+    "file_path": "knowledge:content-formulas:a-forest-formula",
+    "llm_cache_list": [
+      "default:extract:552289dadfe85b94a735d53f6da726c9",
+      "default:extract:17f4250eb6efc09d2b97e188bff13ca0"
+    ],
+    "create_time": 1778002163,
+    "update_time": 1778002173,
+    "_id": "chunk-9a6353c288dc09841f67aafc96c3dd75"
+  },
+  "chunk-b9d8b56b62ba4006d34691e3a08c8b6d": {
+    "tokens": 100,
+    "content": "## 7. AIDA Formula\n\n**Meaning:** Classic conversion funnel copywriting model.\n\n### Structure\n\n- **A – Attention:** Get noticed\n- **I – Interest:** Build curiosity\n- **D – Desire:** Create want/need\n- **A – Action:** Ask for action\n\n### Best Use Cases\n\n- Ads\n- Sales pages\n- Product pages\n- Reels scripts\n- CTAs\n\n### Core Psychology\n\nPeople buy after emotional desire + clear next step.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:aida-formula",
+    "file_path": "knowledge:content-formulas:aida-formula",
+    "llm_cache_list": [
+      "default:extract:670a4c98f8770b3f28820a6891b41bcf",
+      "default:extract:ec3ee6b3a4917c4e9b167edc7c5a8fd8"
+    ],
+    "create_time": 1778002180,
+    "update_time": 1778002191,
+    "_id": "chunk-b9d8b56b62ba4006d34691e3a08c8b6d"
+  },
+  "chunk-2bdfa7df51d81cbf70ad08ced8717ed0": {
+    "tokens": 91,
+    "content": "## 8. 5 Objections Formula\n\n**Meaning:** Remove common buying resistance.\n\n### Structure\n\n- I don't have money\n- I don't have time\n- I don't like it\n- I don't trust it\n- I don't need it\n\n### Best Use Cases\n\n- Sales copy\n- Objection handling posts\n- FAQ content\n- Landing pages\n- Facebook conversion posts\n\n### Core Psychology\n\nSales happen when resistance is lowered.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:5-objections-formula",
+    "file_path": "knowledge:content-formulas:5-objections-formula",
+    "llm_cache_list": [
+      "default:extract:db7e11721fd6839fc253ac46515ff615",
+      "default:extract:8f8929bb1b7ea41c79d65d7459f2b546"
+    ],
+    "create_time": 1778002197,
+    "update_time": 1778002206,
+    "_id": "chunk-2bdfa7df51d81cbf70ad08ced8717ed0"
+  },
+  "chunk-c585de4e41f3180f073833748f3c0cf3": {
+    "tokens": 87,
+    "content": "## 9. 3 Reasons Why Formula\n\n**Meaning:** Build logic and trust through 3 answers.\n\n### Structure\n\n- Why is your product the best?\n- Why should I buy it?\n- Why should I trust you?\n\n### Best Use Cases\n\n- Comparison ads\n- Short-form video\n- Product pages\n- Carousel posts\n- Threads arguments\n\n### Core Psychology\n\nBuyers need confidence, value, trust.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:3-reasons-why-formula",
+    "file_path": "knowledge:content-formulas:3-reasons-why-formula",
+    "llm_cache_list": [
+      "default:extract:dab5f27422a7f4394e3b1b01c676ebda",
+      "default:extract:47a678ebd04d2d0da39657ba59805ba2"
+    ],
+    "create_time": 1778002212,
+    "update_time": 1778002222,
+    "_id": "chunk-c585de4e41f3180f073833748f3c0cf3"
+  },
+  "chunk-6a8090190a179e9e1b56f79157c0d204": {
+    "tokens": 88,
+    "content": "## 10. 4P Formula\n\n**Meaning:** Strong sales persuasion formula.\n\n### Structure\n\n- **Picture:** Show attractive vision/result\n- **Promise:** Make clear promise\n- **Prove:** Provide evidence\n- **Push:** CTA / urge action\n\n### Best Use Cases\n\n- Facebook ads\n- Sales posts\n- Landing pages\n- Product launches\n\n### Core Psychology\n\nVision + proof + urgency convert well.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:4p-formula",
+    "file_path": "knowledge:content-formulas:4p-formula",
+    "llm_cache_list": [
+      "default:extract:74fc9fb3ade49d7f8c137fb88404f0f1",
+      "default:extract:2c7e29d38fe61ce63a95c3e9ee9dd612"
+    ],
+    "create_time": 1778002229,
+    "update_time": 1778002240,
+    "_id": "chunk-6a8090190a179e9e1b56f79157c0d204"
+  },
+  "chunk-9874951f786ca8d1892fa17c49d46abc": {
+    "tokens": 83,
+    "content": "## 11. 3S Formula\n\n**Meaning:** Story-based persuasion.\n\n### Structure\n\n- **Star:** Main character\n- **Story:** Journey/conflict\n- **Solution:** Resolution using your offer\n\n### Best Use Cases\n\n- Storytelling posts\n- Founder stories\n- Facebook posts\n- Reels storytelling\n- Case studies\n\n### Core Psychology\n\nHumans remember stories more than claims.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:3s-formula",
+    "file_path": "knowledge:content-formulas:3s-formula",
+    "llm_cache_list": [
+      "default:extract:a6f3ed311c934d55f02ef90fe8ef9bb9",
+      "default:extract:673bc414613cb068d7e9e236fb35525f"
+    ],
+    "create_time": 1778002249,
+    "update_time": 1778002258,
+    "_id": "chunk-9874951f786ca8d1892fa17c49d46abc"
+  },
+  "chunk-005e60a57bc3b89aeee55cded3275c49": {
+    "tokens": 89,
+    "content": "## 12. 4A Formula\n\n**Meaning:** Brand action loop model.\n\n### Structure\n\n- **Aware:** Know the brand\n- **Attitude:** Build positive feeling\n- **Act:** Purchase/action\n- **Act Again:** Repeat purchase\n\n### Best Use Cases\n\n- Retention strategy\n- Brand campaigns\n- CRM content\n- Loyalty marketing\n\n### Core Psychology\n\nRepeat buyers are more valuable than first-time buyers.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:4a-formula",
+    "file_path": "knowledge:content-formulas:4a-formula",
+    "llm_cache_list": [
+      "default:extract:ec7c4b6d12c6c62ad2a962cfce366206",
+      "default:extract:477c4ab6d4418eb3e0dc1cae8f0b59c0"
+    ],
+    "create_time": 1778002264,
+    "update_time": 1778002275,
+    "_id": "chunk-005e60a57bc3b89aeee55cded3275c49"
+  },
+  "chunk-e1c66da303b8c01ba57d0720d2885887": {
+    "tokens": 97,
+    "content": "## 13. 5A Formula\n\n**Meaning:** Modern customer journey model (Philip Kotler).\n\n### Structure\n\n- **Awareness:** Know brand\n- **Appeal:** Feel attracted\n- **Ask:** Research and compare\n- **Action:** Buy\n- **Advocate:** Recommend brand\n\n### Best Use Cases\n\n- Full funnel campaigns\n- Community building\n- Brand ecosystems\n- Social proof systems\n\n### Core Psychology\n\nModern buyers research and share publicly.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:5a-formula",
+    "file_path": "knowledge:content-formulas:5a-formula",
+    "llm_cache_list": [
+      "default:extract:341736a27351d37c891f3d1869270db2",
+      "default:extract:63a7b99a747dc84af46f89883f7f6e0c"
+    ],
+    "create_time": 1778002283,
+    "update_time": 1778002295,
+    "_id": "chunk-e1c66da303b8c01ba57d0720d2885887"
+  },
+  "chunk-234ab256a973602e886fc1d5f5c01843": {
+    "tokens": 116,
+    "content": "## 14. APP Formula\n\n**Meaning:** Fast hook structure for modern content.\n\n### Structure\n\n- **Agree:** Show you understand their problem\n- **Promise:** Promise value/solution\n- **Preview:** Explain what they'll get\n\n### Best Use Cases\n\n- TikTok intros\n- Reels hooks\n- Blog intros\n- Threads opening posts\n- Email intros\n\n### Core Psychology\n\nPeople engage when they feel understood first.\n\n### Example\n\nStruggling to grow on Instagram?\nI'll show you a method that works.\nHere are 3 steps to start today.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:app-formula",
+    "file_path": "knowledge:content-formulas:app-formula",
+    "llm_cache_list": [
+      "default:extract:1a4d6a7e5afa9be3e379763b55d6c38d",
+      "default:extract:cf037aa3c8f4797123e4bf94a5d4a5ba"
+    ],
+    "create_time": 1778002303,
+    "update_time": 1778002317,
+    "_id": "chunk-234ab256a973602e886fc1d5f5c01843"
+  },
+  "chunk-3a204592fbffe6cfeb6984f733bccc40": {
+    "tokens": 71,
+    "content": "## Platform Mapping TikTok\n\n### Primary Formulas\n\n- 4U\n- AIDA\n- APP\n- BAB\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- FAS\n- 3S\n- FAB\n\n### Best For\n\n- Hooks\n- Retention\n- Fast education\n- Viral short-form content\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:platform-mapping-tiktok",
+    "file_path": "knowledge:content-formulas:platform-mapping-tiktok",
+    "llm_cache_list": [
+      "default:extract:5277c7fb1df55749da93d2f3ca1aa2e3",
+      "default:extract:c1788236d5652845852771e23c3fa5ae"
+    ],
+    "create_time": 1778002324,
+    "update_time": 1778002332,
+    "_id": "chunk-3a204592fbffe6cfeb6984f733bccc40"
+  },
+  "chunk-14aa9b8a6928b34255ea52ee4c3b45d2": {
+    "tokens": 81,
+    "content": "## Platform Mapping Facebook Post\n\n### Primary Formulas\n\n- BAB\n- AIDA\n- FAB\n- 3S\n- 5 Objections\n\n### Secondary Formulas\n\n- 4P\n- FAS\n- APP\n- 4C\n- 3 Reasons Why\n\n### Best For\n\n- Storytelling\n- Community engagement\n- Sales posts\n- Trust building\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:platform-mapping-facebook-post",
+    "file_path": "knowledge:content-formulas:platform-mapping-facebook-post",
+    "llm_cache_list": [
+      "default:extract:fedf658d7b107034e4d07f585c791931",
+      "default:extract:d75472aaf06986d02b730dd04e554f13"
+    ],
+    "create_time": 1778002334,
+    "update_time": 1778002343,
+    "_id": "chunk-14aa9b8a6928b34255ea52ee4c3b45d2"
+  },
+  "chunk-a74983159b5d9d60562b14b3efe79ed4": {
+    "tokens": 66,
+    "content": "## Platform Mapping Facebook Reel\n\n### Primary Formulas\n\n- 4U\n- AIDA\n- APP\n- BAB\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- FAS\n- 3S\n\n### Best For\n\n- Relatable short videos\n- Product demo reels\n- Fast conversions\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:platform-mapping-facebook-reel",
+    "file_path": "knowledge:content-formulas:platform-mapping-facebook-reel",
+    "llm_cache_list": [
+      "default:extract:d15f900bdd700a39e035eb40db7ccb38",
+      "default:extract:3878d0a1872a07b9076279ffb7b565ff"
+    ],
+    "create_time": 1778002345,
+    "update_time": 1778002353,
+    "_id": "chunk-a74983159b5d9d60562b14b3efe79ed4"
+  },
+  "chunk-3d3dbdb4018965a35bc831c46b628ef1": {
+    "tokens": 76,
+    "content": "## Platform Mapping Instagram Post\n\n### Primary Formulas\n\n- 4C\n- FAB\n- 4P\n- 5A\n- APP\n\n### Secondary Formulas\n\n- AIDA\n- BAB\n- FAS\n- 3 Reasons Why\n\n### Best For\n\n- Carousel education\n- Brand identity\n- Saveable content\n- Product showcase\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:platform-mapping-instagram-post",
+    "file_path": "knowledge:content-formulas:platform-mapping-instagram-post",
+    "llm_cache_list": [
+      "default:extract:fabc576313ae97d1a7b13d215fc1078f",
+      "default:extract:d27980878280f57446b326518c1a1fa8"
+    ],
+    "create_time": 1778002355,
+    "update_time": 1778002364,
+    "_id": "chunk-3d3dbdb4018965a35bc831c46b628ef1"
+  },
+  "chunk-310c209905e34b3117ff6c7a1bca1f83": {
+    "tokens": 70,
+    "content": "## Platform Mapping Instagram Reel\n\n### Primary Formulas\n\n- 4U\n- AIDA\n- APP\n- BAB\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- FAS\n- 3S\n- FAB\n\n### Best For\n\n- Aesthetic reels\n- Tips\n- Transformation content\n- Growth content\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:platform-mapping-instagram-reel",
+    "file_path": "knowledge:content-formulas:platform-mapping-instagram-reel",
+    "llm_cache_list": [
+      "default:extract:c6c425e3ebb1026541045f714629dbcb",
+      "default:extract:73ee09b3fa58b099208cb6723ef46f96"
+    ],
+    "create_time": 1778002366,
+    "update_time": 1778002375,
+    "_id": "chunk-310c209905e34b3117ff6c7a1bca1f83"
+  },
+  "chunk-329eaee1aec1b601d88beada37d0d6f0": {
+    "tokens": 72,
+    "content": "## Platform Mapping Threads Post\n\n### Primary Formulas\n\n- 4U\n- APP\n- BAB\n- 3S\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- AIDA\n- 4C\n- FAS\n\n### Best For\n\n- Opinions\n- Relatable thoughts\n- Mini storytelling\n- Community discussions\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:platform-mapping-threads-post",
+    "file_path": "knowledge:content-formulas:platform-mapping-threads-post",
+    "llm_cache_list": [
+      "default:extract:07bf801e5b768fa66b347fdee26edf88",
+      "default:extract:4e871504bd4c9d84d40a074667888d91"
+    ],
+    "create_time": 1778002377,
+    "update_time": 1778002386,
+    "_id": "chunk-329eaee1aec1b601d88beada37d0d6f0"
+  },
+  "chunk-a8f2b43caa2d3405de1738e3b7ba665f": {
+    "tokens": 44,
+    "content": "## Category Cross-Platform High Performance\n\nUse these formulas across any platform when you want maximum reach with minimum platform-specific tuning:\n\n- 4U\n- AIDA\n- BAB\n- APP\n- FAB\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:category-cross-platform-high-performance",
+    "file_path": "knowledge:content-formulas:category-cross-platform-high-performance",
+    "llm_cache_list": [
+      "default:extract:e99761f104853d94450d73e3d36bc5de",
+      "default:extract:561c2c0fa6f730ad9dd6c09bd9d65972"
+    ],
+    "create_time": 1778002388,
+    "update_time": 1778002394,
+    "_id": "chunk-a8f2b43caa2d3405de1738e3b7ba665f"
+  },
+  "chunk-4edcac76e8a788e729349103a465ed98": {
+    "tokens": 36,
+    "content": "## Category Hook Viral\n\nWhen the goal is to grab attention in the first 1–3 seconds:\n\n- 4U\n- APP\n- 3 Reasons Why\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:category-hook-viral",
+    "file_path": "knowledge:content-formulas:category-hook-viral",
+    "llm_cache_list": [
+      "default:extract:f4c95024afea5bc6cb03856a1b42dc92",
+      "default:extract:daaf40ad81be47db5ff5c50bdfbe2870"
+    ],
+    "create_time": 1778002395,
+    "update_time": 1778002400,
+    "_id": "chunk-4edcac76e8a788e729349103a465ed98"
+  },
+  "chunk-99f9e18b25926547f607c7f5bd862a27": {
+    "tokens": 27,
+    "content": "## Category Storytelling Trust\n\nWhen the goal is to build trust through narrative or vulnerability:\n\n- BAB\n- 3S\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:category-storytelling-trust",
+    "file_path": "knowledge:content-formulas:category-storytelling-trust",
+    "llm_cache_list": [
+      "default:extract:e3e57a7096ff795e7777fd6fa173fc2e",
+      "default:extract:473bb475b6c79a34001a6f06e6f696b9"
+    ],
+    "create_time": 1778002404,
+    "update_time": 1778002409,
+    "_id": "chunk-99f9e18b25926547f607c7f5bd862a27"
+  },
+  "chunk-3f0d06ee8de6aad13c1a75678a4a0bed": {
+    "tokens": 38,
+    "content": "## Category Conversion Sales\n\nWhen the goal is to drive purchase or signup:\n\n- AIDA\n- FAB\n- FAS\n- 4P\n- 5 Objections\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:category-conversion-sales",
+    "file_path": "knowledge:content-formulas:category-conversion-sales",
+    "llm_cache_list": [
+      "default:extract:5e6f2ed59e48c681f5594ac2bc90c445",
+      "default:extract:3c867cdce0fc603ca126862806b9ee69"
+    ],
+    "create_time": 1778002416,
+    "update_time": 1778002425,
+    "_id": "chunk-3f0d06ee8de6aad13c1a75678a4a0bed"
+  },
+  "chunk-4e6217cb2a117c34473893c4f28e6dca": {
+    "tokens": 33,
+    "content": "## Category Branding Audience Growth\n\nWhen the goal is to compound brand recognition over time:\n\n- 4C\n- 4A\n- 5A\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:category-branding-audience-growth",
+    "file_path": "knowledge:content-formulas:category-branding-audience-growth",
+    "llm_cache_list": [
+      "default:extract:e48666b9a0f7ad289e91d4505de04e09",
+      "default:extract:d4bb8117459da9dfc4669fc4f79cc62a"
+    ],
+    "create_time": 1778002429,
+    "update_time": 1778002434,
+    "_id": "chunk-4e6217cb2a117c34473893c4f28e6dca"
+  },
+  "chunk-e52cc3157adb787fd547aa055e28ed01": {
+    "tokens": 44,
+    "content": "## Category Low Priority Short Social\n\nAvoid these in short-form social content (too long-form / too strategic):\n\n- A FOREST\n- 4A\n- 5A (except brand strategy or Instagram post)",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:content-formulas:category-low-priority-short-social",
+    "file_path": "knowledge:content-formulas:category-low-priority-short-social",
+    "llm_cache_list": [
+      "default:extract:ed4efa5eb796ab25f688afa389094612",
+      "default:extract:5d823b1a1daaf656c9ed7dc0538eb562"
+    ],
+    "create_time": 1778002435,
+    "update_time": 1778002442,
+    "_id": "chunk-e52cc3157adb787fd547aa055e28ed01"
+  },
+  "chunk-11723b6048ec5837cdf583a0ee35c107": {
+    "tokens": 208,
+    "content": "## Save-bait vs Share-bait vs Comment-bait\n\n**Meaning:** Each engagement type rewards a different content style. Design the post for the action you want.\n\n### When to use\n\n- Anytime — pick the goal first, then the format\n- Don't try to optimize for all three at once\n\n### Examples\n\n- **Save-bait:** Reference checklists, frameworks, \"save this for later\" reminders, infographic carousels. Anything the viewer will want to revisit.\n- **Share-bait:** Memes, relatable observations, opinions that flatter the sharer's identity, political/cultural takes that \"needed to be said\".\n- **Comment-bait:** Questions, polls, controversial-but-positive opinions, \"tell me I'm wrong\" statements.\n\n### Why it works\n\nAlgorithms weight saves and shares much higher than likes because they signal repeat or amplifying value. A post with 100 saves outperforms a post with 1000 likes. Comments boost reach by inviting public discussion, which extends a post's lifespan.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait",
+    "file_path": "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait",
+    "llm_cache_list": [
+      "default:extract:164fc42ed8ca979c847537ed381cc54e",
+      "default:extract:08c1f9ba0dcf6613d5719ac508c852c6"
+    ],
+    "create_time": 1778002445,
+    "update_time": 1778002454,
+    "_id": "chunk-11723b6048ec5837cdf583a0ee35c107"
+  },
+  "chunk-912cd8a0b555494f59372c2fca0263a7": {
+    "tokens": 139,
+    "content": "## Question-Ending\n\n**Meaning:** End every post with a specific, easy-to-answer question to drive comments.\n\n### When to use\n\n- Carousel posts, long captions, threads\n- Anytime you want to boost the comment count\n\n### Example\n\n- Bad: \"Let me know what you think.\" (too vague)\n- Good: \"What's the worst piece of marketing advice you've ever followed?\"\n- Good: \"Carousel or reel — which one are you betting on for 2026?\"\n\n### Why it works\n\nSpecific questions reduce the cognitive load of replying. Vague open-ended prompts get scrolled past; concrete forced-choice or recall questions get answered. More comments = more reach.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:engagement-triggers:question-ending",
+    "file_path": "knowledge:engagement-triggers:question-ending",
+    "llm_cache_list": [
+      "default:extract:283baa9988b4699425e4c24061ba68ac",
+      "default:extract:3e23c6304fe1ed63cf73258ad30be67c"
+    ],
+    "create_time": 1778002460,
+    "update_time": 1778002471,
+    "_id": "chunk-912cd8a0b555494f59372c2fca0263a7"
+  },
+  "chunk-fa6d01b0d9969f0a679c601570d9bbab": {
+    "tokens": 156,
+    "content": "## Vulnerability Posts\n\n**Meaning:** Share a personal struggle, mistake, or admission that contradicts the polished social-media norm.\n\n### When to use\n\n- Personal brand accounts\n- Coaches, founders, creators building thought leadership\n- Sparingly — overuse becomes performative\n\n### Example\n\n\"I burned out 3 times this year. Here's what I'd do differently.\"\n\"My first 6 months as a founder were a complete failure. I didn't make a single sale.\"\n\"I almost deleted my account last week. Here's why I didn't.\"\n\n### Why it works\n\nVulnerability triggers parasocial bonding — followers feel they know you personally. This drives saves (people return to read more) and shares (\"you have to read this\"). It also raises trust, which compounds over months.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:engagement-triggers:vulnerability-posts",
+    "file_path": "knowledge:engagement-triggers:vulnerability-posts",
+    "llm_cache_list": [
+      "default:extract:3f704603984eb6c8da0294c11b2a96f8",
+      "default:extract:3dfd2e280c44d6823de2105cd43d293d"
+    ],
+    "create_time": 1778002478,
+    "update_time": 1778002486,
+    "_id": "chunk-fa6d01b0d9969f0a679c601570d9bbab"
+  },
+  "chunk-c4e63a16b538b4a79b6435793d79695f": {
+    "tokens": 138,
+    "content": "## Controversial-but-Positive\n\n**Meaning:** Take an opinion that splits your audience without being mean. The goal is debate, not trolling.\n\n### When to use\n\n- Established accounts with a defined audience\n- Topics where conventional wisdom is weak\n\n### Example\n\n\"Niching down is overrated for the first 100 followers.\"\n\"Cold outreach is more honest than content marketing.\"\n\"Most morning routines are productivity theater.\"\n\n### Why it works\n\nDisagreement drives comments more than agreement. People reply to push back, defend their view, or signal allegiance. The \"but-positive\" constraint avoids the brand damage of pure rage-bait while still capturing the reach benefit of controversy.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:engagement-triggers:controversial-but-positive",
+    "file_path": "knowledge:engagement-triggers:controversial-but-positive",
+    "llm_cache_list": [
+      "default:extract:b56e9d4d35e2540ec312f09a0ef0d780",
+      "default:extract:cbbf52470d8f23ac229581d6f41d2c86"
+    ],
+    "create_time": 1778002492,
+    "update_time": 1778002500,
+    "_id": "chunk-c4e63a16b538b4a79b6435793d79695f"
+  },
+  "chunk-46d40cf92118325a384f85788dc29e74": {
+    "tokens": 145,
+    "content": "## Insider Knowledge\n\n**Meaning:** Frame content as \"what nobody tells you\" or \"industry secrets\". Implies the reader is now in-the-know.\n\n### When to use\n\n- Niche-specific educational content\n- Saveable carousels and threads\n- Audiences hungry for shortcuts\n\n### Example\n\n\"What my first agency boss taught me that nobody talks about.\"\n\"5 things VCs check before they invest — but won't tell you.\"\n\"The dirty secret of every viral creator: they're all using this tool.\"\n\n### Why it works\n\nStatus: knowing something others don't is socially valuable. Curiosity: people click on hidden information. Saves: insider knowledge feels worth bookmarking, even when the actual content is mundane.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:engagement-triggers:insider-knowledge",
+    "file_path": "knowledge:engagement-triggers:insider-knowledge",
+    "llm_cache_list": [
+      "default:extract:84931f06789c47f85896038650723567",
+      "default:extract:080e97c1ea38f40d7d23daa2ded82145"
+    ],
+    "create_time": 1778002504,
+    "update_time": 1778002514,
+    "_id": "chunk-46d40cf92118325a384f85788dc29e74"
+  },
+  "chunk-0a811792f6c6bb55ab55b2a2d8a2f84c": {
+    "tokens": 196,
+    "content": "## Listicle / Carousel Anatomy\n\n**Meaning:** Structure a multi-slide post as: hook slide + 4–7 value slides + CTA slide. Each slide must earn the next swipe.\n\n### When to use\n\n- Educational content\n- Instagram and Facebook carousels\n- LinkedIn slideshow posts\n\n### Structure\n\n- **Slide 1 (Hook):** Numbered promise + bold visual + \"swipe to see\"\n- **Slides 2 to N–1:** One idea per slide, big text, minimal decoration\n- **Last slide (CTA):** \"Save this for later\" + a single follow-up action (\"Follow @x for more\" / \"Comment your favorite\")\n\n### Why it works\n\nEach swipe is a micro-commitment that signals high engagement. The platform measures swipe-through-rate and uses it as a quality proxy. A carousel that holds attention through 7 slides outperforms a single post 3-5x in reach.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:engagement-triggers:listicle-carousel-anatomy",
+    "file_path": "knowledge:engagement-triggers:listicle-carousel-anatomy",
+    "llm_cache_list": [
+      "default:extract:7417b01724b3be7150db487041902db9",
+      "default:extract:c4f629df7d14857f4a0ca07eb75ba91d"
+    ],
+    "create_time": 1778002520,
+    "update_time": 1778002531,
+    "_id": "chunk-0a811792f6c6bb55ab55b2a2d8a2f84c"
+  },
+  "chunk-d1df8b74b30a35c1c95f01e1998097a2": {
+    "tokens": 208,
+    "content": "## Algorithm-Friendly Cadence\n\n**Meaning:** Posting frequency that the platform's ranker rewards without flooding your audience.\n\n### Guidance\n\n- **Instagram:** 1–2 posts/day max in feed, plus 2–4 stories. Posting more often dilutes reach per post.\n- **TikTok:** 3–5 posts/day during ramp-up; the algorithm rewards velocity but penalizes low-quality spam after ~5 posts/day.\n- **Facebook:** 1–3 posts/day for pages. Facebook deprioritizes back-to-back posts from the same page.\n- **Threads:** 3–7 posts/day. Threads is conversational and rewards activity.\n- **LinkedIn:** 1 post/day max. Quality over frequency; posts compound over a 24–48h window.\n\n### Why it works\n\nEach platform has internal pacing rules to avoid feed spam. Posting above the threshold causes the algorithm to suppress the second/third post to protect the user experience. Posting below the threshold means lost compounding from algorithmic learning.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:engagement-triggers:algorithm-friendly-cadence",
+    "file_path": "knowledge:engagement-triggers:algorithm-friendly-cadence",
+    "llm_cache_list": [
+      "default:extract:603a162c3863365a525796594b324f32",
+      "default:extract:d7ecc637a5d759700ad636379fca02ed"
+    ],
+    "create_time": 1778002537,
+    "update_time": 1778002546,
+    "_id": "chunk-d1df8b74b30a35c1c95f01e1998097a2"
+  },
+  "chunk-ad567cc337e56f77d96c7671a22f0986": {
+    "tokens": 212,
+    "content": "## Golden Hour\n\n**Meaning:** The first 60 minutes after posting determines the post's overall reach. Maximize early engagement.\n\n### When to use\n\n- Every post — but most aggressively for content you've invested heavily in\n\n### Tactics\n\n- Post when your audience is most active (check the platform's analytics tab for your specific peak times — often 7–9 AM or 7–10 PM in the audience's timezone)\n- Pin the post to your profile during the first hour to boost visibility for profile visitors\n- Reply to every comment in the first 30 minutes to signal activity to the ranker\n- Share to Stories, send to a small group of supporters, post in relevant communities — anything to seed early engagement\n\n### Why it works\n\nMost platform rankers use early engagement velocity as the primary distribution signal. A post that gets 100 engagements in the first hour will be shown to 10x the audience of a post that gets 100 engagements over 24 hours. The ranker treats early velocity as evidence of quality.",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:engagement-triggers:golden-hour",
+    "file_path": "knowledge:engagement-triggers:golden-hour",
+    "llm_cache_list": [
+      "default:extract:4c8de406e083cd66449d6a36cc69890a",
+      "default:extract:8e684f61ec7b3ece044fa2169a8a296a"
+    ],
+    "create_time": 1778002551,
+    "update_time": 1778002559,
+    "_id": "chunk-ad567cc337e56f77d96c7671a22f0986"
+  },
+  "chunk-5de24af04a6e5aa3cc721697b9b37edc": {
+    "tokens": 134,
+    "content": "## When To Use Branded Style\n\n**Meaning:** Default for everyday posts. Pick this when neither pure-vibe (creative) nor sales-flyer (marketing) is right.\n\n### Best fit\n- Tip / advice posts (\"3 things you should know about X\")\n- News / updates / announcements (non-promotional)\n- Storytelling posts with a hook\n- Industry insights, opinion takes\n- Engagement-bait questions paired with a visual\n- Anything when the user has not specified a style\n\n### Wrong fit\n- Behind-the-scenes mood pieces with no message → use `creative`\n- Discount / launch / limited-time offer → use `marketing`\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-branded:when-to-use-branded-style",
+    "file_path": "knowledge:image-design-branded:when-to-use-branded-style",
+    "llm_cache_list": [
+      "default:extract:3611ad9e758f4ae9d4420cc8484ef152",
+      "default:extract:63e10ac3127fa13528f26a221ad7b453"
+    ],
+    "create_time": 1778002563,
+    "update_time": 1778002572,
+    "_id": "chunk-5de24af04a6e5aa3cc721697b9b37edc"
+  },
+  "chunk-007a665f6654a78bca0fd2f1f27d50b2": {
+    "tokens": 141,
+    "content": "## Branded Composition Rules\n\n**Meaning:** Strong photographic / illustrative composition first, brand layer second.\n\n### Apply\n- **One hero subject** plus space for one short headline\n- **Headline-safe area:** Top third or bottom third of the frame should be visually quiet (sky, surface, gradient, blurred background) so headline text sits readably\n- **Rule of thirds** for the subject; do not center\n- **Aspect ratio:** 1:1 for feed (default), 4:5 for IG portrait, 9:16 for reel/story covers, 16:9 for FB cover\n- **Mobile-first.** Subject must be recognizable at 200px wide\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-branded:branded-composition-rules",
+    "file_path": "knowledge:image-design-branded:branded-composition-rules",
+    "llm_cache_list": [
+      "default:extract:fc41fe68717c0013a61fe3444483e17f",
+      "default:extract:85e32f246bfd83ed310700419f8dc3a9"
+    ],
+    "create_time": 1778002575,
+    "update_time": 1778002583,
+    "_id": "chunk-007a665f6654a78bca0fd2f1f27d50b2"
+  },
+  "chunk-b5981bf8a153ad8ee40e4b54bc70f435": {
+    "tokens": 274,
+    "content": "## Branded Text Rules\n\n**Meaning:** One short headline, optionally one short subhead. Never a full text block, never CTAs, never contact info.\n\n### Apply\n- **One headline** of 3–8 words. Examples: *\"Your camera, smarter.\"* / *\"Trick #2: light from the side.\"* / *\"5 things every creator misses.\"*\n- **Optional subhead** of 4–10 words for context, sitting smaller below the headline\n- **No body copy.** No paragraphs. No bullet lists\n- **No CTA buttons.** (\"Shop Now\", \"Learn More\" → that is `marketing`)\n- **No phone / email / website on the image.** Contact info lives only in the caption\n- **Type hierarchy:**\n  - Headline: 60–80pt (on a 1080×1080 canvas)\n  - Subhead: 24–32pt\n  - Both top-aligned or bottom-aligned, never floating mid-image\n- **Font:** Brand display font for headline; clean sans-serif for subhead. Only ONE font family per image (use weight + size for hierarchy)\n- **Contrast:** Text must score WCAG AA against its background — dark text on light, light text on dark, never gray on gray\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-branded:branded-text-rules",
+    "file_path": "knowledge:image-design-branded:branded-text-rules",
+    "llm_cache_list": [
+      "default:extract:808202733282643967ccb8c3cde741b8",
+      "default:extract:c4ecd43b0183881dd40ff0dc20811e45"
+    ],
+    "create_time": 1778002587,
+    "update_time": 1778002593,
+    "_id": "chunk-b5981bf8a153ad8ee40e4b54bc70f435"
+  },
+  "chunk-2143f392f169f3b590cc0dd33b9ebfda": {
+    "tokens": 128,
+    "content": "## Branded Brand Presence\n\n**Meaning:** Brand mark is visible but does not dominate.\n\n### Apply\n- **Wordmark or logo** in one corner (top-left or bottom-right preferred), 6–10% of frame width\n- **Brand color accent** somewhere in the frame — a stripe, a button shape, an underline under the headline — to repeat brand identity\n- **No tagline lockup** — just the mark\n- **No \"Follow @handle\"** banner\n- **Brand consistency check:** the image should be recognizable as YOUR brand from a 500ms glance, before any text is read\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-branded:branded-brand-presence",
+    "file_path": "knowledge:image-design-branded:branded-brand-presence",
+    "llm_cache_list": [
+      "default:extract:bcef8a0e4f53b0a7e71edc58032f8d84",
+      "default:extract:9d7742dc78658bcc2a1ab2403b887304"
+    ],
+    "create_time": 1778002594,
+    "update_time": 1778002603,
+    "_id": "chunk-2143f392f169f3b590cc0dd33b9ebfda"
+  },
+  "chunk-20dd2eeadb182ea661fb96db38ceefbc": {
+    "tokens": 140,
+    "content": "## Branded Color & Lighting\n\n**Meaning:** Pull palette + lighting from the brand identity (RAG'd from past posts). Branded posts should look like they belong in the same grid as everything else.\n\n### Apply\n- **Palette:** Pull primary color from page profile / past-post reference images. Use 2–3 colors max\n- **Lighting:** Match the brand's typical mood. Warm + natural for lifestyle brands, cool + clean for tech, high-contrast for bold/edgy brands\n- **Headline color:** brand primary OR pure white/black for max readability over photography\n- **Background:** photo, illustration, or solid brand color — not a stock gradient\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-branded:branded-color-lighting",
+    "file_path": "knowledge:image-design-branded:branded-color-lighting",
+    "llm_cache_list": [
+      "default:extract:7dc4f6b6bbf5c6be57ef0bf538ef4b65",
+      "default:extract:d747c6dda96e8ffd6a1e3f51f6af4daa"
+    ],
+    "create_time": 1778002607,
+    "update_time": 1778002616,
+    "_id": "chunk-20dd2eeadb182ea661fb96db38ceefbc"
+  },
+  "chunk-19ff6b4cd2b981c4e299f73f1969442a": {
+    "tokens": 195,
+    "content": "## Branded Layout Patterns\n\n**Meaning:** Three reliable patterns work for ~80% of branded posts. Use one, do not invent.\n\n### Apply\n\n**Pattern A — Top-Title Photo**\n- Top third: brand color or white block + headline\n- Bottom two-thirds: hero photo\n- Brand mark: bottom-right corner\n- Best for: tip posts, news\n\n**Pattern B — Bottom-Title Photo**\n- Top two-thirds: hero photo\n- Bottom third: brand color block + headline + subhead\n- Brand mark: top-left or in the bottom block\n- Best for: storytelling, lifestyle-with-message\n\n**Pattern C — Overlay-Title Photo**\n- Full-bleed photo with a subtle dark gradient at top OR bottom\n- Headline sits over the gradient area, full-bleed safe\n- Brand mark: opposite corner from headline\n- Best for: editorial-feel posts, when the photo is too good to crop",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-branded:branded-layout-patterns",
+    "file_path": "knowledge:image-design-branded:branded-layout-patterns",
+    "llm_cache_list": [
+      "default:extract:8597c933b4c697edbddbb29c6c3ce47c",
+      "default:extract:dfa31f6838e09b9082f4e369ba4e1c1a"
+    ],
+    "create_time": 1778002620,
+    "update_time": 1778002627,
+    "_id": "chunk-19ff6b4cd2b981c4e299f73f1969442a"
+  },
+  "chunk-68ba12ae5ff3f0aecb6e23aa8381dd83": {
+    "tokens": 127,
+    "content": "## When To Use Creative Style\n\n**Meaning:** Pick this style when the goal is brand vibe, emotional connection, or mood — not conversion or education.\n\n### Best fit\n- Behind-the-scenes glimpses, team moments, brand storytelling\n- Lifestyle / aspirational imagery\n- Brand-vibe posts (no specific product CTA)\n- Photography-led brands (food, fashion, travel, fitness)\n- Trending-format participation (memes, cultural moments)\n\n### Wrong fit\n- Product launches with feature claims → use `marketing`\n- Tip / list posts → use `branded`\n- Sales / discount announcements → use `marketing`\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-creative:when-to-use-creative-style",
+    "file_path": "knowledge:image-design-creative:when-to-use-creative-style",
+    "llm_cache_list": [
+      "default:extract:b065312eb21634ec1fb3afd4d5388658",
+      "default:extract:1eae7ebe6df6b486ab27be4f18c87513"
+    ],
+    "create_time": 1778002630,
+    "update_time": 1778002640,
+    "_id": "chunk-68ba12ae5ff3f0aecb6e23aa8381dd83"
+  },
+  "chunk-f221ba7743d1dca6e150702038ffe4cc": {
+    "tokens": 164,
+    "content": "## Creative Composition Rules\n\n**Meaning:** Treat the image like a single editorial photograph. One subject, strong composition, atmosphere over information.\n\n### Apply\n- **Single hero subject** — one clear focal point, not a crowded layout\n- **Rule of thirds** — subject sits on a one-third intersection, not centered\n- **Negative space** — let the subject breathe; do not fill every pixel\n- **Cinematic framing** — shallow depth of field, leading lines, layered foreground/background\n- **Natural lighting** — golden hour, window light, soft diffused; avoid flat overhead light\n- **Aspect ratio** — 1:1 for feed, 4:5 for IG portrait, 9:16 for reels/stories. Marketing-style 16:9 is rarely correct here\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-creative:creative-composition-rules",
+    "file_path": "knowledge:image-design-creative:creative-composition-rules",
+    "llm_cache_list": [
+      "default:extract:319cbbcdce1816c6a83786133cc25f3f",
+      "default:extract:a2d314a17e3c9dde924248e21a57d8eb"
+    ],
+    "create_time": 1778002644,
+    "update_time": 1778002653,
+    "_id": "chunk-f221ba7743d1dca6e150702038ffe4cc"
+  },
+  "chunk-c22796214eab5ad0c81668abff16d0e9": {
+    "tokens": 169,
+    "content": "## Creative Text Rules\n\n**Meaning:** The image should be readable WITHOUT text. Any text on the image is a constraint, not a feature.\n\n### Apply\n- **No text by default.** The caption carries copy\n- **Allowed exceptions:** A single short word/phrase as artistic typography (e.g., a title like \"Sunday.\" or \"On the road\"), under 5 words, treated as a design element not a marketing claim\n- **No headline + body + CTA stacks** — that is `marketing` territory\n- **No contact info on the image** — phone, email, website never appear here. They live in the caption (and only when the post warrants it)\n- **No logo lockup with tagline** — at most a small subtle wordmark in a corner; never the full brand block\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-creative:creative-text-rules",
+    "file_path": "knowledge:image-design-creative:creative-text-rules",
+    "llm_cache_list": [
+      "default:extract:5e09f931e60dc726b57892c0fe9d80a9",
+      "default:extract:672c2777d4c50b4912c75ec59825878e"
+    ],
+    "create_time": 1778002658,
+    "update_time": 1778002667,
+    "_id": "chunk-c22796214eab5ad0c81668abff16d0e9"
+  },
+  "chunk-7b0d7722e8fcfa82a6ba972838b0d9ea": {
+    "tokens": 166,
+    "content": "## Creative Color & Mood\n\n**Meaning:** Palette is dictated by the brand identity from the page profile, not invented per post.\n\n### Apply\n- **Pull palette from past posts** — use the RAG'd reference images to lock palette\n- **2–3 colors max** — limited palette feels intentional\n- **Mood signals:**\n  - Warm tones (golden, amber) → cozy, nostalgic, food, lifestyle\n  - Cool tones (blue, teal, slate) → tech, premium, trustworthy\n  - High saturation → energetic, youthful, bold\n  - Desaturated / muted → editorial, timeless, premium\n- **Match the brand mood from the profile.** A wellness brand should not get a high-contrast neon image; a tech brand should not get a watercolor pastel image\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-creative:creative-color-mood",
+    "file_path": "knowledge:image-design-creative:creative-color-mood",
+    "llm_cache_list": [
+      "default:extract:047e38347ce973dd3e3d14e2921fef13",
+      "default:extract:5b0532628859af12beb7f0d5895eaf85"
+    ],
+    "create_time": 1778002671,
+    "update_time": 1778002679,
+    "_id": "chunk-7b0d7722e8fcfa82a6ba972838b0d9ea"
+  },
+  "chunk-05c801375004ec513d4e8096533dc185": {
+    "tokens": 131,
+    "content": "## Creative Brand Presence\n\n**Meaning:** Brand is felt, not displayed. The viewer should know it is your brand from the visual style alone.\n\n### Apply\n- **No on-image logo** by default. If the brand logo is included, it is small (under 8% of frame), in a corner, low-contrast against the background\n- **Brand colors visible** in palette, not as labels\n- **Recognizable signature elements** if the brand has them (a recurring prop, a specific filter, a typeface used as artistic typography only)\n- **No frames, badges, or banners** — those are `marketing` patterns",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-creative:creative-brand-presence",
+    "file_path": "knowledge:image-design-creative:creative-brand-presence",
+    "llm_cache_list": [
+      "default:extract:dde024d99c140e12a6e2fb091a73c648",
+      "default:extract:0bd0ff08805790c7d6df73c3a7123746"
+    ],
+    "create_time": 1778002681,
+    "update_time": 1778002690,
+    "_id": "chunk-05c801375004ec513d4e8096533dc185"
+  },
+  "chunk-8fde58ed6d6a1555100e83cef72d633d": {
+    "tokens": 139,
+    "content": "## When To Use Marketing Style\n\n**Meaning:** Pick this style when the post has a specific commercial goal and the image must close the loop on its own.\n\n### Best fit\n- Product launches, new arrivals\n- Sales / discounts / limited-time offers\n- Service offerings (\"Book a free consultation\")\n- Event announcements (date + venue + RSVP link)\n- Lead magnets (\"Download the free guide\")\n- B2B service ads\n- Direct-response posts (ROI is measured in clicks/replies)\n\n### Wrong fit\n- Mood / lifestyle posts → use `creative`\n- Educational / engagement posts → use `branded`\n- Storytelling without a CTA → use `branded`\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-marketing:when-to-use-marketing-style",
+    "file_path": "knowledge:image-design-marketing:when-to-use-marketing-style",
+    "llm_cache_list": [
+      "default:extract:63f8118a1e2ea447ef70b7bd9ca357f9",
+      "default:extract:4fb76ffcf70a287adcd353c2485ecb43"
+    ],
+    "create_time": 1778002695,
+    "update_time": 1778002708,
+    "_id": "chunk-8fde58ed6d6a1555100e83cef72d633d"
+  },
+  "chunk-bff89de66eb11452e6ac58c20aabe664": {
+    "tokens": 242,
+    "content": "## Marketing Composition Rules\n\n**Meaning:** Layout for fast comprehension. The viewer decides \"is this for me?\" in under one second.\n\n### Apply\n- **F-pattern reading order.** Top-left → top-right → middle → bottom-right (CTA goes bottom-right)\n- **Visual hierarchy in 4 layers:**\n  1. **Headline** (largest, 3–6 words, the value prop)\n  2. **Hero visual** (product / outcome / before-after)\n  3. **Supporting copy** (subhead, 1–2 short lines, the proof or detail)\n  4. **CTA + brand block** (action button + logo + contact line)\n- **Aspect ratio:** 1:1 for feed (universal), 4:5 for IG portrait, 9:16 for reel/story (vertical CTAs), 16:9 for FB cover / LinkedIn ad\n- **Mobile-first.** Headline must be readable at 200px wide\n- **Safe area:** keep bottom 10% (FB/IG UI overlays) and top 10% (story UI) of the frame clear of critical text\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-marketing:marketing-composition-rules",
+    "file_path": "knowledge:image-design-marketing:marketing-composition-rules",
+    "llm_cache_list": [
+      "default:extract:4c0cc46533a5b6ff0582d428dda5020c",
+      "default:extract:fac0f7dfff3fa58acb3ff6343f75acf3"
+    ],
+    "create_time": 1778002715,
+    "update_time": 1778002723,
+    "_id": "chunk-bff89de66eb11452e6ac58c20aabe664"
+  },
+  "chunk-05adc5964c57d4756f5f71a57d0ebe78": {
+    "tokens": 324,
+    "content": "## Marketing Text Rules\n\n**Meaning:** This is the only style where the image carries multiple text layers. Hierarchy must be obvious at a glance.\n\n### Apply\n\n**Headline (mandatory)**\n- 3–6 words maximum\n- The value proposition or the offer (\"50% off all lenses\", \"Book your shoot today\")\n- 80–120pt on a 1080×1080 canvas\n- Brand display font, weight: bold\n\n**Subhead (optional)**\n- 4–10 words\n- The proof, the detail, the qualifier (\"Free shipping over $50\", \"Only 12 spots left\")\n- 28–36pt\n- Sans-serif, regular weight\n\n**CTA button (mandatory)**\n- 1–3 words (\"Shop Now\", \"Book Today\", \"Get Started\", \"Order Online\")\n- Drawn as an actual button shape — rounded rectangle, brand-color fill, white text\n- Bottom-right or bottom-center\n- 32–40pt text inside\n\n**Contact line (mandatory)**\n- The page's website + at least one of phone / email\n- Format: `meai.website  ·  hello@meai.com  ·  +84 ...` (use middle-dot or pipe separator)\n- 16–20pt, sits at the very bottom OR right under the CTA\n- Lower contrast OK (gray-on-white is fine — this is reference info, not the lead)\n\n**Total text limit:** Roughly 25 words across headline + subhead + CTA + contact. Beyond that, viewers stop reading.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-marketing:marketing-text-rules",
+    "file_path": "knowledge:image-design-marketing:marketing-text-rules",
+    "llm_cache_list": [
+      "default:extract:5cb33ad8696f8ec58a4ffebda801b5db",
+      "default:extract:28201b0a62530f5155c0017cbc7dfee2"
+    ],
+    "create_time": 1778002725,
+    "update_time": 1778002735,
+    "_id": "chunk-05adc5964c57d4756f5f71a57d0ebe78"
+  },
+  "chunk-a39d222abd2dee960e115829bbbbd675": {
+    "tokens": 148,
+    "content": "## Marketing Brand Presence\n\n**Meaning:** Brand must be unmistakable. Logo + name + colors + tagline if present.\n\n### Apply\n- **Brand logo lockup** — full logo with wordmark, top-left or paired with the CTA. 12–18% of frame width\n- **Brand colors enforced** — primary brand color must appear in the CTA button AND somewhere else (a stripe, the headline color, an underline). Repetition signals intentionality\n- **Tagline allowed** — a 3–6 word brand tagline can sit under the logo (small)\n- **Consistent across the marketing campaign** — if running a series, the logo placement and color block stay in the same spot across all images\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-marketing:marketing-brand-presence",
+    "file_path": "knowledge:image-design-marketing:marketing-brand-presence",
+    "llm_cache_list": [
+      "default:extract:f574290247bd34312f47dc1d8e6ca767",
+      "default:extract:0582f750d4aa7e21cd4495d1d3f6b34b"
+    ],
+    "create_time": 1778002739,
+    "update_time": 1778002750,
+    "_id": "chunk-a39d222abd2dee960e115829bbbbd675"
+  },
+  "chunk-e56b4d29cd042b4575cf88d57c1e4b53": {
+    "tokens": 130,
+    "content": "## Marketing Visual Anchors\n\n**Meaning:** The hero visual must support the offer, not distract from it.\n\n### Apply\n- **Product shot:** clean background, single product, well-lit, NOT a busy lifestyle scene\n- **Before/after:** split-frame, clear labels above each side\n- **Outcome shot:** the customer holding/using the product, smiling, eye contact with camera (high-trust signal)\n- **Discount badge / sticker:** for sales — circular badge top-right with \"-50%\" or \"FREE\" — high contrast, brand color\n- **Avoid:** stock photography that does not feature the actual product/service\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-marketing:marketing-visual-anchors",
+    "file_path": "knowledge:image-design-marketing:marketing-visual-anchors",
+    "llm_cache_list": [
+      "default:extract:a2dd6ee49f37dca868bd1338689c309e",
+      "default:extract:e09d11f2b19b0df9039c5dbcfdfa5a73"
+    ],
+    "create_time": 1778002754,
+    "update_time": 1778002764,
+    "_id": "chunk-e56b4d29cd042b4575cf88d57c1e4b53"
+  },
+  "chunk-11a6649b61c186427fcd108409f7c6f2": {
+    "tokens": 135,
+    "content": "## Marketing Color & Contrast\n\n**Meaning:** High contrast wins clicks. Subtlety loses to noise in the feed.\n\n### Apply\n- **High-contrast text-to-background** — minimum WCAG AAA (7:1) for headlines\n- **CTA button must POP** — pick the color with highest contrast against the background, NOT the most \"on brand\" pastel\n- **Brand color discipline** — 2–3 colors max, but allow one accent color that does not appear in the brand kit if it boosts CTA contrast\n- **Avoid pastels for headlines** — soft palettes belong in `creative` and `branded`, not `marketing`\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-marketing:marketing-color-contrast",
+    "file_path": "knowledge:image-design-marketing:marketing-color-contrast",
+    "llm_cache_list": [
+      "default:extract:ee00a2b459d961dc46dbd413ac1ac903",
+      "default:extract:8b6e91d8665fca6c58680f64d27ef2ce"
+    ],
+    "create_time": 1778002769,
+    "update_time": 1778002776,
+    "_id": "chunk-11a6649b61c186427fcd108409f7c6f2"
+  },
+  "chunk-42570b285779ca83fc44089b5d4c463f": {
+    "tokens": 141,
+    "content": "## Marketing Trust Signals (Optional Add-Ons)\n\n**Meaning:** Marketing posts win on credibility. Sprinkle one or two signals if they fit.\n\n### Apply (pick at most 2)\n- **Social proof:** \"★★★★★ 4.9/5 from 2,400 reviews\"\n- **Scarcity:** \"Only 12 left\" / \"Ends Sunday\"\n- **Guarantee:** \"30-day money back\" / \"Free returns\"\n- **Authority:** \"As featured in [publication]\" / \"Used by 10,000+ creators\"\n- Place above or below the CTA, smaller than the CTA itself\n- Do not stack more than 2 — too many trust signals reads as desperate",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons",
+    "file_path": "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons",
+    "llm_cache_list": [
+      "default:extract:aad5e6d318cd0c21d1f06448f887cd64",
+      "default:extract:73279387f7ef8da0725144b28e2176af"
+    ],
+    "create_time": 1778002779,
+    "update_time": 1778002789,
+    "_id": "chunk-42570b285779ca83fc44089b5d4c463f"
+  },
+  "chunk-b2f1e58b563431de779523f5c6b88ac3": {
+    "tokens": 312,
+    "content": "## Facebook\n\n**Primary signals:** Meaningful interactions > watch time > engagement velocity > recency\n\n### What the ranker rewards\n\n- **Meaningful interactions:** Comments and replies count more than likes. Long comments count more than short ones. Replying to your own comments amplifies further.\n- **Native uploads beat external links:** Videos uploaded directly to FB get 5–10x the reach of YouTube link reposts. Same for image uploads vs link previews.\n- **FB Reels:** Watch-completion rate, replays, and shares dominate. The first 3 seconds determine whether the reel enters wider distribution.\n- **Page posts vs personal posts:** Page posts have lower organic reach (~5%) by default. Boosting reach requires either ad spend or strong meaningful-interaction signals.\n- **Group posts:** Often outperform page posts in organic reach if the group is active.\n\n### What gets penalized\n\n- Engagement bait (\"comment YES if you agree\") — Facebook's classifier flags these and suppresses\n- Clickbait headlines that don't match the link content\n- Re-posts of viral content from other accounts (low original-content score)\n- Links to news / political content for non-news pages\n\n### Tactical takeaways\n\n- End every post with a specific, non-bait question\n- Upload videos natively, not as YouTube embeds\n- Reply to every comment in the first hour\n- For Reels: hook in first 1.5 seconds, target 90%+ completion on short (<15s) clips\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:platform-algorithm-signals:facebook",
+    "file_path": "knowledge:platform-algorithm-signals:facebook",
+    "llm_cache_list": [
+      "default:extract:596e176d3b2e942a5858ad6179c69848",
+      "default:extract:6763482c94bc1bd53e8c722ba132732e"
+    ],
+    "create_time": 1778002795,
+    "update_time": 1778002806,
+    "_id": "chunk-b2f1e58b563431de779523f5c6b88ac3"
+  },
+  "chunk-099fa493d309316ed02f5deace628766": {
+    "tokens": 328,
+    "content": "## Instagram\n\n**Primary signals:** Saves > Shares > Comments > Likes; for Reels: watch-loops + completion\n\n### What the ranker rewards\n\n- **Saves:** The strongest signal in the feed algorithm. Carousels are heavily favored because they generate more saves per impression than single-image posts.\n- **Shares (DMs and Stories):** Second-strongest signal. Posts shared via DM signal \"this is so good my friend needs to see it.\"\n- **Reels:** Watch-loop rate (people watching a 7-second reel 3x = 21 seconds of watch time = strong signal). Completion rate matters but loops weight higher.\n- **Stories:** Reply-rate is the dominant signal. Stickers (polls, quizzes, sliders) boost engagement floor and feed-back into reach.\n- **Account-level signals:** The ranker considers your past 90-day post performance. New posts inherit some baseline from your account's quality score.\n\n### What gets penalized\n\n- \"Reposted from [other account]\" content — flagged as low-originality\n- Posts with very low engagement in the first hour (<5% engagement rate by view)\n- Posts that get reported as misleading or spam\n- Excessive hashtags (the cap is 30, but using 15+ now correlates with reduced reach)\n\n### Tactical takeaways\n\n- Carousels for educational content (saves)\n- Reels for reach (watch-loops)\n- Stories for community (reply-rate)\n- 5–10 hashtags, not 30\n- Post during peak audience time (check Insights for your specific audience)\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:platform-algorithm-signals:instagram",
+    "file_path": "knowledge:platform-algorithm-signals:instagram",
+    "llm_cache_list": [
+      "default:extract:300f9621fe2e326372beac3b49c29189",
+      "default:extract:781fdd5d63278fd67becbe669fea3374"
+    ],
+    "create_time": 1778002811,
+    "update_time": 1778002823,
+    "_id": "chunk-099fa493d309316ed02f5deace628766"
+  },
+  "chunk-727ef4898851d6e16f17c75a77ba39d9": {
+    "tokens": 328,
+    "content": "## TikTok\n\n**Primary signals:** Completion rate > rewatches > shares > comments > likes; first 3-second retention is critical\n\n### What the ranker rewards\n\n- **Completion rate:** Percentage of viewers who watched to the end. The single most important signal.\n- **Rewatches:** Loops on short videos. A 7-second video watched 3 full times = 21 seconds of total watch.\n- **Shares (in-app and to other platforms):** Strong amplification signal.\n- **Comments:** Especially comment threads where users reply to each other.\n- **Velocity in first hour:** TikTok's For You Page uses early engagement velocity to decide whether to escalate distribution. A video that gets 1000 views and 100 likes in the first hour will get pushed to 100k+ views.\n\n### What gets penalized\n\n- Watermarks from other platforms (Instagram, YouTube logos) — TikTok suppresses cross-posted content\n- Very long videos (>3 min) without high completion — better to keep under 60s if completion is the goal\n- Banned audio / music (TikTok actively removes copyrighted audio)\n- \"Soft\" content (slow openings, no payoff) — first-3-second retention drops, reach dies\n\n### Tactical takeaways\n\n- Hook in first 1 second — visual or audio shock\n- Keep videos 7–15 seconds for maximum completion + rewatch loops\n- Use trending audio (boosts initial reach)\n- Strip Instagram watermarks before posting\n- Reply to top comments in-app (creates new comment-reply videos that surface the original)\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:platform-algorithm-signals:tiktok",
+    "file_path": "knowledge:platform-algorithm-signals:tiktok",
+    "llm_cache_list": [
+      "default:extract:f8681e9ab037e6d4ed30af00598e31cf",
+      "default:extract:fc66c79352441c0e6d52dc79dc976935"
+    ],
+    "create_time": 1778002829,
+    "update_time": 1778002843,
+    "_id": "chunk-727ef4898851d6e16f17c75a77ba39d9"
+  },
+  "chunk-1a32f52be8fde29e94ed58c180a24ce6": {
+    "tokens": 280,
+    "content": "## Threads\n\n**Primary signals:** Reply-rate > quote-replies > likes; trending-topic association\n\n### What the ranker rewards\n\n- **Reply-rate:** How many viewers reply to the post (vs just liking). The dominant signal — Threads is conversation-first.\n- **Quote-replies:** When users quote-reply, they amplify your post into their followers' feeds. Highest-leverage engagement type.\n- **Reply-thread depth:** Replies that themselves get replies generate more total impressions.\n- **Trending-topic association:** Posts that mention currently-trending topics get a temporary boost.\n- **Account follow growth:** New follows from a single post is a signal of quality content.\n\n### What gets penalized\n\n- Pure self-promotion without value (link-spam style posts)\n- Reposts of Twitter/X content (Threads suppresses cross-posted content for originality)\n- Long monologues without reply hooks (5-paragraph essays underperform 1-paragraph hot takes with a question)\n- Negative engagement (mass mutes, blocks) — strong negative signal\n\n### Tactical takeaways\n\n- Open with an opinion, end with a hook for replies\n- Quote-reply other accounts to participate in trending conversations\n- Keep posts short (1–3 lines) for highest reply-rate\n- Mention trending topics when relevant to your niche\n- Don't cross-post X content verbatim — adapt the framing\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:platform-algorithm-signals:threads",
+    "file_path": "knowledge:platform-algorithm-signals:threads",
+    "llm_cache_list": [
+      "default:extract:a49a2fb707320a0914592465c13f8856",
+      "default:extract:a322afa842ef2e262a1f32f3cda4cecd"
+    ],
+    "create_time": 1778002852,
+    "update_time": 1778002864,
+    "_id": "chunk-1a32f52be8fde29e94ed58c180a24ce6"
+  },
+  "chunk-06ab9774b6e9aa0aeab7a13fdb038dbc": {
+    "tokens": 236,
+    "content": "## YouTube (for future expansion)\n\n**Primary signals:** Click-through rate (CTR) on thumbnail + average view duration; first-30-second retention\n\n### What the ranker rewards\n\n- **CTR:** Thumbnail + title combination must earn the click\n- **Average view duration:** Watch-minutes is the currency of YouTube\n- **First-30-second retention:** Drop-off curves from analytics directly affect whether a video is recommended further\n- **Session time:** Videos that lead viewers to watch ANOTHER YouTube video after (not leave the platform) get extra boost\n- **Subscribers gained per video:** Strong long-term ranking signal\n\n### What gets penalized\n\n- Misleading thumbnails / titles (clickbait that doesn't pay off causes high drop-off)\n- Reused TikTok / Reels content reformatted as Shorts without optimization\n- Duplicate audio/video across uploads\n\n### Tactical takeaways\n\n- Spend disproportionate effort on the thumbnail (test multiple variants)\n- Hook in the first 15 seconds — verbalize what the viewer will get\n- Pattern-interrupt every 30 seconds in long videos\n- End with \"next video\" recommendation that matches the same audience",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:platform-algorithm-signals:youtube-for-future-expansion",
+    "file_path": "knowledge:platform-algorithm-signals:youtube-for-future-expansion",
+    "llm_cache_list": [
+      "default:extract:b8d85b9ac48a6184480d9c95f1cb42f3",
+      "default:extract:fe570ae2058b4d0d96e9adb4cefdff4d"
+    ],
+    "create_time": 1778002871,
+    "update_time": 1778002889,
+    "_id": "chunk-06ab9774b6e9aa0aeab7a13fdb038dbc"
+  },
+  "chunk-40ddb34470f164e1f8baeb7a56a0e0b6": {
+    "tokens": 147,
+    "content": "## 3-Second Rule\n\n**Meaning:** Deliver a visual + emotional payoff before the viewer's thumb reaches to scroll.\n\n### When to use\n\n- Reels, TikTok, Stories, Shorts — any short-form video\n- Any time you need to stop the scroll on autoplay feeds\n\n### Example\n\nOpen with a face mid-laugh, a finished plate of food being unveiled, or \"Wait — watch this\" before a reveal. Avoid 2-second logo intros and slow fades.\n\n### Why it works\n\nMobile feeds are designed for scrolling. The platform measures the first 3 seconds of view time as the strongest signal of whether to keep distributing the video. Lose the first 3 seconds and the algorithm stops boosting.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:viral-hooks:3-second-rule",
+    "file_path": "knowledge:viral-hooks:3-second-rule",
+    "llm_cache_list": [
+      "default:extract:40e19437662ea7a03cbfa4d61edcc574",
+      "default:extract:23a34055c31a26b21a6c178d95fe41f7"
+    ],
+    "create_time": 1778002900,
+    "update_time": 1778002909,
+    "_id": "chunk-40ddb34470f164e1f8baeb7a56a0e0b6"
+  },
+  "chunk-d3e75cfe6e58b04c27e92833c1cbcd28": {
+    "tokens": 143,
+    "content": "## Pattern Interrupt\n\n**Meaning:** Open with something the viewer didn't expect — a contradiction, a controversial take, an abrupt cut, or a visual that breaks feed convention.\n\n### When to use\n\n- Saturated topics where most posts look alike\n- Audiences fatigued by formulaic content\n- Educational or opinion content\n\n### Example\n\n\"Stop posting every day on Instagram.\" (in a creator-growth feed where everyone says \"post every day\")\nA black frame followed by sudden full-volume audio.\nA talking head that suddenly cuts to a completely different scene.\n\n### Why it works\n\nThe brain's pattern-matching reflex pauses scrolling when expectations break. Even a half-second pause is enough to register the hook.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:viral-hooks:pattern-interrupt",
+    "file_path": "knowledge:viral-hooks:pattern-interrupt",
+    "llm_cache_list": [
+      "default:extract:c6fd2337937bd8cfcebc151c57d14ef4",
+      "default:extract:33374b80ba4f74ded544d38c413ce0c0"
+    ],
+    "create_time": 1778002913,
+    "update_time": 1778002923,
+    "_id": "chunk-d3e75cfe6e58b04c27e92833c1cbcd28"
+  },
+  "chunk-860b31095f79179d4d612439410f152e": {
+    "tokens": 153,
+    "content": "## Curiosity Gap\n\n**Meaning:** Tease a piece of information without revealing it, forcing the viewer to keep watching to close the loop.\n\n### When to use\n\n- Listicle content (\"3 things I wish I knew…\")\n- Behind-the-scenes / reveal videos\n- Tutorial content\n\n### Example\n\n\"3 mistakes I made before I crossed 100k followers — #2 changed everything.\"\n\"This is the only marketing tactic that actually worked for my 7-figure business.\"\n\"I tried [thing] for 30 days. The result wasn't what I expected.\"\n\n### Why it works\n\nThe Zeigarnik effect: the brain assigns higher cognitive priority to incomplete information. Viewers feel mild discomfort until the loop closes — they keep watching to relieve it.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:viral-hooks:curiosity-gap",
+    "file_path": "knowledge:viral-hooks:curiosity-gap",
+    "llm_cache_list": [
+      "default:extract:bd59a71a752ade5fbf12252b1a39ab23",
+      "default:extract:2f91eca09a716aacc81ca6ebbe200e22"
+    ],
+    "create_time": 1778002928,
+    "update_time": 1778002939,
+    "_id": "chunk-860b31095f79179d4d612439410f152e"
+  },
+  "chunk-0b17b37f44382daee9503ba67b0f71f3": {
+    "tokens": 131,
+    "content": "## Open Loop\n\n**Meaning:** Pose a specific question at the start, answer it at the end. Variant of Curiosity Gap, but more disciplined.\n\n### When to use\n\n- Educational reels and threads\n- Story-based posts\n- Long-ish (30s+) videos where retention is the bottleneck\n\n### Example\n\nOpen: \"Why do some founders reply to every comment but others ignore them?\"\nBody: explore both sides, share your view.\nClose: explicit answer + why.\n\n### Why it works\n\nForces the viewer to keep watching for the resolution. Also boosts watch-time which is the dominant ranking signal on most short-form platforms.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:viral-hooks:open-loop",
+    "file_path": "knowledge:viral-hooks:open-loop",
+    "llm_cache_list": [
+      "default:extract:3dbc5703cceb05ef749bfadededc780b",
+      "default:extract:123902522d2345c632391bc29572b8ab"
+    ],
+    "create_time": 1778002946,
+    "update_time": 1778002954,
+    "_id": "chunk-0b17b37f44382daee9503ba67b0f71f3"
+  },
+  "chunk-976f097a5e4b9d6d3498c796ceffaf9d": {
+    "tokens": 151,
+    "content": "## Before/After Tease\n\n**Meaning:** Show the transformation upfront in a single frame or split-second cut — viewer wants to know HOW.\n\n### When to use\n\n- Fitness, beauty, finance, productivity, design\n- Anything with a visible result\n- Carousel post slide 1\n\n### Example\n\nA split-screen image: messy room → spotless room.\nSingle-shot: \"I went from 0 to 50k followers in 90 days. Here's the playbook.\"\nReel cold-open: 2-second flash of the finished result, then \"let's back up to where this started…\"\n\n### Why it works\n\nPeople click on outcomes, not processes. Showing the destination first earns the right to walk them through the journey.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:viral-hooks:before-after-tease",
+    "file_path": "knowledge:viral-hooks:before-after-tease",
+    "llm_cache_list": [
+      "default:extract:44f78be278f6b21732ef555e14c6ff71",
+      "default:extract:2152a0d1b26278d91c2ebd7a5c707700"
+    ],
+    "create_time": 1778002959,
+    "update_time": 1778002969,
+    "_id": "chunk-976f097a5e4b9d6d3498c796ceffaf9d"
+  },
+  "chunk-f7a1933722739760c82d4c7e7ac40734": {
+    "tokens": 154,
+    "content": "## High-Contrast Cold Open\n\n**Meaning:** Open with a visual or audio shock — bright color flash, sudden silence after loud audio, or vice versa.\n\n### When to use\n\n- Reels and TikToks where attention competes with autoplay neighbors\n- Brand content needing visual differentiation\n\n### Example\n\nFirst frame is pure black, then a vibrant product shot with bass-drop audio.\nFirst 0.5 seconds is a face filling the entire frame, expressionless.\nLoud overlapping voices that cut to absolute silence + a single line of text.\n\n### Why it works\n\nMobile autoplay queues a stream of similar-looking content. A frame that visually breaks the surrounding feed pattern earns a longer eye-fixation, and longer fixation correlates with more watch time.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:viral-hooks:high-contrast-cold-open",
+    "file_path": "knowledge:viral-hooks:high-contrast-cold-open",
+    "llm_cache_list": [
+      "default:extract:e40f1495406b2077c5c1747015811eef",
+      "default:extract:e706f6402c548e872e19780aff084365"
+    ],
+    "create_time": 1778002976,
+    "update_time": 1778002984,
+    "_id": "chunk-f7a1933722739760c82d4c7e7ac40734"
+  },
+  "chunk-6d827a41a2df931090eb12cb7d36a26a": {
+    "tokens": 146,
+    "content": "## Direct Address\n\n**Meaning:** Call out the specific role / situation of your target viewer in the first sentence so they know it's for them.\n\n### When to use\n\n- Niche content (B2B, specific industries, lifestyle micro-niches)\n- Educational posts with a defined ICP\n- Cold outreach style content\n\n### Example\n\n\"If you're a freelancer charging less than $5,000 per project, stop scrolling.\"\n\"For founders who've launched and gotten zero customers — this one's for you.\"\n\"To everyone who's tried Zone 2 cardio and quit after a week…\"\n\n### Why it works\n\nSelf-identification triggers attention more reliably than generic value claims. The viewer feels seen, which reduces cognitive friction to keep watching.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:viral-hooks:direct-address",
+    "file_path": "knowledge:viral-hooks:direct-address",
+    "llm_cache_list": [
+      "default:extract:f4ae8d40ed9018d89c4008dcb75ef9fc",
+      "default:extract:ecbbccdbf33ca2607f6c396bb90a8c90"
+    ],
+    "create_time": 1778002989,
+    "update_time": 1778002998,
+    "_id": "chunk-6d827a41a2df931090eb12cb7d36a26a"
+  },
+  "chunk-2688ad8e62f60b9a66f600a3cbee9c9e": {
+    "tokens": 122,
+    "content": "## Counterintuitive Claim\n\n**Meaning:** Open with a statement that challenges a widely-held assumption in your niche.\n\n### When to use\n\n- Thought-leadership content\n- Threads / LinkedIn-style posts\n- Long-form caption posts\n\n### Example\n\n\"You don't need a niche to grow on Instagram.\" (when most advice says you do)\n\"Cold outreach beats content marketing for early-stage founders.\"\n\"Most productivity advice is making you less productive.\"\n\n### Why it works\n\nCuriosity + mild outrage = high engagement. Even readers who disagree comment to push back, which boosts the post's distribution.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:viral-hooks:counterintuitive-claim",
+    "file_path": "knowledge:viral-hooks:counterintuitive-claim",
+    "llm_cache_list": [
+      "default:extract:7847031e7dde4270b69b8d30cfb27e94",
+      "default:extract:ca89e99fe05e18aa374b133503919664"
+    ],
+    "create_time": 1778003002,
+    "update_time": 1778003012,
+    "_id": "chunk-2688ad8e62f60b9a66f600a3cbee9c9e"
+  },
+  "chunk-518091a56c55377aa5120723c6c307c3": {
+    "tokens": 160,
+    "content": "## Numbered Promise\n\n**Meaning:** Lead with a specific number + concrete outcome. Specificity outperforms vague claims.\n\n### When to use\n\n- Listicle / educational content\n- Carousel slide 1 / Reel cover text\n- Threads opening posts\n- Blog/email subject lines\n\n### Example\n\n\"7 cold-email lines that got me 23 sales calls.\"\n\"3 portfolio mistakes that cost me $40k in clients.\"\n\"The 5-minute morning routine that cut my anxiety by half.\"\n\n### Why it works\n\nNumbers signal a finite, scannable promise. The brain processes \"7 things\" as a contained commitment of attention, not an open-ended ask. Ultra-specific numbers (23, $40k) also feel more credible than rounded ones (20, $50k).\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:viral-hooks:numbered-promise",
+    "file_path": "knowledge:viral-hooks:numbered-promise",
+    "llm_cache_list": [
+      "default:extract:4ab523297ddda9c48a2c84ebc16a6486",
+      "default:extract:bb3a04adf4ca291bb9aed972c41c747c"
+    ],
+    "create_time": 1778003016,
+    "update_time": 1778003024,
+    "_id": "chunk-518091a56c55377aa5120723c6c307c3"
+  },
+  "chunk-32717e23ea8cf44a352874ed98705946": {
+    "tokens": 167,
+    "content": "## Stakes-First\n\n**Meaning:** Open with what the viewer will lose by NOT watching, rather than what they'll gain by watching. Loss-aversion is roughly 2x more motivating than equivalent gain.\n\n### When to use\n\n- High-cost decisions (financial, career, health)\n- Warning / mistake content\n- Audiences already aware of the topic\n\n### Example\n\n\"This one mistake on your taxes could cost you $10,000 next April.\"\n\"If you're not doing this in your first 30 days as a founder, you're already behind.\"\n\"The one Instagram setting that's silently killing your reach.\"\n\n### Why it works\n\nLoss aversion is a robust cognitive bias: the pain of losing something is psychologically larger than the pleasure of gaining the equivalent. Hooks framed around loss earn higher click-through and watch-through than gain-framed hooks.",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:viral-hooks:stakes-first",
+    "file_path": "knowledge:viral-hooks:stakes-first",
+    "llm_cache_list": [
+      "default:extract:deb4660a0935b98140d6b536aa176846",
+      "default:extract:e15e0c989ee00db77e653f4f9c2cf575"
+    ],
+    "create_time": 1778003028,
+    "update_time": 1778003036,
+    "_id": "chunk-32717e23ea8cf44a352874ed98705946"
+  },
+  "chunk-2a184060d44406503c4befead6608fca": {
+    "tokens": 113,
+    "content": "## Rule of Thirds\n\n**Meaning:** Divide the frame into a 3×3 grid. Place the subject and key elements on the gridlines or their intersections, not centered.\n\n### When to use\n\n- Photo composition for feed posts\n- Image-generation prompts (specify \"subject placed on the right third\")\n- Reel framing — the subject's eyes should sit on the upper third gridline\n\n### Why it works\n\nOff-center compositions feel dynamic and create visual tension that holds attention longer than centered compositions. The eye naturally lands on intersection points first.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:visual-design:rule-of-thirds",
+    "file_path": "knowledge:visual-design:rule-of-thirds",
+    "llm_cache_list": [
+      "default:extract:6a2045b7687cb3affe5d25f64c7e21c6",
+      "default:extract:3bd9019446a70c2bc288a0c751fb83b3"
+    ],
+    "create_time": 1778003039,
+    "update_time": 1778003047,
+    "_id": "chunk-2a184060d44406503c4befead6608fca"
+  },
+  "chunk-56cd18f7b7433212ca21b7261585e92e": {
+    "tokens": 155,
+    "content": "## F-Pattern Reading\n\n**Meaning:** On text-heavy images, the eye scans in an F shape — top horizontal sweep, second horizontal sweep below, then vertical scan down the left side.\n\n### When to use\n\n- Carousel slides with body text\n- Quote graphics\n- Infographic posts\n- Any image where text is the primary content\n\n### Application\n\n- Put the most important word or number on the **top-left**\n- Put the secondary message on the second line\n- Avoid hiding the punchline in the bottom-right where eyes never reach\n\n### Why it works\n\nThe F-pattern is a documented eye-tracking finding (Nielsen Norman Group studies on web reading behavior) that holds for static images as well. Designs that fight the pattern lose readability.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:visual-design:f-pattern-reading",
+    "file_path": "knowledge:visual-design:f-pattern-reading",
+    "llm_cache_list": [
+      "default:extract:9aa9bf9030c742a2804b5c8c346ef095",
+      "default:extract:3ecf6a7905987a8845a0d7dc52843249"
+    ],
+    "create_time": 1778003051,
+    "update_time": 1778003058,
+    "_id": "chunk-56cd18f7b7433212ca21b7261585e92e"
+  },
+  "chunk-c676dbaddd0ab5a88338a4bf4ae4f4c9": {
+    "tokens": 164,
+    "content": "## Mobile-First (9:16)\n\n**Meaning:** Reels, Stories, TikTok, and Shorts default to vertical full-screen 9:16. Design with that aspect ratio in mind from the start.\n\n### When to use\n\n- All short-form video\n- Story content\n- IGTV / FB Reels / YouTube Shorts\n\n### Tactics\n\n- Frame subjects in the center vertical band — outside thirds get cropped on some devices\n- Reserve top 15% and bottom 25% as \"safe zones\" — platform UI overlays the rest\n- Avoid landscape footage cropped to vertical — always shoot/render native vertical\n\n### Why it works\n\nVertical video gets ~9x more engagement than horizontal on mobile feeds. Native vertical avoids letterboxing and the \"low-effort repurpose\" feel.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:visual-design:mobile-first-9-16",
+    "file_path": "knowledge:visual-design:mobile-first-9-16",
+    "llm_cache_list": [
+      "default:extract:5b297565a2801470c50183c8d3b189fa",
+      "default:extract:b2a519fde9a2d3cf6a5931aa04e397aa"
+    ],
+    "create_time": 1778003062,
+    "update_time": 1778003071,
+    "_id": "chunk-c676dbaddd0ab5a88338a4bf4ae4f4c9"
+  },
+  "chunk-517177c19500ba4749eba4fa06e11417": {
+    "tokens": 166,
+    "content": "## Square (1:1) for Feed\n\n**Meaning:** Standard Instagram and Facebook feed posts default to 1:1 square (or 4:5 portrait). Don't repurpose 16:9 horizontal for feed.\n\n### When to use\n\n- Instagram feed posts\n- Facebook feed posts\n- Carousel slides\n\n### Tactics\n\n- Use 1080×1080 (square) or 1080×1350 (portrait, 4:5) — these get the most feed real estate\n- For carousels: pick one aspect ratio and stick with it across all slides\n\n### Why it works\n\nPortrait (4:5) takes up ~25% more vertical screen space than square in mobile feeds, which directly increases dwell time and engagement. Mixed-aspect carousels look unprofessional.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:visual-design:square-1-1-for-feed",
+    "file_path": "knowledge:visual-design:square-1-1-for-feed",
+    "llm_cache_list": [
+      "default:extract:5bb9c45301e72980c9ff370e615dd04a",
+      "default:extract:26ab5fad8b5551779432b2beacfbc6f4"
+    ],
+    "create_time": 1778003075,
+    "update_time": 1778003085,
+    "_id": "chunk-517177c19500ba4749eba4fa06e11417"
+  },
+  "chunk-f6564aff0f66e7c912366525fe36de3f": {
+    "tokens": 207,
+    "content": "## Text Overlay Rules\n\n**Meaning:** Text on images/video must be readable in 1 second on a small screen.\n\n### When to use\n\n- Reel cover text\n- Carousel slide headlines\n- Any image with overlaid copy\n\n### Tactics\n\n- **Contrast:** Text color must contrast strongly with background. Use a semi-transparent box behind text if the background is busy.\n- **Size:** At least 60pt for reel covers, 80pt for carousel slide 1. Test at 200×356 px (mobile feed thumbnail size).\n- **Placement:** Top-left or center — avoid bottom (UI overlays cover it on most platforms).\n- **Length:** Max 6–8 words per line. Two lines max for reel covers.\n- **Font:** Sans-serif for digital. Avoid thin weights — they disappear at thumbnail size.\n\n### Why it works\n\nText that requires effort to read is text that doesn't get read. Mobile users decide in <1 second whether to keep watching; unreadable hooks cost reach.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:visual-design:text-overlay-rules",
+    "file_path": "knowledge:visual-design:text-overlay-rules",
+    "llm_cache_list": [
+      "default:extract:b400e455174445d706bc77bfcaaec1e1",
+      "default:extract:7120a41438f6c047c801f155ed4fcc8c"
+    ],
+    "create_time": 1778003089,
+    "update_time": 1778003102,
+    "_id": "chunk-f6564aff0f66e7c912366525fe36de3f"
+  },
+  "chunk-4fea7d7f065b62f47a9e8d0484fe5cae": {
+    "tokens": 151,
+    "content": "## Brand Color Discipline\n\n**Meaning:** Use 2–3 colors maximum, repeated consistently across every post.\n\n### When to use\n\n- All brand and creator accounts\n- Especially important for new accounts building recognition\n\n### Tactics\n\n- Pick: 1 dominant color (60% of frame), 1 accent (30%), 1 highlight (10%)\n- Save the palette as a Figma / Canva swatch and reuse on every post\n- Avoid trendy color shifts — pick a palette and commit for at least 90 days\n\n### Why it works\n\nVisual consistency makes your posts recognizable mid-scroll without the user reading the handle. After 30+ posts in the same palette, your account becomes pattern-detectable and follow-rate climbs.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:visual-design:brand-color-discipline",
+    "file_path": "knowledge:visual-design:brand-color-discipline",
+    "llm_cache_list": [
+      "default:extract:4ca665d6fed8fc8ba209a8a830d69154",
+      "default:extract:828b61f73524d704b95d5a147e85ef47"
+    ],
+    "create_time": 1778003110,
+    "update_time": 1778003120,
+    "_id": "chunk-4fea7d7f065b62f47a9e8d0484fe5cae"
+  },
+  "chunk-5de5f6aeb9e08a6d9fb7272ffbb72952": {
+    "tokens": 169,
+    "content": "## Font Pairing\n\n**Meaning:** Use one display font (for headlines) and one body font (for everything else). No more.\n\n### When to use\n\n- All text-on-image content\n- Carousel slides\n- Reel text overlays\n\n### Tactics\n\n- **Display:** A bold, geometric sans-serif (e.g., Inter Bold, Poppins Bold, Bebas Neue). Used only for headlines and slide 1.\n- **Body:** A clean readable sans-serif (e.g., Inter Regular, Roboto, system default). Used for everything else.\n- Never use 3+ fonts in a single post — it looks amateur and fights for attention.\n\n### Why it works\n\nTypography hierarchy guides the eye. Two fonts give enough contrast to differentiate \"this is important\" vs \"this is detail\" without becoming visual noise.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:visual-design:font-pairing",
+    "file_path": "knowledge:visual-design:font-pairing",
+    "llm_cache_list": [
+      "default:extract:6ceb00f2c41a95970178982ab2321951",
+      "default:extract:bee58f64bc1f9048499a011091976921"
+    ],
+    "create_time": 1778003127,
+    "update_time": 1778003137,
+    "_id": "chunk-5de5f6aeb9e08a6d9fb7272ffbb72952"
+  },
+  "chunk-15d3c57e1c04f91cc88c3fede244761c": {
+    "tokens": 185,
+    "content": "## Carousel Pacing\n\n**Meaning:** Each slide must earn the next swipe. Treat slides like cliffhanger episodes.\n\n### When to use\n\n- All multi-slide posts (Instagram, Facebook, LinkedIn)\n\n### Structure\n\n- **Slide 1:** Hook — bold visual + numbered promise + \"swipe to see\"\n- **Slides 2 to N–1:** One single idea per slide, big text, minimal decoration. End each slide with a forward-pull (\"but here's the catch…\", \"the trick is on the next slide\", or a continuation)\n- **Last slide:** Single CTA — \"save this\", \"follow for more\", or a clear next action. Don't dilute with multiple CTAs.\n\n### Why it works\n\nCarousel completion rate is a strong distribution signal — the algorithm shows your post to more people if viewers swipe through. Each slide is a micro-test of whether you've earned the swipe.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:visual-design:carousel-pacing",
+    "file_path": "knowledge:visual-design:carousel-pacing",
+    "llm_cache_list": [
+      "default:extract:85b2afa923ccaf164acfa52fb8befbd1",
+      "default:extract:eda5e5c9a41901b069c83dbe042df483"
+    ],
+    "create_time": 1778003141,
+    "update_time": 1778003151,
+    "_id": "chunk-15d3c57e1c04f91cc88c3fede244761c"
+  },
+  "chunk-134e69813d23dac6cb65275e5089cea5": {
+    "tokens": 167,
+    "content": "## Thumbnail Optimization\n\n**Meaning:** Your post is judged at thumbnail size (200px wide on most feeds) before anyone reads it. Design for that size first.\n\n### When to use\n\n- Reel covers\n- Carousel slide 1\n- Static feed images\n\n### Tactics\n\n- Test the design at 200px wide — if you can't read the headline or recognize the subject, redesign\n- Avoid thin lines, small text, busy backgrounds\n- Use bold colors that pop in a feed (yellow, red, electric blue)\n- Subjects with faces outperform abstract or scenic shots — eyes draw eyes\n\n### Why it works\n\nThe thumbnail is the only thing competing for attention in the feed. Most posts are designed at full size and are unreadable at thumbnail size — a post that survives thumbnail scrutiny gets disproportionate clicks.\n\n---",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:visual-design:thumbnail-optimization",
+    "file_path": "knowledge:visual-design:thumbnail-optimization",
+    "llm_cache_list": [
+      "default:extract:1af0231491e86dbf500178ae22b2320c",
+      "default:extract:b18165d8ab39e0e6635546ba68e4c509"
+    ],
+    "create_time": 1778003159,
+    "update_time": 1778003167,
+    "_id": "chunk-134e69813d23dac6cb65275e5089cea5"
+  },
+  "chunk-4b610e2de93502f15a042b434c8e53de": {
+    "tokens": 151,
+    "content": "## Negative Space\n\n**Meaning:** Let the subject breathe. Resist the urge to fill every pixel with information.\n\n### When to use\n\n- All visual design\n- Especially photo posts and minimal-text quote graphics\n\n### Tactics\n\n- Aim for 30–50% of the frame to be empty (background, sky, single-color fill)\n- One subject per frame. Multiple competing subjects split attention and weaken impact.\n- White space (or any single-color space) around text makes it feel premium\n\n### Why it works\n\nCluttered designs look amateur and are harder to read. Negative space increases perceived quality and improves comprehension speed. Apple's product shots and high-end fashion ads are built almost entirely on negative space — it signals confidence in the subject.",
+    "chunk_order_index": 0,
+    "full_doc_id": "knowledge:visual-design:negative-space",
+    "file_path": "knowledge:visual-design:negative-space",
+    "llm_cache_list": [
+      "default:extract:71567b708d2dcd3434bf9021f0ece23b",
+      "default:extract:bd7fba4978ad5f110a7be881f598b36f"
+    ],
+    "create_time": 1778003171,
+    "update_time": 1778003180,
+    "_id": "chunk-4b610e2de93502f15a042b434c8e53de"
+  }
+}

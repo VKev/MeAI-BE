@@ -15,6 +15,11 @@ from ..transport.health_app import build_app
 from ..transport.rabbit_consumer import RabbitConsumer
 from .config import load_config
 from .container import build_container, close_async, initialize_async
+from .seed_loader import (
+    apply_filesystem_seed_if_needed,
+    apply_qdrant_seed_if_needed,
+    should_skip_bootstrap,
+)
 
 
 async def run() -> None:
@@ -25,8 +30,42 @@ async def run() -> None:
     )
     logger = logging.getLogger("rag-service")
 
+    # ── Seed restore phase A (filesystem) ────────────────────────────────
+    # Must run BEFORE LightRAG initializes so it sees the populated workspace
+    # state (kv_store_*.json + graphml + merged fingerprint registry). No-op
+    # when no baked seed is present (dev compose with empty bakedknowledge/).
+    seed_manifest = apply_filesystem_seed_if_needed(
+        working_dir=cfg.working_dir,
+        qdrant_namespace=cfg.qdrant_namespace,
+    )
+
     container = build_container(cfg)
     await initialize_async(container)
+
+    # ── Seed restore phase B (Qdrant points) ─────────────────────────────
+    # Must run AFTER initialize_async so LightRAG has created the collections
+    # with the right payload indexes. Idempotent same-id upsert.
+    if seed_manifest is not None:
+        await apply_qdrant_seed_if_needed(
+            qdrant_url=cfg.qdrant_url,
+            qdrant_api_key=cfg.qdrant_api_key,
+            working_dir=cfg.working_dir,
+            manifest=seed_manifest,
+        )
+
+    # ── Skip the lazy knowledge bootstrap when the seed is in sync ───────
+    # If the marker matches the bake's content hash, every `knowledge:*` doc
+    # is already in the registry + Qdrant; running the bootstrap would just
+    # walk the markdown files and ack each section as 'skipped'. Pre-marking
+    # the lazy bootstrap as ready makes the FIRST incoming request instant
+    # for the WaitForRagReady leg too (rather than ~100 ms walk + skip).
+    #
+    # Falls back to the regular lazy bootstrap when:
+    #   - No seed in the image (dev compose without committed bakedknowledge/)
+    #   - Marker missing or hash mismatch (knowledge edited since last bake)
+    if should_skip_bootstrap(working_dir=cfg.working_dir):
+        logger.info("Knowledge seed in sync with bake — skipping lazy bootstrap on first request")
+        container.lazy_knowledge_bootstrap.mark_already_ready()
 
     # ── Transport: RabbitMQ (ingest one-way + query RPC) ──────────────────
     rabbit = RabbitConsumer(

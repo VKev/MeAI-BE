@@ -41,6 +41,24 @@ class LazyKnowledgeBootstrap:
             self._task = asyncio.create_task(self._run())
         await self._task
 
+    def mark_already_ready(self) -> None:
+        """Pre-set the bootstrap as completed without running it. Used by the
+        entrypoint when the baked-knowledge seed is in sync with the live
+        Qdrant — the registry is already populated and any walk of
+        `src/knowledge/*.md` would just ack every section as 'skipped'.
+
+        Idempotent: a no-op when `ensure_ready()` already triggered, or when
+        this was already called. Subsequent `await ensure_ready()` calls then
+        return immediately on the next event-loop tick.
+        """
+        if self._task is not None:
+            return
+
+        async def _noop() -> None:
+            logger.info("Knowledge bootstrap pre-marked ready (seed already in sync)")
+
+        self._task = asyncio.create_task(_noop())
+
     @property
     def task(self) -> asyncio.Task[None] | None:
         """The bootstrap task, or None if `ensure_ready()` was never called.

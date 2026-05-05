@@ -1,0 +1,2074 @@
+{
+  "knowledge:content-formulas:fab-formula": {
+    "relation_pairs": [
+      [
+        "FAB Formula",
+        "Sales Pages"
+      ],
+      [
+        "FAB Formula",
+        "Facebook Conversion Posts"
+      ],
+      [
+        "FAB Formula",
+        "Instagram Product Captions"
+      ],
+      [
+        "FAB Formula",
+        "Product Launch Campaigns"
+      ],
+      [
+        "Benefits",
+        "FAB Formula"
+      ],
+      [
+        "FAB Formula",
+        "Features"
+      ],
+      [
+        "Advantages",
+        "FAB Formula"
+      ],
+      [
+        "FAB Formula",
+        "Product Descriptions"
+      ]
+    ],
+    "count": 8,
+    "create_time": 1778002104,
+    "update_time": 1778002104,
+    "_id": "knowledge:content-formulas:fab-formula"
+  },
+  "knowledge:content-formulas:fas-formula": {
+    "relation_pairs": [
+      [
+        "Agitate",
+        "FAS Formula"
+      ],
+      [
+        "Core Psychology",
+        "FAS Formula"
+      ],
+      [
+        "FAS Formula",
+        "Solve"
+      ],
+      [
+        "Content Growth System",
+        "Problem"
+      ],
+      [
+        "Agitate",
+        "Problem"
+      ],
+      [
+        "Best Use Cases",
+        "FAS Formula"
+      ],
+      [
+        "FAS Formula",
+        "Problem"
+      ],
+      [
+        "Agitate",
+        "Solve"
+      ]
+    ],
+    "count": 8,
+    "create_time": 1778002119,
+    "update_time": 1778002119,
+    "_id": "knowledge:content-formulas:fas-formula"
+  },
+  "knowledge:content-formulas:bab-formula": {
+    "relation_pairs": [
+      [
+        "Before",
+        "Budget Tracking App"
+      ],
+      [
+        "BAB Formula",
+        "Before"
+      ],
+      [
+        "After",
+        "Budget Tracking App"
+      ],
+      [
+        "After",
+        "BAB Formula"
+      ],
+      [
+        "BAB Formula",
+        "Reels/TikTok Transformation Content"
+      ],
+      [
+        "BAB Formula",
+        "Bridge"
+      ],
+      [
+        "BAB Formula",
+        "SaaS Case Studies"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002133,
+    "update_time": 1778002133,
+    "_id": "knowledge:content-formulas:bab-formula"
+  },
+  "knowledge:content-formulas:4c-formula": {
+    "relation_pairs": [
+      [
+        "4C Formula",
+        "Content Writing"
+      ],
+      [
+        "4C Formula",
+        "Website Copy"
+      ],
+      [
+        "4C Formula",
+        "Clear"
+      ],
+      [
+        "4C Formula",
+        "Compelling"
+      ],
+      [
+        "4C Formula",
+        "Brand Communication"
+      ],
+      [
+        "4C Formula",
+        "Concise"
+      ],
+      [
+        "4C Formula",
+        "Credible"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002150,
+    "update_time": 1778002150,
+    "_id": "knowledge:content-formulas:4c-formula"
+  },
+  "knowledge:content-formulas:4u-formula": {
+    "relation_pairs": [
+      [
+        "4U Formula",
+        "Useful"
+      ],
+      [
+        "4U Formula",
+        "Core Psychology"
+      ],
+      [
+        "4U Formula",
+        "Best Use Cases"
+      ],
+      [
+        "4U Formula",
+        "Unique"
+      ],
+      [
+        "4U Formula",
+        "Ultra-specific"
+      ],
+      [
+        "4U Formula",
+        "Urgent"
+      ]
+    ],
+    "count": 6,
+    "create_time": 1778002163,
+    "update_time": 1778002163,
+    "_id": "knowledge:content-formulas:4u-formula"
+  },
+  "knowledge:content-formulas:a-forest-formula": {
+    "relation_pairs": [
+      [
+        "FOREST Formula",
+        "Repetition"
+      ],
+      [
+        "FOREST Formula",
+        "Facts"
+      ],
+      [
+        "FOREST Formula",
+        "Statistics"
+      ],
+      [
+        "Examples",
+        "FOREST Formula"
+      ],
+      [
+        "Core Psychology",
+        "FOREST Formula"
+      ],
+      [
+        "FOREST Formula",
+        "Threes"
+      ],
+      [
+        "FOREST Formula",
+        "Opinions"
+      ],
+      [
+        "Alliteration",
+        "FOREST Formula"
+      ]
+    ],
+    "count": 8,
+    "create_time": 1778002180,
+    "update_time": 1778002180,
+    "_id": "knowledge:content-formulas:a-forest-formula"
+  },
+  "knowledge:content-formulas:aida-formula": {
+    "relation_pairs": [
+      [
+        "AIDA Formula",
+        "Best Use Cases"
+      ],
+      [
+        "AIDA Formula",
+        "Attention"
+      ],
+      [
+        "AIDA Formula",
+        "Interest"
+      ],
+      [
+        "AIDA Formula",
+        "CTAs"
+      ],
+      [
+        "AIDA Formula",
+        "Desire"
+      ],
+      [
+        "Action",
+        "Desire"
+      ],
+      [
+        "AIDA Formula",
+        "Action"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002197,
+    "update_time": 1778002197,
+    "_id": "knowledge:content-formulas:aida-formula"
+  },
+  "knowledge:content-formulas:5-objections-formula": {
+    "relation_pairs": [
+      [
+        "Objections Formula",
+        "Sales Copy"
+      ],
+      [
+        "Facebook Conversion Posts",
+        "Objections Formula"
+      ],
+      [
+        "Core Psychology",
+        "Objections Formula"
+      ],
+      [
+        "Buying Resistance",
+        "Objections Formula"
+      ],
+      [
+        "FAQ Content",
+        "Objections Formula"
+      ],
+      [
+        "Objection Handling Posts",
+        "Objections Formula"
+      ],
+      [
+        "Landing Pages",
+        "Objections Formula"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002212,
+    "update_time": 1778002212,
+    "_id": "knowledge:content-formulas:5-objections-formula"
+  },
+  "knowledge:content-formulas:3-reasons-why-formula": {
+    "relation_pairs": [
+      [
+        "Core Psychology",
+        "Formula"
+      ],
+      [
+        "Comparison Ads",
+        "Formula"
+      ],
+      [
+        "Formula",
+        "Product Pages"
+      ],
+      [
+        "Carousel Posts",
+        "Formula"
+      ],
+      [
+        "Best Use Cases",
+        "Formula"
+      ],
+      [
+        "Formula",
+        "Short-Form Video"
+      ],
+      [
+        "Formula",
+        "Threads Arguments"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002229,
+    "update_time": 1778002229,
+    "_id": "knowledge:content-formulas:3-reasons-why-formula"
+  },
+  "knowledge:content-formulas:4p-formula": {
+    "relation_pairs": [
+      [
+        "4P Formula",
+        "Sales Posts"
+      ],
+      [
+        "4P Formula",
+        "Push"
+      ],
+      [
+        "4P Formula",
+        "Prove"
+      ],
+      [
+        "4P Formula",
+        "Promise"
+      ],
+      [
+        "4P Formula",
+        "Facebook Ads"
+      ],
+      [
+        "4P Formula",
+        "Picture"
+      ],
+      [
+        "4P Formula",
+        "Landing Pages"
+      ],
+      [
+        "4P Formula",
+        "Product Launches"
+      ]
+    ],
+    "count": 8,
+    "create_time": 1778002249,
+    "update_time": 1778002249,
+    "_id": "knowledge:content-formulas:4p-formula"
+  },
+  "knowledge:content-formulas:3s-formula": {
+    "relation_pairs": [
+      [
+        "3S Formula",
+        "Core Psychology"
+      ],
+      [
+        "3S Formula",
+        "Solution"
+      ],
+      [
+        "3S Formula",
+        "Story"
+      ],
+      [
+        "3S Formula",
+        "Star"
+      ],
+      [
+        "3S Formula",
+        "Best Use Cases"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002263,
+    "update_time": 1778002263,
+    "_id": "knowledge:content-formulas:3s-formula"
+  },
+  "knowledge:content-formulas:4a-formula": {
+    "relation_pairs": [
+      [
+        "4A Formula",
+        "CRM Content"
+      ],
+      [
+        "4A Formula",
+        "Retention Strategy"
+      ],
+      [
+        "4A Formula",
+        "Loyalty Marketing"
+      ],
+      [
+        "4A Formula",
+        "Repeat Action"
+      ],
+      [
+        "4A Formula",
+        "Attitude"
+      ],
+      [
+        "4A Formula",
+        "Action"
+      ],
+      [
+        "4A Formula",
+        "Brand Campaigns"
+      ],
+      [
+        "4A Formula",
+        "Awareness"
+      ]
+    ],
+    "count": 8,
+    "create_time": 1778002283,
+    "update_time": 1778002283,
+    "_id": "knowledge:content-formulas:4a-formula"
+  },
+  "knowledge:content-formulas:5a-formula": {
+    "relation_pairs": [
+      [
+        "5A Formula",
+        "Ask"
+      ],
+      [
+        "5A Formula",
+        "Awareness"
+      ],
+      [
+        "5A Formula",
+        "Appeal"
+      ],
+      [
+        "5A Formula",
+        "Philip Kotler"
+      ],
+      [
+        "5A Formula",
+        "Action"
+      ],
+      [
+        "5A Formula",
+        "Advocate"
+      ]
+    ],
+    "count": 6,
+    "create_time": 1778002303,
+    "update_time": 1778002303,
+    "_id": "knowledge:content-formulas:5a-formula"
+  },
+  "knowledge:content-formulas:app-formula": {
+    "relation_pairs": [
+      [
+        "APP Formula",
+        "Structure"
+      ],
+      [
+        "Promise",
+        "Structure"
+      ],
+      [
+        "APP Formula",
+        "Reels"
+      ],
+      [
+        "APP Formula",
+        "Blog"
+      ],
+      [
+        "Preview",
+        "Structure"
+      ],
+      [
+        "APP Formula",
+        "Core Psychology"
+      ],
+      [
+        "APP Formula",
+        "Threads"
+      ],
+      [
+        "APP Formula",
+        "TikTok"
+      ],
+      [
+        "APP Formula",
+        "Email"
+      ],
+      [
+        "Agree",
+        "Structure"
+      ]
+    ],
+    "count": 10,
+    "create_time": 1778002324,
+    "update_time": 1778002324,
+    "_id": "knowledge:content-formulas:app-formula"
+  },
+  "knowledge:content-formulas:category-storytelling-trust": {
+    "relation_pairs": [
+      [
+        "BAB",
+        "Storytelling Trust"
+      ],
+      [
+        "3S",
+        "Storytelling Trust"
+      ]
+    ],
+    "count": 2,
+    "create_time": 1778002416,
+    "update_time": 1778002416,
+    "_id": "knowledge:content-formulas:category-storytelling-trust"
+  },
+  "knowledge:content-formulas:category-low-priority-short-social": {
+    "relation_pairs": [
+      [
+        "5A",
+        "Category Low Priority Short Social"
+      ],
+      [
+        "4A",
+        "Category Low Priority Short Social"
+      ],
+      [
+        "A Forest",
+        "Category Low Priority Short Social"
+      ]
+    ],
+    "count": 3,
+    "create_time": 1778002445,
+    "update_time": 1778002445,
+    "_id": "knowledge:content-formulas:category-low-priority-short-social"
+  },
+  "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait": {
+    "relation_pairs": [
+      [
+        "Comment-Bait",
+        "Engagement Types"
+      ],
+      [
+        "Share-Bait",
+        "comment-bait"
+      ],
+      [
+        "Engagement Types",
+        "Share-Bait"
+      ],
+      [
+        "Engagement Types",
+        "Save-Bait"
+      ],
+      [
+        "Save-Bait",
+        "share-bait"
+      ],
+      [
+        "Engagement Types",
+        "Post Lifespan"
+      ],
+      [
+        "Algorithms",
+        "Engagement Types"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002460,
+    "update_time": 1778002460,
+    "_id": "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait"
+  },
+  "knowledge:engagement-triggers:question-ending": {
+    "relation_pairs": [
+      [
+        "Concrete Forced-Choice Questions",
+        "Question-Ending"
+      ],
+      [
+        "Carousel Posts",
+        "Question-Ending"
+      ],
+      [
+        "Question-Ending",
+        "Vague Open-Ended Prompts"
+      ],
+      [
+        "Marketing Advice",
+        "Question-Ending"
+      ],
+      [
+        "Long Captions",
+        "Question-Ending"
+      ],
+      [
+        "Question-Ending",
+        "Specific Questions"
+      ],
+      [
+        "Question-Ending",
+        "Threads"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002478,
+    "update_time": 1778002478,
+    "_id": "knowledge:engagement-triggers:question-ending"
+  },
+  "knowledge:engagement-triggers:vulnerability-posts": {
+    "relation_pairs": [
+      [
+        "Thought Leadership",
+        "Vulnerability Posts"
+      ],
+      [
+        "Founders",
+        "Vulnerability Posts"
+      ],
+      [
+        "Personal Brand Accounts",
+        "Vulnerability Posts"
+      ],
+      [
+        "Social Media Norm",
+        "Vulnerability Posts"
+      ],
+      [
+        "Creators",
+        "Vulnerability Posts"
+      ],
+      [
+        "Coaches",
+        "Vulnerability Posts"
+      ]
+    ],
+    "count": 6,
+    "create_time": 1778002492,
+    "update_time": 1778002492,
+    "_id": "knowledge:engagement-triggers:vulnerability-posts"
+  },
+  "knowledge:engagement-triggers:controversial-but-positive": {
+    "relation_pairs": [
+      [
+        "Cold Outreach",
+        "Controversial-but-Positive"
+      ],
+      [
+        "Controversial-but-Positive",
+        "Established Accounts"
+      ],
+      [
+        "Controversial-but-Positive",
+        "Morning Routines"
+      ],
+      [
+        "Controversial-but-Positive",
+        "Productivity Theater"
+      ]
+    ],
+    "count": 4,
+    "create_time": 1778002504,
+    "update_time": 1778002504,
+    "_id": "knowledge:engagement-triggers:controversial-but-positive"
+  },
+  "knowledge:engagement-triggers:insider-knowledge": {
+    "relation_pairs": [
+      [
+        "Insider Knowledge",
+        "When to Use"
+      ],
+      [
+        "Example",
+        "Insider Knowledge"
+      ],
+      [
+        "Educational Content",
+        "Insider Knowledge"
+      ],
+      [
+        "Insider Knowledge",
+        "VCs"
+      ],
+      [
+        "Insider Knowledge",
+        "Viral Creator"
+      ],
+      [
+        "Insider Knowledge",
+        "Why It Works"
+      ]
+    ],
+    "count": 6,
+    "create_time": 1778002520,
+    "update_time": 1778002520,
+    "_id": "knowledge:engagement-triggers:insider-knowledge"
+  },
+  "knowledge:engagement-triggers:listicle-carousel-anatomy": {
+    "relation_pairs": [
+      [
+        "Instagram",
+        "Listicle / Carousel Anatomy"
+      ],
+      [
+        "Educational Content",
+        "Listicle / Carousel Anatomy"
+      ],
+      [
+        "Facebook",
+        "Listicle / Carousel Anatomy"
+      ],
+      [
+        "LinkedIn",
+        "Listicle / Carousel Anatomy"
+      ],
+      [
+        "Listicle / Carousel Anatomy",
+        "Swipe-Through-Rate"
+      ],
+      [
+        "Listicle / Carousel Anatomy",
+        "Swipe"
+      ],
+      [
+        "CTA Slide",
+        "Listicle / Carousel Anatomy"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002536,
+    "update_time": 1778002536,
+    "_id": "knowledge:engagement-triggers:listicle-carousel-anatomy"
+  },
+  "knowledge:engagement-triggers:algorithm-friendly-cadence": {
+    "relation_pairs": [
+      [
+        "Algorithm-Friendly Cadence",
+        "TikTok"
+      ],
+      [
+        "Algorithm-Friendly Cadence",
+        "LinkedIn"
+      ],
+      [
+        "Algorithm-Friendly Cadence",
+        "Facebook"
+      ],
+      [
+        "Algorithm-Friendly Cadence",
+        "Instagram"
+      ],
+      [
+        "Algorithm-Friendly Cadence",
+        "Threads"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002550,
+    "update_time": 1778002550,
+    "_id": "knowledge:engagement-triggers:algorithm-friendly-cadence"
+  },
+  "knowledge:engagement-triggers:golden-hour": {
+    "relation_pairs": [
+      [
+        "Analytics Tab",
+        "Golden Hour"
+      ],
+      [
+        "Engagement Velocity",
+        "Golden Hour"
+      ],
+      [
+        "Golden Hour",
+        "Post Boosting"
+      ],
+      [
+        "Audience",
+        "Golden Hour"
+      ],
+      [
+        "Comments",
+        "Post Boosting"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002563,
+    "update_time": 1778002563,
+    "_id": "knowledge:engagement-triggers:golden-hour"
+  },
+  "knowledge:image-design-branded:when-to-use-branded-style": {
+    "relation_pairs": [
+      [
+        "Engagement-Bait Questions",
+        "Visuals"
+      ],
+      [
+        "Branded Style",
+        "Posts"
+      ]
+    ],
+    "count": 2,
+    "create_time": 1778002575,
+    "update_time": 1778002575,
+    "_id": "knowledge:image-design-branded:when-to-use-branded-style"
+  },
+  "knowledge:image-design-branded:branded-composition-rules": {
+    "relation_pairs": [
+      [
+        "Branded Composition Rules",
+        "Hero Subject"
+      ],
+      [
+        "Headline-Safe Area",
+        "Hero Subject"
+      ],
+      [
+        "Branded Composition Rules",
+        "Mobile-First"
+      ],
+      [
+        "Branded Composition Rules",
+        "Rule of Thirds"
+      ],
+      [
+        "Aspect Ratio",
+        "Branded Composition Rules"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002586,
+    "update_time": 1778002586,
+    "_id": "knowledge:image-design-branded:branded-composition-rules"
+  },
+  "knowledge:image-design-branded:branded-brand-presence": {
+    "relation_pairs": [
+      [
+        "Brand Color Accent",
+        "Branded Brand Presence"
+      ],
+      [
+        "Brand Consistency Check",
+        "Branded Brand Presence"
+      ],
+      [
+        "Branded Brand Presence",
+        "Wordmark or Logo"
+      ],
+      [
+        "Branded Brand Presence",
+        "Tagline Lockup"
+      ],
+      [
+        "Branded Brand Presence",
+        "Handle"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002607,
+    "update_time": 1778002607,
+    "_id": "knowledge:image-design-branded:branded-brand-presence"
+  },
+  "knowledge:image-design-branded:branded-color-lighting": {
+    "relation_pairs": [
+      [
+        "Branded Color & Lighting",
+        "Branded Post"
+      ],
+      [
+        "Branded Color & Lighting",
+        "Palette"
+      ],
+      [
+        "Branded Color & Lighting",
+        "Headline Color"
+      ],
+      [
+        "Background",
+        "Branded Color & Lighting"
+      ],
+      [
+        "Lighting",
+        "Palette"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002620,
+    "update_time": 1778002620,
+    "_id": "knowledge:image-design-branded:branded-color-lighting"
+  },
+  "knowledge:image-design-branded:branded-layout-patterns": {
+    "relation_pairs": [
+      [
+        "Branded Layout Patterns",
+        "Pattern C"
+      ],
+      [
+        "Branded Layout Patterns",
+        "Pattern A"
+      ],
+      [
+        "Branded Layout Patterns",
+        "Pattern B"
+      ]
+    ],
+    "count": 3,
+    "create_time": 1778002630,
+    "update_time": 1778002630,
+    "_id": "knowledge:image-design-branded:branded-layout-patterns"
+  },
+  "knowledge:image-design-creative:when-to-use-creative-style": {
+    "relation_pairs": [
+      [
+        "Behind-the-Scenes Glimpses",
+        "Creative Style"
+      ],
+      [
+        "Brand Vibe Posts",
+        "Creative Style"
+      ],
+      [
+        "Creative Style",
+        "Marketing Style"
+      ],
+      [
+        "Creative Style",
+        "Lifestyle Imagery"
+      ],
+      [
+        "Creative Style",
+        "Photography-Led Brands"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002644,
+    "update_time": 1778002644,
+    "_id": "knowledge:image-design-creative:when-to-use-creative-style"
+  },
+  "knowledge:image-design-creative:creative-composition-rules": {
+    "relation_pairs": [
+      [
+        "Creative Composition Rules",
+        "Single Hero Subject"
+      ],
+      [
+        "Cinematic Framing",
+        "Creative Composition Rules"
+      ],
+      [
+        "Creative Composition Rules",
+        "Natural Lighting"
+      ],
+      [
+        "Aspect Ratio",
+        "Creative Composition Rules"
+      ],
+      [
+        "Creative Composition Rules",
+        "Negative Space"
+      ],
+      [
+        "Creative Composition Rules",
+        "Rule of Thirds"
+      ]
+    ],
+    "count": 6,
+    "create_time": 1778002658,
+    "update_time": 1778002658,
+    "_id": "knowledge:image-design-creative:creative-composition-rules"
+  },
+  "knowledge:image-design-creative:creative-text-rules": {
+    "relation_pairs": [
+      [
+        "Artistic Typography",
+        "Creative Text Rules"
+      ],
+      [
+        "Creative Text Rules",
+        "Marketing"
+      ],
+      [
+        "Creative Text Rules",
+        "Image Content"
+      ],
+      [
+        "Creative Text Rules",
+        "Text Constraint"
+      ]
+    ],
+    "count": 4,
+    "create_time": 1778002670,
+    "update_time": 1778002670,
+    "_id": "knowledge:image-design-creative:creative-text-rules"
+  },
+  "knowledge:image-design-creative:creative-brand-presence": {
+    "relation_pairs": [
+      [
+        "Creative Brand Presence",
+        "Marketing Patterns"
+      ],
+      [
+        "Brand",
+        "Visual Style"
+      ],
+      [
+        "Palette",
+        "Visual Style"
+      ],
+      [
+        "Brand",
+        "Creative Brand Presence"
+      ],
+      [
+        "Brand",
+        "Signature Elements"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002694,
+    "update_time": 1778002694,
+    "_id": "knowledge:image-design-creative:creative-brand-presence"
+  },
+  "knowledge:image-design-marketing:when-to-use-marketing-style": {
+    "relation_pairs": [
+      [
+        "Lead Magnets",
+        "Marketing Style"
+      ],
+      [
+        "Marketing Style",
+        "Product Launches"
+      ],
+      [
+        "B2B Service Ads",
+        "Marketing Style"
+      ],
+      [
+        "Branded Style",
+        "Marketing Style"
+      ],
+      [
+        "Direct-Response Posts",
+        "Marketing Style"
+      ],
+      [
+        "Creative Style",
+        "Marketing Style"
+      ],
+      [
+        "Marketing Style",
+        "Sales/Discounts"
+      ],
+      [
+        "Marketing Style",
+        "Service Offerings"
+      ],
+      [
+        "Event Announcements",
+        "Marketing Style"
+      ]
+    ],
+    "count": 9,
+    "create_time": 1778002715,
+    "update_time": 1778002715,
+    "_id": "knowledge:image-design-marketing:when-to-use-marketing-style"
+  },
+  "knowledge:image-design-marketing:marketing-text-rules": {
+    "relation_pairs": [
+      [
+        "Marketing Text Rules",
+        "Total Text Limit"
+      ],
+      [
+        "Headline",
+        "Subhead"
+      ],
+      [
+        "CTA Button",
+        "Marketing Text Rules"
+      ],
+      [
+        "Marketing Text Rules",
+        "Subhead"
+      ],
+      [
+        "Headline",
+        "Marketing Text Rules"
+      ],
+      [
+        "Contact Line",
+        "Marketing Text Rules"
+      ]
+    ],
+    "count": 6,
+    "create_time": 1778002739,
+    "update_time": 1778002739,
+    "_id": "knowledge:image-design-marketing:marketing-text-rules"
+  },
+  "knowledge:image-design-marketing:marketing-brand-presence": {
+    "relation_pairs": [
+      [
+        "Brand Logo",
+        "Brand Logo Lockup"
+      ],
+      [
+        "Marketing Brand Presence",
+        "Marketing Campaign"
+      ],
+      [
+        "Brand Colors",
+        "Frame Width"
+      ],
+      [
+        "Brand Colors",
+        "Marketing Brand Presence"
+      ],
+      [
+        "Brand Colors",
+        "Call to Action (CTA)"
+      ],
+      [
+        "Marketing Brand Presence",
+        "Tagline"
+      ],
+      [
+        "Brand Logo",
+        "Marketing Brand Presence"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002754,
+    "update_time": 1778002754,
+    "_id": "knowledge:image-design-marketing:marketing-brand-presence"
+  },
+  "knowledge:image-design-marketing:marketing-visual-anchors": {
+    "relation_pairs": [
+      [
+        "Marketing Visual Anchors",
+        "Stock Photography"
+      ],
+      [
+        "Before/After",
+        "Marketing Visual Anchors"
+      ],
+      [
+        "Discount Badge / Sticker",
+        "Marketing Visual Anchors"
+      ],
+      [
+        "Marketing Visual Anchors",
+        "Product Shot"
+      ],
+      [
+        "Marketing Visual Anchors",
+        "Outcome Shot"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002769,
+    "update_time": 1778002769,
+    "_id": "knowledge:image-design-marketing:marketing-visual-anchors"
+  },
+  "knowledge:image-design-marketing:marketing-color-contrast": {
+    "relation_pairs": [
+      [
+        "CTA Button",
+        "High Contrast"
+      ],
+      [
+        "Brand Color Discipline",
+        "High Contrast"
+      ]
+    ],
+    "count": 2,
+    "create_time": 1778002779,
+    "update_time": 1778002779,
+    "_id": "knowledge:image-design-marketing:marketing-color-contrast"
+  },
+  "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons": {
+    "relation_pairs": [
+      [
+        "Marketing Trust Signals",
+        "Social Proof"
+      ],
+      [
+        "Call to Action (CTA)",
+        "Scarcity"
+      ],
+      [
+        "Authority",
+        "Marketing Trust Signals"
+      ],
+      [
+        "Authority",
+        "Call to Action (CTA)"
+      ],
+      [
+        "Marketing Trust Signals",
+        "Scarcity"
+      ],
+      [
+        "Call to Action (CTA)",
+        "Guarantee"
+      ],
+      [
+        "Call to Action (CTA)",
+        "Social Proof"
+      ],
+      [
+        "Guarantee",
+        "Marketing Trust Signals"
+      ]
+    ],
+    "count": 8,
+    "create_time": 1778002794,
+    "update_time": 1778002794,
+    "_id": "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons"
+  },
+  "knowledge:platform-algorithm-signals:facebook": {
+    "relation_pairs": [
+      [
+        "Facebook",
+        "Group Posts"
+      ],
+      [
+        "FB Reels",
+        "Meaningful Interactions"
+      ],
+      [
+        "Engagement Velocity",
+        "Facebook"
+      ],
+      [
+        "Facebook",
+        "Tactical Takeaways"
+      ],
+      [
+        "Group Posts",
+        "Organic Reach"
+      ],
+      [
+        "Facebook",
+        "Recency"
+      ],
+      [
+        "Facebook",
+        "Meaningful Interactions"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002811,
+    "update_time": 1778002811,
+    "_id": "knowledge:platform-algorithm-signals:facebook"
+  },
+  "knowledge:platform-algorithm-signals:instagram": {
+    "relation_pairs": [
+      [
+        "Account Quality Score",
+        "Instagram"
+      ],
+      [
+        "Instagram",
+        "Shares"
+      ],
+      [
+        "Instagram",
+        "Tactical Takeaways"
+      ],
+      [
+        "Hashtags",
+        "Instagram"
+      ],
+      [
+        "Instagram",
+        "Saves"
+      ],
+      [
+        "Instagram",
+        "Reels"
+      ],
+      [
+        "Account-Level Signals",
+        "Saves"
+      ],
+      [
+        "Instagram",
+        "Stories"
+      ]
+    ],
+    "count": 8,
+    "create_time": 1778002829,
+    "update_time": 1778002829,
+    "_id": "knowledge:platform-algorithm-signals:instagram"
+  },
+  "knowledge:platform-algorithm-signals:tiktok": {
+    "relation_pairs": [
+      [
+        "Banned Audio/Music",
+        "TikTok"
+      ],
+      [
+        "Long Videos",
+        "TikTok"
+      ],
+      [
+        "Completion Rate",
+        "TikTok"
+      ],
+      [
+        "Shares",
+        "TikTok"
+      ],
+      [
+        "Comments",
+        "TikTok"
+      ],
+      [
+        "TikTok",
+        "Velocity in First Hour"
+      ],
+      [
+        "Rewatches",
+        "TikTok"
+      ],
+      [
+        "TikTok",
+        "Trending Audio"
+      ],
+      [
+        "Tactical Takeaways",
+        "TikTok"
+      ],
+      [
+        "TikTok",
+        "Watermarks"
+      ]
+    ],
+    "count": 10,
+    "create_time": 1778002852,
+    "update_time": 1778002852,
+    "_id": "knowledge:platform-algorithm-signals:tiktok"
+  },
+  "knowledge:platform-algorithm-signals:threads": {
+    "relation_pairs": [
+      [
+        "Long Monologues",
+        "Threads"
+      ],
+      [
+        "Reply-Rate",
+        "Reply-Thread Depth"
+      ],
+      [
+        "Self-Promotion",
+        "Threads"
+      ],
+      [
+        "Account Follow Growth",
+        "Threads"
+      ],
+      [
+        "Quote-Replies",
+        "Threads"
+      ],
+      [
+        "Reply-Rate",
+        "Threads"
+      ],
+      [
+        "Reposts of Twitter/X Content",
+        "Threads"
+      ],
+      [
+        "Negative Engagement",
+        "Threads"
+      ],
+      [
+        "Threads",
+        "Trending-Topic Association"
+      ]
+    ],
+    "count": 9,
+    "create_time": 1778002871,
+    "update_time": 1778002871,
+    "_id": "knowledge:platform-algorithm-signals:threads"
+  },
+  "knowledge:platform-algorithm-signals:youtube-for-future-expansion": {
+    "relation_pairs": [
+      [
+        "Reused TikTok/Reels Content",
+        "YouTube"
+      ],
+      [
+        "First-30-Second Retention",
+        "YouTube"
+      ],
+      [
+        "Thumbnail + Title Combination",
+        "YouTube"
+      ],
+      [
+        "Average View Duration",
+        "YouTube"
+      ],
+      [
+        "Drop-Off Curves",
+        "YouTube"
+      ],
+      [
+        "Click-Through Rate (CTR)",
+        "YouTube"
+      ],
+      [
+        "Watch-Minutes",
+        "YouTube"
+      ],
+      [
+        "Next Video Recommendation",
+        "YouTube"
+      ],
+      [
+        "Session Time",
+        "YouTube"
+      ],
+      [
+        "Duplicate Audio/Video",
+        "YouTube"
+      ],
+      [
+        "Misleading Thumbnails/Titles",
+        "YouTube"
+      ],
+      [
+        "Subscribers Gained Per Video",
+        "YouTube"
+      ]
+    ],
+    "count": 12,
+    "create_time": 1778002900,
+    "update_time": 1778002900,
+    "_id": "knowledge:platform-algorithm-signals:youtube-for-future-expansion"
+  },
+  "knowledge:viral-hooks:3-second-rule": {
+    "relation_pairs": [
+      [
+        "3-Second Rule",
+        "Reels"
+      ],
+      [
+        "3-Second Rule",
+        "Shorts"
+      ],
+      [
+        "3-Second Rule",
+        "Algorithm"
+      ],
+      [
+        "3-Second Rule",
+        "Stories"
+      ],
+      [
+        "3-Second Rule",
+        "TikTok"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002913,
+    "update_time": 1778002913,
+    "_id": "knowledge:viral-hooks:3-second-rule"
+  },
+  "knowledge:viral-hooks:pattern-interrupt": {
+    "relation_pairs": [
+      [
+        "Instagram",
+        "Pattern Interrupt"
+      ],
+      [
+        "Educational Content",
+        "Pattern Interrupt"
+      ],
+      [
+        "Pattern Interrupt",
+        "Visual Content"
+      ],
+      [
+        "Abrupt Cut",
+        "Pattern Interrupt"
+      ],
+      [
+        "Contradiction",
+        "Pattern Interrupt"
+      ],
+      [
+        "Creator-Growth Feed",
+        "Instagram"
+      ]
+    ],
+    "count": 6,
+    "create_time": 1778002928,
+    "update_time": 1778002928,
+    "_id": "knowledge:viral-hooks:pattern-interrupt"
+  },
+  "knowledge:viral-hooks:curiosity-gap": {
+    "relation_pairs": [
+      [
+        "Behind-the-Scenes Videos",
+        "Curiosity Gap"
+      ],
+      [
+        "Curiosity Gap",
+        "Thing Used for 30 Days"
+      ],
+      [
+        "Curiosity Gap",
+        "Zeigarnik Effect"
+      ],
+      [
+        "7-Figure Business",
+        "Marketing Tactic"
+      ],
+      [
+        "Curiosity Gap",
+        "Listicle Content"
+      ],
+      [
+        "Curiosity Gap",
+        "Tutorial Content"
+      ],
+      [
+        "3 Things I Wish I Knew",
+        "Curiosity Gap"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778002946,
+    "update_time": 1778002946,
+    "_id": "knowledge:viral-hooks:curiosity-gap"
+  },
+  "knowledge:viral-hooks:open-loop": {
+    "relation_pairs": [
+      [
+        "Open Loop",
+        "Short-Form Platforms"
+      ],
+      [
+        "Educational Reels",
+        "Open Loop"
+      ],
+      [
+        "Open Loop",
+        "Story-Based Posts"
+      ],
+      [
+        "Curiosity Gap",
+        "Open Loop"
+      ],
+      [
+        "Long-ish Videos",
+        "Open Loop"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002959,
+    "update_time": 1778002959,
+    "_id": "knowledge:viral-hooks:open-loop"
+  },
+  "knowledge:viral-hooks:before-after-tease": {
+    "relation_pairs": [
+      [
+        "Beauty",
+        "Before/After Tease"
+      ],
+      [
+        "Before/After Tease",
+        "Design"
+      ],
+      [
+        "Before/After Tease",
+        "Finance"
+      ],
+      [
+        "Before/After Tease",
+        "Fitness"
+      ],
+      [
+        "Before/After Tease",
+        "Playbook"
+      ],
+      [
+        "Before/After Tease",
+        "Productivity"
+      ]
+    ],
+    "count": 6,
+    "create_time": 1778002975,
+    "update_time": 1778002975,
+    "_id": "knowledge:viral-hooks:before-after-tease"
+  },
+  "knowledge:viral-hooks:high-contrast-cold-open": {
+    "relation_pairs": [
+      [
+        "Brand Content",
+        "High-Contrast Cold Open"
+      ],
+      [
+        "High-Contrast Cold Open",
+        "Vibrant Product Shot"
+      ],
+      [
+        "High-Contrast Cold Open",
+        "TikToks"
+      ],
+      [
+        "High-Contrast Cold Open",
+        "Mobile Autoplay"
+      ],
+      [
+        "High-Contrast Cold Open",
+        "Reels"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778002989,
+    "update_time": 1778002989,
+    "_id": "knowledge:viral-hooks:high-contrast-cold-open"
+  },
+  "knowledge:viral-hooks:direct-address": {
+    "relation_pairs": [
+      [
+        "Direct Address",
+        "Founders"
+      ],
+      [
+        "Direct Address",
+        "Educational Posts"
+      ],
+      [
+        "Direct Address",
+        "Zone 2 Cardio"
+      ],
+      [
+        "Direct Address",
+        "Freelancer"
+      ],
+      [
+        "Cold Outreach Style Content",
+        "Niche Content"
+      ],
+      [
+        "Direct Address",
+        "Niche Content"
+      ]
+    ],
+    "count": 6,
+    "create_time": 1778003002,
+    "update_time": 1778003002,
+    "_id": "knowledge:viral-hooks:direct-address"
+  },
+  "knowledge:viral-hooks:counterintuitive-claim": {
+    "relation_pairs": [
+      [
+        "Curiosity",
+        "Mild Outrage"
+      ],
+      [
+        "Counterintuitive Claim",
+        "Meaning"
+      ],
+      [
+        "Counterintuitive Claim",
+        "Thought-Leadership Content"
+      ],
+      [
+        "Counterintuitive Claim",
+        "Mild Outrage"
+      ],
+      [
+        "Counterintuitive Claim",
+        "Curiosity"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778003015,
+    "update_time": 1778003015,
+    "_id": "knowledge:viral-hooks:counterintuitive-claim"
+  },
+  "knowledge:viral-hooks:numbered-promise": {
+    "relation_pairs": [
+      [
+        "Carousel Slide",
+        "Numbered Promise"
+      ],
+      [
+        "Listicle",
+        "Numbered Promise"
+      ],
+      [
+        "Numbered Promise",
+        "Specific Number Claims"
+      ],
+      [
+        "Blog/Email Subject Lines",
+        "Numbered Promise"
+      ],
+      [
+        "Numbered Promise",
+        "Ultra-Specific Numbers"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778003028,
+    "update_time": 1778003028,
+    "_id": "knowledge:viral-hooks:numbered-promise"
+  },
+  "knowledge:viral-hooks:stakes-first": {
+    "relation_pairs": [
+      [
+        "Cognitive Bias",
+        "Loss-Aversion"
+      ],
+      [
+        "Loss-Aversion",
+        "Stakes-First"
+      ],
+      [
+        "Stakes-First",
+        "Warning Content"
+      ],
+      [
+        "High-Cost Decisions",
+        "Stakes-First"
+      ]
+    ],
+    "count": 4,
+    "create_time": 1778003039,
+    "update_time": 1778003039,
+    "_id": "knowledge:viral-hooks:stakes-first"
+  },
+  "knowledge:visual-design:rule-of-thirds": {
+    "relation_pairs": [
+      [
+        "Image-Generation Prompts",
+        "Rule of Thirds"
+      ],
+      [
+        "Grid",
+        "Rule of Thirds"
+      ],
+      [
+        "Reel Framing",
+        "Rule of Thirds"
+      ],
+      [
+        "Photo Composition",
+        "Rule of Thirds"
+      ]
+    ],
+    "count": 4,
+    "create_time": 1778003050,
+    "update_time": 1778003050,
+    "_id": "knowledge:visual-design:rule-of-thirds"
+  },
+  "knowledge:visual-design:f-pattern-reading": {
+    "relation_pairs": [
+      [
+        "F-Pattern Reading",
+        "Nielsen Norman Group"
+      ],
+      [
+        "Eye-Tracking Findings",
+        "F-Pattern Reading"
+      ],
+      [
+        "F-Pattern Reading",
+        "Static Images"
+      ],
+      [
+        "F-Pattern Reading",
+        "Text-Heavy Images"
+      ]
+    ],
+    "count": 4,
+    "create_time": 1778003062,
+    "update_time": 1778003062,
+    "_id": "knowledge:visual-design:f-pattern-reading"
+  },
+  "knowledge:visual-design:mobile-first-9-16": {
+    "relation_pairs": [
+      [
+        "FB Reels",
+        "Short-Form Video"
+      ],
+      [
+        "IGTV",
+        "Short-Form Video"
+      ],
+      [
+        "Mobile-First",
+        "Vertical Video"
+      ],
+      [
+        "Short-Form Video",
+        "YouTube Shorts"
+      ],
+      [
+        "Mobile-First",
+        "Short-Form Video"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778003074,
+    "update_time": 1778003074,
+    "_id": "knowledge:visual-design:mobile-first-9-16"
+  },
+  "knowledge:visual-design:square-1-1-for-feed": {
+    "relation_pairs": [
+      [
+        "Portrait (4:5) Format",
+        "Square (1:1) Format"
+      ],
+      [
+        "Instagram",
+        "Square (1:1) Format"
+      ],
+      [
+        "1080×1350",
+        "Portrait (4:5) Format"
+      ],
+      [
+        "Facebook",
+        "Square (1:1) Format"
+      ],
+      [
+        "1080×1080",
+        "Square (1:1) Format"
+      ],
+      [
+        "Carousel Slides",
+        "Portrait (4:5) Format"
+      ],
+      [
+        "Carousel Slides",
+        "Square (1:1) Format"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778003089,
+    "update_time": 1778003089,
+    "_id": "knowledge:visual-design:square-1-1-for-feed"
+  },
+  "knowledge:visual-design:text-overlay-rules": {
+    "relation_pairs": [
+      [
+        "Placement",
+        "Tactics"
+      ],
+      [
+        "Image with Overlaid Copy",
+        "Text Overlay Rules"
+      ],
+      [
+        "Carousel Slide Headlines",
+        "Text Overlay Rules"
+      ],
+      [
+        "Tactics",
+        "Text Overlay Rules"
+      ],
+      [
+        "Length",
+        "Tactics"
+      ],
+      [
+        "Font",
+        "Tactics"
+      ],
+      [
+        "Reel Cover Text",
+        "Text Overlay Rules"
+      ],
+      [
+        "Size",
+        "Tactics"
+      ],
+      [
+        "Contrast",
+        "Tactics"
+      ]
+    ],
+    "count": 9,
+    "create_time": 1778003110,
+    "update_time": 1778003110,
+    "_id": "knowledge:visual-design:text-overlay-rules"
+  },
+  "knowledge:visual-design:brand-color-discipline": {
+    "relation_pairs": [
+      [
+        "Brand Color Discipline",
+        "Figma"
+      ],
+      [
+        "Brand Color Discipline",
+        "Canva"
+      ],
+      [
+        "Brand Color Discipline",
+        "Highlight Color"
+      ],
+      [
+        "Brand Color Discipline",
+        "Color Palette"
+      ],
+      [
+        "Brand Color Discipline",
+        "Color Shifts"
+      ],
+      [
+        "Accent Color",
+        "Brand Color Discipline"
+      ],
+      [
+        "Brand Color Discipline",
+        "Dominant Color"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778003127,
+    "update_time": 1778003127,
+    "_id": "knowledge:visual-design:brand-color-discipline"
+  },
+  "knowledge:visual-design:font-pairing": {
+    "relation_pairs": [
+      [
+        "Display Font",
+        "Inter Bold"
+      ],
+      [
+        "Display Font",
+        "Font Pairing"
+      ],
+      [
+        "Bebas Neue",
+        "Display Font"
+      ],
+      [
+        "Display Font",
+        "Poppins Bold"
+      ],
+      [
+        "Body Font",
+        "Font Pairing"
+      ],
+      [
+        "Body Font",
+        "Inter Regular"
+      ],
+      [
+        "Body Font",
+        "Roboto"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778003141,
+    "update_time": 1778003141,
+    "_id": "knowledge:visual-design:font-pairing"
+  },
+  "knowledge:visual-design:carousel-pacing": {
+    "relation_pairs": [
+      [
+        "Carousel Pacing",
+        "Social Media Platforms"
+      ],
+      [
+        "Carousel Pacing",
+        "Instagram"
+      ],
+      [
+        "Carousel Pacing",
+        "Slide Structure"
+      ],
+      [
+        "Carousel Completion Rate",
+        "Carousel Pacing"
+      ],
+      [
+        "Carousel Pacing",
+        "LinkedIn"
+      ],
+      [
+        "CTA",
+        "Slide Structure"
+      ],
+      [
+        "Carousel Pacing",
+        "Facebook"
+      ]
+    ],
+    "count": 7,
+    "create_time": 1778003159,
+    "update_time": 1778003159,
+    "_id": "knowledge:visual-design:carousel-pacing"
+  },
+  "knowledge:visual-design:thumbnail-optimization": {
+    "relation_pairs": [
+      [
+        "Thumbnail",
+        "Thumbnail Optimization"
+      ],
+      [
+        "Static Feed Images",
+        "Thumbnail Optimization"
+      ],
+      [
+        "Reel Covers",
+        "Thumbnail Optimization"
+      ],
+      [
+        "Carousel Slide 1",
+        "Thumbnail Optimization"
+      ]
+    ],
+    "count": 4,
+    "create_time": 1778003171,
+    "update_time": 1778003171,
+    "_id": "knowledge:visual-design:thumbnail-optimization"
+  },
+  "knowledge:visual-design:negative-space": {
+    "relation_pairs": [
+      [
+        "Negative Space",
+        "Photo Posts"
+      ],
+      [
+        "Apple",
+        "Negative Space"
+      ],
+      [
+        "Minimal-Text Quote Graphics",
+        "Negative Space"
+      ],
+      [
+        "High-End Fashion Ads",
+        "Negative Space"
+      ],
+      [
+        "Negative Space",
+        "Visual Design"
+      ]
+    ],
+    "count": 5,
+    "create_time": 1778003185,
+    "update_time": 1778003185,
+    "_id": "knowledge:visual-design:negative-space"
+  }
+}
