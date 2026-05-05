@@ -84,6 +84,34 @@ def _write_marker(workdir: Path, content_hash: str) -> None:
     (workdir / ".knowledge-seed-applied").write_text(content_hash, encoding="utf-8")
 
 
+def should_skip_bootstrap(
+    *,
+    working_dir: str | Path,
+    seed_dir: str | Path = SEED_DIR_DEFAULT,
+) -> bool:
+    """Return True if the lazy knowledge bootstrap can be safely skipped on
+    first request — i.e. the seed marker matches the seed manifest's content
+    hash, so the registry is already populated and walking knowledge files
+    would just ack every section as 'skipped'.
+
+    Returns False when:
+      - No seed is present (e.g. dev compose with empty bakedknowledge/)
+      - Marker is missing (cold volume that hasn't completed seed restore yet)
+      - Marker hash differs from manifest hash (knowledge was edited since
+        last bake; lazy bootstrap should still run to ingest the delta)
+    """
+    seed = Path(seed_dir)
+    workdir = Path(working_dir)
+    manifest = _seed_present(seed)
+    if manifest is None:
+        return False
+    expected_hash = manifest.get("knowledge_content_hash") or ""
+    if not expected_hash:
+        return False
+    actual_hash = _read_marker(workdir)
+    return actual_hash == expected_hash
+
+
 def apply_filesystem_seed_if_needed(
     *,
     working_dir: str | Path,

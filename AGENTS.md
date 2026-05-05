@@ -243,14 +243,27 @@ data **cannot** end up in committed artifacts. Per-account ingest at runtime
 is unaffected — `facebook:<sm-id>:*` documents flow through the same pipeline
 and live in different payload-id partitions of the same Qdrant collections.
 
-### 9.1 Lazy knowledge bootstrap (run-once, blocking)
+### 9.1 Lazy knowledge bootstrap (fallback path; rarely runs in production)
 
-`LazyKnowledgeBootstrap.ensure_ready()` is awaitable + idempotent. The first incoming
-RPC/gRPC handler call schedules the bootstrap and **awaits** it; every subsequent caller
-awaits the same task and returns the moment it completes. After completion, calls return
-instantly for the rest of the container's lifetime.
+With § 9.0 in place, the lazy bootstrap is now mostly a **fallback**. The
+entrypoint calls `seed_loader.should_skip_bootstrap()` and, when the marker
+matches the bake's content hash, calls `LazyKnowledgeBootstrap.mark_already_ready()`
+to pre-complete the task. The first request then sees the bootstrap as
+already done — `WaitForRagReady` returns instantly.
 
-- Service start-up does **not** trigger bootstrap. The first request does.
+The lazy bootstrap actually fires only when:
+- The container has **no committed seed** (e.g. dev compose where
+  `bakedknowledge/` is empty), OR
+- The seed marker **doesn't match** the bake's content hash — i.e. someone
+  edited `src/knowledge/*.md` and re-deployed without re-running `./bake.sh`.
+  In that case, the bootstrap walks the changed sections, writes them via the
+  `IngestService`, and the registry catches up.
+
+When it does run:
+- `LazyKnowledgeBootstrap.ensure_ready()` is awaitable + idempotent. The first incoming
+  RPC/gRPC handler call schedules the bootstrap and **awaits** it; every subsequent caller
+  awaits the same task and returns the moment it completes. After completion, calls return
+  instantly for the rest of the container's lifetime.
 - Knowledge files (`src/knowledge/*.md`) are bootstrapped via LightRAG entity-extraction;
   this takes ~90–180s cold (~25–80 docs depending on file count).
 - The fingerprint registry persists in `rag-data` volume (`ingested_ids.json`), so
