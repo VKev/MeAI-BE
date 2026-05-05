@@ -1,3 +1,4 @@
+using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
 using Application.Posts.Models;
 using Domain.Entities;
@@ -16,15 +17,18 @@ public sealed class GetPostBuilderByIdQueryHandler
     private readonly IPostBuilderRepository _postBuilderRepository;
     private readonly PostResponseBuilder _postResponseBuilder;
     private readonly IUserSocialMediaService _userSocialMediaService;
+    private readonly IUserResourceService _userResourceService;
 
     public GetPostBuilderByIdQueryHandler(
         IPostBuilderRepository postBuilderRepository,
         PostResponseBuilder postResponseBuilder,
-        IUserSocialMediaService userSocialMediaService)
+        IUserSocialMediaService userSocialMediaService,
+        IUserResourceService userResourceService)
     {
         _postBuilderRepository = postBuilderRepository;
         _postResponseBuilder = postResponseBuilder;
         _userSocialMediaService = userSocialMediaService;
+        _userResourceService = userResourceService;
     }
 
     public async Task<Result<PostBuilderDetailsResponse>> Handle(
@@ -105,15 +109,61 @@ public sealed class GetPostBuilderByIdQueryHandler
                 group.Posts))
             .ToList();
 
+        // Hydrate builder-level resourceIds the same way the per-post `media[]`
+        // is hydrated by PostResponseBuilder — same shape (resourceId,
+        // presignedUrl, contentType, resourceType) — so callers can render
+        // builder-level resources without a second round-trip.
+        var builderResourceIds = GeminiDraftPostHelper.ParseResourceIds(postBuilder.ResourceIds);
+        var builderResources = await BuildBuilderResourcesAsync(
+            request.UserId, builderResourceIds, cancellationToken);
+
         return Result.Success(new PostBuilderDetailsResponse(
             postBuilder.Id,
             postBuilder.WorkspaceId,
             postBuilder.OriginKind,
             postBuilder.PostType,
-            GeminiDraftPostHelper.ParseResourceIds(postBuilder.ResourceIds),
+            builderResourceIds,
+            builderResources,
             finalizedGroups,
             postBuilder.CreatedAt,
             postBuilder.UpdatedAt));
+    }
+
+    private async Task<IReadOnlyList<PostMediaResponse>> BuildBuilderResourcesAsync(
+        Guid userId,
+        IReadOnlyList<Guid> resourceIds,
+        CancellationToken cancellationToken)
+    {
+        if (resourceIds.Count == 0)
+        {
+            return Array.Empty<PostMediaResponse>();
+        }
+
+        var presignResult = await _userResourceService.GetPresignedResourcesAsync(
+            userId, resourceIds, cancellationToken);
+        if (presignResult.IsFailure)
+        {
+            // Best-effort: the IDs are still surfaced via `resourceIds`, so a
+            // hydrate failure shouldn't fail the whole detail call.
+            return Array.Empty<PostMediaResponse>();
+        }
+
+        var resourcesById = presignResult.Value.ToDictionary(r => r.ResourceId, r => r);
+
+        var hydrated = new List<PostMediaResponse>(resourceIds.Count);
+        foreach (var id in resourceIds)
+        {
+            if (resourcesById.TryGetValue(id, out var resource))
+            {
+                hydrated.Add(new PostMediaResponse(
+                    resource.ResourceId,
+                    resource.PresignedUrl,
+                    resource.ContentType,
+                    resource.ResourceType));
+            }
+        }
+
+        return hydrated;
     }
 
     private static string ResolvePlatform(Post post, IReadOnlyDictionary<Guid, string> socialMediaTypesById)
