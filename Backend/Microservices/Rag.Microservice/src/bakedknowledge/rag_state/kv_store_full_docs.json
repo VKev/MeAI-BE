@@ -1,0 +1,541 @@
+{
+  "knowledge:content-formulas:fab-formula": {
+    "content": "## 1. FAB Formula\n\n**Meaning:** Highlight product/service value through features, advantages, and benefits.\n\n### Structure\n\n- **F – Features:** What the product/service has.\n- **A – Advantages:** What makes it better than competitors.\n- **B – Benefits:** What positive outcomes customers receive.\n\n### Best Use Cases\n\n- Product descriptions\n- Sales pages\n- E-commerce posts\n- Product launch campaigns\n- Instagram product captions\n- Facebook conversion posts\n\n### Core Psychology\n\nCustomers care more about benefits than features.\n\n### Example\n\n- Feature: Waterproof smartwatch\n- Advantage: Lasts 10 days on one charge\n- Benefit: No need to charge daily while traveling\n\n---",
+    "file_path": "knowledge:content-formulas:fab-formula",
+    "create_time": 1778002078,
+    "update_time": 1778002078,
+    "_id": "knowledge:content-formulas:fab-formula"
+  },
+  "knowledge:content-formulas:fas-formula": {
+    "content": "## 2. FAS Formula\n\n**Meaning:** Convert pain points into purchase intent by showing a solution.\n\n### Structure\n\n- **F / P – Problem:** Identify customer pain point\n- **A – Agitate:** Intensify the pain/problem\n- **S – Solve:** Present the solution\n\n### Best Use Cases\n\n- Ads\n- TikTok hooks\n- Facebook sales posts\n- Landing pages\n- Service marketing\n\n### Core Psychology\n\nPeople act faster to remove pain than to gain pleasure.\n\n### Example\n\n- Problem: Low engagement on social media\n- Agitate: Your brand looks invisible online\n- Solve: Use our content growth system\n\n---",
+    "file_path": "knowledge:content-formulas:fas-formula",
+    "create_time": 1778002104,
+    "update_time": 1778002104,
+    "_id": "knowledge:content-formulas:fas-formula"
+  },
+  "knowledge:content-formulas:bab-formula": {
+    "content": "## 3. BAB Formula\n\n**Meaning:** Show transformation from before to after.\n\n### Structure\n\n- **B – Before:** Current painful state\n- **A – After:** Desired future state\n- **B – Bridge:** Your product/service bridges the gap\n\n### Best Use Cases\n\n- Beauty\n- Fitness\n- Coaching\n- SaaS case studies\n- Reels/TikTok transformation content\n\n### Core Psychology\n\nPeople buy results and progress.\n\n### Example\n\nBefore: Messy finances\nAfter: Full control of money\nBridge: Budget tracking app\n\n---",
+    "file_path": "knowledge:content-formulas:bab-formula",
+    "create_time": 1778002119,
+    "update_time": 1778002119,
+    "_id": "knowledge:content-formulas:bab-formula"
+  },
+  "knowledge:content-formulas:4c-formula": {
+    "content": "## 4. 4C Formula\n\n**Meaning:** High-quality writing standards.\n\n### Structure\n\n- **Clear:** Easy to understand\n- **Concise:** Short and direct\n- **Compelling:** Persuasive and engaging\n- **Credible:** Trustworthy with proof\n\n### Best Use Cases\n\n- All content writing\n- Brand communication\n- Captions\n- Threads posts\n- Website copy\n\n### Core Psychology\n\nConfused people do not buy.\n\n---",
+    "file_path": "knowledge:content-formulas:4c-formula",
+    "create_time": 1778002133,
+    "update_time": 1778002133,
+    "_id": "knowledge:content-formulas:4c-formula"
+  },
+  "knowledge:content-formulas:4u-formula": {
+    "content": "## 5. 4U Formula\n\n**Meaning:** Create irresistible headlines/hooks.\n\n### Structure\n\n- **Useful:** Valuable to audience\n- **Urgent:** Time-sensitive or immediate need\n- **Unique:** Different from others\n- **Ultra-specific:** Specific and concrete\n\n### Best Use Cases\n\n- TikTok hooks\n- Reels titles\n- Ad headlines\n- Email subjects\n- Threads openers\n\n### Core Psychology\n\nSpecific promises outperform vague claims.\n\n### Example\n\n3 ways to grow followers in 7 days\n\n---",
+    "file_path": "knowledge:content-formulas:4u-formula",
+    "create_time": 1778002150,
+    "update_time": 1778002150,
+    "_id": "knowledge:content-formulas:4u-formula"
+  },
+  "knowledge:content-formulas:a-forest-formula": {
+    "content": "## 6. A FOREST Formula\n\n**Meaning:** Persuasive writing framework using rhetorical devices.\n\n### Structure\n\n- **A – Alliteration:** Repeated sounds\n- **F – Facts:** Truth/data\n- **O – Opinions:** Arguments/viewpoints\n- **R – Repetition:** Repeat key ideas\n- **E – Examples:** Examples/case studies\n- **S – Statistics:** Numbers/data\n- **T – Threes:** Use groups of three\n\n### Best Use Cases\n\n- Long-form sales pages\n- Landing pages\n- Speeches\n- Persuasive copy\n- Educational content\n\n### Core Psychology\n\nRepetition + proof + rhythm improve persuasion.\n\n---",
+    "file_path": "knowledge:content-formulas:a-forest-formula",
+    "create_time": 1778002163,
+    "update_time": 1778002163,
+    "_id": "knowledge:content-formulas:a-forest-formula"
+  },
+  "knowledge:content-formulas:aida-formula": {
+    "content": "## 7. AIDA Formula\n\n**Meaning:** Classic conversion funnel copywriting model.\n\n### Structure\n\n- **A – Attention:** Get noticed\n- **I – Interest:** Build curiosity\n- **D – Desire:** Create want/need\n- **A – Action:** Ask for action\n\n### Best Use Cases\n\n- Ads\n- Sales pages\n- Product pages\n- Reels scripts\n- CTAs\n\n### Core Psychology\n\nPeople buy after emotional desire + clear next step.\n\n---",
+    "file_path": "knowledge:content-formulas:aida-formula",
+    "create_time": 1778002180,
+    "update_time": 1778002180,
+    "_id": "knowledge:content-formulas:aida-formula"
+  },
+  "knowledge:content-formulas:5-objections-formula": {
+    "content": "## 8. 5 Objections Formula\n\n**Meaning:** Remove common buying resistance.\n\n### Structure\n\n- I don't have money\n- I don't have time\n- I don't like it\n- I don't trust it\n- I don't need it\n\n### Best Use Cases\n\n- Sales copy\n- Objection handling posts\n- FAQ content\n- Landing pages\n- Facebook conversion posts\n\n### Core Psychology\n\nSales happen when resistance is lowered.\n\n---",
+    "file_path": "knowledge:content-formulas:5-objections-formula",
+    "create_time": 1778002197,
+    "update_time": 1778002197,
+    "_id": "knowledge:content-formulas:5-objections-formula"
+  },
+  "knowledge:content-formulas:3-reasons-why-formula": {
+    "content": "## 9. 3 Reasons Why Formula\n\n**Meaning:** Build logic and trust through 3 answers.\n\n### Structure\n\n- Why is your product the best?\n- Why should I buy it?\n- Why should I trust you?\n\n### Best Use Cases\n\n- Comparison ads\n- Short-form video\n- Product pages\n- Carousel posts\n- Threads arguments\n\n### Core Psychology\n\nBuyers need confidence, value, trust.\n\n---",
+    "file_path": "knowledge:content-formulas:3-reasons-why-formula",
+    "create_time": 1778002212,
+    "update_time": 1778002212,
+    "_id": "knowledge:content-formulas:3-reasons-why-formula"
+  },
+  "knowledge:content-formulas:4p-formula": {
+    "content": "## 10. 4P Formula\n\n**Meaning:** Strong sales persuasion formula.\n\n### Structure\n\n- **Picture:** Show attractive vision/result\n- **Promise:** Make clear promise\n- **Prove:** Provide evidence\n- **Push:** CTA / urge action\n\n### Best Use Cases\n\n- Facebook ads\n- Sales posts\n- Landing pages\n- Product launches\n\n### Core Psychology\n\nVision + proof + urgency convert well.\n\n---",
+    "file_path": "knowledge:content-formulas:4p-formula",
+    "create_time": 1778002229,
+    "update_time": 1778002229,
+    "_id": "knowledge:content-formulas:4p-formula"
+  },
+  "knowledge:content-formulas:3s-formula": {
+    "content": "## 11. 3S Formula\n\n**Meaning:** Story-based persuasion.\n\n### Structure\n\n- **Star:** Main character\n- **Story:** Journey/conflict\n- **Solution:** Resolution using your offer\n\n### Best Use Cases\n\n- Storytelling posts\n- Founder stories\n- Facebook posts\n- Reels storytelling\n- Case studies\n\n### Core Psychology\n\nHumans remember stories more than claims.\n\n---",
+    "file_path": "knowledge:content-formulas:3s-formula",
+    "create_time": 1778002249,
+    "update_time": 1778002249,
+    "_id": "knowledge:content-formulas:3s-formula"
+  },
+  "knowledge:content-formulas:4a-formula": {
+    "content": "## 12. 4A Formula\n\n**Meaning:** Brand action loop model.\n\n### Structure\n\n- **Aware:** Know the brand\n- **Attitude:** Build positive feeling\n- **Act:** Purchase/action\n- **Act Again:** Repeat purchase\n\n### Best Use Cases\n\n- Retention strategy\n- Brand campaigns\n- CRM content\n- Loyalty marketing\n\n### Core Psychology\n\nRepeat buyers are more valuable than first-time buyers.\n\n---",
+    "file_path": "knowledge:content-formulas:4a-formula",
+    "create_time": 1778002264,
+    "update_time": 1778002264,
+    "_id": "knowledge:content-formulas:4a-formula"
+  },
+  "knowledge:content-formulas:5a-formula": {
+    "content": "## 13. 5A Formula\n\n**Meaning:** Modern customer journey model (Philip Kotler).\n\n### Structure\n\n- **Awareness:** Know brand\n- **Appeal:** Feel attracted\n- **Ask:** Research and compare\n- **Action:** Buy\n- **Advocate:** Recommend brand\n\n### Best Use Cases\n\n- Full funnel campaigns\n- Community building\n- Brand ecosystems\n- Social proof systems\n\n### Core Psychology\n\nModern buyers research and share publicly.\n\n---",
+    "file_path": "knowledge:content-formulas:5a-formula",
+    "create_time": 1778002283,
+    "update_time": 1778002283,
+    "_id": "knowledge:content-formulas:5a-formula"
+  },
+  "knowledge:content-formulas:app-formula": {
+    "content": "## 14. APP Formula\n\n**Meaning:** Fast hook structure for modern content.\n\n### Structure\n\n- **Agree:** Show you understand their problem\n- **Promise:** Promise value/solution\n- **Preview:** Explain what they'll get\n\n### Best Use Cases\n\n- TikTok intros\n- Reels hooks\n- Blog intros\n- Threads opening posts\n- Email intros\n\n### Core Psychology\n\nPeople engage when they feel understood first.\n\n### Example\n\nStruggling to grow on Instagram?\nI'll show you a method that works.\nHere are 3 steps to start today.\n\n---",
+    "file_path": "knowledge:content-formulas:app-formula",
+    "create_time": 1778002303,
+    "update_time": 1778002303,
+    "_id": "knowledge:content-formulas:app-formula"
+  },
+  "knowledge:content-formulas:platform-mapping-tiktok": {
+    "content": "## Platform Mapping TikTok\n\n### Primary Formulas\n\n- 4U\n- AIDA\n- APP\n- BAB\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- FAS\n- 3S\n- FAB\n\n### Best For\n\n- Hooks\n- Retention\n- Fast education\n- Viral short-form content\n\n---",
+    "file_path": "knowledge:content-formulas:platform-mapping-tiktok",
+    "create_time": 1778002324,
+    "update_time": 1778002324,
+    "_id": "knowledge:content-formulas:platform-mapping-tiktok"
+  },
+  "knowledge:content-formulas:platform-mapping-facebook-post": {
+    "content": "## Platform Mapping Facebook Post\n\n### Primary Formulas\n\n- BAB\n- AIDA\n- FAB\n- 3S\n- 5 Objections\n\n### Secondary Formulas\n\n- 4P\n- FAS\n- APP\n- 4C\n- 3 Reasons Why\n\n### Best For\n\n- Storytelling\n- Community engagement\n- Sales posts\n- Trust building\n\n---",
+    "file_path": "knowledge:content-formulas:platform-mapping-facebook-post",
+    "create_time": 1778002334,
+    "update_time": 1778002334,
+    "_id": "knowledge:content-formulas:platform-mapping-facebook-post"
+  },
+  "knowledge:content-formulas:platform-mapping-facebook-reel": {
+    "content": "## Platform Mapping Facebook Reel\n\n### Primary Formulas\n\n- 4U\n- AIDA\n- APP\n- BAB\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- FAS\n- 3S\n\n### Best For\n\n- Relatable short videos\n- Product demo reels\n- Fast conversions\n\n---",
+    "file_path": "knowledge:content-formulas:platform-mapping-facebook-reel",
+    "create_time": 1778002345,
+    "update_time": 1778002345,
+    "_id": "knowledge:content-formulas:platform-mapping-facebook-reel"
+  },
+  "knowledge:content-formulas:platform-mapping-instagram-post": {
+    "content": "## Platform Mapping Instagram Post\n\n### Primary Formulas\n\n- 4C\n- FAB\n- 4P\n- 5A\n- APP\n\n### Secondary Formulas\n\n- AIDA\n- BAB\n- FAS\n- 3 Reasons Why\n\n### Best For\n\n- Carousel education\n- Brand identity\n- Saveable content\n- Product showcase\n\n---",
+    "file_path": "knowledge:content-formulas:platform-mapping-instagram-post",
+    "create_time": 1778002355,
+    "update_time": 1778002355,
+    "_id": "knowledge:content-formulas:platform-mapping-instagram-post"
+  },
+  "knowledge:content-formulas:platform-mapping-instagram-reel": {
+    "content": "## Platform Mapping Instagram Reel\n\n### Primary Formulas\n\n- 4U\n- AIDA\n- APP\n- BAB\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- FAS\n- 3S\n- FAB\n\n### Best For\n\n- Aesthetic reels\n- Tips\n- Transformation content\n- Growth content\n\n---",
+    "file_path": "knowledge:content-formulas:platform-mapping-instagram-reel",
+    "create_time": 1778002366,
+    "update_time": 1778002366,
+    "_id": "knowledge:content-formulas:platform-mapping-instagram-reel"
+  },
+  "knowledge:content-formulas:platform-mapping-threads-post": {
+    "content": "## Platform Mapping Threads Post\n\n### Primary Formulas\n\n- 4U\n- APP\n- BAB\n- 3S\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- AIDA\n- 4C\n- FAS\n\n### Best For\n\n- Opinions\n- Relatable thoughts\n- Mini storytelling\n- Community discussions\n\n---",
+    "file_path": "knowledge:content-formulas:platform-mapping-threads-post",
+    "create_time": 1778002377,
+    "update_time": 1778002377,
+    "_id": "knowledge:content-formulas:platform-mapping-threads-post"
+  },
+  "knowledge:content-formulas:category-cross-platform-high-performance": {
+    "content": "## Category Cross-Platform High Performance\n\nUse these formulas across any platform when you want maximum reach with minimum platform-specific tuning:\n\n- 4U\n- AIDA\n- BAB\n- APP\n- FAB\n\n---",
+    "file_path": "knowledge:content-formulas:category-cross-platform-high-performance",
+    "create_time": 1778002388,
+    "update_time": 1778002388,
+    "_id": "knowledge:content-formulas:category-cross-platform-high-performance"
+  },
+  "knowledge:content-formulas:category-hook-viral": {
+    "content": "## Category Hook Viral\n\nWhen the goal is to grab attention in the first 1–3 seconds:\n\n- 4U\n- APP\n- 3 Reasons Why\n\n---",
+    "file_path": "knowledge:content-formulas:category-hook-viral",
+    "create_time": 1778002395,
+    "update_time": 1778002395,
+    "_id": "knowledge:content-formulas:category-hook-viral"
+  },
+  "knowledge:content-formulas:category-storytelling-trust": {
+    "content": "## Category Storytelling Trust\n\nWhen the goal is to build trust through narrative or vulnerability:\n\n- BAB\n- 3S\n\n---",
+    "file_path": "knowledge:content-formulas:category-storytelling-trust",
+    "create_time": 1778002404,
+    "update_time": 1778002404,
+    "_id": "knowledge:content-formulas:category-storytelling-trust"
+  },
+  "knowledge:content-formulas:category-conversion-sales": {
+    "content": "## Category Conversion Sales\n\nWhen the goal is to drive purchase or signup:\n\n- AIDA\n- FAB\n- FAS\n- 4P\n- 5 Objections\n\n---",
+    "file_path": "knowledge:content-formulas:category-conversion-sales",
+    "create_time": 1778002416,
+    "update_time": 1778002416,
+    "_id": "knowledge:content-formulas:category-conversion-sales"
+  },
+  "knowledge:content-formulas:category-branding-audience-growth": {
+    "content": "## Category Branding Audience Growth\n\nWhen the goal is to compound brand recognition over time:\n\n- 4C\n- 4A\n- 5A\n\n---",
+    "file_path": "knowledge:content-formulas:category-branding-audience-growth",
+    "create_time": 1778002429,
+    "update_time": 1778002429,
+    "_id": "knowledge:content-formulas:category-branding-audience-growth"
+  },
+  "knowledge:content-formulas:category-low-priority-short-social": {
+    "content": "## Category Low Priority Short Social\n\nAvoid these in short-form social content (too long-form / too strategic):\n\n- A FOREST\n- 4A\n- 5A (except brand strategy or Instagram post)",
+    "file_path": "knowledge:content-formulas:category-low-priority-short-social",
+    "create_time": 1778002435,
+    "update_time": 1778002435,
+    "_id": "knowledge:content-formulas:category-low-priority-short-social"
+  },
+  "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait": {
+    "content": "## Save-bait vs Share-bait vs Comment-bait\n\n**Meaning:** Each engagement type rewards a different content style. Design the post for the action you want.\n\n### When to use\n\n- Anytime — pick the goal first, then the format\n- Don't try to optimize for all three at once\n\n### Examples\n\n- **Save-bait:** Reference checklists, frameworks, \"save this for later\" reminders, infographic carousels. Anything the viewer will want to revisit.\n- **Share-bait:** Memes, relatable observations, opinions that flatter the sharer's identity, political/cultural takes that \"needed to be said\".\n- **Comment-bait:** Questions, polls, controversial-but-positive opinions, \"tell me I'm wrong\" statements.\n\n### Why it works\n\nAlgorithms weight saves and shares much higher than likes because they signal repeat or amplifying value. A post with 100 saves outperforms a post with 1000 likes. Comments boost reach by inviting public discussion, which extends a post's lifespan.\n\n---",
+    "file_path": "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait",
+    "create_time": 1778002445,
+    "update_time": 1778002445,
+    "_id": "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait"
+  },
+  "knowledge:engagement-triggers:question-ending": {
+    "content": "## Question-Ending\n\n**Meaning:** End every post with a specific, easy-to-answer question to drive comments.\n\n### When to use\n\n- Carousel posts, long captions, threads\n- Anytime you want to boost the comment count\n\n### Example\n\n- Bad: \"Let me know what you think.\" (too vague)\n- Good: \"What's the worst piece of marketing advice you've ever followed?\"\n- Good: \"Carousel or reel — which one are you betting on for 2026?\"\n\n### Why it works\n\nSpecific questions reduce the cognitive load of replying. Vague open-ended prompts get scrolled past; concrete forced-choice or recall questions get answered. More comments = more reach.\n\n---",
+    "file_path": "knowledge:engagement-triggers:question-ending",
+    "create_time": 1778002460,
+    "update_time": 1778002460,
+    "_id": "knowledge:engagement-triggers:question-ending"
+  },
+  "knowledge:engagement-triggers:vulnerability-posts": {
+    "content": "## Vulnerability Posts\n\n**Meaning:** Share a personal struggle, mistake, or admission that contradicts the polished social-media norm.\n\n### When to use\n\n- Personal brand accounts\n- Coaches, founders, creators building thought leadership\n- Sparingly — overuse becomes performative\n\n### Example\n\n\"I burned out 3 times this year. Here's what I'd do differently.\"\n\"My first 6 months as a founder were a complete failure. I didn't make a single sale.\"\n\"I almost deleted my account last week. Here's why I didn't.\"\n\n### Why it works\n\nVulnerability triggers parasocial bonding — followers feel they know you personally. This drives saves (people return to read more) and shares (\"you have to read this\"). It also raises trust, which compounds over months.\n\n---",
+    "file_path": "knowledge:engagement-triggers:vulnerability-posts",
+    "create_time": 1778002478,
+    "update_time": 1778002478,
+    "_id": "knowledge:engagement-triggers:vulnerability-posts"
+  },
+  "knowledge:engagement-triggers:controversial-but-positive": {
+    "content": "## Controversial-but-Positive\n\n**Meaning:** Take an opinion that splits your audience without being mean. The goal is debate, not trolling.\n\n### When to use\n\n- Established accounts with a defined audience\n- Topics where conventional wisdom is weak\n\n### Example\n\n\"Niching down is overrated for the first 100 followers.\"\n\"Cold outreach is more honest than content marketing.\"\n\"Most morning routines are productivity theater.\"\n\n### Why it works\n\nDisagreement drives comments more than agreement. People reply to push back, defend their view, or signal allegiance. The \"but-positive\" constraint avoids the brand damage of pure rage-bait while still capturing the reach benefit of controversy.\n\n---",
+    "file_path": "knowledge:engagement-triggers:controversial-but-positive",
+    "create_time": 1778002492,
+    "update_time": 1778002492,
+    "_id": "knowledge:engagement-triggers:controversial-but-positive"
+  },
+  "knowledge:engagement-triggers:insider-knowledge": {
+    "content": "## Insider Knowledge\n\n**Meaning:** Frame content as \"what nobody tells you\" or \"industry secrets\". Implies the reader is now in-the-know.\n\n### When to use\n\n- Niche-specific educational content\n- Saveable carousels and threads\n- Audiences hungry for shortcuts\n\n### Example\n\n\"What my first agency boss taught me that nobody talks about.\"\n\"5 things VCs check before they invest — but won't tell you.\"\n\"The dirty secret of every viral creator: they're all using this tool.\"\n\n### Why it works\n\nStatus: knowing something others don't is socially valuable. Curiosity: people click on hidden information. Saves: insider knowledge feels worth bookmarking, even when the actual content is mundane.\n\n---",
+    "file_path": "knowledge:engagement-triggers:insider-knowledge",
+    "create_time": 1778002504,
+    "update_time": 1778002504,
+    "_id": "knowledge:engagement-triggers:insider-knowledge"
+  },
+  "knowledge:engagement-triggers:listicle-carousel-anatomy": {
+    "content": "## Listicle / Carousel Anatomy\n\n**Meaning:** Structure a multi-slide post as: hook slide + 4–7 value slides + CTA slide. Each slide must earn the next swipe.\n\n### When to use\n\n- Educational content\n- Instagram and Facebook carousels\n- LinkedIn slideshow posts\n\n### Structure\n\n- **Slide 1 (Hook):** Numbered promise + bold visual + \"swipe to see\"\n- **Slides 2 to N–1:** One idea per slide, big text, minimal decoration\n- **Last slide (CTA):** \"Save this for later\" + a single follow-up action (\"Follow @x for more\" / \"Comment your favorite\")\n\n### Why it works\n\nEach swipe is a micro-commitment that signals high engagement. The platform measures swipe-through-rate and uses it as a quality proxy. A carousel that holds attention through 7 slides outperforms a single post 3-5x in reach.\n\n---",
+    "file_path": "knowledge:engagement-triggers:listicle-carousel-anatomy",
+    "create_time": 1778002520,
+    "update_time": 1778002520,
+    "_id": "knowledge:engagement-triggers:listicle-carousel-anatomy"
+  },
+  "knowledge:engagement-triggers:algorithm-friendly-cadence": {
+    "content": "## Algorithm-Friendly Cadence\n\n**Meaning:** Posting frequency that the platform's ranker rewards without flooding your audience.\n\n### Guidance\n\n- **Instagram:** 1–2 posts/day max in feed, plus 2–4 stories. Posting more often dilutes reach per post.\n- **TikTok:** 3–5 posts/day during ramp-up; the algorithm rewards velocity but penalizes low-quality spam after ~5 posts/day.\n- **Facebook:** 1–3 posts/day for pages. Facebook deprioritizes back-to-back posts from the same page.\n- **Threads:** 3–7 posts/day. Threads is conversational and rewards activity.\n- **LinkedIn:** 1 post/day max. Quality over frequency; posts compound over a 24–48h window.\n\n### Why it works\n\nEach platform has internal pacing rules to avoid feed spam. Posting above the threshold causes the algorithm to suppress the second/third post to protect the user experience. Posting below the threshold means lost compounding from algorithmic learning.\n\n---",
+    "file_path": "knowledge:engagement-triggers:algorithm-friendly-cadence",
+    "create_time": 1778002537,
+    "update_time": 1778002537,
+    "_id": "knowledge:engagement-triggers:algorithm-friendly-cadence"
+  },
+  "knowledge:engagement-triggers:golden-hour": {
+    "content": "## Golden Hour\n\n**Meaning:** The first 60 minutes after posting determines the post's overall reach. Maximize early engagement.\n\n### When to use\n\n- Every post — but most aggressively for content you've invested heavily in\n\n### Tactics\n\n- Post when your audience is most active (check the platform's analytics tab for your specific peak times — often 7–9 AM or 7–10 PM in the audience's timezone)\n- Pin the post to your profile during the first hour to boost visibility for profile visitors\n- Reply to every comment in the first 30 minutes to signal activity to the ranker\n- Share to Stories, send to a small group of supporters, post in relevant communities — anything to seed early engagement\n\n### Why it works\n\nMost platform rankers use early engagement velocity as the primary distribution signal. A post that gets 100 engagements in the first hour will be shown to 10x the audience of a post that gets 100 engagements over 24 hours. The ranker treats early velocity as evidence of quality.",
+    "file_path": "knowledge:engagement-triggers:golden-hour",
+    "create_time": 1778002551,
+    "update_time": 1778002551,
+    "_id": "knowledge:engagement-triggers:golden-hour"
+  },
+  "knowledge:image-design-branded:when-to-use-branded-style": {
+    "content": "## When To Use Branded Style\n\n**Meaning:** Default for everyday posts. Pick this when neither pure-vibe (creative) nor sales-flyer (marketing) is right.\n\n### Best fit\n- Tip / advice posts (\"3 things you should know about X\")\n- News / updates / announcements (non-promotional)\n- Storytelling posts with a hook\n- Industry insights, opinion takes\n- Engagement-bait questions paired with a visual\n- Anything when the user has not specified a style\n\n### Wrong fit\n- Behind-the-scenes mood pieces with no message → use `creative`\n- Discount / launch / limited-time offer → use `marketing`\n\n---",
+    "file_path": "knowledge:image-design-branded:when-to-use-branded-style",
+    "create_time": 1778002563,
+    "update_time": 1778002563,
+    "_id": "knowledge:image-design-branded:when-to-use-branded-style"
+  },
+  "knowledge:image-design-branded:branded-composition-rules": {
+    "content": "## Branded Composition Rules\n\n**Meaning:** Strong photographic / illustrative composition first, brand layer second.\n\n### Apply\n- **One hero subject** plus space for one short headline\n- **Headline-safe area:** Top third or bottom third of the frame should be visually quiet (sky, surface, gradient, blurred background) so headline text sits readably\n- **Rule of thirds** for the subject; do not center\n- **Aspect ratio:** 1:1 for feed (default), 4:5 for IG portrait, 9:16 for reel/story covers, 16:9 for FB cover\n- **Mobile-first.** Subject must be recognizable at 200px wide\n\n---",
+    "file_path": "knowledge:image-design-branded:branded-composition-rules",
+    "create_time": 1778002575,
+    "update_time": 1778002575,
+    "_id": "knowledge:image-design-branded:branded-composition-rules"
+  },
+  "knowledge:image-design-branded:branded-text-rules": {
+    "content": "## Branded Text Rules\n\n**Meaning:** One short headline, optionally one short subhead. Never a full text block, never CTAs, never contact info.\n\n### Apply\n- **One headline** of 3–8 words. Examples: *\"Your camera, smarter.\"* / *\"Trick #2: light from the side.\"* / *\"5 things every creator misses.\"*\n- **Optional subhead** of 4–10 words for context, sitting smaller below the headline\n- **No body copy.** No paragraphs. No bullet lists\n- **No CTA buttons.** (\"Shop Now\", \"Learn More\" → that is `marketing`)\n- **No phone / email / website on the image.** Contact info lives only in the caption\n- **Type hierarchy:**\n  - Headline: 60–80pt (on a 1080×1080 canvas)\n  - Subhead: 24–32pt\n  - Both top-aligned or bottom-aligned, never floating mid-image\n- **Font:** Brand display font for headline; clean sans-serif for subhead. Only ONE font family per image (use weight + size for hierarchy)\n- **Contrast:** Text must score WCAG AA against its background — dark text on light, light text on dark, never gray on gray\n\n---",
+    "file_path": "knowledge:image-design-branded:branded-text-rules",
+    "create_time": 1778002587,
+    "update_time": 1778002587,
+    "_id": "knowledge:image-design-branded:branded-text-rules"
+  },
+  "knowledge:image-design-branded:branded-brand-presence": {
+    "content": "## Branded Brand Presence\n\n**Meaning:** Brand mark is visible but does not dominate.\n\n### Apply\n- **Wordmark or logo** in one corner (top-left or bottom-right preferred), 6–10% of frame width\n- **Brand color accent** somewhere in the frame — a stripe, a button shape, an underline under the headline — to repeat brand identity\n- **No tagline lockup** — just the mark\n- **No \"Follow @handle\"** banner\n- **Brand consistency check:** the image should be recognizable as YOUR brand from a 500ms glance, before any text is read\n\n---",
+    "file_path": "knowledge:image-design-branded:branded-brand-presence",
+    "create_time": 1778002594,
+    "update_time": 1778002594,
+    "_id": "knowledge:image-design-branded:branded-brand-presence"
+  },
+  "knowledge:image-design-branded:branded-color-lighting": {
+    "content": "## Branded Color & Lighting\n\n**Meaning:** Pull palette + lighting from the brand identity (RAG'd from past posts). Branded posts should look like they belong in the same grid as everything else.\n\n### Apply\n- **Palette:** Pull primary color from page profile / past-post reference images. Use 2–3 colors max\n- **Lighting:** Match the brand's typical mood. Warm + natural for lifestyle brands, cool + clean for tech, high-contrast for bold/edgy brands\n- **Headline color:** brand primary OR pure white/black for max readability over photography\n- **Background:** photo, illustration, or solid brand color — not a stock gradient\n\n---",
+    "file_path": "knowledge:image-design-branded:branded-color-lighting",
+    "create_time": 1778002607,
+    "update_time": 1778002607,
+    "_id": "knowledge:image-design-branded:branded-color-lighting"
+  },
+  "knowledge:image-design-branded:branded-layout-patterns": {
+    "content": "## Branded Layout Patterns\n\n**Meaning:** Three reliable patterns work for ~80% of branded posts. Use one, do not invent.\n\n### Apply\n\n**Pattern A — Top-Title Photo**\n- Top third: brand color or white block + headline\n- Bottom two-thirds: hero photo\n- Brand mark: bottom-right corner\n- Best for: tip posts, news\n\n**Pattern B — Bottom-Title Photo**\n- Top two-thirds: hero photo\n- Bottom third: brand color block + headline + subhead\n- Brand mark: top-left or in the bottom block\n- Best for: storytelling, lifestyle-with-message\n\n**Pattern C — Overlay-Title Photo**\n- Full-bleed photo with a subtle dark gradient at top OR bottom\n- Headline sits over the gradient area, full-bleed safe\n- Brand mark: opposite corner from headline\n- Best for: editorial-feel posts, when the photo is too good to crop",
+    "file_path": "knowledge:image-design-branded:branded-layout-patterns",
+    "create_time": 1778002620,
+    "update_time": 1778002620,
+    "_id": "knowledge:image-design-branded:branded-layout-patterns"
+  },
+  "knowledge:image-design-creative:when-to-use-creative-style": {
+    "content": "## When To Use Creative Style\n\n**Meaning:** Pick this style when the goal is brand vibe, emotional connection, or mood — not conversion or education.\n\n### Best fit\n- Behind-the-scenes glimpses, team moments, brand storytelling\n- Lifestyle / aspirational imagery\n- Brand-vibe posts (no specific product CTA)\n- Photography-led brands (food, fashion, travel, fitness)\n- Trending-format participation (memes, cultural moments)\n\n### Wrong fit\n- Product launches with feature claims → use `marketing`\n- Tip / list posts → use `branded`\n- Sales / discount announcements → use `marketing`\n\n---",
+    "file_path": "knowledge:image-design-creative:when-to-use-creative-style",
+    "create_time": 1778002630,
+    "update_time": 1778002630,
+    "_id": "knowledge:image-design-creative:when-to-use-creative-style"
+  },
+  "knowledge:image-design-creative:creative-composition-rules": {
+    "content": "## Creative Composition Rules\n\n**Meaning:** Treat the image like a single editorial photograph. One subject, strong composition, atmosphere over information.\n\n### Apply\n- **Single hero subject** — one clear focal point, not a crowded layout\n- **Rule of thirds** — subject sits on a one-third intersection, not centered\n- **Negative space** — let the subject breathe; do not fill every pixel\n- **Cinematic framing** — shallow depth of field, leading lines, layered foreground/background\n- **Natural lighting** — golden hour, window light, soft diffused; avoid flat overhead light\n- **Aspect ratio** — 1:1 for feed, 4:5 for IG portrait, 9:16 for reels/stories. Marketing-style 16:9 is rarely correct here\n\n---",
+    "file_path": "knowledge:image-design-creative:creative-composition-rules",
+    "create_time": 1778002644,
+    "update_time": 1778002644,
+    "_id": "knowledge:image-design-creative:creative-composition-rules"
+  },
+  "knowledge:image-design-creative:creative-text-rules": {
+    "content": "## Creative Text Rules\n\n**Meaning:** The image should be readable WITHOUT text. Any text on the image is a constraint, not a feature.\n\n### Apply\n- **No text by default.** The caption carries copy\n- **Allowed exceptions:** A single short word/phrase as artistic typography (e.g., a title like \"Sunday.\" or \"On the road\"), under 5 words, treated as a design element not a marketing claim\n- **No headline + body + CTA stacks** — that is `marketing` territory\n- **No contact info on the image** — phone, email, website never appear here. They live in the caption (and only when the post warrants it)\n- **No logo lockup with tagline** — at most a small subtle wordmark in a corner; never the full brand block\n\n---",
+    "file_path": "knowledge:image-design-creative:creative-text-rules",
+    "create_time": 1778002658,
+    "update_time": 1778002658,
+    "_id": "knowledge:image-design-creative:creative-text-rules"
+  },
+  "knowledge:image-design-creative:creative-color-mood": {
+    "content": "## Creative Color & Mood\n\n**Meaning:** Palette is dictated by the brand identity from the page profile, not invented per post.\n\n### Apply\n- **Pull palette from past posts** — use the RAG'd reference images to lock palette\n- **2–3 colors max** — limited palette feels intentional\n- **Mood signals:**\n  - Warm tones (golden, amber) → cozy, nostalgic, food, lifestyle\n  - Cool tones (blue, teal, slate) → tech, premium, trustworthy\n  - High saturation → energetic, youthful, bold\n  - Desaturated / muted → editorial, timeless, premium\n- **Match the brand mood from the profile.** A wellness brand should not get a high-contrast neon image; a tech brand should not get a watercolor pastel image\n\n---",
+    "file_path": "knowledge:image-design-creative:creative-color-mood",
+    "create_time": 1778002671,
+    "update_time": 1778002671,
+    "_id": "knowledge:image-design-creative:creative-color-mood"
+  },
+  "knowledge:image-design-creative:creative-brand-presence": {
+    "content": "## Creative Brand Presence\n\n**Meaning:** Brand is felt, not displayed. The viewer should know it is your brand from the visual style alone.\n\n### Apply\n- **No on-image logo** by default. If the brand logo is included, it is small (under 8% of frame), in a corner, low-contrast against the background\n- **Brand colors visible** in palette, not as labels\n- **Recognizable signature elements** if the brand has them (a recurring prop, a specific filter, a typeface used as artistic typography only)\n- **No frames, badges, or banners** — those are `marketing` patterns",
+    "file_path": "knowledge:image-design-creative:creative-brand-presence",
+    "create_time": 1778002681,
+    "update_time": 1778002681,
+    "_id": "knowledge:image-design-creative:creative-brand-presence"
+  },
+  "knowledge:image-design-marketing:when-to-use-marketing-style": {
+    "content": "## When To Use Marketing Style\n\n**Meaning:** Pick this style when the post has a specific commercial goal and the image must close the loop on its own.\n\n### Best fit\n- Product launches, new arrivals\n- Sales / discounts / limited-time offers\n- Service offerings (\"Book a free consultation\")\n- Event announcements (date + venue + RSVP link)\n- Lead magnets (\"Download the free guide\")\n- B2B service ads\n- Direct-response posts (ROI is measured in clicks/replies)\n\n### Wrong fit\n- Mood / lifestyle posts → use `creative`\n- Educational / engagement posts → use `branded`\n- Storytelling without a CTA → use `branded`\n\n---",
+    "file_path": "knowledge:image-design-marketing:when-to-use-marketing-style",
+    "create_time": 1778002695,
+    "update_time": 1778002695,
+    "_id": "knowledge:image-design-marketing:when-to-use-marketing-style"
+  },
+  "knowledge:image-design-marketing:marketing-composition-rules": {
+    "content": "## Marketing Composition Rules\n\n**Meaning:** Layout for fast comprehension. The viewer decides \"is this for me?\" in under one second.\n\n### Apply\n- **F-pattern reading order.** Top-left → top-right → middle → bottom-right (CTA goes bottom-right)\n- **Visual hierarchy in 4 layers:**\n  1. **Headline** (largest, 3–6 words, the value prop)\n  2. **Hero visual** (product / outcome / before-after)\n  3. **Supporting copy** (subhead, 1–2 short lines, the proof or detail)\n  4. **CTA + brand block** (action button + logo + contact line)\n- **Aspect ratio:** 1:1 for feed (universal), 4:5 for IG portrait, 9:16 for reel/story (vertical CTAs), 16:9 for FB cover / LinkedIn ad\n- **Mobile-first.** Headline must be readable at 200px wide\n- **Safe area:** keep bottom 10% (FB/IG UI overlays) and top 10% (story UI) of the frame clear of critical text\n\n---",
+    "file_path": "knowledge:image-design-marketing:marketing-composition-rules",
+    "create_time": 1778002715,
+    "update_time": 1778002715,
+    "_id": "knowledge:image-design-marketing:marketing-composition-rules"
+  },
+  "knowledge:image-design-marketing:marketing-text-rules": {
+    "content": "## Marketing Text Rules\n\n**Meaning:** This is the only style where the image carries multiple text layers. Hierarchy must be obvious at a glance.\n\n### Apply\n\n**Headline (mandatory)**\n- 3–6 words maximum\n- The value proposition or the offer (\"50% off all lenses\", \"Book your shoot today\")\n- 80–120pt on a 1080×1080 canvas\n- Brand display font, weight: bold\n\n**Subhead (optional)**\n- 4–10 words\n- The proof, the detail, the qualifier (\"Free shipping over $50\", \"Only 12 spots left\")\n- 28–36pt\n- Sans-serif, regular weight\n\n**CTA button (mandatory)**\n- 1–3 words (\"Shop Now\", \"Book Today\", \"Get Started\", \"Order Online\")\n- Drawn as an actual button shape — rounded rectangle, brand-color fill, white text\n- Bottom-right or bottom-center\n- 32–40pt text inside\n\n**Contact line (mandatory)**\n- The page's website + at least one of phone / email\n- Format: `meai.website  ·  hello@meai.com  ·  +84 ...` (use middle-dot or pipe separator)\n- 16–20pt, sits at the very bottom OR right under the CTA\n- Lower contrast OK (gray-on-white is fine — this is reference info, not the lead)\n\n**Total text limit:** Roughly 25 words across headline + subhead + CTA + contact. Beyond that, viewers stop reading.\n\n---",
+    "file_path": "knowledge:image-design-marketing:marketing-text-rules",
+    "create_time": 1778002725,
+    "update_time": 1778002725,
+    "_id": "knowledge:image-design-marketing:marketing-text-rules"
+  },
+  "knowledge:image-design-marketing:marketing-brand-presence": {
+    "content": "## Marketing Brand Presence\n\n**Meaning:** Brand must be unmistakable. Logo + name + colors + tagline if present.\n\n### Apply\n- **Brand logo lockup** — full logo with wordmark, top-left or paired with the CTA. 12–18% of frame width\n- **Brand colors enforced** — primary brand color must appear in the CTA button AND somewhere else (a stripe, the headline color, an underline). Repetition signals intentionality\n- **Tagline allowed** — a 3–6 word brand tagline can sit under the logo (small)\n- **Consistent across the marketing campaign** — if running a series, the logo placement and color block stay in the same spot across all images\n\n---",
+    "file_path": "knowledge:image-design-marketing:marketing-brand-presence",
+    "create_time": 1778002739,
+    "update_time": 1778002739,
+    "_id": "knowledge:image-design-marketing:marketing-brand-presence"
+  },
+  "knowledge:image-design-marketing:marketing-visual-anchors": {
+    "content": "## Marketing Visual Anchors\n\n**Meaning:** The hero visual must support the offer, not distract from it.\n\n### Apply\n- **Product shot:** clean background, single product, well-lit, NOT a busy lifestyle scene\n- **Before/after:** split-frame, clear labels above each side\n- **Outcome shot:** the customer holding/using the product, smiling, eye contact with camera (high-trust signal)\n- **Discount badge / sticker:** for sales — circular badge top-right with \"-50%\" or \"FREE\" — high contrast, brand color\n- **Avoid:** stock photography that does not feature the actual product/service\n\n---",
+    "file_path": "knowledge:image-design-marketing:marketing-visual-anchors",
+    "create_time": 1778002754,
+    "update_time": 1778002754,
+    "_id": "knowledge:image-design-marketing:marketing-visual-anchors"
+  },
+  "knowledge:image-design-marketing:marketing-color-contrast": {
+    "content": "## Marketing Color & Contrast\n\n**Meaning:** High contrast wins clicks. Subtlety loses to noise in the feed.\n\n### Apply\n- **High-contrast text-to-background** — minimum WCAG AAA (7:1) for headlines\n- **CTA button must POP** — pick the color with highest contrast against the background, NOT the most \"on brand\" pastel\n- **Brand color discipline** — 2–3 colors max, but allow one accent color that does not appear in the brand kit if it boosts CTA contrast\n- **Avoid pastels for headlines** — soft palettes belong in `creative` and `branded`, not `marketing`\n\n---",
+    "file_path": "knowledge:image-design-marketing:marketing-color-contrast",
+    "create_time": 1778002769,
+    "update_time": 1778002769,
+    "_id": "knowledge:image-design-marketing:marketing-color-contrast"
+  },
+  "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons": {
+    "content": "## Marketing Trust Signals (Optional Add-Ons)\n\n**Meaning:** Marketing posts win on credibility. Sprinkle one or two signals if they fit.\n\n### Apply (pick at most 2)\n- **Social proof:** \"★★★★★ 4.9/5 from 2,400 reviews\"\n- **Scarcity:** \"Only 12 left\" / \"Ends Sunday\"\n- **Guarantee:** \"30-day money back\" / \"Free returns\"\n- **Authority:** \"As featured in [publication]\" / \"Used by 10,000+ creators\"\n- Place above or below the CTA, smaller than the CTA itself\n- Do not stack more than 2 — too many trust signals reads as desperate",
+    "file_path": "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons",
+    "create_time": 1778002779,
+    "update_time": 1778002779,
+    "_id": "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons"
+  },
+  "knowledge:platform-algorithm-signals:facebook": {
+    "content": "## Facebook\n\n**Primary signals:** Meaningful interactions > watch time > engagement velocity > recency\n\n### What the ranker rewards\n\n- **Meaningful interactions:** Comments and replies count more than likes. Long comments count more than short ones. Replying to your own comments amplifies further.\n- **Native uploads beat external links:** Videos uploaded directly to FB get 5–10x the reach of YouTube link reposts. Same for image uploads vs link previews.\n- **FB Reels:** Watch-completion rate, replays, and shares dominate. The first 3 seconds determine whether the reel enters wider distribution.\n- **Page posts vs personal posts:** Page posts have lower organic reach (~5%) by default. Boosting reach requires either ad spend or strong meaningful-interaction signals.\n- **Group posts:** Often outperform page posts in organic reach if the group is active.\n\n### What gets penalized\n\n- Engagement bait (\"comment YES if you agree\") — Facebook's classifier flags these and suppresses\n- Clickbait headlines that don't match the link content\n- Re-posts of viral content from other accounts (low original-content score)\n- Links to news / political content for non-news pages\n\n### Tactical takeaways\n\n- End every post with a specific, non-bait question\n- Upload videos natively, not as YouTube embeds\n- Reply to every comment in the first hour\n- For Reels: hook in first 1.5 seconds, target 90%+ completion on short (<15s) clips\n\n---",
+    "file_path": "knowledge:platform-algorithm-signals:facebook",
+    "create_time": 1778002795,
+    "update_time": 1778002795,
+    "_id": "knowledge:platform-algorithm-signals:facebook"
+  },
+  "knowledge:platform-algorithm-signals:instagram": {
+    "content": "## Instagram\n\n**Primary signals:** Saves > Shares > Comments > Likes; for Reels: watch-loops + completion\n\n### What the ranker rewards\n\n- **Saves:** The strongest signal in the feed algorithm. Carousels are heavily favored because they generate more saves per impression than single-image posts.\n- **Shares (DMs and Stories):** Second-strongest signal. Posts shared via DM signal \"this is so good my friend needs to see it.\"\n- **Reels:** Watch-loop rate (people watching a 7-second reel 3x = 21 seconds of watch time = strong signal). Completion rate matters but loops weight higher.\n- **Stories:** Reply-rate is the dominant signal. Stickers (polls, quizzes, sliders) boost engagement floor and feed-back into reach.\n- **Account-level signals:** The ranker considers your past 90-day post performance. New posts inherit some baseline from your account's quality score.\n\n### What gets penalized\n\n- \"Reposted from [other account]\" content — flagged as low-originality\n- Posts with very low engagement in the first hour (<5% engagement rate by view)\n- Posts that get reported as misleading or spam\n- Excessive hashtags (the cap is 30, but using 15+ now correlates with reduced reach)\n\n### Tactical takeaways\n\n- Carousels for educational content (saves)\n- Reels for reach (watch-loops)\n- Stories for community (reply-rate)\n- 5–10 hashtags, not 30\n- Post during peak audience time (check Insights for your specific audience)\n\n---",
+    "file_path": "knowledge:platform-algorithm-signals:instagram",
+    "create_time": 1778002811,
+    "update_time": 1778002811,
+    "_id": "knowledge:platform-algorithm-signals:instagram"
+  },
+  "knowledge:platform-algorithm-signals:tiktok": {
+    "content": "## TikTok\n\n**Primary signals:** Completion rate > rewatches > shares > comments > likes; first 3-second retention is critical\n\n### What the ranker rewards\n\n- **Completion rate:** Percentage of viewers who watched to the end. The single most important signal.\n- **Rewatches:** Loops on short videos. A 7-second video watched 3 full times = 21 seconds of total watch.\n- **Shares (in-app and to other platforms):** Strong amplification signal.\n- **Comments:** Especially comment threads where users reply to each other.\n- **Velocity in first hour:** TikTok's For You Page uses early engagement velocity to decide whether to escalate distribution. A video that gets 1000 views and 100 likes in the first hour will get pushed to 100k+ views.\n\n### What gets penalized\n\n- Watermarks from other platforms (Instagram, YouTube logos) — TikTok suppresses cross-posted content\n- Very long videos (>3 min) without high completion — better to keep under 60s if completion is the goal\n- Banned audio / music (TikTok actively removes copyrighted audio)\n- \"Soft\" content (slow openings, no payoff) — first-3-second retention drops, reach dies\n\n### Tactical takeaways\n\n- Hook in first 1 second — visual or audio shock\n- Keep videos 7–15 seconds for maximum completion + rewatch loops\n- Use trending audio (boosts initial reach)\n- Strip Instagram watermarks before posting\n- Reply to top comments in-app (creates new comment-reply videos that surface the original)\n\n---",
+    "file_path": "knowledge:platform-algorithm-signals:tiktok",
+    "create_time": 1778002829,
+    "update_time": 1778002829,
+    "_id": "knowledge:platform-algorithm-signals:tiktok"
+  },
+  "knowledge:platform-algorithm-signals:threads": {
+    "content": "## Threads\n\n**Primary signals:** Reply-rate > quote-replies > likes; trending-topic association\n\n### What the ranker rewards\n\n- **Reply-rate:** How many viewers reply to the post (vs just liking). The dominant signal — Threads is conversation-first.\n- **Quote-replies:** When users quote-reply, they amplify your post into their followers' feeds. Highest-leverage engagement type.\n- **Reply-thread depth:** Replies that themselves get replies generate more total impressions.\n- **Trending-topic association:** Posts that mention currently-trending topics get a temporary boost.\n- **Account follow growth:** New follows from a single post is a signal of quality content.\n\n### What gets penalized\n\n- Pure self-promotion without value (link-spam style posts)\n- Reposts of Twitter/X content (Threads suppresses cross-posted content for originality)\n- Long monologues without reply hooks (5-paragraph essays underperform 1-paragraph hot takes with a question)\n- Negative engagement (mass mutes, blocks) — strong negative signal\n\n### Tactical takeaways\n\n- Open with an opinion, end with a hook for replies\n- Quote-reply other accounts to participate in trending conversations\n- Keep posts short (1–3 lines) for highest reply-rate\n- Mention trending topics when relevant to your niche\n- Don't cross-post X content verbatim — adapt the framing\n\n---",
+    "file_path": "knowledge:platform-algorithm-signals:threads",
+    "create_time": 1778002852,
+    "update_time": 1778002852,
+    "_id": "knowledge:platform-algorithm-signals:threads"
+  },
+  "knowledge:platform-algorithm-signals:youtube-for-future-expansion": {
+    "content": "## YouTube (for future expansion)\n\n**Primary signals:** Click-through rate (CTR) on thumbnail + average view duration; first-30-second retention\n\n### What the ranker rewards\n\n- **CTR:** Thumbnail + title combination must earn the click\n- **Average view duration:** Watch-minutes is the currency of YouTube\n- **First-30-second retention:** Drop-off curves from analytics directly affect whether a video is recommended further\n- **Session time:** Videos that lead viewers to watch ANOTHER YouTube video after (not leave the platform) get extra boost\n- **Subscribers gained per video:** Strong long-term ranking signal\n\n### What gets penalized\n\n- Misleading thumbnails / titles (clickbait that doesn't pay off causes high drop-off)\n- Reused TikTok / Reels content reformatted as Shorts without optimization\n- Duplicate audio/video across uploads\n\n### Tactical takeaways\n\n- Spend disproportionate effort on the thumbnail (test multiple variants)\n- Hook in the first 15 seconds — verbalize what the viewer will get\n- Pattern-interrupt every 30 seconds in long videos\n- End with \"next video\" recommendation that matches the same audience",
+    "file_path": "knowledge:platform-algorithm-signals:youtube-for-future-expansion",
+    "create_time": 1778002871,
+    "update_time": 1778002871,
+    "_id": "knowledge:platform-algorithm-signals:youtube-for-future-expansion"
+  },
+  "knowledge:viral-hooks:3-second-rule": {
+    "content": "## 3-Second Rule\n\n**Meaning:** Deliver a visual + emotional payoff before the viewer's thumb reaches to scroll.\n\n### When to use\n\n- Reels, TikTok, Stories, Shorts — any short-form video\n- Any time you need to stop the scroll on autoplay feeds\n\n### Example\n\nOpen with a face mid-laugh, a finished plate of food being unveiled, or \"Wait — watch this\" before a reveal. Avoid 2-second logo intros and slow fades.\n\n### Why it works\n\nMobile feeds are designed for scrolling. The platform measures the first 3 seconds of view time as the strongest signal of whether to keep distributing the video. Lose the first 3 seconds and the algorithm stops boosting.\n\n---",
+    "file_path": "knowledge:viral-hooks:3-second-rule",
+    "create_time": 1778002900,
+    "update_time": 1778002900,
+    "_id": "knowledge:viral-hooks:3-second-rule"
+  },
+  "knowledge:viral-hooks:pattern-interrupt": {
+    "content": "## Pattern Interrupt\n\n**Meaning:** Open with something the viewer didn't expect — a contradiction, a controversial take, an abrupt cut, or a visual that breaks feed convention.\n\n### When to use\n\n- Saturated topics where most posts look alike\n- Audiences fatigued by formulaic content\n- Educational or opinion content\n\n### Example\n\n\"Stop posting every day on Instagram.\" (in a creator-growth feed where everyone says \"post every day\")\nA black frame followed by sudden full-volume audio.\nA talking head that suddenly cuts to a completely different scene.\n\n### Why it works\n\nThe brain's pattern-matching reflex pauses scrolling when expectations break. Even a half-second pause is enough to register the hook.\n\n---",
+    "file_path": "knowledge:viral-hooks:pattern-interrupt",
+    "create_time": 1778002913,
+    "update_time": 1778002913,
+    "_id": "knowledge:viral-hooks:pattern-interrupt"
+  },
+  "knowledge:viral-hooks:curiosity-gap": {
+    "content": "## Curiosity Gap\n\n**Meaning:** Tease a piece of information without revealing it, forcing the viewer to keep watching to close the loop.\n\n### When to use\n\n- Listicle content (\"3 things I wish I knew…\")\n- Behind-the-scenes / reveal videos\n- Tutorial content\n\n### Example\n\n\"3 mistakes I made before I crossed 100k followers — #2 changed everything.\"\n\"This is the only marketing tactic that actually worked for my 7-figure business.\"\n\"I tried [thing] for 30 days. The result wasn't what I expected.\"\n\n### Why it works\n\nThe Zeigarnik effect: the brain assigns higher cognitive priority to incomplete information. Viewers feel mild discomfort until the loop closes — they keep watching to relieve it.\n\n---",
+    "file_path": "knowledge:viral-hooks:curiosity-gap",
+    "create_time": 1778002928,
+    "update_time": 1778002928,
+    "_id": "knowledge:viral-hooks:curiosity-gap"
+  },
+  "knowledge:viral-hooks:open-loop": {
+    "content": "## Open Loop\n\n**Meaning:** Pose a specific question at the start, answer it at the end. Variant of Curiosity Gap, but more disciplined.\n\n### When to use\n\n- Educational reels and threads\n- Story-based posts\n- Long-ish (30s+) videos where retention is the bottleneck\n\n### Example\n\nOpen: \"Why do some founders reply to every comment but others ignore them?\"\nBody: explore both sides, share your view.\nClose: explicit answer + why.\n\n### Why it works\n\nForces the viewer to keep watching for the resolution. Also boosts watch-time which is the dominant ranking signal on most short-form platforms.\n\n---",
+    "file_path": "knowledge:viral-hooks:open-loop",
+    "create_time": 1778002946,
+    "update_time": 1778002946,
+    "_id": "knowledge:viral-hooks:open-loop"
+  },
+  "knowledge:viral-hooks:before-after-tease": {
+    "content": "## Before/After Tease\n\n**Meaning:** Show the transformation upfront in a single frame or split-second cut — viewer wants to know HOW.\n\n### When to use\n\n- Fitness, beauty, finance, productivity, design\n- Anything with a visible result\n- Carousel post slide 1\n\n### Example\n\nA split-screen image: messy room → spotless room.\nSingle-shot: \"I went from 0 to 50k followers in 90 days. Here's the playbook.\"\nReel cold-open: 2-second flash of the finished result, then \"let's back up to where this started…\"\n\n### Why it works\n\nPeople click on outcomes, not processes. Showing the destination first earns the right to walk them through the journey.\n\n---",
+    "file_path": "knowledge:viral-hooks:before-after-tease",
+    "create_time": 1778002959,
+    "update_time": 1778002959,
+    "_id": "knowledge:viral-hooks:before-after-tease"
+  },
+  "knowledge:viral-hooks:high-contrast-cold-open": {
+    "content": "## High-Contrast Cold Open\n\n**Meaning:** Open with a visual or audio shock — bright color flash, sudden silence after loud audio, or vice versa.\n\n### When to use\n\n- Reels and TikToks where attention competes with autoplay neighbors\n- Brand content needing visual differentiation\n\n### Example\n\nFirst frame is pure black, then a vibrant product shot with bass-drop audio.\nFirst 0.5 seconds is a face filling the entire frame, expressionless.\nLoud overlapping voices that cut to absolute silence + a single line of text.\n\n### Why it works\n\nMobile autoplay queues a stream of similar-looking content. A frame that visually breaks the surrounding feed pattern earns a longer eye-fixation, and longer fixation correlates with more watch time.\n\n---",
+    "file_path": "knowledge:viral-hooks:high-contrast-cold-open",
+    "create_time": 1778002976,
+    "update_time": 1778002976,
+    "_id": "knowledge:viral-hooks:high-contrast-cold-open"
+  },
+  "knowledge:viral-hooks:direct-address": {
+    "content": "## Direct Address\n\n**Meaning:** Call out the specific role / situation of your target viewer in the first sentence so they know it's for them.\n\n### When to use\n\n- Niche content (B2B, specific industries, lifestyle micro-niches)\n- Educational posts with a defined ICP\n- Cold outreach style content\n\n### Example\n\n\"If you're a freelancer charging less than $5,000 per project, stop scrolling.\"\n\"For founders who've launched and gotten zero customers — this one's for you.\"\n\"To everyone who's tried Zone 2 cardio and quit after a week…\"\n\n### Why it works\n\nSelf-identification triggers attention more reliably than generic value claims. The viewer feels seen, which reduces cognitive friction to keep watching.\n\n---",
+    "file_path": "knowledge:viral-hooks:direct-address",
+    "create_time": 1778002989,
+    "update_time": 1778002989,
+    "_id": "knowledge:viral-hooks:direct-address"
+  },
+  "knowledge:viral-hooks:counterintuitive-claim": {
+    "content": "## Counterintuitive Claim\n\n**Meaning:** Open with a statement that challenges a widely-held assumption in your niche.\n\n### When to use\n\n- Thought-leadership content\n- Threads / LinkedIn-style posts\n- Long-form caption posts\n\n### Example\n\n\"You don't need a niche to grow on Instagram.\" (when most advice says you do)\n\"Cold outreach beats content marketing for early-stage founders.\"\n\"Most productivity advice is making you less productive.\"\n\n### Why it works\n\nCuriosity + mild outrage = high engagement. Even readers who disagree comment to push back, which boosts the post's distribution.\n\n---",
+    "file_path": "knowledge:viral-hooks:counterintuitive-claim",
+    "create_time": 1778003002,
+    "update_time": 1778003002,
+    "_id": "knowledge:viral-hooks:counterintuitive-claim"
+  },
+  "knowledge:viral-hooks:numbered-promise": {
+    "content": "## Numbered Promise\n\n**Meaning:** Lead with a specific number + concrete outcome. Specificity outperforms vague claims.\n\n### When to use\n\n- Listicle / educational content\n- Carousel slide 1 / Reel cover text\n- Threads opening posts\n- Blog/email subject lines\n\n### Example\n\n\"7 cold-email lines that got me 23 sales calls.\"\n\"3 portfolio mistakes that cost me $40k in clients.\"\n\"The 5-minute morning routine that cut my anxiety by half.\"\n\n### Why it works\n\nNumbers signal a finite, scannable promise. The brain processes \"7 things\" as a contained commitment of attention, not an open-ended ask. Ultra-specific numbers (23, $40k) also feel more credible than rounded ones (20, $50k).\n\n---",
+    "file_path": "knowledge:viral-hooks:numbered-promise",
+    "create_time": 1778003016,
+    "update_time": 1778003016,
+    "_id": "knowledge:viral-hooks:numbered-promise"
+  },
+  "knowledge:viral-hooks:stakes-first": {
+    "content": "## Stakes-First\n\n**Meaning:** Open with what the viewer will lose by NOT watching, rather than what they'll gain by watching. Loss-aversion is roughly 2x more motivating than equivalent gain.\n\n### When to use\n\n- High-cost decisions (financial, career, health)\n- Warning / mistake content\n- Audiences already aware of the topic\n\n### Example\n\n\"This one mistake on your taxes could cost you $10,000 next April.\"\n\"If you're not doing this in your first 30 days as a founder, you're already behind.\"\n\"The one Instagram setting that's silently killing your reach.\"\n\n### Why it works\n\nLoss aversion is a robust cognitive bias: the pain of losing something is psychologically larger than the pleasure of gaining the equivalent. Hooks framed around loss earn higher click-through and watch-through than gain-framed hooks.",
+    "file_path": "knowledge:viral-hooks:stakes-first",
+    "create_time": 1778003028,
+    "update_time": 1778003028,
+    "_id": "knowledge:viral-hooks:stakes-first"
+  },
+  "knowledge:visual-design:rule-of-thirds": {
+    "content": "## Rule of Thirds\n\n**Meaning:** Divide the frame into a 3×3 grid. Place the subject and key elements on the gridlines or their intersections, not centered.\n\n### When to use\n\n- Photo composition for feed posts\n- Image-generation prompts (specify \"subject placed on the right third\")\n- Reel framing — the subject's eyes should sit on the upper third gridline\n\n### Why it works\n\nOff-center compositions feel dynamic and create visual tension that holds attention longer than centered compositions. The eye naturally lands on intersection points first.\n\n---",
+    "file_path": "knowledge:visual-design:rule-of-thirds",
+    "create_time": 1778003039,
+    "update_time": 1778003039,
+    "_id": "knowledge:visual-design:rule-of-thirds"
+  },
+  "knowledge:visual-design:f-pattern-reading": {
+    "content": "## F-Pattern Reading\n\n**Meaning:** On text-heavy images, the eye scans in an F shape — top horizontal sweep, second horizontal sweep below, then vertical scan down the left side.\n\n### When to use\n\n- Carousel slides with body text\n- Quote graphics\n- Infographic posts\n- Any image where text is the primary content\n\n### Application\n\n- Put the most important word or number on the **top-left**\n- Put the secondary message on the second line\n- Avoid hiding the punchline in the bottom-right where eyes never reach\n\n### Why it works\n\nThe F-pattern is a documented eye-tracking finding (Nielsen Norman Group studies on web reading behavior) that holds for static images as well. Designs that fight the pattern lose readability.\n\n---",
+    "file_path": "knowledge:visual-design:f-pattern-reading",
+    "create_time": 1778003051,
+    "update_time": 1778003051,
+    "_id": "knowledge:visual-design:f-pattern-reading"
+  },
+  "knowledge:visual-design:mobile-first-9-16": {
+    "content": "## Mobile-First (9:16)\n\n**Meaning:** Reels, Stories, TikTok, and Shorts default to vertical full-screen 9:16. Design with that aspect ratio in mind from the start.\n\n### When to use\n\n- All short-form video\n- Story content\n- IGTV / FB Reels / YouTube Shorts\n\n### Tactics\n\n- Frame subjects in the center vertical band — outside thirds get cropped on some devices\n- Reserve top 15% and bottom 25% as \"safe zones\" — platform UI overlays the rest\n- Avoid landscape footage cropped to vertical — always shoot/render native vertical\n\n### Why it works\n\nVertical video gets ~9x more engagement than horizontal on mobile feeds. Native vertical avoids letterboxing and the \"low-effort repurpose\" feel.\n\n---",
+    "file_path": "knowledge:visual-design:mobile-first-9-16",
+    "create_time": 1778003062,
+    "update_time": 1778003062,
+    "_id": "knowledge:visual-design:mobile-first-9-16"
+  },
+  "knowledge:visual-design:square-1-1-for-feed": {
+    "content": "## Square (1:1) for Feed\n\n**Meaning:** Standard Instagram and Facebook feed posts default to 1:1 square (or 4:5 portrait). Don't repurpose 16:9 horizontal for feed.\n\n### When to use\n\n- Instagram feed posts\n- Facebook feed posts\n- Carousel slides\n\n### Tactics\n\n- Use 1080×1080 (square) or 1080×1350 (portrait, 4:5) — these get the most feed real estate\n- For carousels: pick one aspect ratio and stick with it across all slides\n\n### Why it works\n\nPortrait (4:5) takes up ~25% more vertical screen space than square in mobile feeds, which directly increases dwell time and engagement. Mixed-aspect carousels look unprofessional.\n\n---",
+    "file_path": "knowledge:visual-design:square-1-1-for-feed",
+    "create_time": 1778003075,
+    "update_time": 1778003075,
+    "_id": "knowledge:visual-design:square-1-1-for-feed"
+  },
+  "knowledge:visual-design:text-overlay-rules": {
+    "content": "## Text Overlay Rules\n\n**Meaning:** Text on images/video must be readable in 1 second on a small screen.\n\n### When to use\n\n- Reel cover text\n- Carousel slide headlines\n- Any image with overlaid copy\n\n### Tactics\n\n- **Contrast:** Text color must contrast strongly with background. Use a semi-transparent box behind text if the background is busy.\n- **Size:** At least 60pt for reel covers, 80pt for carousel slide 1. Test at 200×356 px (mobile feed thumbnail size).\n- **Placement:** Top-left or center — avoid bottom (UI overlays cover it on most platforms).\n- **Length:** Max 6–8 words per line. Two lines max for reel covers.\n- **Font:** Sans-serif for digital. Avoid thin weights — they disappear at thumbnail size.\n\n### Why it works\n\nText that requires effort to read is text that doesn't get read. Mobile users decide in <1 second whether to keep watching; unreadable hooks cost reach.\n\n---",
+    "file_path": "knowledge:visual-design:text-overlay-rules",
+    "create_time": 1778003089,
+    "update_time": 1778003089,
+    "_id": "knowledge:visual-design:text-overlay-rules"
+  },
+  "knowledge:visual-design:brand-color-discipline": {
+    "content": "## Brand Color Discipline\n\n**Meaning:** Use 2–3 colors maximum, repeated consistently across every post.\n\n### When to use\n\n- All brand and creator accounts\n- Especially important for new accounts building recognition\n\n### Tactics\n\n- Pick: 1 dominant color (60% of frame), 1 accent (30%), 1 highlight (10%)\n- Save the palette as a Figma / Canva swatch and reuse on every post\n- Avoid trendy color shifts — pick a palette and commit for at least 90 days\n\n### Why it works\n\nVisual consistency makes your posts recognizable mid-scroll without the user reading the handle. After 30+ posts in the same palette, your account becomes pattern-detectable and follow-rate climbs.\n\n---",
+    "file_path": "knowledge:visual-design:brand-color-discipline",
+    "create_time": 1778003110,
+    "update_time": 1778003110,
+    "_id": "knowledge:visual-design:brand-color-discipline"
+  },
+  "knowledge:visual-design:font-pairing": {
+    "content": "## Font Pairing\n\n**Meaning:** Use one display font (for headlines) and one body font (for everything else). No more.\n\n### When to use\n\n- All text-on-image content\n- Carousel slides\n- Reel text overlays\n\n### Tactics\n\n- **Display:** A bold, geometric sans-serif (e.g., Inter Bold, Poppins Bold, Bebas Neue). Used only for headlines and slide 1.\n- **Body:** A clean readable sans-serif (e.g., Inter Regular, Roboto, system default). Used for everything else.\n- Never use 3+ fonts in a single post — it looks amateur and fights for attention.\n\n### Why it works\n\nTypography hierarchy guides the eye. Two fonts give enough contrast to differentiate \"this is important\" vs \"this is detail\" without becoming visual noise.\n\n---",
+    "file_path": "knowledge:visual-design:font-pairing",
+    "create_time": 1778003127,
+    "update_time": 1778003127,
+    "_id": "knowledge:visual-design:font-pairing"
+  },
+  "knowledge:visual-design:carousel-pacing": {
+    "content": "## Carousel Pacing\n\n**Meaning:** Each slide must earn the next swipe. Treat slides like cliffhanger episodes.\n\n### When to use\n\n- All multi-slide posts (Instagram, Facebook, LinkedIn)\n\n### Structure\n\n- **Slide 1:** Hook — bold visual + numbered promise + \"swipe to see\"\n- **Slides 2 to N–1:** One single idea per slide, big text, minimal decoration. End each slide with a forward-pull (\"but here's the catch…\", \"the trick is on the next slide\", or a continuation)\n- **Last slide:** Single CTA — \"save this\", \"follow for more\", or a clear next action. Don't dilute with multiple CTAs.\n\n### Why it works\n\nCarousel completion rate is a strong distribution signal — the algorithm shows your post to more people if viewers swipe through. Each slide is a micro-test of whether you've earned the swipe.\n\n---",
+    "file_path": "knowledge:visual-design:carousel-pacing",
+    "create_time": 1778003141,
+    "update_time": 1778003141,
+    "_id": "knowledge:visual-design:carousel-pacing"
+  },
+  "knowledge:visual-design:thumbnail-optimization": {
+    "content": "## Thumbnail Optimization\n\n**Meaning:** Your post is judged at thumbnail size (200px wide on most feeds) before anyone reads it. Design for that size first.\n\n### When to use\n\n- Reel covers\n- Carousel slide 1\n- Static feed images\n\n### Tactics\n\n- Test the design at 200px wide — if you can't read the headline or recognize the subject, redesign\n- Avoid thin lines, small text, busy backgrounds\n- Use bold colors that pop in a feed (yellow, red, electric blue)\n- Subjects with faces outperform abstract or scenic shots — eyes draw eyes\n\n### Why it works\n\nThe thumbnail is the only thing competing for attention in the feed. Most posts are designed at full size and are unreadable at thumbnail size — a post that survives thumbnail scrutiny gets disproportionate clicks.\n\n---",
+    "file_path": "knowledge:visual-design:thumbnail-optimization",
+    "create_time": 1778003159,
+    "update_time": 1778003159,
+    "_id": "knowledge:visual-design:thumbnail-optimization"
+  },
+  "knowledge:visual-design:negative-space": {
+    "content": "## Negative Space\n\n**Meaning:** Let the subject breathe. Resist the urge to fill every pixel with information.\n\n### When to use\n\n- All visual design\n- Especially photo posts and minimal-text quote graphics\n\n### Tactics\n\n- Aim for 30–50% of the frame to be empty (background, sky, single-color fill)\n- One subject per frame. Multiple competing subjects split attention and weaken impact.\n- White space (or any single-color space) around text makes it feel premium\n\n### Why it works\n\nCluttered designs look amateur and are harder to read. Negative space increases perceived quality and improves comprehension speed. Apple's product shots and high-end fashion ads are built almost entirely on negative space — it signals confidence in the subject.",
+    "file_path": "knowledge:visual-design:negative-space",
+    "create_time": 1778003171,
+    "update_time": 1778003171,
+    "_id": "knowledge:visual-design:negative-space"
+  }
+}

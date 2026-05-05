@@ -1,0 +1,1311 @@
+{
+  "knowledge:content-formulas:fab-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-376ce19608fd6f7974cce021cf830faf"
+    ],
+    "content_summary": "## 1. FAB Formula\n\n**Meaning:** Highlight product/service value through features, advantages, and benefits.\n\n### Structure\n\n- **F – Features:** What the product/service has.\n- **A – Advantages:** What makes it better than competitors.\n- **B – Benefit...",
+    "content_length": 673,
+    "created_at": "2026-05-05T17:27:58.961750+00:00",
+    "updated_at": "2026-05-05T17:28:24.565653+00:00",
+    "file_path": "knowledge:content-formulas:fab-formula",
+    "track_id": "insert_20260505_172758_ce7ed41a",
+    "metadata": {
+      "processing_start_time": 1778002078,
+      "processing_end_time": 1778002104
+    }
+  },
+  "knowledge:content-formulas:fas-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-23228893e740a725d6889fc2eaf5ba2b"
+    ],
+    "content_summary": "## 2. FAS Formula\n\n**Meaning:** Convert pain points into purchase intent by showing a solution.\n\n### Structure\n\n- **F / P – Problem:** Identify customer pain point\n- **A – Agitate:** Intensify the pain/problem\n- **S – Solve:** Present the solution\n\n#...",
+    "content_length": 571,
+    "created_at": "2026-05-05T17:28:24.576751+00:00",
+    "updated_at": "2026-05-05T17:28:39.310620+00:00",
+    "file_path": "knowledge:content-formulas:fas-formula",
+    "track_id": "insert_20260505_172824_c27057a4",
+    "metadata": {
+      "processing_start_time": 1778002104,
+      "processing_end_time": 1778002119
+    }
+  },
+  "knowledge:content-formulas:bab-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-1618a62f66a5bf53d57a2a56aff4da25"
+    ],
+    "content_summary": "## 3. BAB Formula\n\n**Meaning:** Show transformation from before to after.\n\n### Structure\n\n- **B – Before:** Current painful state\n- **A – After:** Desired future state\n- **B – Bridge:** Your product/service bridges the gap\n\n### Best Use Cases\n\n- Beau...",
+    "content_length": 485,
+    "created_at": "2026-05-05T17:28:39.326683+00:00",
+    "updated_at": "2026-05-05T17:28:53.715519+00:00",
+    "file_path": "knowledge:content-formulas:bab-formula",
+    "track_id": "insert_20260505_172839_cb27f63d",
+    "metadata": {
+      "processing_start_time": 1778002119,
+      "processing_end_time": 1778002133
+    }
+  },
+  "knowledge:content-formulas:4c-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-a674389a050a3af7d6ef86952824ee81"
+    ],
+    "content_summary": "## 4. 4C Formula\n\n**Meaning:** High-quality writing standards.\n\n### Structure\n\n- **Clear:** Easy to understand\n- **Concise:** Short and direct\n- **Compelling:** Persuasive and engaging\n- **Credible:** Trustworthy with proof\n\n### Best Use Cases\n\n- All...",
+    "content_length": 385,
+    "created_at": "2026-05-05T17:28:53.734783+00:00",
+    "updated_at": "2026-05-05T17:29:10.107052+00:00",
+    "file_path": "knowledge:content-formulas:4c-formula",
+    "track_id": "insert_20260505_172853_4de23830",
+    "metadata": {
+      "processing_start_time": 1778002133,
+      "processing_end_time": 1778002150
+    }
+  },
+  "knowledge:content-formulas:4u-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-2728fcb241855085169f04bf28e99dff"
+    ],
+    "content_summary": "## 5. 4U Formula\n\n**Meaning:** Create irresistible headlines/hooks.\n\n### Structure\n\n- **Useful:** Valuable to audience\n- **Urgent:** Time-sensitive or immediate need\n- **Unique:** Different from others\n- **Ultra-specific:** Specific and concrete\n\n###...",
+    "content_length": 465,
+    "created_at": "2026-05-05T17:29:10.124745+00:00",
+    "updated_at": "2026-05-05T17:29:23.586180+00:00",
+    "file_path": "knowledge:content-formulas:4u-formula",
+    "track_id": "insert_20260505_172910_1690348a",
+    "metadata": {
+      "processing_start_time": 1778002150,
+      "processing_end_time": 1778002163
+    }
+  },
+  "knowledge:content-formulas:a-forest-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-9a6353c288dc09841f67aafc96c3dd75"
+    ],
+    "content_summary": "## 6. A FOREST Formula\n\n**Meaning:** Persuasive writing framework using rhetorical devices.\n\n### Structure\n\n- **A – Alliteration:** Repeated sounds\n- **F – Facts:** Truth/data\n- **O – Opinions:** Arguments/viewpoints\n- **R – Repetition:** Repeat key ...",
+    "content_length": 557,
+    "created_at": "2026-05-05T17:29:23.620202+00:00",
+    "updated_at": "2026-05-05T17:29:40.351226+00:00",
+    "file_path": "knowledge:content-formulas:a-forest-formula",
+    "track_id": "insert_20260505_172923_83cde6e1",
+    "metadata": {
+      "processing_start_time": 1778002163,
+      "processing_end_time": 1778002180
+    }
+  },
+  "knowledge:content-formulas:aida-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-b9d8b56b62ba4006d34691e3a08c8b6d"
+    ],
+    "content_summary": "## 7. AIDA Formula\n\n**Meaning:** Classic conversion funnel copywriting model.\n\n### Structure\n\n- **A – Attention:** Get noticed\n- **I – Interest:** Build curiosity\n- **D – Desire:** Create want/need\n- **A – Action:** Ask for action\n\n### Best Use Cases...",
+    "content_length": 390,
+    "created_at": "2026-05-05T17:29:40.385221+00:00",
+    "updated_at": "2026-05-05T17:29:57.322652+00:00",
+    "file_path": "knowledge:content-formulas:aida-formula",
+    "track_id": "insert_20260505_172940_ac573ca4",
+    "metadata": {
+      "processing_start_time": 1778002180,
+      "processing_end_time": 1778002197
+    }
+  },
+  "knowledge:content-formulas:5-objections-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-2bdfa7df51d81cbf70ad08ced8717ed0"
+    ],
+    "content_summary": "## 8. 5 Objections Formula\n\n**Meaning:** Remove common buying resistance.\n\n### Structure\n\n- I don't have money\n- I don't have time\n- I don't like it\n- I don't trust it\n- I don't need it\n\n### Best Use Cases\n\n- Sales copy\n- Objection handling posts\n- F...",
+    "content_length": 372,
+    "created_at": "2026-05-05T17:29:57.346104+00:00",
+    "updated_at": "2026-05-05T17:30:12.487570+00:00",
+    "file_path": "knowledge:content-formulas:5-objections-formula",
+    "track_id": "insert_20260505_172957_df750e90",
+    "metadata": {
+      "processing_start_time": 1778002197,
+      "processing_end_time": 1778002212
+    }
+  },
+  "knowledge:content-formulas:3-reasons-why-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-c585de4e41f3180f073833748f3c0cf3"
+    ],
+    "content_summary": "## 9. 3 Reasons Why Formula\n\n**Meaning:** Build logic and trust through 3 answers.\n\n### Structure\n\n- Why is your product the best?\n- Why should I buy it?\n- Why should I trust you?\n\n### Best Use Cases\n\n- Comparison ads\n- Short-form video\n- Product pag...",
+    "content_length": 354,
+    "created_at": "2026-05-05T17:30:12.525980+00:00",
+    "updated_at": "2026-05-05T17:30:29.381696+00:00",
+    "file_path": "knowledge:content-formulas:3-reasons-why-formula",
+    "track_id": "insert_20260505_173012_0540efa4",
+    "metadata": {
+      "processing_start_time": 1778002212,
+      "processing_end_time": 1778002229
+    }
+  },
+  "knowledge:content-formulas:4p-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-6a8090190a179e9e1b56f79157c0d204"
+    ],
+    "content_summary": "## 10. 4P Formula\n\n**Meaning:** Strong sales persuasion formula.\n\n### Structure\n\n- **Picture:** Show attractive vision/result\n- **Promise:** Make clear promise\n- **Prove:** Provide evidence\n- **Push:** CTA / urge action\n\n### Best Use Cases\n\n- Faceboo...",
+    "content_length": 370,
+    "created_at": "2026-05-05T17:30:29.406695+00:00",
+    "updated_at": "2026-05-05T17:30:49.141358+00:00",
+    "file_path": "knowledge:content-formulas:4p-formula",
+    "track_id": "insert_20260505_173029_f6756a39",
+    "metadata": {
+      "processing_start_time": 1778002229,
+      "processing_end_time": 1778002249
+    }
+  },
+  "knowledge:content-formulas:3s-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-9874951f786ca8d1892fa17c49d46abc"
+    ],
+    "content_summary": "## 11. 3S Formula\n\n**Meaning:** Story-based persuasion.\n\n### Structure\n\n- **Star:** Main character\n- **Story:** Journey/conflict\n- **Solution:** Resolution using your offer\n\n### Best Use Cases\n\n- Storytelling posts\n- Founder stories\n- Facebook posts\n...",
+    "content_length": 354,
+    "created_at": "2026-05-05T17:30:49.185327+00:00",
+    "updated_at": "2026-05-05T17:31:03.997114+00:00",
+    "file_path": "knowledge:content-formulas:3s-formula",
+    "track_id": "insert_20260505_173049_19b441b5",
+    "metadata": {
+      "processing_start_time": 1778002249,
+      "processing_end_time": 1778002263
+    }
+  },
+  "knowledge:content-formulas:4a-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-005e60a57bc3b89aeee55cded3275c49"
+    ],
+    "content_summary": "## 12. 4A Formula\n\n**Meaning:** Brand action loop model.\n\n### Structure\n\n- **Aware:** Know the brand\n- **Attitude:** Build positive feeling\n- **Act:** Purchase/action\n- **Act Again:** Repeat purchase\n\n### Best Use Cases\n\n- Retention strategy\n- Brand ...",
+    "content_length": 376,
+    "created_at": "2026-05-05T17:31:04.024339+00:00",
+    "updated_at": "2026-05-05T17:31:23.775092+00:00",
+    "file_path": "knowledge:content-formulas:4a-formula",
+    "track_id": "insert_20260505_173104_8bd5e630",
+    "metadata": {
+      "processing_start_time": 1778002264,
+      "processing_end_time": 1778002283
+    }
+  },
+  "knowledge:content-formulas:5a-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-e1c66da303b8c01ba57d0720d2885887"
+    ],
+    "content_summary": "## 13. 5A Formula\n\n**Meaning:** Modern customer journey model (Philip Kotler).\n\n### Structure\n\n- **Awareness:** Know brand\n- **Appeal:** Feel attracted\n- **Ask:** Research and compare\n- **Action:** Buy\n- **Advocate:** Recommend brand\n\n### Best Use Ca...",
+    "content_length": 411,
+    "created_at": "2026-05-05T17:31:23.820240+00:00",
+    "updated_at": "2026-05-05T17:31:43.564744+00:00",
+    "file_path": "knowledge:content-formulas:5a-formula",
+    "track_id": "insert_20260505_173123_b900e80e",
+    "metadata": {
+      "processing_start_time": 1778002283,
+      "processing_end_time": 1778002303
+    }
+  },
+  "knowledge:content-formulas:app-formula": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-234ab256a973602e886fc1d5f5c01843"
+    ],
+    "content_summary": "## 14. APP Formula\n\n**Meaning:** Fast hook structure for modern content.\n\n### Structure\n\n- **Agree:** Show you understand their problem\n- **Promise:** Promise value/solution\n- **Preview:** Explain what they'll get\n\n### Best Use Cases\n\n- TikTok intros...",
+    "content_length": 506,
+    "created_at": "2026-05-05T17:31:43.619439+00:00",
+    "updated_at": "2026-05-05T17:32:04.025450+00:00",
+    "file_path": "knowledge:content-formulas:app-formula",
+    "track_id": "insert_20260505_173143_7e73f430",
+    "metadata": {
+      "processing_start_time": 1778002303,
+      "processing_end_time": 1778002324
+    }
+  },
+  "knowledge:content-formulas:platform-mapping-tiktok": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-3a204592fbffe6cfeb6984f733bccc40"
+    ],
+    "content_summary": "## Platform Mapping TikTok\n\n### Primary Formulas\n\n- 4U\n- AIDA\n- APP\n- BAB\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- FAS\n- 3S\n- FAB\n\n### Best For\n\n- Hooks\n- Retention\n- Fast education\n- Viral short-form content\n\n---",
+    "content_length": 215,
+    "created_at": "2026-05-05T17:32:04.070225+00:00",
+    "updated_at": "2026-05-05T17:32:14.743077+00:00",
+    "file_path": "knowledge:content-formulas:platform-mapping-tiktok",
+    "track_id": "insert_20260505_173204_680b912c",
+    "metadata": {
+      "processing_start_time": 1778002324,
+      "processing_end_time": 1778002334
+    }
+  },
+  "knowledge:content-formulas:platform-mapping-facebook-post": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-14aa9b8a6928b34255ea52ee4c3b45d2"
+    ],
+    "content_summary": "## Platform Mapping Facebook Post\n\n### Primary Formulas\n\n- BAB\n- AIDA\n- FAB\n- 3S\n- 5 Objections\n\n### Secondary Formulas\n\n- 4P\n- FAS\n- APP\n- 4C\n- 3 Reasons Why\n\n### Best For\n\n- Storytelling\n- Community engagement\n- Sales posts\n- Trust building\n\n---",
+    "content_length": 247,
+    "created_at": "2026-05-05T17:32:14.779579+00:00",
+    "updated_at": "2026-05-05T17:32:25.294762+00:00",
+    "file_path": "knowledge:content-formulas:platform-mapping-facebook-post",
+    "track_id": "insert_20260505_173214_13688688",
+    "metadata": {
+      "processing_start_time": 1778002334,
+      "processing_end_time": 1778002345
+    }
+  },
+  "knowledge:content-formulas:platform-mapping-facebook-reel": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-a74983159b5d9d60562b14b3efe79ed4"
+    ],
+    "content_summary": "## Platform Mapping Facebook Reel\n\n### Primary Formulas\n\n- 4U\n- AIDA\n- APP\n- BAB\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- FAS\n- 3S\n\n### Best For\n\n- Relatable short videos\n- Product demo reels\n- Fast conversions\n\n---",
+    "content_length": 217,
+    "created_at": "2026-05-05T17:32:25.328748+00:00",
+    "updated_at": "2026-05-05T17:32:35.270542+00:00",
+    "file_path": "knowledge:content-formulas:platform-mapping-facebook-reel",
+    "track_id": "insert_20260505_173225_e257d44f",
+    "metadata": {
+      "processing_start_time": 1778002345,
+      "processing_end_time": 1778002355
+    }
+  },
+  "knowledge:content-formulas:platform-mapping-instagram-post": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-3d3dbdb4018965a35bc831c46b628ef1"
+    ],
+    "content_summary": "## Platform Mapping Instagram Post\n\n### Primary Formulas\n\n- 4C\n- FAB\n- 4P\n- 5A\n- APP\n\n### Secondary Formulas\n\n- AIDA\n- BAB\n- FAS\n- 3 Reasons Why\n\n### Best For\n\n- Carousel education\n- Brand identity\n- Saveable content\n- Product showcase\n\n---",
+    "content_length": 240,
+    "created_at": "2026-05-05T17:32:35.329467+00:00",
+    "updated_at": "2026-05-05T17:32:46.449637+00:00",
+    "file_path": "knowledge:content-formulas:platform-mapping-instagram-post",
+    "track_id": "insert_20260505_173235_0396534b",
+    "metadata": {
+      "processing_start_time": 1778002355,
+      "processing_end_time": 1778002366
+    }
+  },
+  "knowledge:content-formulas:platform-mapping-instagram-reel": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-310c209905e34b3117ff6c7a1bca1f83"
+    ],
+    "content_summary": "## Platform Mapping Instagram Reel\n\n### Primary Formulas\n\n- 4U\n- AIDA\n- APP\n- BAB\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- FAS\n- 3S\n- FAB\n\n### Best For\n\n- Aesthetic reels\n- Tips\n- Transformation content\n- Growth content\n\n---",
+    "content_length": 226,
+    "created_at": "2026-05-05T17:32:46.490594+00:00",
+    "updated_at": "2026-05-05T17:32:57.630003+00:00",
+    "file_path": "knowledge:content-formulas:platform-mapping-instagram-reel",
+    "track_id": "insert_20260505_173246_e296988e",
+    "metadata": {
+      "processing_start_time": 1778002366,
+      "processing_end_time": 1778002377
+    }
+  },
+  "knowledge:content-formulas:platform-mapping-threads-post": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-329eaee1aec1b601d88beada37d0d6f0"
+    ],
+    "content_summary": "## Platform Mapping Threads Post\n\n### Primary Formulas\n\n- 4U\n- APP\n- BAB\n- 3S\n- 3 Reasons Why\n\n### Secondary Formulas\n\n- AIDA\n- 4C\n- FAS\n\n### Best For\n\n- Opinions\n- Relatable thoughts\n- Mini storytelling\n- Community discussions\n\n---",
+    "content_length": 232,
+    "created_at": "2026-05-05T17:32:57.919909+00:00",
+    "updated_at": "2026-05-05T17:33:08.457149+00:00",
+    "file_path": "knowledge:content-formulas:platform-mapping-threads-post",
+    "track_id": "insert_20260505_173257_94a45977",
+    "metadata": {
+      "processing_start_time": 1778002377,
+      "processing_end_time": 1778002388
+    }
+  },
+  "knowledge:content-formulas:category-cross-platform-high-performance": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-a8f2b43caa2d3405de1738e3b7ba665f"
+    ],
+    "content_summary": "## Category Cross-Platform High Performance\n\nUse these formulas across any platform when you want maximum reach with minimum platform-specific tuning:\n\n- 4U\n- AIDA\n- BAB\n- APP\n- FAB\n\n---",
+    "content_length": 186,
+    "created_at": "2026-05-05T17:33:08.507431+00:00",
+    "updated_at": "2026-05-05T17:33:14.970777+00:00",
+    "file_path": "knowledge:content-formulas:category-cross-platform-high-performance",
+    "track_id": "insert_20260505_173308_0a4d4fcd",
+    "metadata": {
+      "processing_start_time": 1778002388,
+      "processing_end_time": 1778002394
+    }
+  },
+  "knowledge:content-formulas:category-hook-viral": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-4edcac76e8a788e729349103a465ed98"
+    ],
+    "content_summary": "## Category Hook Viral\n\nWhen the goal is to grab attention in the first 1–3 seconds:\n\n- 4U\n- APP\n- 3 Reasons Why\n\n---",
+    "content_length": 117,
+    "created_at": "2026-05-05T17:33:15.017693+00:00",
+    "updated_at": "2026-05-05T17:33:24.535144+00:00",
+    "file_path": "knowledge:content-formulas:category-hook-viral",
+    "track_id": "insert_20260505_173315_04856116",
+    "metadata": {
+      "processing_start_time": 1778002395,
+      "processing_end_time": 1778002404
+    }
+  },
+  "knowledge:content-formulas:category-storytelling-trust": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-99f9e18b25926547f607c7f5bd862a27"
+    ],
+    "content_summary": "## Category Storytelling Trust\n\nWhen the goal is to build trust through narrative or vulnerability:\n\n- BAB\n- 3S\n\n---",
+    "content_length": 116,
+    "created_at": "2026-05-05T17:33:24.587118+00:00",
+    "updated_at": "2026-05-05T17:33:36.641867+00:00",
+    "file_path": "knowledge:content-formulas:category-storytelling-trust",
+    "track_id": "insert_20260505_173324_fc011a77",
+    "metadata": {
+      "processing_start_time": 1778002404,
+      "processing_end_time": 1778002416
+    }
+  },
+  "knowledge:content-formulas:category-conversion-sales": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-3f0d06ee8de6aad13c1a75678a4a0bed"
+    ],
+    "content_summary": "## Category Conversion Sales\n\nWhen the goal is to drive purchase or signup:\n\n- AIDA\n- FAB\n- FAS\n- 4P\n- 5 Objections\n\n---",
+    "content_length": 120,
+    "created_at": "2026-05-05T17:33:36.687422+00:00",
+    "updated_at": "2026-05-05T17:33:49.066689+00:00",
+    "file_path": "knowledge:content-formulas:category-conversion-sales",
+    "track_id": "insert_20260505_173336_04985393",
+    "metadata": {
+      "processing_start_time": 1778002416,
+      "processing_end_time": 1778002429
+    }
+  },
+  "knowledge:content-formulas:category-branding-audience-growth": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-4e6217cb2a117c34473893c4f28e6dca"
+    ],
+    "content_summary": "## Category Branding Audience Growth\n\nWhen the goal is to compound brand recognition over time:\n\n- 4C\n- 4A\n- 5A\n\n---",
+    "content_length": 116,
+    "created_at": "2026-05-05T17:33:49.113320+00:00",
+    "updated_at": "2026-05-05T17:33:55.392966+00:00",
+    "file_path": "knowledge:content-formulas:category-branding-audience-growth",
+    "track_id": "insert_20260505_173349_409c4482",
+    "metadata": {
+      "processing_start_time": 1778002429,
+      "processing_end_time": 1778002435
+    }
+  },
+  "knowledge:content-formulas:category-low-priority-short-social": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-e52cc3157adb787fd547aa055e28ed01"
+    ],
+    "content_summary": "## Category Low Priority Short Social\n\nAvoid these in short-form social content (too long-form / too strategic):\n\n- A FOREST\n- 4A\n- 5A (except brand strategy or Instagram post)",
+    "content_length": 176,
+    "created_at": "2026-05-05T17:33:55.438458+00:00",
+    "updated_at": "2026-05-05T17:34:05.230964+00:00",
+    "file_path": "knowledge:content-formulas:category-low-priority-short-social",
+    "track_id": "insert_20260505_173355_2398bcf0",
+    "metadata": {
+      "processing_start_time": 1778002435,
+      "processing_end_time": 1778002445
+    }
+  },
+  "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-11723b6048ec5837cdf583a0ee35c107"
+    ],
+    "content_summary": "## Save-bait vs Share-bait vs Comment-bait\n\n**Meaning:** Each engagement type rewards a different content style. Design the post for the action you want.\n\n### When to use\n\n- Anytime — pick the goal first, then the format\n- Don't try to optimize for a...",
+    "content_length": 955,
+    "created_at": "2026-05-05T17:34:05.281932+00:00",
+    "updated_at": "2026-05-05T17:34:20.751966+00:00",
+    "file_path": "knowledge:engagement-triggers:save-bait-vs-share-bait-vs-comment-bait",
+    "track_id": "insert_20260505_173405_0644bfff",
+    "metadata": {
+      "processing_start_time": 1778002445,
+      "processing_end_time": 1778002460
+    }
+  },
+  "knowledge:engagement-triggers:question-ending": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-912cd8a0b555494f59372c2fca0263a7"
+    ],
+    "content_summary": "## Question-Ending\n\n**Meaning:** End every post with a specific, easy-to-answer question to drive comments.\n\n### When to use\n\n- Carousel posts, long captions, threads\n- Anytime you want to boost the comment count\n\n### Example\n\n- Bad: \"Let me know wha...",
+    "content_length": 629,
+    "created_at": "2026-05-05T17:34:20.811554+00:00",
+    "updated_at": "2026-05-05T17:34:38.134037+00:00",
+    "file_path": "knowledge:engagement-triggers:question-ending",
+    "track_id": "insert_20260505_173420_f7db7596",
+    "metadata": {
+      "processing_start_time": 1778002460,
+      "processing_end_time": 1778002478
+    }
+  },
+  "knowledge:engagement-triggers:vulnerability-posts": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-fa6d01b0d9969f0a679c601570d9bbab"
+    ],
+    "content_summary": "## Vulnerability Posts\n\n**Meaning:** Share a personal struggle, mistake, or admission that contradicts the polished social-media norm.\n\n### When to use\n\n- Personal brand accounts\n- Coaches, founders, creators building thought leadership\n- Sparingly —...",
+    "content_length": 753,
+    "created_at": "2026-05-05T17:34:38.200319+00:00",
+    "updated_at": "2026-05-05T17:34:52.552205+00:00",
+    "file_path": "knowledge:engagement-triggers:vulnerability-posts",
+    "track_id": "insert_20260505_173438_74fa68ef",
+    "metadata": {
+      "processing_start_time": 1778002478,
+      "processing_end_time": 1778002492
+    }
+  },
+  "knowledge:engagement-triggers:controversial-but-positive": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-c4e63a16b538b4a79b6435793d79695f"
+    ],
+    "content_summary": "## Controversial-but-Positive\n\n**Meaning:** Take an opinion that splits your audience without being mean. The goal is debate, not trolling.\n\n### When to use\n\n- Established accounts with a defined audience\n- Topics where conventional wisdom is weak\n\n#...",
+    "content_length": 693,
+    "created_at": "2026-05-05T17:34:52.608011+00:00",
+    "updated_at": "2026-05-05T17:35:04.749318+00:00",
+    "file_path": "knowledge:engagement-triggers:controversial-but-positive",
+    "track_id": "insert_20260505_173452_c9497973",
+    "metadata": {
+      "processing_start_time": 1778002492,
+      "processing_end_time": 1778002504
+    }
+  },
+  "knowledge:engagement-triggers:insider-knowledge": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-46d40cf92118325a384f85788dc29e74"
+    ],
+    "content_summary": "## Insider Knowledge\n\n**Meaning:** Frame content as \"what nobody tells you\" or \"industry secrets\". Implies the reader is now in-the-know.\n\n### When to use\n\n- Niche-specific educational content\n- Saveable carousels and threads\n- Audiences hungry for s...",
+    "content_length": 692,
+    "created_at": "2026-05-05T17:35:04.809030+00:00",
+    "updated_at": "2026-05-05T17:35:20.016170+00:00",
+    "file_path": "knowledge:engagement-triggers:insider-knowledge",
+    "track_id": "insert_20260505_173504_3b1fafda",
+    "metadata": {
+      "processing_start_time": 1778002504,
+      "processing_end_time": 1778002520
+    }
+  },
+  "knowledge:engagement-triggers:listicle-carousel-anatomy": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-0a811792f6c6bb55ab55b2a2d8a2f84c"
+    ],
+    "content_summary": "## Listicle / Carousel Anatomy\n\n**Meaning:** Structure a multi-slide post as: hook slide + 4–7 value slides + CTA slide. Each slide must earn the next swipe.\n\n### When to use\n\n- Educational content\n- Instagram and Facebook carousels\n- LinkedIn slides...",
+    "content_length": 790,
+    "created_at": "2026-05-05T17:35:20.111919+00:00",
+    "updated_at": "2026-05-05T17:35:36.985140+00:00",
+    "file_path": "knowledge:engagement-triggers:listicle-carousel-anatomy",
+    "track_id": "insert_20260505_173520_39cf09cc",
+    "metadata": {
+      "processing_start_time": 1778002520,
+      "processing_end_time": 1778002536
+    }
+  },
+  "knowledge:engagement-triggers:algorithm-friendly-cadence": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-d1df8b74b30a35c1c95f01e1998097a2"
+    ],
+    "content_summary": "## Algorithm-Friendly Cadence\n\n**Meaning:** Posting frequency that the platform's ranker rewards without flooding your audience.\n\n### Guidance\n\n- **Instagram:** 1–2 posts/day max in feed, plus 2–4 stories. Posting more often dilutes reach per post.\n-...",
+    "content_length": 925,
+    "created_at": "2026-05-05T17:35:37.072128+00:00",
+    "updated_at": "2026-05-05T17:35:50.938580+00:00",
+    "file_path": "knowledge:engagement-triggers:algorithm-friendly-cadence",
+    "track_id": "insert_20260505_173537_1512b2d6",
+    "metadata": {
+      "processing_start_time": 1778002537,
+      "processing_end_time": 1778002550
+    }
+  },
+  "knowledge:engagement-triggers:golden-hour": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-ad567cc337e56f77d96c7671a22f0986"
+    ],
+    "content_summary": "## Golden Hour\n\n**Meaning:** The first 60 minutes after posting determines the post's overall reach. Maximize early engagement.\n\n### When to use\n\n- Every post — but most aggressively for content you've invested heavily in\n\n### Tactics\n\n- Post when yo...",
+    "content_length": 993,
+    "created_at": "2026-05-05T17:35:51.020885+00:00",
+    "updated_at": "2026-05-05T17:36:03.684617+00:00",
+    "file_path": "knowledge:engagement-triggers:golden-hour",
+    "track_id": "insert_20260505_173551_0d147dec",
+    "metadata": {
+      "processing_start_time": 1778002551,
+      "processing_end_time": 1778002563
+    }
+  },
+  "knowledge:image-design-branded:when-to-use-branded-style": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-5de24af04a6e5aa3cc721697b9b37edc"
+    ],
+    "content_summary": "## When To Use Branded Style\n\n**Meaning:** Default for everyday posts. Pick this when neither pure-vibe (creative) nor sales-flyer (marketing) is right.\n\n### Best fit\n- Tip / advice posts (\"3 things you should know about X\")\n- News / updates / announ...",
+    "content_length": 587,
+    "created_at": "2026-05-05T17:36:03.781828+00:00",
+    "updated_at": "2026-05-05T17:36:15.082346+00:00",
+    "file_path": "knowledge:image-design-branded:when-to-use-branded-style",
+    "track_id": "insert_20260505_173603_851f77c3",
+    "metadata": {
+      "processing_start_time": 1778002563,
+      "processing_end_time": 1778002575
+    }
+  },
+  "knowledge:image-design-branded:branded-composition-rules": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-007a665f6654a78bca0fd2f1f27d50b2"
+    ],
+    "content_summary": "## Branded Composition Rules\n\n**Meaning:** Strong photographic / illustrative composition first, brand layer second.\n\n### Apply\n- **One hero subject** plus space for one short headline\n- **Headline-safe area:** Top third or bottom third of the frame ...",
+    "content_length": 581,
+    "created_at": "2026-05-05T17:36:15.159457+00:00",
+    "updated_at": "2026-05-05T17:36:26.972063+00:00",
+    "file_path": "knowledge:image-design-branded:branded-composition-rules",
+    "track_id": "insert_20260505_173615_d7c55aaa",
+    "metadata": {
+      "processing_start_time": 1778002575,
+      "processing_end_time": 1778002586
+    }
+  },
+  "knowledge:image-design-branded:branded-text-rules": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-b5981bf8a153ad8ee40e4b54bc70f435"
+    ],
+    "content_summary": "## Branded Text Rules\n\n**Meaning:** One short headline, optionally one short subhead. Never a full text block, never CTAs, never contact info.\n\n### Apply\n- **One headline** of 3–8 words. Examples: *\"Your camera, smarter.\"* / *\"Trick #2: light from th...",
+    "content_length": 1012,
+    "created_at": "2026-05-05T17:36:27.064295+00:00",
+    "updated_at": "2026-05-05T17:36:34.658557+00:00",
+    "file_path": "knowledge:image-design-branded:branded-text-rules",
+    "track_id": "insert_20260505_173627_ca505dbd",
+    "metadata": {
+      "processing_start_time": 1778002587,
+      "processing_end_time": 1778002594
+    }
+  },
+  "knowledge:image-design-branded:branded-brand-presence": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-2143f392f169f3b590cc0dd33b9ebfda"
+    ],
+    "content_summary": "## Branded Brand Presence\n\n**Meaning:** Brand mark is visible but does not dominate.\n\n### Apply\n- **Wordmark or logo** in one corner (top-left or bottom-right preferred), 6–10% of frame width\n- **Brand color accent** somewhere in the frame — a stripe...",
+    "content_length": 527,
+    "created_at": "2026-05-05T17:36:34.754338+00:00",
+    "updated_at": "2026-05-05T17:36:47.819260+00:00",
+    "file_path": "knowledge:image-design-branded:branded-brand-presence",
+    "track_id": "insert_20260505_173634_3147ed5d",
+    "metadata": {
+      "processing_start_time": 1778002594,
+      "processing_end_time": 1778002607
+    }
+  },
+  "knowledge:image-design-branded:branded-color-lighting": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-20dd2eeadb182ea661fb96db38ceefbc"
+    ],
+    "content_summary": "## Branded Color & Lighting\n\n**Meaning:** Pull palette + lighting from the brand identity (RAG'd from past posts). Branded posts should look like they belong in the same grid as everything else.\n\n### Apply\n- **Palette:** Pull primary color from page ...",
+    "content_length": 630,
+    "created_at": "2026-05-05T17:36:47.912536+00:00",
+    "updated_at": "2026-05-05T17:37:00.177957+00:00",
+    "file_path": "knowledge:image-design-branded:branded-color-lighting",
+    "track_id": "insert_20260505_173647_955d34f7",
+    "metadata": {
+      "processing_start_time": 1778002607,
+      "processing_end_time": 1778002620
+    }
+  },
+  "knowledge:image-design-branded:branded-layout-patterns": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-19ff6b4cd2b981c4e299f73f1969442a"
+    ],
+    "content_summary": "## Branded Layout Patterns\n\n**Meaning:** Three reliable patterns work for ~80% of branded posts. Use one, do not invent.\n\n### Apply\n\n**Pattern A — Top-Title Photo**\n- Top third: brand color or white block + headline\n- Bottom two-thirds: hero photo\n- ...",
+    "content_length": 794,
+    "created_at": "2026-05-05T17:37:00.251487+00:00",
+    "updated_at": "2026-05-05T17:37:10.595241+00:00",
+    "file_path": "knowledge:image-design-branded:branded-layout-patterns",
+    "track_id": "insert_20260505_173700_5de5c60d",
+    "metadata": {
+      "processing_start_time": 1778002620,
+      "processing_end_time": 1778002630
+    }
+  },
+  "knowledge:image-design-creative:when-to-use-creative-style": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-68ba12ae5ff3f0aecb6e23aa8381dd83"
+    ],
+    "content_summary": "## When To Use Creative Style\n\n**Meaning:** Pick this style when the goal is brand vibe, emotional connection, or mood — not conversion or education.\n\n### Best fit\n- Behind-the-scenes glimpses, team moments, brand storytelling\n- Lifestyle / aspiratio...",
+    "content_length": 585,
+    "created_at": "2026-05-05T17:37:10.687787+00:00",
+    "updated_at": "2026-05-05T17:37:24.446574+00:00",
+    "file_path": "knowledge:image-design-creative:when-to-use-creative-style",
+    "track_id": "insert_20260505_173710_3ef225e5",
+    "metadata": {
+      "processing_start_time": 1778002630,
+      "processing_end_time": 1778002644
+    }
+  },
+  "knowledge:image-design-creative:creative-composition-rules": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-f221ba7743d1dca6e150702038ffe4cc"
+    ],
+    "content_summary": "## Creative Composition Rules\n\n**Meaning:** Treat the image like a single editorial photograph. One subject, strong composition, atmosphere over information.\n\n### Apply\n- **Single hero subject** — one clear focal point, not a crowded layout\n- **Rule ...",
+    "content_length": 707,
+    "created_at": "2026-05-05T17:37:24.544562+00:00",
+    "updated_at": "2026-05-05T17:37:38.711774+00:00",
+    "file_path": "knowledge:image-design-creative:creative-composition-rules",
+    "track_id": "insert_20260505_173724_0ff44880",
+    "metadata": {
+      "processing_start_time": 1778002644,
+      "processing_end_time": 1778002658
+    }
+  },
+  "knowledge:image-design-creative:creative-text-rules": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-c22796214eab5ad0c81668abff16d0e9"
+    ],
+    "content_summary": "## Creative Text Rules\n\n**Meaning:** The image should be readable WITHOUT text. Any text on the image is a constraint, not a feature.\n\n### Apply\n- **No text by default.** The caption carries copy\n- **Allowed exceptions:** A single short word/phrase a...",
+    "content_length": 708,
+    "created_at": "2026-05-05T17:37:38.792460+00:00",
+    "updated_at": "2026-05-05T17:37:50.971567+00:00",
+    "file_path": "knowledge:image-design-creative:creative-text-rules",
+    "track_id": "insert_20260505_173738_b7e3fc38",
+    "metadata": {
+      "processing_start_time": 1778002658,
+      "processing_end_time": 1778002670
+    }
+  },
+  "knowledge:image-design-creative:creative-color-mood": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-7b0d7722e8fcfa82a6ba972838b0d9ea"
+    ],
+    "content_summary": "## Creative Color & Mood\n\n**Meaning:** Palette is dictated by the brand identity from the page profile, not invented per post.\n\n### Apply\n- **Pull palette from past posts** — use the RAG'd reference images to lock palette\n- **2–3 colors max** — limit...",
+    "content_length": 695,
+    "created_at": "2026-05-05T17:37:51.045620+00:00",
+    "updated_at": "2026-05-05T17:38:01.615846+00:00",
+    "file_path": "knowledge:image-design-creative:creative-color-mood",
+    "track_id": "insert_20260505_173751_58878402",
+    "metadata": {
+      "processing_start_time": 1778002671,
+      "processing_end_time": 1778002681
+    }
+  },
+  "knowledge:image-design-creative:creative-brand-presence": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-05c801375004ec513d4e8096533dc185"
+    ],
+    "content_summary": "## Creative Brand Presence\n\n**Meaning:** Brand is felt, not displayed. The viewer should know it is your brand from the visual style alone.\n\n### Apply\n- **No on-image logo** by default. If the brand logo is included, it is small (under 8% of frame), ...",
+    "content_length": 563,
+    "created_at": "2026-05-05T17:38:01.899161+00:00",
+    "updated_at": "2026-05-05T17:38:14.960074+00:00",
+    "file_path": "knowledge:image-design-creative:creative-brand-presence",
+    "track_id": "insert_20260505_173801_bd886ee0",
+    "metadata": {
+      "processing_start_time": 1778002681,
+      "processing_end_time": 1778002694
+    }
+  },
+  "knowledge:image-design-marketing:when-to-use-marketing-style": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-8fde58ed6d6a1555100e83cef72d633d"
+    ],
+    "content_summary": "## When To Use Marketing Style\n\n**Meaning:** Pick this style when the post has a specific commercial goal and the image must close the loop on its own.\n\n### Best fit\n- Product launches, new arrivals\n- Sales / discounts / limited-time offers\n- Service...",
+    "content_length": 615,
+    "created_at": "2026-05-05T17:38:15.045691+00:00",
+    "updated_at": "2026-05-05T17:38:35.709951+00:00",
+    "file_path": "knowledge:image-design-marketing:when-to-use-marketing-style",
+    "track_id": "insert_20260505_173815_5290cd87",
+    "metadata": {
+      "processing_start_time": 1778002695,
+      "processing_end_time": 1778002715
+    }
+  },
+  "knowledge:image-design-marketing:marketing-composition-rules": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-bff89de66eb11452e6ac58c20aabe664"
+    ],
+    "content_summary": "## Marketing Composition Rules\n\n**Meaning:** Layout for fast comprehension. The viewer decides \"is this for me?\" in under one second.\n\n### Apply\n- **F-pattern reading order.** Top-left → top-right → middle → bottom-right (CTA goes bottom-right)\n- **V...",
+    "content_length": 842,
+    "created_at": "2026-05-05T17:38:35.796861+00:00",
+    "updated_at": "2026-05-05T17:38:45.418642+00:00",
+    "file_path": "knowledge:image-design-marketing:marketing-composition-rules",
+    "track_id": "insert_20260505_173835_e6597d8b",
+    "metadata": {
+      "processing_start_time": 1778002715,
+      "processing_end_time": 1778002725
+    }
+  },
+  "knowledge:image-design-marketing:marketing-text-rules": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-05adc5964c57d4756f5f71a57d0ebe78"
+    ],
+    "content_summary": "## Marketing Text Rules\n\n**Meaning:** This is the only style where the image carries multiple text layers. Hierarchy must be obvious at a glance.\n\n### Apply\n\n**Headline (mandatory)**\n- 3–6 words maximum\n- The value proposition or the offer (\"50% off ...",
+    "content_length": 1193,
+    "created_at": "2026-05-05T17:38:45.510426+00:00",
+    "updated_at": "2026-05-05T17:38:59.297630+00:00",
+    "file_path": "knowledge:image-design-marketing:marketing-text-rules",
+    "track_id": "insert_20260505_173845_e7368ea2",
+    "metadata": {
+      "processing_start_time": 1778002725,
+      "processing_end_time": 1778002739
+    }
+  },
+  "knowledge:image-design-marketing:marketing-brand-presence": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-a39d222abd2dee960e115829bbbbd675"
+    ],
+    "content_summary": "## Marketing Brand Presence\n\n**Meaning:** Brand must be unmistakable. Logo + name + colors + tagline if present.\n\n### Apply\n- **Brand logo lockup** — full logo with wordmark, top-left or paired with the CTA. 12–18% of frame width\n- **Brand colors enf...",
+    "content_length": 638,
+    "created_at": "2026-05-05T17:38:59.380251+00:00",
+    "updated_at": "2026-05-05T17:39:14.369128+00:00",
+    "file_path": "knowledge:image-design-marketing:marketing-brand-presence",
+    "track_id": "insert_20260505_173859_3ad9a24f",
+    "metadata": {
+      "processing_start_time": 1778002739,
+      "processing_end_time": 1778002754
+    }
+  },
+  "knowledge:image-design-marketing:marketing-visual-anchors": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-e56b4d29cd042b4575cf88d57c1e4b53"
+    ],
+    "content_summary": "## Marketing Visual Anchors\n\n**Meaning:** The hero visual must support the offer, not distract from it.\n\n### Apply\n- **Product shot:** clean background, single product, well-lit, NOT a busy lifestyle scene\n- **Before/after:** split-frame, clear label...",
+    "content_length": 585,
+    "created_at": "2026-05-05T17:39:14.455398+00:00",
+    "updated_at": "2026-05-05T17:39:29.104186+00:00",
+    "file_path": "knowledge:image-design-marketing:marketing-visual-anchors",
+    "track_id": "insert_20260505_173914_0ce6fb0d",
+    "metadata": {
+      "processing_start_time": 1778002754,
+      "processing_end_time": 1778002769
+    }
+  },
+  "knowledge:image-design-marketing:marketing-color-contrast": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-11a6649b61c186427fcd108409f7c6f2"
+    ],
+    "content_summary": "## Marketing Color & Contrast\n\n**Meaning:** High contrast wins clicks. Subtlety loses to noise in the feed.\n\n### Apply\n- **High-contrast text-to-background** — minimum WCAG AAA (7:1) for headlines\n- **CTA button must POP** — pick the color with highe...",
+    "content_length": 561,
+    "created_at": "2026-05-05T17:39:29.192022+00:00",
+    "updated_at": "2026-05-05T17:39:39.454099+00:00",
+    "file_path": "knowledge:image-design-marketing:marketing-color-contrast",
+    "track_id": "insert_20260505_173929_d7b3e888",
+    "metadata": {
+      "processing_start_time": 1778002769,
+      "processing_end_time": 1778002779
+    }
+  },
+  "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-42570b285779ca83fc44089b5d4c463f"
+    ],
+    "content_summary": "## Marketing Trust Signals (Optional Add-Ons)\n\n**Meaning:** Marketing posts win on credibility. Sprinkle one or two signals if they fit.\n\n### Apply (pick at most 2)\n- **Social proof:** \"★★★★★ 4.9/5 from 2,400 reviews\"\n- **Scarcity:** \"Only 12 left\" /...",
+    "content_length": 526,
+    "created_at": "2026-05-05T17:39:39.538961+00:00",
+    "updated_at": "2026-05-05T17:39:54.928136+00:00",
+    "file_path": "knowledge:image-design-marketing:marketing-trust-signals-optional-add-ons",
+    "track_id": "insert_20260505_173939_8f6902aa",
+    "metadata": {
+      "processing_start_time": 1778002779,
+      "processing_end_time": 1778002794
+    }
+  },
+  "knowledge:platform-algorithm-signals:facebook": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-b2f1e58b563431de779523f5c6b88ac3"
+    ],
+    "content_summary": "## Facebook\n\n**Primary signals:** Meaningful interactions > watch time > engagement velocity > recency\n\n### What the ranker rewards\n\n- **Meaningful interactions:** Comments and replies count more than likes. Long comments count more than short ones. ...",
+    "content_length": 1430,
+    "created_at": "2026-05-05T17:39:55.018428+00:00",
+    "updated_at": "2026-05-05T17:40:11.830495+00:00",
+    "file_path": "knowledge:platform-algorithm-signals:facebook",
+    "track_id": "insert_20260505_173955_bcb86f94",
+    "metadata": {
+      "processing_start_time": 1778002795,
+      "processing_end_time": 1778002811
+    }
+  },
+  "knowledge:platform-algorithm-signals:instagram": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-099fa493d309316ed02f5deace628766"
+    ],
+    "content_summary": "## Instagram\n\n**Primary signals:** Saves > Shares > Comments > Likes; for Reels: watch-loops + completion\n\n### What the ranker rewards\n\n- **Saves:** The strongest signal in the feed algorithm. Carousels are heavily favored because they generate more ...",
+    "content_length": 1425,
+    "created_at": "2026-05-05T17:40:11.953502+00:00",
+    "updated_at": "2026-05-05T17:40:29.761871+00:00",
+    "file_path": "knowledge:platform-algorithm-signals:instagram",
+    "track_id": "insert_20260505_174011_f244ca86",
+    "metadata": {
+      "processing_start_time": 1778002811,
+      "processing_end_time": 1778002829
+    }
+  },
+  "knowledge:platform-algorithm-signals:tiktok": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-727ef4898851d6e16f17c75a77ba39d9"
+    ],
+    "content_summary": "## TikTok\n\n**Primary signals:** Completion rate > rewatches > shares > comments > likes; first 3-second retention is critical\n\n### What the ranker rewards\n\n- **Completion rate:** Percentage of viewers who watched to the end. The single most important...",
+    "content_length": 1450,
+    "created_at": "2026-05-05T17:40:29.884401+00:00",
+    "updated_at": "2026-05-05T17:40:52.195824+00:00",
+    "file_path": "knowledge:platform-algorithm-signals:tiktok",
+    "track_id": "insert_20260505_174029_8563ad5d",
+    "metadata": {
+      "processing_start_time": 1778002829,
+      "processing_end_time": 1778002852
+    }
+  },
+  "knowledge:platform-algorithm-signals:threads": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-1a32f52be8fde29e94ed58c180a24ce6"
+    ],
+    "content_summary": "## Threads\n\n**Primary signals:** Reply-rate > quote-replies > likes; trending-topic association\n\n### What the ranker rewards\n\n- **Reply-rate:** How many viewers reply to the post (vs just liking). The dominant signal — Threads is conversation-first.\n...",
+    "content_length": 1340,
+    "created_at": "2026-05-05T17:40:52.299830+00:00",
+    "updated_at": "2026-05-05T17:41:11.650255+00:00",
+    "file_path": "knowledge:platform-algorithm-signals:threads",
+    "track_id": "insert_20260505_174052_854dd7b3",
+    "metadata": {
+      "processing_start_time": 1778002852,
+      "processing_end_time": 1778002871
+    }
+  },
+  "knowledge:platform-algorithm-signals:youtube-for-future-expansion": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-06ab9774b6e9aa0aeab7a13fdb038dbc"
+    ],
+    "content_summary": "## YouTube (for future expansion)\n\n**Primary signals:** Click-through rate (CTR) on thumbnail + average view duration; first-30-second retention\n\n### What the ranker rewards\n\n- **CTR:** Thumbnail + title combination must earn the click\n- **Average vi...",
+    "content_length": 1131,
+    "created_at": "2026-05-05T17:41:11.746170+00:00",
+    "updated_at": "2026-05-05T17:41:40.288122+00:00",
+    "file_path": "knowledge:platform-algorithm-signals:youtube-for-future-expansion",
+    "track_id": "insert_20260505_174111_18d3baf4",
+    "metadata": {
+      "processing_start_time": 1778002871,
+      "processing_end_time": 1778002900
+    }
+  },
+  "knowledge:viral-hooks:3-second-rule": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-40ddb34470f164e1f8baeb7a56a0e0b6"
+    ],
+    "content_summary": "## 3-Second Rule\n\n**Meaning:** Deliver a visual + emotional payoff before the viewer's thumb reaches to scroll.\n\n### When to use\n\n- Reels, TikTok, Stories, Shorts — any short-form video\n- Any time you need to stop the scroll on autoplay feeds\n\n### Ex...",
+    "content_length": 654,
+    "created_at": "2026-05-05T17:41:40.398766+00:00",
+    "updated_at": "2026-05-05T17:41:53.651833+00:00",
+    "file_path": "knowledge:viral-hooks:3-second-rule",
+    "track_id": "insert_20260505_174140_26318078",
+    "metadata": {
+      "processing_start_time": 1778002900,
+      "processing_end_time": 1778002913
+    }
+  },
+  "knowledge:viral-hooks:pattern-interrupt": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-d3e75cfe6e58b04c27e92833c1cbcd28"
+    ],
+    "content_summary": "## Pattern Interrupt\n\n**Meaning:** Open with something the viewer didn't expect — a contradiction, a controversial take, an abrupt cut, or a visual that breaks feed convention.\n\n### When to use\n\n- Saturated topics where most posts look alike\n- Audien...",
+    "content_length": 711,
+    "created_at": "2026-05-05T17:41:53.969913+00:00",
+    "updated_at": "2026-05-05T17:42:08.259111+00:00",
+    "file_path": "knowledge:viral-hooks:pattern-interrupt",
+    "track_id": "insert_20260505_174153_9bac4ecd",
+    "metadata": {
+      "processing_start_time": 1778002913,
+      "processing_end_time": 1778002928
+    }
+  },
+  "knowledge:viral-hooks:curiosity-gap": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-860b31095f79179d4d612439410f152e"
+    ],
+    "content_summary": "## Curiosity Gap\n\n**Meaning:** Tease a piece of information without revealing it, forcing the viewer to keep watching to close the loop.\n\n### When to use\n\n- Listicle content (\"3 things I wish I knew…\")\n- Behind-the-scenes / reveal videos\n- Tutorial c...",
+    "content_length": 700,
+    "created_at": "2026-05-05T17:42:08.373103+00:00",
+    "updated_at": "2026-05-05T17:42:26.685501+00:00",
+    "file_path": "knowledge:viral-hooks:curiosity-gap",
+    "track_id": "insert_20260505_174208_84824ed0",
+    "metadata": {
+      "processing_start_time": 1778002928,
+      "processing_end_time": 1778002946
+    }
+  },
+  "knowledge:viral-hooks:open-loop": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-0b17b37f44382daee9503ba67b0f71f3"
+    ],
+    "content_summary": "## Open Loop\n\n**Meaning:** Pose a specific question at the start, answer it at the end. Variant of Curiosity Gap, but more disciplined.\n\n### When to use\n\n- Educational reels and threads\n- Story-based posts\n- Long-ish (30s+) videos where retention is ...",
+    "content_length": 596,
+    "created_at": "2026-05-05T17:42:26.804429+00:00",
+    "updated_at": "2026-05-05T17:42:39.253461+00:00",
+    "file_path": "knowledge:viral-hooks:open-loop",
+    "track_id": "insert_20260505_174226_1f1b54e8",
+    "metadata": {
+      "processing_start_time": 1778002946,
+      "processing_end_time": 1778002959
+    }
+  },
+  "knowledge:viral-hooks:before-after-tease": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-976f097a5e4b9d6d3498c796ceffaf9d"
+    ],
+    "content_summary": "## Before/After Tease\n\n**Meaning:** Show the transformation upfront in a single frame or split-second cut — viewer wants to know HOW.\n\n### When to use\n\n- Fitness, beauty, finance, productivity, design\n- Anything with a visible result\n- Carousel post ...",
+    "content_length": 644,
+    "created_at": "2026-05-05T17:42:39.371735+00:00",
+    "updated_at": "2026-05-05T17:42:55.921819+00:00",
+    "file_path": "knowledge:viral-hooks:before-after-tease",
+    "track_id": "insert_20260505_174239_64f587a0",
+    "metadata": {
+      "processing_start_time": 1778002959,
+      "processing_end_time": 1778002975
+    }
+  },
+  "knowledge:viral-hooks:high-contrast-cold-open": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-f7a1933722739760c82d4c7e7ac40734"
+    ],
+    "content_summary": "## High-Contrast Cold Open\n\n**Meaning:** Open with a visual or audio shock — bright color flash, sudden silence after loud audio, or vice versa.\n\n### When to use\n\n- Reels and TikToks where attention competes with autoplay neighbors\n- Brand content ne...",
+    "content_length": 741,
+    "created_at": "2026-05-05T17:42:56.041058+00:00",
+    "updated_at": "2026-05-05T17:43:09.118060+00:00",
+    "file_path": "knowledge:viral-hooks:high-contrast-cold-open",
+    "track_id": "insert_20260505_174256_0f63baec",
+    "metadata": {
+      "processing_start_time": 1778002976,
+      "processing_end_time": 1778002989
+    }
+  },
+  "knowledge:viral-hooks:direct-address": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-6d827a41a2df931090eb12cb7d36a26a"
+    ],
+    "content_summary": "## Direct Address\n\n**Meaning:** Call out the specific role / situation of your target viewer in the first sentence so they know it's for them.\n\n### When to use\n\n- Niche content (B2B, specific industries, lifestyle micro-niches)\n- Educational posts wi...",
+    "content_length": 710,
+    "created_at": "2026-05-05T17:43:09.231054+00:00",
+    "updated_at": "2026-05-05T17:43:22.397320+00:00",
+    "file_path": "knowledge:viral-hooks:direct-address",
+    "track_id": "insert_20260505_174309_91b182b3",
+    "metadata": {
+      "processing_start_time": 1778002989,
+      "processing_end_time": 1778003002
+    }
+  },
+  "knowledge:viral-hooks:counterintuitive-claim": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-2688ad8e62f60b9a66f600a3cbee9c9e"
+    ],
+    "content_summary": "## Counterintuitive Claim\n\n**Meaning:** Open with a statement that challenges a widely-held assumption in your niche.\n\n### When to use\n\n- Thought-leadership content\n- Threads / LinkedIn-style posts\n- Long-form caption posts\n\n### Example\n\n\"You don't n...",
+    "content_length": 593,
+    "created_at": "2026-05-05T17:43:22.527654+00:00",
+    "updated_at": "2026-05-05T17:43:35.924389+00:00",
+    "file_path": "knowledge:viral-hooks:counterintuitive-claim",
+    "track_id": "insert_20260505_174322_aa241ab2",
+    "metadata": {
+      "processing_start_time": 1778003002,
+      "processing_end_time": 1778003015
+    }
+  },
+  "knowledge:viral-hooks:numbered-promise": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-518091a56c55377aa5120723c6c307c3"
+    ],
+    "content_summary": "## Numbered Promise\n\n**Meaning:** Lead with a specific number + concrete outcome. Specificity outperforms vague claims.\n\n### When to use\n\n- Listicle / educational content\n- Carousel slide 1 / Reel cover text\n- Threads opening posts\n- Blog/email subje...",
+    "content_length": 684,
+    "created_at": "2026-05-05T17:43:36.057526+00:00",
+    "updated_at": "2026-05-05T17:43:48.862614+00:00",
+    "file_path": "knowledge:viral-hooks:numbered-promise",
+    "track_id": "insert_20260505_174336_84392aae",
+    "metadata": {
+      "processing_start_time": 1778003016,
+      "processing_end_time": 1778003028
+    }
+  },
+  "knowledge:viral-hooks:stakes-first": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-32717e23ea8cf44a352874ed98705946"
+    ],
+    "content_summary": "## Stakes-First\n\n**Meaning:** Open with what the viewer will lose by NOT watching, rather than what they'll gain by watching. Loss-aversion is roughly 2x more motivating than equivalent gain.\n\n### When to use\n\n- High-cost decisions (financial, career...",
+    "content_length": 812,
+    "created_at": "2026-05-05T17:43:48.987813+00:00",
+    "updated_at": "2026-05-05T17:43:59.558683+00:00",
+    "file_path": "knowledge:viral-hooks:stakes-first",
+    "track_id": "insert_20260505_174348_8060073e",
+    "metadata": {
+      "processing_start_time": 1778003028,
+      "processing_end_time": 1778003039
+    }
+  },
+  "knowledge:visual-design:rule-of-thirds": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-2a184060d44406503c4befead6608fca"
+    ],
+    "content_summary": "## Rule of Thirds\n\n**Meaning:** Divide the frame into a 3×3 grid. Place the subject and key elements on the gridlines or their intersections, not centered.\n\n### When to use\n\n- Photo composition for feed posts\n- Image-generation prompts (specify \"subj...",
+    "content_length": 553,
+    "created_at": "2026-05-05T17:43:59.741243+00:00",
+    "updated_at": "2026-05-05T17:44:10.797537+00:00",
+    "file_path": "knowledge:visual-design:rule-of-thirds",
+    "track_id": "insert_20260505_174359_efd3e429",
+    "metadata": {
+      "processing_start_time": 1778003039,
+      "processing_end_time": 1778003050
+    }
+  },
+  "knowledge:visual-design:f-pattern-reading": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-56cd18f7b7433212ca21b7261585e92e"
+    ],
+    "content_summary": "## F-Pattern Reading\n\n**Meaning:** On text-heavy images, the eye scans in an F shape — top horizontal sweep, second horizontal sweep below, then vertical scan down the left side.\n\n### When to use\n\n- Carousel slides with body text\n- Quote graphics\n- I...",
+    "content_length": 726,
+    "created_at": "2026-05-05T17:44:11.147991+00:00",
+    "updated_at": "2026-05-05T17:44:22.472197+00:00",
+    "file_path": "knowledge:visual-design:f-pattern-reading",
+    "track_id": "insert_20260505_174411_5639d676",
+    "metadata": {
+      "processing_start_time": 1778003051,
+      "processing_end_time": 1778003062
+    }
+  },
+  "knowledge:visual-design:mobile-first-9-16": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-c676dbaddd0ab5a88338a4bf4ae4f4c9"
+    ],
+    "content_summary": "## Mobile-First (9:16)\n\n**Meaning:** Reels, Stories, TikTok, and Shorts default to vertical full-screen 9:16. Design with that aspect ratio in mind from the start.\n\n### When to use\n\n- All short-form video\n- Story content\n- IGTV / FB Reels / YouTube S...",
+    "content_length": 694,
+    "created_at": "2026-05-05T17:44:22.598993+00:00",
+    "updated_at": "2026-05-05T17:44:34.824662+00:00",
+    "file_path": "knowledge:visual-design:mobile-first-9-16",
+    "track_id": "insert_20260505_174422_21665bdf",
+    "metadata": {
+      "processing_start_time": 1778003062,
+      "processing_end_time": 1778003074
+    }
+  },
+  "knowledge:visual-design:square-1-1-for-feed": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-517177c19500ba4749eba4fa06e11417"
+    ],
+    "content_summary": "## Square (1:1) for Feed\n\n**Meaning:** Standard Instagram and Facebook feed posts default to 1:1 square (or 4:5 portrait). Don't repurpose 16:9 horizontal for feed.\n\n### When to use\n\n- Instagram feed posts\n- Facebook feed posts\n- Carousel slides\n\n###...",
+    "content_length": 631,
+    "created_at": "2026-05-05T17:44:35.002797+00:00",
+    "updated_at": "2026-05-05T17:44:49.682292+00:00",
+    "file_path": "knowledge:visual-design:square-1-1-for-feed",
+    "track_id": "insert_20260505_174435_3e4e4f01",
+    "metadata": {
+      "processing_start_time": 1778003075,
+      "processing_end_time": 1778003089
+    }
+  },
+  "knowledge:visual-design:text-overlay-rules": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-f6564aff0f66e7c912366525fe36de3f"
+    ],
+    "content_summary": "## Text Overlay Rules\n\n**Meaning:** Text on images/video must be readable in 1 second on a small screen.\n\n### When to use\n\n- Reel cover text\n- Carousel slide headlines\n- Any image with overlaid copy\n\n### Tactics\n\n- **Contrast:** Text color must contr...",
+    "content_length": 894,
+    "created_at": "2026-05-05T17:44:49.819709+00:00",
+    "updated_at": "2026-05-05T17:45:10.537698+00:00",
+    "file_path": "knowledge:visual-design:text-overlay-rules",
+    "track_id": "insert_20260505_174449_8ddb7e82",
+    "metadata": {
+      "processing_start_time": 1778003089,
+      "processing_end_time": 1778003110
+    }
+  },
+  "knowledge:visual-design:brand-color-discipline": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-4fea7d7f065b62f47a9e8d0484fe5cae"
+    ],
+    "content_summary": "## Brand Color Discipline\n\n**Meaning:** Use 2–3 colors maximum, repeated consistently across every post.\n\n### When to use\n\n- All brand and creator accounts\n- Especially important for new accounts building recognition\n\n### Tactics\n\n- Pick: 1 dominant ...",
+    "content_length": 673,
+    "created_at": "2026-05-05T17:45:10.659707+00:00",
+    "updated_at": "2026-05-05T17:45:27.260673+00:00",
+    "file_path": "knowledge:visual-design:brand-color-discipline",
+    "track_id": "insert_20260505_174510_906326f7",
+    "metadata": {
+      "processing_start_time": 1778003110,
+      "processing_end_time": 1778003127
+    }
+  },
+  "knowledge:visual-design:font-pairing": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-5de5f6aeb9e08a6d9fb7272ffbb72952"
+    ],
+    "content_summary": "## Font Pairing\n\n**Meaning:** Use one display font (for headlines) and one body font (for everything else). No more.\n\n### When to use\n\n- All text-on-image content\n- Carousel slides\n- Reel text overlays\n\n### Tactics\n\n- **Display:** A bold, geometric s...",
+    "content_length": 718,
+    "created_at": "2026-05-05T17:45:27.385271+00:00",
+    "updated_at": "2026-05-05T17:45:41.406739+00:00",
+    "file_path": "knowledge:visual-design:font-pairing",
+    "track_id": "insert_20260505_174527_fa827fdf",
+    "metadata": {
+      "processing_start_time": 1778003127,
+      "processing_end_time": 1778003141
+    }
+  },
+  "knowledge:visual-design:carousel-pacing": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-15d3c57e1c04f91cc88c3fede244761c"
+    ],
+    "content_summary": "## Carousel Pacing\n\n**Meaning:** Each slide must earn the next swipe. Treat slides like cliffhanger episodes.\n\n### When to use\n\n- All multi-slide posts (Instagram, Facebook, LinkedIn)\n\n### Structure\n\n- **Slide 1:** Hook — bold visual + numbered promi...",
+    "content_length": 800,
+    "created_at": "2026-05-05T17:45:41.561877+00:00",
+    "updated_at": "2026-05-05T17:45:59.114527+00:00",
+    "file_path": "knowledge:visual-design:carousel-pacing",
+    "track_id": "insert_20260505_174541_5c9f4d3e",
+    "metadata": {
+      "processing_start_time": 1778003141,
+      "processing_end_time": 1778003159
+    }
+  },
+  "knowledge:visual-design:thumbnail-optimization": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-134e69813d23dac6cb65275e5089cea5"
+    ],
+    "content_summary": "## Thumbnail Optimization\n\n**Meaning:** Your post is judged at thumbnail size (200px wide on most feeds) before anyone reads it. Design for that size first.\n\n### When to use\n\n- Reel covers\n- Carousel slide 1\n- Static feed images\n\n### Tactics\n\n- Test ...",
+    "content_length": 771,
+    "created_at": "2026-05-05T17:45:59.291604+00:00",
+    "updated_at": "2026-05-05T17:46:11.819468+00:00",
+    "file_path": "knowledge:visual-design:thumbnail-optimization",
+    "track_id": "insert_20260505_174559_cac32a41",
+    "metadata": {
+      "processing_start_time": 1778003159,
+      "processing_end_time": 1778003171
+    }
+  },
+  "knowledge:visual-design:negative-space": {
+    "status": "processed",
+    "chunks_count": 1,
+    "chunks_list": [
+      "chunk-4b610e2de93502f15a042b434c8e53de"
+    ],
+    "content_summary": "## Negative Space\n\n**Meaning:** Let the subject breathe. Resist the urge to fill every pixel with information.\n\n### When to use\n\n- All visual design\n- Especially photo posts and minimal-text quote graphics\n\n### Tactics\n\n- Aim for 30–50% of the frame ...",
+    "content_length": 744,
+    "created_at": "2026-05-05T17:46:11.947873+00:00",
+    "updated_at": "2026-05-05T17:46:25.230265+00:00",
+    "file_path": "knowledge:visual-design:negative-space",
+    "track_id": "insert_20260505_174611_318bbf00",
+    "metadata": {
+      "processing_start_time": 1778003171,
+      "processing_end_time": 1778003185
+    }
+  }
+}

@@ -1,0 +1,76 @@
+# bake.compose.yml — disposable stack for re-baking the knowledge base.
+#
+# Run with `./bake.sh` from this directory. The stack:
+#   1. Spins up an EMPTY Qdrant (no volume → fresh every time, disposable).
+#   2. Runs a one-shot rag-microservice in bake mode that connects to that
+#      Qdrant, runs `KnowledgeBootstrapService.bootstrap()`, then exports
+#      every Qdrant point + LightRAG state file to ./src/bakedknowledge/.
+#   3. Tears everything down.
+#
+# Network is isolated from the prod stack (`bake-net`); this never touches
+# your production Qdrant or rag-microservice volumes.
+#
+# Required env (or set in a .env beside this file): LLM_API_KEY (OpenRouter).
+
+services:
+  qdrant-bake:
+    image: qdrant/qdrant:v1.11.0
+    # No volume by design — every bake starts from a guaranteed-empty Qdrant.
+    # That removes any chance of FB account data slipping into the artifacts.
+    networks:
+      - bake-net
+
+  rag-bake:
+    build:
+      # Wider context so the dockerfile can also read SharedLibrary/Protos —
+      # same context shape as the prod stack but resolved relative to THIS
+      # compose file's location (Rag.Microservice/), so `..` = the
+      # Microservices directory.
+      context: ..
+      dockerfile: ./Rag.Microservice/dockerfile
+    image: rag-microservice-bake:latest
+    depends_on:
+      qdrant-bake:
+        condition: service_started
+    networks:
+      - bake-net
+    environment:
+      # Qdrant — points to the disposable instance, NOT the prod one.
+      QDRANT_URL: http://qdrant-bake:6333
+      QDRANT_NAMESPACE: meai_rag
+      # LLM + embeddings — required for the bootstrap LLM calls.
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_API_KEY: ${LLM_API_KEY:?Set LLM_API_KEY (your OpenRouter key) before running ./bake.sh}
+      LLM_MODEL: ${LLM_MODEL:-openai/gpt-4o-mini}
+      EMBED_BASE_URL: ${EMBED_BASE_URL:-${LLM_BASE_URL:-https://openrouter.ai/api/v1}}
+      EMBED_API_KEY: ${EMBED_API_KEY:-${LLM_API_KEY}}
+      EMBED_MODEL: ${EMBED_MODEL:-openai/text-embedding-3-small}
+      EMBED_DIM: ${EMBED_DIM:-1536}
+      EMBED_MAX_TOKENS: "8192"
+      # Multimodal embedder — values are required for container init but the
+      # bake never invokes it (knowledge files are text-only). Use the same
+      # key, dummy values are fine since no calls go out.
+      MULTIMODAL_EMBED_BASE_URL: ${MULTIMODAL_EMBED_BASE_URL:-${LLM_BASE_URL:-https://openrouter.ai/api/v1}}
+      MULTIMODAL_EMBED_API_KEY: ${MULTIMODAL_EMBED_API_KEY:-${LLM_API_KEY}}
+      MULTIMODAL_EMBED_MODEL: ${MULTIMODAL_EMBED_MODEL:-google/gemini-embedding-2-preview}
+      MULTIMODAL_EMBED_DIM: ${MULTIMODAL_EMBED_DIM:-3072}
+      MULTIMODAL_VISUAL_COLLECTION: meai_rag_visual_v2
+      # Optional rerank wiring (mirrors production). Leave empty to disable.
+      RERANK_API_KEY: ${RERANK_API_KEY:-}
+      RERANK_BASE_URL: ${RERANK_BASE_URL:-https://api.jina.ai/v1/rerank}
+      RERANK_MODEL: ${RERANK_MODEL:-jina-reranker-v2-base-multilingual}
+      # VideoRAG: disabled — knowledge has no videos.
+      VIDEORAG_ENABLED: "0"
+      # Working dir inside the bake container — temp, gets discarded.
+      WORKING_DIR: /tmp/bake-workdir
+      KNOWLEDGE_DIR: /app/src/knowledge
+      LOG_LEVEL: INFO
+    volumes:
+      # Mount the host's bakedknowledge dir — the bake script writes its
+      # artifacts here, then they appear on the host for git commit.
+      - ./src/bakedknowledge:/app/src/bakedknowledge
+    command: ["python", "-m", "src.composition.bake_knowledge"]
+
+networks:
+  bake-net:
+    driver: bridge

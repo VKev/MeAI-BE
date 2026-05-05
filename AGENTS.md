@@ -206,6 +206,43 @@ Both are queried in parallel; the Ai service does fusion + answer synthesis.
 
 These are non-obvious behaviors callers depend on.
 
+### 9.0 Pre-baked knowledge seed (eliminates the cold-start wait)
+
+`Backend/Microservices/Rag.Microservice/src/bakedknowledge/` is a checked-in
+artifact directory containing the **result** of running knowledge bootstrap
+once. On container start, `src/composition/seed_loader.py` restores it into
+the live Qdrant + LightRAG state with **zero LLM calls** in ~5–15 seconds.
+
+**Two-phase restore** (driven by `entrypoint.py`):
+
+- **Phase A** (before `initialize_async`): copy `rag_state/*` (kv_store + graphml)
+  into `WORKING_DIR/<workspace>/`, merge `ingested_ids.knowledge.json` into the
+  runtime fingerprint registry.
+- **Phase B** (after `initialize_async`): upsert points from
+  `qdrant_points/<collection>.json` into the live Qdrant collections that
+  LightRAG just created. Same-id upserts replace, so this is idempotent.
+
+A marker file `WORKING_DIR/.knowledge-seed-applied` holds the manifest's
+`knowledge_content_hash`. On warm volumes whose marker matches, both phases
+are skipped (~1 ms). On a content-hash mismatch (new bake committed since
+last apply), filesystem files are overwritten and the new points upserted —
+no manual intervention needed.
+
+If `bakedknowledge/manifest.json` is missing, every call is a no-op — the
+service falls back to the lazy bootstrap (§ 9.1).
+
+**Refreshing the seed**: after editing `src/knowledge/*.md`, run
+`./bake.sh` from `Backend/Microservices/Rag.Microservice/` (requires
+`LLM_API_KEY` env). The script spawns a disposable Qdrant + a one-shot
+rag-microservice via `bake.compose.yml`, runs the bootstrap once, exports
+artifacts to `src/bakedknowledge/`, and tears the stack down. Commit the diff
+and push — production deploys auto-pick up the new seed on next container start.
+
+The bake's Qdrant is empty by construction (no volume), so per-account FB
+data **cannot** end up in committed artifacts. Per-account ingest at runtime
+is unaffected — `facebook:<sm-id>:*` documents flow through the same pipeline
+and live in different payload-id partitions of the same Qdrant collections.
+
 ### 9.1 Lazy knowledge bootstrap (run-once, blocking)
 
 `LazyKnowledgeBootstrap.ensure_ready()` is awaitable + idempotent. The first incoming
@@ -652,3 +689,20 @@ the matching GH secret.
   active suggestion per post — replace-on-rerun is intentional and is enforced by
   both the start command (hard-delete prior row) AND the unique index on
   `Post.RecommendPostId` (filtered on NOT NULL).
+- Editing files inside `Backend/Microservices/Rag.Microservice/src/bakedknowledge/`
+  by hand. They're regenerated atomically by `./bake.sh` — a hand-edit is at
+  best lost on next bake, at worst breaks the seed restore (size/dim/hash
+  invariants enforced by `seed_loader.py`).
+- Ingesting non-knowledge documents into the bake's Qdrant. The bake's Qdrant
+  is started with no volume (disposable). If you wire a persistent volume into
+  `bake.compose.yml` and previous FB ingest data lands in there, that data
+  WILL end up in the committed artifacts. The whole point of the disposable
+  pattern is that this is impossible by construction — keep it that way.
+
+### Performance tuning (in compose)
+
+| Env var (rag-microservice) | Default | Set to | Effect |
+|---|---|---|---|
+| `MAX_PARALLEL_INSERT` | `1` | `4` | LightRAG ingests N docs concurrently. Cuts knowledge bootstrap and FB ingest by ~30–50%; the upstream LLM-extract calls are I/O-bound on OpenRouter. |
+| `CHUNK_TOP_K` | `20` | `10` | LightRAG pulls fewer chunks per query (post-rerank). Cuts query latency ~30%; downstream context is trimmed to ~6–8 chunks anyway. |
+| `RERANK_API_KEY` | unset | Jina key | Wires LightRAG's internal `rerank_model_func` to Jina; silences the "rerank not configured" warning and improves retrieval quality. Separate from the Ai service's external Jina-m0 multimodal rerank. |

@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "baked_at_utc": "2026-05-05T17:46:29.728172+00:00",
+  "embed_model": "openai/text-embedding-3-small",
+  "embed_dim": 1536,
+  "qdrant_namespace": "meai_rag",
+  "knowledge_content_hash": "1b4a24e21daa7158",
+  "knowledge_files": [
+    "content_formulas.md",
+    "engagement_triggers.md",
+    "image_design_branded.md",
+    "image_design_creative.md",
+    "image_design_marketing.md",
+    "platform_algorithm_signals.md",
+    "viral_hooks.md",
+    "visual_design.md"
+  ],
+  "doc_counts_by_namespace": {
+    "content-formulas": 26,
+    "engagement-triggers": 8,
+    "image-design-branded": 6,
+    "image-design-creative": 5,
+    "image-design-marketing": 7,
+    "platform-algorithm-signals": 5,
+    "viral-hooks": 10,
+    "visual-design": 10
+  },
+  "qdrant_collections": [
+    "lightrag_vdb_chunks",
+    "lightrag_vdb_entities",
+    "lightrag_vdb_relationships"
+  ],
+  "fingerprint_count": 77
+}
