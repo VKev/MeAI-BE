@@ -146,6 +146,78 @@ public sealed class RecommendationsController : ApiController
         return Ok(result);
     }
 
+    /// <summary>
+    /// Async "improve this existing post" generation. Mirrors the draft-post pipeline
+    /// (WaitForRagReady → re-index → RAG anchored on original post → conditional caption
+    /// regen → conditional image regen → persist on RecommendPost) but operates on an
+    /// existing <c>Post</c>. The original post is left untouched. Replace-on-rerun:
+    /// any prior RecommendPost for the same post id is hard-deleted before this row
+    /// is inserted, so each post has at most one active suggestion. Returns 202
+    /// immediately; final completion is delivered via SignalR notification, and the
+    /// FE can poll <see cref="GetImprovePostStatus(Guid, CancellationToken)"/>.
+    /// </summary>
+    [HttpPost("posts/{postId:guid}/improve")]
+    [ProducesResponseType(typeof(Result<RecommendPostTaskResponse>), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> StartImprovePost(
+        Guid postId,
+        [FromBody] StartImprovePostRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new StartImprovePostCommand(
+                UserId: userId,
+                PostId: postId,
+                ImproveCaption: request.ImproveCaption,
+                ImproveImage: request.ImproveImage,
+                Style: request.Style,
+                UserInstruction: request.UserInstruction),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return StatusCode(StatusCodes.Status202Accepted, result);
+    }
+
+    /// <summary>
+    /// Status / result of the most recent improve-post task for a given post id.
+    /// 1:1 with the post (replace-on-rerun semantics) — there is no history of past
+    /// suggestions; only the most recent run is reachable.
+    /// </summary>
+    [HttpGet("posts/{postId:guid}/improve")]
+    [ProducesResponseType(typeof(Result<RecommendPostTaskResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetImprovePostStatus(
+        Guid postId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new GetRecommendPostByPostIdQuery(userId, postId),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);

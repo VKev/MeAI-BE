@@ -446,7 +446,45 @@ Hydration is best-effort — a `IUserResourceService` failure falls back to empt
 `resources[]` rather than failing the whole detail call. Do not re-introduce the redundant
 `resourceIds: Guid[]` field.
 
-### 16.3 `POST /api/Ai/recommendations/{socialMediaId}/draft-posts` + consumer
+### 16.3 Improve-existing-post (RecommendPost) endpoints
+
+Async pipeline that suggests a replacement caption and/or image for an EXISTING
+post. Mirrors the draft-post flow but anchors RAG retrieval on the original post
+rather than a fresh user prompt, and persists outputs on a separate
+`RecommendPost` row WITHOUT modifying the original `Post`.
+
+| Endpoint | Verb | Body | Returns |
+|---|---|---|---|
+| `/api/Ai/recommendations/posts/{postId}/improve` | POST | `StartImprovePostRequest` | `202 Accepted` + `RecommendPostTaskResponse` (status=`Submitted`, with `correlationId` and the new `RecommendPost.Id`) |
+| `/api/Ai/recommendations/posts/{postId}/improve` | GET | – | `RecommendPostTaskResponse` for the most recent improvement of this post |
+
+**Request body** (`StartImprovePostRequest`):
+- `improveCaption: bool` — at least one of `improveCaption` / `improveImage` must be true (else 400 `ImprovePost.NothingToImprove`).
+- `improveImage: bool`.
+- `style?: "creative" | "branded" | "marketing"` — optional. When omitted, inherits the original post's stored style; final fallback is `branded`.
+- `userInstruction?: string` — free-form steering ("make caption more playful", "cooler palette", etc.). Forwarded into both caption + image-brief prompts.
+
+**Replace-on-rerun**: every new submit on the same post hard-deletes any existing
+`RecommendPost` for that post id and inserts a fresh one. There is no history of
+past suggestions; only the most recent run is reachable. The unique index on
+`Post.RecommendPostId` (filtered on NOT NULL) is the safety net under concurrent
+double-submit.
+
+**Pipeline** (see `Infrastructure/Logic/Consumers/RecommendPostGenerationConsumer.cs`):
+1. Step 0 — `WaitForRagReady` (same contract as draft-post).
+2. Step 1 — re-index the social account (if `Post.SocialMediaId` is set; skipped otherwise — orphan drafts run unindexed).
+3. Step 2 — RAG `QueryAccountRecommendationsQuery` anchored on the **original caption** (skipped when no SocialMediaId or empty caption — falls back to unscoped).
+4. Step 3 — caption regen with the **"improve" system prompt** (skipped when `improveCaption=false`). Original caption + image refs + `userInstruction` + RAG context all go in.
+5. Step 3.4 — style-knowledge fetch (`knowledge:image-design-{style}:`) — only when `improveImage=true`.
+6. Step 4 — image-brief LLM (JSON output: `prompt`, `aspect_ratio`, `style_notes`) → image-gen with the original image as primary reference, then S3 upload (skipped when `improveImage=false`). **Costs ~$0.234 per fire** (image-gen call).
+7. Step 5 — persist outputs on the `RecommendPost` row, mark `Completed`, publish `ai.draft_post_generation.completed` notification.
+
+**The original `Post` is NEVER modified.** Suggested replacement caption/image
+live on `RecommendPost.ResultCaption` / `RecommendPost.ResultResourceId` /
+`ResultPresignedUrl`. A future "accept" endpoint to apply the suggestion to the
+original post is out of current scope.
+
+### 16.4 `POST /api/Ai/recommendations/{socialMediaId}/draft-posts` + consumer
 
 Async pipeline (see `DraftPostGenerationConsumer`):
 1. Step 0 — `WaitForRagReady` (blocks until rag knowledge bootstrap done; first cold call
@@ -606,3 +644,11 @@ the matching GH secret.
   `PrepareGeminiPostsCommand` — that was deliberately removed.
 - Adding a redundant `resourceIds: Guid[]` field back to `PostBuilderDetailsResponse`
   next to `resources[]` — `resources[].resourceId` is the single source of truth.
+- Mutating the original `Post` inside `RecommendPostGenerationConsumer` — the
+  contract is to **suggest** replacements (caption + image) on the `RecommendPost`
+  row, NOT apply them to the original post. `Post.RecommendPostId` is the only
+  field on `Post` the improve flow may touch.
+- Keeping multiple `RecommendPost` rows per `Post`. The system holds at most ONE
+  active suggestion per post — replace-on-rerun is intentional and is enforced by
+  both the start command (hard-delete prior row) AND the unique index on
+  `Post.RecommendPostId` (filtered on NOT NULL).

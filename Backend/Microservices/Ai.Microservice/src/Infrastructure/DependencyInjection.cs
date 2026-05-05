@@ -286,6 +286,7 @@ namespace Infrastructure
             services.AddHttpClient<IImageGenerationClient, OpenRouterImageGenerationClient>();
 
             services.AddScoped<IDraftPostTaskRepository, DraftPostTaskRepository>();
+            services.AddScoped<IRecommendPostRepository, RecommendPostRepository>();
 
             services.AddGrpcClient<UserResourceService.UserResourceServiceClient>((sp, options) =>
             {
@@ -411,6 +412,10 @@ namespace Infrastructure
 
                 // Async draft-post generation: index → RAG query → caption → image → S3 → PostBuilder → notify
                 x.AddConsumer<DraftPostGenerationConsumer>();
+
+                // Async improve-existing-post generation: anchored on the original post,
+                // conditional caption / image regen, persists to RecommendPost row only.
+                x.AddConsumer<RecommendPostGenerationConsumer>();
 
                 x.AddSagaStateMachine<VideoTaskStateMachine, VideoTaskState>()
                     .RedisRepository(r =>

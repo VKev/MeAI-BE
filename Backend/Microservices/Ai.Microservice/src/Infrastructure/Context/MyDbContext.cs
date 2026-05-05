@@ -50,6 +50,8 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<DraftPostTask> DraftPostTasks { get; set; }
 
+    public virtual DbSet<RecommendPost> RecommendPosts { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MyDbContext).Assembly);

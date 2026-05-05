@@ -29,6 +29,14 @@ public sealed class Post
 
     public Guid? ScheduleGroupId { get; set; }
 
+    /// <summary>
+    /// Foreign key to the most recent <see cref="RecommendPost"/> generated for this
+    /// post. Nullable + unique — at most one active RecommendPost per Post. On
+    /// re-improve the start command hard-deletes the existing RecommendPost, inserts
+    /// a new one, and updates this field; there is no history of past suggestions.
+    /// </summary>
+    public Guid? RecommendPostId { get; set; }
+
     [Column(TypeName = "uuid[]")]
     public Guid[] ScheduledSocialMediaIds { get; set; } = Array.Empty<Guid>();
 
