@@ -5,7 +5,7 @@ public sealed record PostBuilderDetailsResponse(
     Guid? WorkspaceId,
     string? OriginKind,
     string? Type,
-    IReadOnlyList<Guid> ResourceIds,
+    IReadOnlyList<PostMediaResponse> Resources,
     IReadOnlyList<PostBuilderSocialMediaGroupResponse> SocialMedia,
     DateTime? CreatedAt,
     DateTime? UpdatedAt);
