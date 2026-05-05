@@ -88,15 +88,21 @@ public sealed class PrepareGeminiPostsCommandHandler
                 .ToList();
         }
 
+        // Resources can live ONLY at the builder level (per-platform Posts then
+        // store an empty resource list — the caller is opting in to "builder
+        // owns the bundle, no platform-specific bind"), or the caller can
+        // explicitly attach per-platform resources. Either way, validate that
+        // every referenced resource exists.
         var allResourceIds = normalizedSocialMedia
             .SelectMany(item => item.ResourceIds)
+            .Concat(builderResourceIds)
             .Distinct()
             .ToList();
 
         if (allResourceIds.Count == 0)
         {
             return Result.Failure<PrepareGeminiPostsResponse>(
-                new Error("Resource.Missing", "At least one resource is required."));
+                new Error("Resource.Missing", "At least one resource is required (builder-level or any per-platform)."));
         }
 
         var resourcesResult = await _userResourceService.GetPresignedResourcesAsync(
@@ -204,19 +210,10 @@ public sealed class PrepareGeminiPostsCommandHandler
                 .Distinct()
                 .ToList();
 
-            if (resourceIds.Count == 0 && builderResourceIds.Count > 0)
-            {
-                resourceIds = builderResourceIds
-                    .Where(id => id != Guid.Empty)
-                    .Distinct()
-                    .ToList();
-            }
-
-            if (resourceIds.Count == 0)
-            {
-                return Result.Failure<IReadOnlyList<ResolvedSocialMediaInput>>(
-                    new Error("Resource.Missing", "Each social media item must include at least one resource or use builder resourceIds."));
-            }
+            // Per-platform resourceIds are NEVER auto-filled from the builder list.
+            // Empty stays empty — that means "this platform's Post has no platform-
+            // specific resources; the bundle lives on PostBuilder only". Whatever
+            // the caller specified is exactly what gets persisted on Post.Content.
 
             if (builderResourceIds.Count > 0 && resourceIds.Any(id => !builderResourceIds.Contains(id)))
             {
