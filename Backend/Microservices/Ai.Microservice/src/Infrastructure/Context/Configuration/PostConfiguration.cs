@@ -32,6 +32,10 @@ public sealed class PostConfiguration : IEntityTypeConfiguration<Post>
         entity.Property(e => e.Platform).HasColumnName("platform");
         entity.Property(e => e.Title).HasColumnName("title");
         entity.Property(e => e.ScheduleGroupId).HasColumnName("schedule_group_id");
+        entity.Property(e => e.RecommendPostId).HasColumnName("recommend_post_id");
+        entity.HasIndex(e => e.RecommendPostId, "ux_posts_recommend_post_id")
+            .IsUnique()
+            .HasFilter("recommend_post_id IS NOT NULL");
         entity.Property(e => e.ScheduledSocialMediaIds)
             .HasColumnName("scheduled_social_media_ids")
             .HasColumnType("uuid[]");

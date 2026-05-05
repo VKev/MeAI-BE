@@ -1,14 +1,110 @@
+# ====================================================================
+# Editor / IDE
+# ====================================================================
 .vscode
+.vscode/
+.vscode/settings.json
+.idea/
+.history/
+/Backend/Microservices/.idea
+
+# ====================================================================
+# .NET build artifacts
+# ====================================================================
+**/Build/
+artifacts/
+Tools/DesignAnalyzer/bin
+Tools/DesignAnalyzer/obj
+Backend/Microservices/build.binlog
+
+# ====================================================================
+# Python build / cache (used by Rag.Microservice)
+# ====================================================================
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+env/
+venv/
+*.tgz
+*.tar.gz
+*.ini
+.cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.gradio/
+dist/
+build/
+site/
+
+# ====================================================================
+# Logs
+# ====================================================================
+*.log
+*.log.*
+*.logfire
+*.coverage/
+log/
+
+# ====================================================================
+# Environment / secrets / production overrides
+# ====================================================================
+.env
+.env_example
+*.env*
+.fake
+docker-compose-production.yml
+cloudfront_private_key.pem
+ec2_private_key.pem
+vinh-branch
+
+# ====================================================================
+# Terraform
+# ====================================================================
 .terraform
 .terraform.lock.hcl
 terraform-var
-vinh-branch
-/Backend/Microservices/.idea
+
+# ====================================================================
+# Runtime state / scratch dirs
+# ====================================================================
 .temp
-/.forge
 .codex
-Tools/DesignAnalyzer/bin
-Tools/DesignAnalyzer/obj
-artifacts/
-AGENTS.md
-Backend/Microservices/build.binlog
+/.forge
+temp/
+local_neo4jWorkDir/
+neo4jWorkDir/
+inputs/
+rag_storage*/
+examples/input/
+examples/output/
+output*/
+dickens*/
+book.txt
+LightRAG.pdf
+LightRAG_2-4.pdf
+download_models_hf.py
+lightrag-dev/
+gui/
+tiktoken_cache/
+
+# ====================================================================
+# Misc
+# ====================================================================
+.DS_Store
+TODO.md
+ignore_this.txt
+*.ignore.*
+test_*
+memory-bank/
+
+# ====================================================================
+# AI assistant scratch files (NOT AGENTS.md — that's tracked now as the
+# project's master doc; per-service AGENTS.md were removed in favor of
+# the root one.)
+# ====================================================================
+.claude/
+.cursor/
+CLAUDE.md
