@@ -12,7 +12,7 @@ public sealed class UpdateCoinPackageCommandValidator : AbstractValidator<Update
         RuleFor(x => x.CoinAmount).GreaterThan(0m);
         RuleFor(x => x.BonusCoins).GreaterThanOrEqualTo(0m);
         RuleFor(x => x.Price).GreaterThan(0m);
-        RuleFor(x => x.Currency).NotEmpty().Must(v => string.Equals(v, "usd", StringComparison.OrdinalIgnoreCase));
+        RuleFor(x => x.Currency).NotEmpty().Must(v => string.Equals(v, "vnd", StringComparison.OrdinalIgnoreCase));
         RuleFor(x => x.DisplayOrder).GreaterThanOrEqualTo(0);
     }
 }

@@ -56,7 +56,7 @@ public sealed class PurchaseCoinPackageCommandHandler
                 new Error("CoinPackage.InvalidPrice", "Coin package price is not valid."));
         }
 
-        if (!string.Equals(package.Currency, "usd", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(package.Currency, "vnd", StringComparison.OrdinalIgnoreCase))
         {
             return Result.Failure<CoinPackageCheckoutResponse>(
                 new Error("CoinPackage.InvalidCurrency", "Coin package currency is not supported."));

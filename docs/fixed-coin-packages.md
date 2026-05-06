@@ -19,9 +19,9 @@ Tài liệu này mô tả trạng thái backend hiện tại của feature coin 
 - [x] Có startup seeder cho `coin_packages`
 - Seeder mặc định tham chiếu 3 tier subscription hiện có để tạo catalog coin package
 - Catalog mặc định:
-  - `Coin Package 10000` -> `coinAmount = 10000`, `bonusCoins = 0`, `price = 3.99`, `currency = usd`
-  - `Coin Package 15000` -> `coinAmount = 15000`, `bonusCoins = 0`, `price = 5.99`, `currency = usd`
-  - `Coin Package 20000` -> `coinAmount = 20000`, `bonusCoins = 0`, `price = 7.99`, `currency = usd`
+  - `Coin Package 10000` -> `coinAmount = 10000`, `bonusCoins = 0`, `price = 100000`, `currency = vnd`
+  - `Coin Package 15000` -> `coinAmount = 15000`, `bonusCoins = 0`, `price = 150000`, `currency = vnd`
+  - `Coin Package 20000` -> `coinAmount = 20000`, `bonusCoins = 0`, `price = 200000`, `currency = vnd`
 
 ## Mục tiêu
 
@@ -49,7 +49,7 @@ Package `inactive` vẫn còn trong dữ liệu để admin và các màn hình 
 
 Luồng hiện tại:
 
-1. Validate package tồn tại, đang `active`, giá hợp lệ, và currency `usd`.
+1. Validate package tồn tại, đang `active`, giá hợp lệ, và currency `vnd`.
 2. Tạo hoặc resolve Stripe customer cho user.
 3. Tạo `Transaction` pending.
 4. Tạo Stripe `PaymentIntent`.
