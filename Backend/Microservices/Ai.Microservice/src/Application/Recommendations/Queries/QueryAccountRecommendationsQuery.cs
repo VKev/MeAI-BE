@@ -1,6 +1,7 @@
 using System.Text;
 using Application.Abstractions.Rag;
 using Application.Abstractions.SocialMedias;
+using Application.Recommendations.Services;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
@@ -11,7 +12,15 @@ public sealed record QueryAccountRecommendationsQuery(
     Guid UserId,
     Guid SocialMediaId,
     string Query,
-    int? TopK = null) : IRequest<Result<AccountRecommendationsAnswer>>;
+    int? TopK = null,
+    /// <summary>
+    /// Optional pre-computed query rewrite. When the orchestrating consumer
+    /// (DraftPostGenerationConsumer / RecommendPostGenerationConsumer) already ran
+    /// the rewriter at the top of its pipeline, it passes the result here so the
+    /// handler doesn't repeat the LLM call. When null (e.g. direct /query HTTP),
+    /// the handler runs the rewriter itself.
+    /// </summary>
+    QueryRewriteResult? PrecomputedRewrite = null) : IRequest<Result<AccountRecommendationsAnswer>>;
 
 public sealed record AccountRecommendationsAnswer(
     string Answer,
@@ -142,6 +151,7 @@ public sealed class QueryAccountRecommendationsQueryHandler
     private readonly IRagClient _ragClient;
     private readonly IMultimodalLlmClient _multimodalLlm;
     private readonly IRerankClient _rerankClient;
+    private readonly IQueryRewriter _queryRewriter;
     private readonly ILogger<QueryAccountRecommendationsQueryHandler> _logger;
 
     public QueryAccountRecommendationsQueryHandler(
@@ -149,12 +159,14 @@ public sealed class QueryAccountRecommendationsQueryHandler
         IRagClient ragClient,
         IMultimodalLlmClient multimodalLlm,
         IRerankClient rerankClient,
+        IQueryRewriter queryRewriter,
         ILogger<QueryAccountRecommendationsQueryHandler> logger)
     {
         _userSocialMediaService = userSocialMediaService;
         _ragClient = ragClient;
         _multimodalLlm = multimodalLlm;
         _rerankClient = rerankClient;
+        _queryRewriter = queryRewriter;
         _logger = logger;
     }
 
@@ -189,12 +201,53 @@ public sealed class QueryAccountRecommendationsQueryHandler
         var prefix = $"{platform}:{request.SocialMediaId:N}:";
         var topK = request.TopK ?? DefaultTopK;
 
-        // Fan-out: account RAG + platform-pinned formula list + semantic knowledge.
-        // Account RAG returns rich multimodal hits; the two knowledge calls return
-        // pure text context (formulas + tactical heuristics) we'll inject as guidance.
+        // ── Query rewriter pass (R0) ─────────────────────────────────────
+        // Single LLM call that turns the raw userPrompt into a structured set of
+        // text/visual queries + intent classification. Outputs feed every retrieval
+        // and rerank query slot below. Consumer-orchestrated calls pass a
+        // PrecomputedRewrite so we don't re-issue the LLM call.
+        var rewrite = request.PrecomputedRewrite;
+        if (rewrite is null)
+        {
+            var rewriteResult = await _queryRewriter.RewriteAsync(
+                new QueryRewriteRequest(
+                    UserPrompt: request.Query,
+                    PageProfileSnippet: null,    // we don't have profile text yet — handler does
+                                                 // a naive rewrite. Consumers that have it should
+                                                 // pre-compute the rewrite themselves with profile.
+                    Platform: platform,
+                    Style: null),
+                cancellationToken);
+            rewrite = rewriteResult.IsSuccess
+                ? rewriteResult.Value
+                : new QueryRewriteResult(
+                    Language: "en", Intent: "informational",
+                    PrimaryQuery: request.Query, AltQueries: Array.Empty<string>(),
+                    VisualQuery: request.Query, KeyTerms: Array.Empty<string>());
+        }
+        _logger.LogInformation(
+            "RAG rewriter: lang={Lang} intent={Intent} primary={Primary} alts={Alts} visual={Visual}",
+            rewrite.Language, rewrite.Intent,
+            Truncate(rewrite.PrimaryQuery, 200),
+            rewrite.AltQueries.Count,
+            Truncate(rewrite.VisualQuery, 200));
+
+        // Localized literals for R5 (platform-pinned), R6 (profile). Falls back to
+        // English when a non-Latin language has no template entry — better cross-lingual
+        // than worse-Latin embedding.
+        var literalProfile = LocalizedProfileLiteral(rewrite.Language);
+        var literalPlatformFormulas = LocalizedPlatformFormulasLiteral(rewrite.Language, platform);
+
+        // ── Fan-out: account RAG + platform-pinned formula list + intent-gated
+        // semantic knowledge fan-out. Account RAG returns multimodal hits; knowledge
+        // calls return pure text context. ──────────────────────────────────────
         var ragTask = _ragClient.MultimodalQueryAsync(
             new RagMultimodalQueryRequest(
-                Query: request.Query,
+                Query: rewrite.PrimaryQuery,        // R1/R3 — text/video legs use rewrite
+                                                     // (visual leg embeds same string but
+                                                     //  Gemini multimodal handles it; the
+                                                     //  separate visual rerank pass below
+                                                     //  uses VisualQuery for cross-encoder)
                 DocumentIdPrefix: prefix,
                 TopK: topK,
                 Modes: new[] { "text", "visual", "video" },
@@ -204,28 +257,40 @@ public sealed class QueryAccountRecommendationsQueryHandler
 
         var platformPinnedTask = _ragClient.QueryAsync(
             new RagQueryRequest(
-                Query: $"primary content formulas for {platform}",
+                Query: literalPlatformFormulas,    // localized
                 DocumentIdPrefix: $"knowledge:content-formulas:platform-mapping-{platform}",
                 Mode: "naive",
                 TopK: 2,
                 OnlyNeedContext: true),
             cancellationToken);
 
-        var semanticKnowledgeTask = _ragClient.QueryAsync(
-            new RagQueryRequest(
-                Query: request.Query,
-                DocumentIdPrefix: "knowledge:",
-                Mode: "naive",
-                TopK: 3,
-                OnlyNeedContext: true),
-            cancellationToken);
+        // R5 — fan out across rewriter's primary + alt queries, gated to namespaces
+        // matching the typed intent. Each sub-query independently retrieves top-2;
+        // we union + dedupe results downstream by chunk content hash.
+        var semanticPrefixes = KnowledgeNamespaceRouter.NamespacesFor(rewrite.Intent);
+        var semanticQueries = new List<string> { rewrite.PrimaryQuery };
+        semanticQueries.AddRange(rewrite.AltQueries.Take(2));
+        var semanticTasks = new List<Task<RagQueryResponse>>();
+        foreach (var ns in semanticPrefixes)
+        {
+            foreach (var q in semanticQueries)
+            {
+                semanticTasks.Add(_ragClient.QueryAsync(
+                    new RagQueryRequest(
+                        Query: q,
+                        DocumentIdPrefix: ns,
+                        Mode: "hybrid",            // ← upgraded from naive; entity-graph
+                                                    //   gives lateral reasoning across
+                                                    //   the knowledge base
+                        TopK: 2,
+                        OnlyNeedContext: true),
+                    cancellationToken));
+            }
+        }
 
-        // Page profile (About / category / website / location / bio) — ingested
-        // by the indexer as docId `<prefix>profile`. Always-on so the LLM grounds
-        // every answer in what the page is actually about, not just past posts.
         var profileTask = _ragClient.QueryAsync(
             new RagQueryRequest(
-                Query: "page profile and introduction",
+                Query: literalProfile,             // localized
                 DocumentIdPrefix: $"{prefix}profile",
                 Mode: "naive",
                 TopK: 1,
@@ -235,8 +300,35 @@ public sealed class QueryAccountRecommendationsQueryHandler
         // Tasks run in parallel; awaiting each one in turn is fine since they were started concurrently.
         var rag = await ragTask;
         var platformPinned = await SafeQuery(platformPinnedTask, "platform-pinned knowledge");
-        var semanticKnowledge = await SafeQuery(semanticKnowledgeTask, "semantic knowledge");
         var pageProfile = await SafeQuery(profileTask, "page profile");
+
+        // Fan-out merge: collect all semantic-knowledge results (intent-gated, multi-query
+        // fan-out from R5). Drop nulls (failed sub-queries) and dedupe answer text by
+        // exact-match. We build a single concatenated "semanticKnowledge" string for the
+        // existing log + LLM-context plumbing below.
+        var semanticResponses = new List<RagQueryResponse>();
+        foreach (var t in semanticTasks)
+        {
+            var r = await SafeQuery(t, "semantic knowledge (fan-out)");
+            if (r != null) semanticResponses.Add(r);
+        }
+        var seenAnswers = new HashSet<string>(StringComparer.Ordinal);
+        var mergedSb = new StringBuilder();
+        foreach (var r in semanticResponses)
+        {
+            var ans = (r.Answer ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(ans) || !seenAnswers.Add(ans)) continue;
+            if (mergedSb.Length > 0) mergedSb.Append("\n\n---\n\n");
+            mergedSb.Append(ans);
+        }
+        var semanticKnowledge = mergedSb.Length > 0
+            ? new RagQueryResponse(
+                Query: rewrite.PrimaryQuery,
+                Mode: "hybrid",
+                TopK: semanticResponses.Sum(r => r.TopK),
+                Answer: mergedSb.ToString(),
+                MatchedDocumentIds: null)
+            : null;
 
         // ── RAG VISIBILITY ────────────────────────────────────────────────
         // Dump what each RAG leg actually retrieved so the operator can see
@@ -300,18 +392,23 @@ public sealed class QueryAccountRecommendationsQueryHandler
         // image_url payload we'll feed back to the multimodal LLM.
         var fusedReferencesRaw = FuseReferences(rag, prefix);
 
+        // Build the enriched rerank query: rewriter's primary + key-terms. Gives the
+        // cross-encoder more anchors than the raw userPrompt (e.g. "DJI Osmo,
+        // mirrorless, digital camera 2026" vs "make content about news camera nowaday").
+        var rerankQuery = BuildRerankQuery(rewrite);
+
         // Rerank pass 1 — within each video post that has multiple matched
         // segments, pick the segment whose transcript is most relevant. Replaces
         // the "first segment wins" RRF behavior with "best-by-relevance wins".
         var fusedAfterSegmentPick = await PickBestVideoSegmentsAsync(
-            request.Query, fusedReferencesRaw, rag.Video, cancellationToken);
+            rerankQuery, fusedReferencesRaw, rag.Video, cancellationToken);
 
         // Rerank pass 2 — text rerank across ALL fused references using their
         // captions + (best) transcripts. Drops low-relevance items below threshold,
         // caps at MaxReferencesAfterRerank to keep the recommendation LLM's user-text
         // focused. Falls back to the un-reranked order if Jina returns empty.
         var fusedReferences = await RerankReferencesByTextAsync(
-            request.Query, fusedAfterSegmentPick, cancellationToken);
+            rerankQuery, fusedAfterSegmentPick, cancellationToken);
 
         // Prefer the S3-mirror URL (fetchable by OpenAI / OpenRouter) over the raw
         // FB CDN URL (which they refuse). Old Qdrant points without mirror_s3_key
@@ -807,5 +904,64 @@ public sealed class QueryAccountRecommendationsQueryHandler
             _logger.LogWarning(ex, "{Label} fetch failed; continuing without it", label);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Build the enriched rerank query: rewriter's primary query plus distilled
+    /// key terms, separated by ` | `. The cross-encoder benefits from short,
+    /// concrete anchors that the original imperative userPrompt typically lacks.
+    /// </summary>
+    private static string BuildRerankQuery(QueryRewriteResult rewrite)
+    {
+        if (rewrite.KeyTerms.Count == 0) return rewrite.PrimaryQuery;
+        var terms = string.Join(", ", rewrite.KeyTerms.Take(6));
+        return $"{rewrite.PrimaryQuery} | key terms: {terms}";
+    }
+
+    /// <summary>
+    /// Localized literal for the page-profile retrieval query (R6). Cross-lingual
+    /// embed quality is fine but matching language always edges out — for a
+    /// Vietnamese page profile, embedding Vietnamese against Vietnamese gives the
+    /// tightest cosine alignment. Falls back to English for languages without an
+    /// entry rather than degrading to romanization.
+    /// </summary>
+    private static string LocalizedProfileLiteral(string language)
+    {
+        return language switch
+        {
+            "vi" => "hồ sơ trang và phần giới thiệu",
+            "ja" => "ページのプロフィールと自己紹介",
+            "ko" => "페이지 프로필과 소개",
+            "th" => "โปรไฟล์เพจและข้อมูลเบื้องต้น",
+            "zh" => "页面简介和介绍",
+            "es" => "perfil de la página e introducción",
+            "pt" => "perfil da página e introdução",
+            "fr" => "profil de la page et introduction",
+            "de" => "Seitenprofil und Einleitung",
+            "id" => "profil halaman dan perkenalan",
+            _ => "page profile and introduction",
+        };
+    }
+
+    /// <summary>
+    /// Localized literal for the platform-pinned content-formulas query (R5/platform).
+    /// Same pattern as the profile literal.
+    /// </summary>
+    private static string LocalizedPlatformFormulasLiteral(string language, string platform)
+    {
+        return language switch
+        {
+            "vi" => $"công thức nội dung chính cho {platform}",
+            "ja" => $"{platform}の主要なコンテンツフォーミュラ",
+            "ko" => $"{platform}의 주요 콘텐츠 공식",
+            "th" => $"สูตรเนื้อหาหลักสำหรับ {platform}",
+            "zh" => $"{platform} 的主要内容公式",
+            "es" => $"fórmulas de contenido principales para {platform}",
+            "pt" => $"fórmulas de conteúdo principais para {platform}",
+            "fr" => $"formules de contenu principales pour {platform}",
+            "de" => $"primäre Content-Formeln für {platform}",
+            "id" => $"formula konten utama untuk {platform}",
+            _ => $"primary content formulas for {platform}",
+        };
     }
 }

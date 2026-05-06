@@ -134,6 +134,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
     private readonly IRagClient _ragClient;
     private readonly IMultimodalLlmClient _multimodalLlm;
     private readonly IImageGenerationClient _imageGenClient;
+    private readonly Application.Recommendations.Services.IQueryRewriter _queryRewriter;
     private readonly ILogger<RecommendPostGenerationConsumer> _logger;
 
     public RecommendPostGenerationConsumer(
@@ -144,6 +145,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         IRagClient ragClient,
         IMultimodalLlmClient multimodalLlm,
         IImageGenerationClient imageGenClient,
+        Application.Recommendations.Services.IQueryRewriter queryRewriter,
         ILogger<RecommendPostGenerationConsumer> logger)
     {
         _mediator = mediator;
@@ -153,6 +155,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         _ragClient = ragClient;
         _multimodalLlm = multimodalLlm;
         _imageGenClient = imageGenClient;
+        _queryRewriter = queryRewriter;
         _logger = logger;
     }
 
@@ -230,6 +233,37 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     "ImprovePost {Id}: skipping re-index (post has no SocialMediaId)", task.Id);
             }
 
+            // ── Step 1.5 — Query rewriter. Single LLM call up-front; outputs feed
+            // the RAG handler (Step 2) AND the downstream style-knowledge fetch
+            // (Step 3.4). Threaded into the query via PrecomputedRewrite so the
+            // handler doesn't repeat the LLM call.
+            // The user's improvement instruction (if present) is the most informative
+            // input for the rewriter — it tells us what they want changed. Original
+            // caption is the fallback prompt when the user gave no instruction.
+            var rewriterPrompt = !string.IsNullOrWhiteSpace(msg.UserInstruction)
+                ? $"Improve an existing social post: {msg.UserInstruction}. Original caption: {originalCaption}"
+                : $"Improve this social post while preserving its topic: {originalCaption}";
+            var rewriteResult = await _queryRewriter.RewriteAsync(
+                new Application.Recommendations.Services.QueryRewriteRequest(
+                    UserPrompt: rewriterPrompt,
+                    PageProfileSnippet: null,
+                    Platform: null,
+                    Style: style),
+                ct);
+            var rewrite = rewriteResult.IsSuccess
+                ? rewriteResult.Value
+                : new Application.Recommendations.Services.QueryRewriteResult(
+                    Language: "en",
+                    Intent: "informational",
+                    PrimaryQuery: originalCaption,
+                    AltQueries: Array.Empty<string>(),
+                    VisualQuery: originalCaption,
+                    KeyTerms: Array.Empty<string>());
+            _logger.LogInformation(
+                "ImprovePost {Id}: rewriter lang={Lang} intent={Intent} primary={Primary} visual={Visual}",
+                task.Id, rewrite.Language, rewrite.Intent,
+                Truncate(rewrite.PrimaryQuery, 180), Truncate(rewrite.VisualQuery, 180));
+
             // ── Step 2 — RAG query anchored on the original caption ────────
             // The original caption IS the topic anchor here; we pull past-post
             // examples + content formulas for voice matching, not topic discovery.
@@ -239,13 +273,14 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             if (originalPost.SocialMediaId.HasValue && originalPost.SocialMediaId.Value != Guid.Empty
                 && !string.IsNullOrWhiteSpace(originalCaption))
             {
-                _logger.LogDebug("ImprovePost {Id}: querying RAG (anchor=caption)", task.Id);
+                _logger.LogDebug("ImprovePost {Id}: querying RAG (anchor=caption, with rewriter)", task.Id);
                 var queryResult = await _mediator.Send(
                     new QueryAccountRecommendationsQuery(
                         msg.UserId,
                         originalPost.SocialMediaId.Value,
                         originalCaption,
-                        DefaultRagTopK),
+                        DefaultRagTopK,
+                        PrecomputedRewrite: rewrite),
                     ct);
                 if (queryResult.IsFailure)
                 {
@@ -309,8 +344,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             string? resultPresignedUrl = null;
             if (msg.ImproveImage)
             {
-                // Step 3.4 — fetch style-knowledge for the requested style
-                var styleKnowledge = await FetchStyleKnowledgeAsync(style, ct);
+                // Step 3.4 — fetch style-knowledge for the requested style (localized)
+                var styleKnowledge = await FetchStyleKnowledgeAsync(style, rewrite.Language, ct);
                 _logger.LogInformation(
                     "ImprovePost {Id}: style-knowledge[{Style}] fetched ({Len} chars)",
                     task.Id, style, styleKnowledge.Length);
@@ -555,14 +590,15 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         return sb.ToString();
     }
 
-    private async Task<string> FetchStyleKnowledgeAsync(string style, CancellationToken cancellationToken)
+    private async Task<string> FetchStyleKnowledgeAsync(string style, string language, CancellationToken cancellationToken)
     {
         try
         {
             var prefix = $"knowledge:image-design-{style}:";
+            var query = LocalizedStyleDesignLiteral(language, style);
             var resp = await _ragClient.QueryAsync(
                 new RagQueryRequest(
-                    Query: $"design rules for {style} style",
+                    Query: query,
                     DocumentIdPrefix: prefix,
                     Mode: "naive",
                     TopK: 6,
@@ -635,4 +671,28 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
 
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max] + "...[truncated]";
+
+    /// <summary>
+    /// Localized literal for the style-design knowledge query. Same table as the
+    /// draft-post consumer's helper — kept duplicated so each consumer is
+    /// self-contained without a shared utility class. If you add a language here,
+    /// add it to DraftPostGenerationConsumer.LocalizedStyleDesignLiteral too.
+    /// </summary>
+    private static string LocalizedStyleDesignLiteral(string language, string style)
+    {
+        return language switch
+        {
+            "vi" => $"quy tắc thiết kế hình ảnh cho phong cách {style} trên mạng xã hội",
+            "ja" => $"ソーシャルメディア投稿の{style}スタイル画像デザインルール",
+            "ko" => $"소셜 미디어 게시물의 {style} 스타일 이미지 디자인 규칙",
+            "th" => $"กฎการออกแบบภาพสำหรับสไตล์ {style} ในโซเชียลมีเดีย",
+            "zh" => $"社交媒体帖子的 {style} 风格图像设计规则",
+            "es" => $"reglas de diseño de imagen para estilo {style} en redes sociales",
+            "pt" => $"regras de design de imagem para estilo {style} em redes sociais",
+            "fr" => $"règles de conception d'image pour style {style} sur les réseaux sociaux",
+            "de" => $"Bilddesign-Regeln für {style}-Stil in sozialen Medien",
+            "id" => $"aturan desain gambar untuk gaya {style} di media sosial",
+            _ => $"image design rules for {style} style social media post",
+        };
+    }
 }

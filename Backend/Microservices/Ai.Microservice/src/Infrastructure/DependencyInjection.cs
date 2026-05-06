@@ -288,6 +288,11 @@ namespace Infrastructure
             services.AddScoped<IDraftPostTaskRepository, DraftPostTaskRepository>();
             services.AddScoped<IRecommendPostRepository, RecommendPostRepository>();
 
+            // Query rewriter (single LLM call up-front; outputs feed every retrieval +
+            // rerank query downstream). See `Application/Recommendations/Services/QueryRewriter`.
+            services.AddScoped<Application.Recommendations.Services.IQueryRewriter,
+                              Application.Recommendations.Services.QueryRewriter>();
+
             services.AddGrpcClient<UserResourceService.UserResourceServiceClient>((sp, options) =>
             {
                 var configuration = sp.GetRequiredService<IConfiguration>();

@@ -232,16 +232,45 @@ If `bakedknowledge/manifest.json` is missing, every call is a no-op — the
 service falls back to the lazy bootstrap (§ 9.1).
 
 **Refreshing the seed**: after editing `src/knowledge/*.md`, run
-`./bake.sh` from `Backend/Microservices/Rag.Microservice/` (requires
-`LLM_API_KEY` env). The script spawns a disposable Qdrant + a one-shot
-rag-microservice via `bake.compose.yml`, runs the bootstrap once, exports
-artifacts to `src/bakedknowledge/`, and tears the stack down. Commit the diff
-and push — production deploys auto-pick up the new seed on next container start.
+`./bake.sh` from `Backend/Microservices/Rag.Microservice/`. Zero env setup
+required — the script drives the `bake` profile of
+`Backend/Compose/docker-compose-production.yml` (which is gitignored and
+already has all API keys hardcoded), spinning up an empty `qdrant-bake` +
+a one-shot `rag-bake` on a dedicated `bake-net`. Bootstrap runs once,
+artifacts get written to `src/bakedknowledge/`, then the two bake services
+are stopped + removed (other prod services on the same compose file are
+untouched). Commit the diff and push — production deploys auto-pick up
+the new seed on next container start.
 
 The bake's Qdrant is empty by construction (no volume), so per-account FB
 data **cannot** end up in committed artifacts. Per-account ingest at runtime
 is unaffected — `facebook:<sm-id>:*` documents flow through the same pipeline
 and live in different payload-id partitions of the same Qdrant collections.
+
+**Artifact layout** under `src/bakedknowledge/`:
+
+| File / dir | What it is |
+|---|---|
+| `manifest.json` | Bake metadata — timestamp, embedding model + dim, content hash of input markdown files. The hash gates whether the seed loader skips or re-applies on container start. |
+| `rag_state/` | LightRAG filesystem state: `kv_store_*.json` (full docs / chunks / entities / relations / doc_status / LLM-response cache) plus `graph_chunk_entity_relation.graphml`. Restored to `WORKING_DIR/<workspace>/`. |
+| `qdrant_points/<collection>.json` | One file per LightRAG vector collection (`lightrag_vdb_chunks` / `lightrag_vdb_entities` / `lightrag_vdb_relationships`). Each is `{collection, vectors_config, points_count, points: [{id, vector, payload}]}`. Knowledge slice only — disposable Qdrant has no FB data. |
+| `ingested_ids.knowledge.json` | Fingerprint registry filtered to `knowledge:*` doc ids only. Merged into the runtime `ingested_ids.json` so subsequent bootstrap runs ack baked sections as `skipped` rather than re-extracting. |
+
+**Caveats**:
+
+- **Vector dim must match between bake and runtime.** If you change
+  `EMBED_MODEL` or `EMBED_DIM`, you must rebake; otherwise the live Qdrant
+  collection (created with the new dim) will reject the old vectors.
+- **Section-deletion orphans**: if you delete a `## Section` from a `.md`
+  file and rebake, that section's chunks / entities are no longer in the new
+  bake — but if a previous bake had already been applied to a warm volume,
+  they're still in the live Qdrant after restore. Cold volumes are naturally
+  fine. Workaround on warm volumes: drop the `rag-data` + `qdrant-data`
+  volumes and let cold-start re-apply. Future enhancement: have the seed
+  loader scrub `knowledge:*` points whose ids aren't in the new bake.
+- **Don't commit anything else under `src/bakedknowledge/`.** The bake mounts
+  it RW; extra files would survive the bake and ship inside the image. Do
+  not add a per-directory `README.md` either — this section IS the doc.
 
 ### 9.1 Lazy knowledge bootstrap (fallback path; rarely runs in production)
 
@@ -296,6 +325,48 @@ workspace filter. The facade's `query()` sets the contextvar around `aquery()`.
 - Multi-tenant isolation is correct under this scheme **only as long as the registry +
   Qdrant agree**. If you ever drop a Qdrant collection without clearing the registry,
   ingests will look like `skipped` but the data is gone. Always migrate or clear together.
+
+### 9.3.1 Query rewriter (single LLM call up-front, feeds every retrieval + rerank query)
+
+`Application/Recommendations/Services/IQueryRewriter` is called once per request
+(by the orchestrating consumer or, for direct `/query` HTTP, by the handler).
+One gpt-4o-mini call returns a structured rewrite:
+
+```jsonc
+{
+  "language":      "en | vi | ja | ...",
+  "intent":        "viral | informational | sales | story | engagement | design | algorithm",
+  "primary_query": "<descriptive, key-term-rich rewrite of userPrompt, in detected language>",
+  "alt_queries":   ["<alt 1>", "<alt 2>"],
+  "visual_query":  "<English visually-descriptive query — for image rerank>",
+  "key_terms":     ["<noun phrase>", ...]
+}
+```
+
+Outputs feed every query slot:
+
+| Slot | Uses |
+|---|---|
+| R1/R3 multimodal text+video legs | `primary_query` |
+| R4 platform-pinned literal | `LocalizedPlatformFormulasLiteral(language, platform)` |
+| R5 semantic knowledge | **fan out** across `[primary_query, ...alt_queries]` × `KnowledgeNamespaceRouter.NamespacesFor(intent)` (e.g. intent=viral → 3 namespaces × 3 queries = 9 sub-queries; was 1 query in `knowledge:` previously) |
+| R6 profile literal | `LocalizedProfileLiteral(language)` |
+| R7 style-design literal | `LocalizedStyleDesignLiteral(language, style)` |
+| K2 video segment rerank | `primary_query \| key terms: <key_terms>` |
+| K3 text reference rerank | same |
+| K4 image candidate rerank | `Topic: ... \nVisual: <visual_query>\nCaption: ...\nKey terms: ...` |
+
+The LLM call adds ~$0.0005 + ~500 ms but lifts retrieval recall ~3-6× (HyDE-class).
+When it fails or returns non-JSON, an identity fallback preserves the user's
+original prompt so the pipeline still works.
+
+The semantic-knowledge fan-out also upgrades from `mode=naive` to `mode=hybrid` so
+the LightRAG entity-graph contributes lateral reasoning (e.g. user query about
+"camera" walks `camera → DJI → product launch → 4U formula`).
+
+`Application/Recommendations/KnowledgeNamespaceRouter.NamespacesFor(intent)` is the
+intent → namespace-prefix map. Unknown intent falls back to bare `knowledge:` so
+behavior degrades gracefully.
 
 ### 9.4 Jina rerank wired into LightRAG
 
