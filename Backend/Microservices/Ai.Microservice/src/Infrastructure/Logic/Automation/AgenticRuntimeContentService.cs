@@ -48,10 +48,13 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 [
                     new ChatMessage(ChatRole.System,
                         """
-                        You create concise social media post drafts from verified web search results.
+                        You create concise social media post drafts from verified web search results and optional RAG recommendation grounding.
                         Return strict JSON with fields: title, content, hashtag, postType.
                         postType must be "posts".
                         content must be plain text suitable for a social post.
+                        Respect maxContentLength as a hard character cap when it is provided.
+                        If the payload includes recommendationSummary or recommendationPageProfile, use them to match the account's voice, positioning, and contact details.
+                        Keep the post grounded in fresh search results when they are present.
                         Do not wrap the JSON in markdown.
                         """),
                     new ChatMessage(ChatRole.User, BuildPrompt(request))
@@ -65,7 +68,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 var parsed = TryParseDraft(raw);
                 if (parsed is not null && !string.IsNullOrWhiteSpace(parsed.Content))
                 {
-                    return Result.Success(parsed);
+                    return Result.Success(ApplyContentLimit(parsed, request.MaxContentLength));
                 }
             }
         }
@@ -74,7 +77,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             _logger.LogWarning(ex, "Gemini runtime content generation failed for ScheduleId {ScheduleId}", request.ScheduleId);
         }
 
-        return Result.Success(CreateFallbackDraft(request));
+        return Result.Success(ApplyContentLimit(CreateFallbackDraft(request), request.MaxContentLength));
     }
 
     private async Task<string> ResolveModelAsync(CancellationToken cancellationToken)
@@ -105,10 +108,25 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             scheduleName = request.ScheduleName,
             agentPrompt = request.AgentPrompt,
             platformPreference = request.PlatformPreference,
+            maxContentLength = request.MaxContentLength,
+            grounding = new
+            {
+                socialMediaId = request.GroundingSocialMediaId,
+                platform = request.GroundingPlatform,
+                recommendationQuery = request.RecommendationQuery,
+                recommendationSummary = request.RecommendationSummary,
+                recommendationPageProfile = request.RecommendationPageProfile,
+                recommendationWebSources = request.RecommendationWebSources,
+                ragFallbackReason = request.RagFallbackReason
+            },
             search = request.Search
         }, JsonOptions);
 
-        return $"Create one plain-text social post from this runtime search payload: {payload}";
+        return
+            "Create one plain-text social post for immediate scheduled publishing from this payload. " +
+            "If recommendationSummary is present, treat it as the primary brand-voice and page-profile grounding. " +
+            "Use the web search payload for freshness and facts. If maxContentLength is set, keep content within that hard limit. Return one publishable post only.\n\n" +
+            payload;
     }
 
     private static AgenticRuntimePostDraft? TryParseDraft(string raw)
@@ -151,6 +169,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             "\n",
             new[]
             {
+                request.RecommendationSummary,
                 request.AgentPrompt,
                 topResult?.Title,
                 topResult?.Description,
@@ -162,6 +181,35 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             string.IsNullOrWhiteSpace(content) ? request.Search.Query : content,
             null,
             "posts");
+    }
+
+    private static AgenticRuntimePostDraft ApplyContentLimit(AgenticRuntimePostDraft draft, int? maxContentLength)
+    {
+        if (!maxContentLength.HasValue || maxContentLength.Value < 1)
+        {
+            return draft;
+        }
+
+        var trimmedContent = TrimToLength(draft.Content, maxContentLength.Value);
+        var trimmedTitle = TrimToLength(draft.Title, Math.Min(maxContentLength.Value, 120));
+        var trimmedHashtag = TrimToLength(draft.Hashtag, Math.Min(maxContentLength.Value, 200));
+
+        return draft with
+        {
+            Title = trimmedTitle,
+            Content = trimmedContent ?? string.Empty,
+            Hashtag = trimmedHashtag
+        };
+    }
+
+    private static string? TrimToLength(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        return value[..maxLength].TrimEnd();
     }
 
     private Client CreateClient()

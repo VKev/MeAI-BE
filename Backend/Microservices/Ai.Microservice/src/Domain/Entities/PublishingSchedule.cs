@@ -31,6 +31,10 @@ public sealed class PublishingSchedule
 
     public string? AgentPrompt { get; set; }
 
+    public int? MaxContentLength { get; set; }
+
+    public string? SearchQueryTemplate { get; set; }
+
     [Column(TypeName = "jsonb")]
     public string? ExecutionContextJson { get; set; }
 

@@ -71,6 +71,7 @@ public sealed class UpdatePublishingScheduleCommandHandler
             null,
             null,
             null,
+            null,
             request.Items,
             request.Targets,
             schedule.Id,

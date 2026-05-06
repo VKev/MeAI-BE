@@ -8,6 +8,7 @@ public sealed record AgentChatResponse(
     string? ValidationError = null,
     string? RevisedPrompt = null,
     Guid? PostId = null,
+    Guid? ScheduleId = null,
     Guid? ChatId = null,
     Guid? CorrelationId = null,
     string? RetrievalMode = null,

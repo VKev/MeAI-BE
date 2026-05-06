@@ -29,6 +29,8 @@ public sealed class PublishingScheduleConfiguration : IEntityTypeConfiguration<P
         entity.Property(e => e.CreatedBy).HasColumnName("created_by");
         entity.Property(e => e.PlatformPreference).HasColumnName("platform_preference");
         entity.Property(e => e.AgentPrompt).HasColumnName("agent_prompt");
+        entity.Property(e => e.MaxContentLength).HasColumnName("max_content_length");
+        entity.Property(e => e.SearchQueryTemplate).HasColumnName("search_query_template");
         entity.Property(e => e.ExecutionContextJson).HasColumnName("execution_context_json").HasColumnType("jsonb");
         entity.Property(e => e.LastExecutionAt).HasColumnName("last_execution_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.NextRetryAt).HasColumnName("next_retry_at").HasColumnType("timestamp with time zone");

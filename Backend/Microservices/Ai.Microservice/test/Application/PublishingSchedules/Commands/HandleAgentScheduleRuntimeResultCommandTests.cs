@@ -1,9 +1,13 @@
 using Application.Abstractions.Automation;
+using Application.Abstractions.Rag;
 using Application.Posts.Commands;
 using Application.Posts.Models;
 using Application.PublishingSchedules;
 using Application.PublishingSchedules.Commands;
 using Application.PublishingSchedules.Models;
+using Application.Recommendations.Commands;
+using Application.Recommendations.Models;
+using Application.Recommendations.Queries;
 using Domain.Entities;
 using Domain.Repositories;
 using FluentAssertions;
@@ -21,6 +25,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
         var scheduleId = Guid.NewGuid();
         var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
+        var primarySocialMediaId = Guid.NewGuid();
         var socialMediaId = Guid.NewGuid();
         var runtimePostId = Guid.NewGuid();
         var callbackJobId = Guid.NewGuid();
@@ -37,6 +42,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
             ExecuteAtUtc = DateTime.UtcNow.AddHours(1),
             PlatformPreference = "facebook",
             AgentPrompt = "Đăng kết quả xổ số miền bắc lên Facebook.",
+            MaxContentLength = 280,
             ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(
                 new AgenticScheduleExecutionContext(
                     Search: new PublishingScheduleSearchInput(
@@ -51,10 +57,18 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 new PublishingScheduleTarget
                 {
                     Id = Guid.NewGuid(),
+                    SocialMediaId = primarySocialMediaId,
+                    Platform = "tiktok",
+                    TargetLabel = "tiktok",
+                    IsPrimary = true
+                },
+                new PublishingScheduleTarget
+                {
+                    Id = Guid.NewGuid(),
                     SocialMediaId = socialMediaId,
                     Platform = "facebook",
                     TargetLabel = "facebook",
-                    IsPrimary = true
+                    IsPrimary = false
                 }
             ]
         };
@@ -109,7 +123,11 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 It.Is<AgenticRuntimeContentRequest>(request =>
                     request.ScheduleId == scheduleId &&
                     request.PlatformPreference == "facebook" &&
-                    request.Search.Query == "kết quả xổ số miền bắc hôm nay"),
+                    request.MaxContentLength == 280 &&
+                    request.GroundingSocialMediaId == socialMediaId &&
+                    request.GroundingPlatform == "facebook" &&
+                    request.Search.Query == "kết quả xổ số miền bắc hôm nay" &&
+                    request.RecommendationSummary == "Đăng kết quả xổ số theo giọng điệu ngắn gọn, rõ số và CTA theo dõi page."),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new AgenticRuntimePostDraft(
                 "KQXS Miền Bắc",
@@ -117,7 +135,45 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 "#xoso #mienbac",
                 "posts")));
 
+        var ragClient = new Mock<IRagClient>(MockBehavior.Strict);
+        ragClient
+            .Setup(client => client.WaitForRagReadyAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         var mediator = new Mock<IMediator>(MockBehavior.Strict);
+        mediator
+            .Setup(m => m.Send(
+                It.Is<IndexSocialAccountPostsCommand>(command =>
+                    command.UserId == userId &&
+                    command.SocialMediaId == socialMediaId &&
+                    command.MaxPosts == 30),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new IndexSocialAccountPostsResponse(
+                socialMediaId,
+                "facebook",
+                $"facebook:{socialMediaId:N}:",
+                10,
+                1,
+                0,
+                9,
+                1,
+                1,
+                0,
+                1)));
+        mediator
+            .Setup(m => m.Send(
+                It.Is<QueryAccountRecommendationsQuery>(command =>
+                    command.UserId == userId &&
+                    command.SocialMediaId == socialMediaId &&
+                    command.Query.Contains("Đăng kết quả xổ số miền bắc lên Facebook.", StringComparison.Ordinal) &&
+                    command.Query.Contains("kết quả xổ số miền bắc hôm nay", StringComparison.Ordinal)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new AccountRecommendationsAnswer(
+                "Đăng kết quả xổ số theo giọng điệu ngắn gọn, rõ số và CTA theo dõi page.",
+                $"facebook:{socialMediaId:N}:",
+                Array.Empty<RecommendationReference>(),
+                null,
+                "Page profile")));
         mediator
             .Setup(m => m.Send(
                 It.Is<CreatePostCommand>(command =>
@@ -161,8 +217,9 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                     command.Targets.Count == 1 &&
                     command.Targets[0].PostId == runtimePostId &&
                     command.Targets[0].PublishingScheduleId == scheduleId &&
-                    command.Targets[0].SocialMediaIds.Count == 1 &&
-                    command.Targets[0].SocialMediaIds[0] == socialMediaId),
+                    command.Targets[0].SocialMediaIds.Count == 2 &&
+                    command.Targets[0].SocialMediaIds.Contains(primarySocialMediaId) &&
+                    command.Targets[0].SocialMediaIds.Contains(socialMediaId)),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new PublishPostsResponse(
             [
@@ -170,6 +227,13 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                     runtimePostId,
                     "processing",
                     [
+                        new PublishPostDestinationResult(
+                            primarySocialMediaId,
+                            "tiktok",
+                            string.Empty,
+                            string.Empty,
+                            Guid.NewGuid(),
+                            "processing"),
                         new PublishPostDestinationResult(
                             socialMediaId,
                             "facebook",
@@ -184,7 +248,8 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
             scheduleRepository.Object,
             runtimeContentService.Object,
             webSearchEnrichmentService.Object,
-            mediator.Object);
+            mediator.Object,
+            ragClient.Object);
 
         var result = await handler.Handle(
             new HandleAgentScheduleRuntimeResultCommand(
@@ -216,10 +281,183 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
         updatedContext.LastProcessedCallbackJobId.Should().Be(callbackJobId);
         updatedContext.RuntimePostId.Should().Be(runtimePostId);
         updatedContext.LastQuery.Should().Be("kết quả xổ số miền bắc hôm nay");
+        updatedContext.GroundingSocialMediaId.Should().Be(socialMediaId);
+        updatedContext.LastRecommendationQuery.Should().NotBeNull();
+        updatedContext.LastRecommendationSummary.Should().Contain("xổ số");
 
         scheduleRepository.VerifyAll();
         webSearchEnrichmentService.VerifyAll();
         runtimeContentService.VerifyAll();
+        ragClient.VerifyAll();
+        mediator.VerifyAll();
+    }
+
+    [Fact]
+    public async Task Handle_ShouldFallbackToLegacyRuntimeDraft_WhenRagRecommendationFails()
+    {
+        var scheduleId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        var socialMediaId = Guid.NewGuid();
+        var runtimePostId = Guid.NewGuid();
+        var callbackJobId = Guid.NewGuid();
+
+        var schedule = new PublishingSchedule
+        {
+            Id = scheduleId,
+            UserId = userId,
+            WorkspaceId = workspaceId,
+            Name = "Runtime fallback",
+            Mode = PublishingScheduleState.AgenticMode,
+            Status = PublishingScheduleState.StatusWaitingForExecution,
+            Timezone = "UTC",
+            ExecuteAtUtc = DateTime.UtcNow.AddHours(1),
+            PlatformPreference = "facebook",
+            AgentPrompt = "Đăng tin nóng lên Facebook.",
+            MaxContentLength = 220,
+            ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(
+                new AgenticScheduleExecutionContext(N8nJobId: callbackJobId)),
+            Targets =
+            [
+                new PublishingScheduleTarget
+                {
+                    Id = Guid.NewGuid(),
+                    SocialMediaId = socialMediaId,
+                    Platform = "facebook",
+                    IsPrimary = true
+                }
+            ]
+        };
+
+        var scheduleRepository = new Mock<IPublishingScheduleRepository>(MockBehavior.Strict);
+        scheduleRepository
+            .Setup(repository => repository.GetByIdForUpdateAsync(scheduleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(schedule);
+        scheduleRepository
+            .Setup(repository => repository.Update(schedule));
+        scheduleRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var runtimeContentService = new Mock<IAgenticRuntimeContentService>(MockBehavior.Strict);
+        runtimeContentService
+            .Setup(service => service.GeneratePostDraftAsync(
+                It.Is<AgenticRuntimeContentRequest>(request =>
+                    request.MaxContentLength == 220 &&
+                    request.GroundingSocialMediaId == socialMediaId &&
+                    request.RecommendationSummary == null &&
+                    !string.IsNullOrWhiteSpace(request.RagFallbackReason)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new AgenticRuntimePostDraft(
+                "Fallback post",
+                "Fallback content from search results",
+                null,
+                "posts")));
+
+        var webSearchEnrichmentService = new Mock<IWebSearchEnrichmentService>(MockBehavior.Strict);
+        webSearchEnrichmentService
+            .Setup(service => service.EnrichAsync(
+                It.IsAny<N8nWebSearchResponse>(),
+                userId,
+                workspaceId,
+                null,
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new N8nWebSearchResponse(
+                "tin nóng AI",
+                DateTime.UtcNow,
+                [
+                    new N8nWebSearchResultItem("Tin nóng", "https://example.com", "Mô tả", "example.com")
+                ],
+                "context"));
+
+        var ragClient = new Mock<IRagClient>(MockBehavior.Strict);
+        ragClient
+            .Setup(client => client.WaitForRagReadyAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var mediator = new Mock<IMediator>(MockBehavior.Strict);
+        mediator
+            .Setup(m => m.Send(
+                It.IsAny<IndexSocialAccountPostsCommand>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure<IndexSocialAccountPostsResponse>(
+                new Error("Rag.IndexFailed", "Simulated RAG outage")));
+        mediator
+            .Setup(m => m.Send(
+                It.IsAny<CreatePostCommand>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PostResponse(
+                runtimePostId,
+                userId,
+                "user",
+                null,
+                workspaceId,
+                Guid.NewGuid(),
+                null,
+                null,
+                "Fallback post",
+                new PostContent
+                {
+                    Content = "Fallback content from search results",
+                    PostType = "posts",
+                    ResourceList = []
+                },
+                "draft",
+                null,
+                false,
+                [],
+                [],
+                DateTime.UtcNow,
+                DateTime.UtcNow)));
+        mediator
+            .Setup(m => m.Send(
+                It.IsAny<PublishPostsCommand>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PublishPostsResponse(
+            [
+                new PublishPostResponse(
+                    runtimePostId,
+                    "processing",
+                    [
+                        new PublishPostDestinationResult(
+                            socialMediaId,
+                            "facebook",
+                            string.Empty,
+                            string.Empty,
+                            Guid.NewGuid(),
+                            "processing")
+                    ])
+            ])));
+
+        var handler = new HandleAgentScheduleRuntimeResultCommandHandler(
+            scheduleRepository.Object,
+            runtimeContentService.Object,
+            webSearchEnrichmentService.Object,
+            mediator.Object,
+            ragClient.Object);
+
+        var result = await handler.Handle(
+            new HandleAgentScheduleRuntimeResultCommand(
+                scheduleId,
+                callbackJobId,
+                new N8nWebSearchResponse(
+                    "tin nóng AI",
+                    DateTime.UtcNow,
+                    [new N8nWebSearchResultItem("Tin nóng", "https://example.com", "Mô tả", "example.com")],
+                    "context")),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        schedule.Status.Should().Be(PublishingScheduleState.StatusPublishing);
+
+        var updatedContext = AgenticScheduleExecutionContextSerializer.Parse(schedule.ExecutionContextJson);
+        updatedContext.LastRagFallbackReason.Should().NotBeNullOrWhiteSpace();
+
+        scheduleRepository.VerifyAll();
+        runtimeContentService.VerifyAll();
+        webSearchEnrichmentService.VerifyAll();
+        ragClient.VerifyAll();
         mediator.VerifyAll();
     }
 }

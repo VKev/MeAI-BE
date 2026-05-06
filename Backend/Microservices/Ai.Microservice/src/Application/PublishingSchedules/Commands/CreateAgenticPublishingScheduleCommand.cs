@@ -18,6 +18,7 @@ public sealed record CreateAgenticPublishingScheduleCommand(
     bool? IsPrivate,
     string? PlatformPreference,
     string? AgentPrompt,
+    int? MaxContentLength,
     PublishingScheduleSearchInput? Search,
     IReadOnlyList<PublishingScheduleTargetInput>? Targets) : IRequest<Result<PublishingScheduleResponse>>;
 
@@ -62,6 +63,7 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
             request.IsPrivate,
             request.PlatformPreference,
             request.AgentPrompt,
+            request.MaxContentLength,
             request.Search,
             null,
             request.Targets,
@@ -104,6 +106,8 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
             CreatedBy = PublishingScheduleState.CreatedByUser,
             PlatformPreference = validated.Value.PlatformPreference,
             AgentPrompt = validated.Value.AgentPrompt,
+            MaxContentLength = validated.Value.MaxContentLength,
+            SearchQueryTemplate = validated.Value.Search!.QueryTemplate,
             ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(executionContext),
             CreatedAt = now,
             UpdatedAt = now,

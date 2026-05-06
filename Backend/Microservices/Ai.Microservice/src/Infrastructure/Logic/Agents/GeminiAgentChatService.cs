@@ -5,7 +5,11 @@ using Application.Abstractions.Configs;
 using Application.Agents;
 using Application.Agents.Models;
 using Application.Chats.Commands;
+using Application.PublishingSchedules;
+using Application.PublishingSchedules.Commands;
+using Application.PublishingSchedules.Models;
 using Application.Posts.Commands;
+using Application.Recommendations.Services;
 using Domain.Entities;
 using Google.GenAI;
 using MediatR;
@@ -32,6 +36,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
     private readonly ILogger<GeminiAgentChatService> _logger;
     private readonly IApiCredentialProvider _credentialProvider;
     private readonly IChatWebPostService _chatWebPostService;
+    private readonly IQueryRewriter _queryRewriter;
 
     public GeminiAgentChatService(
         IConfiguration configuration,
@@ -39,6 +44,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
         IUserConfigService userConfigService,
         IMediator mediator,
         IChatWebPostService chatWebPostService,
+        IQueryRewriter queryRewriter,
         ILogger<GeminiAgentChatService> logger)
     {
         _configuration = configuration;
@@ -46,6 +52,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
         _userConfigService = userConfigService;
         _mediator = mediator;
         _chatWebPostService = chatWebPostService;
+        _queryRewriter = queryRewriter;
         _logger = logger;
     }
 
@@ -57,6 +64,12 @@ public sealed class GeminiAgentChatService : IAgentChatService
         if (obviousValidation is not null)
         {
             return Result.Success(obviousValidation);
+        }
+
+        if (request.ScheduleOptions is not null)
+        {
+            var inferredFutureEventIntent = TryBuildFutureEventScheduleInference(request.Message);
+            return await CreateFutureAiScheduleAsync(request, inferredFutureEventIntent, cancellationToken);
         }
 
         var model = await ResolveModelAsync(cancellationToken);
@@ -91,6 +104,132 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 [],
                 AgentActions.Unsupported))
         };
+    }
+
+    private async Task<Result<AgentChatCompletionResult>> CreateFutureAiScheduleAsync(
+        AgentChatRequest request,
+        AgentPromptAnalysis? inferredAnalysis,
+        CancellationToken cancellationToken)
+    {
+        var scheduleOptions = request.ScheduleOptions!;
+        var validationError = ValidateScheduleOptions(scheduleOptions);
+        if (validationError is not null)
+        {
+            return Result.Failure<AgentChatCompletionResult>(validationError);
+        }
+
+        var model = await ResolveModelAsync(cancellationToken);
+        AgentPromptAnalysis analysis;
+        if (inferredAnalysis is not null)
+        {
+            analysis = inferredAnalysis;
+        }
+        else
+        {
+            var analysisResult = await AnalyzePromptAsync(request.Message, model, cancellationToken);
+            if (analysisResult.IsFailure)
+            {
+                return Result.Failure<AgentChatCompletionResult>(analysisResult.Error);
+            }
+
+            analysis = analysisResult.Value;
+        }
+
+        if (string.Equals(analysis.Action, AgentActions.ValidationFailed, StringComparison.Ordinal))
+        {
+            return Result.Success(new AgentChatCompletionResult(
+                analysis.AssistantMessage ?? "Yeu cau chua du ro de tao lich dang AI.",
+                model,
+                [],
+                [],
+                analysis.Action,
+                analysis.ValidationError,
+                analysis.RevisedPrompt));
+        }
+
+        if (string.Equals(analysis.Action, AgentActions.ImageCreated, StringComparison.Ordinal))
+        {
+            return Result.Success(new AgentChatCompletionResult(
+                "Flow nay chi ho tro schedule AI tao bai dang tuong lai, khong ho tro tao anh truoc luc schedule.",
+                model,
+                [],
+                [],
+                AgentActions.Unsupported));
+        }
+
+        if (string.Equals(analysis.Action, AgentActions.Unsupported, StringComparison.Ordinal))
+        {
+            return Result.Success(new AgentChatCompletionResult(
+                analysis.AssistantMessage ?? "Yeu cau nay nam ngoai pham vi future AI scheduling.",
+                model,
+                [],
+                [],
+                AgentActions.Unsupported));
+        }
+
+        var finalPrompt = string.IsNullOrWhiteSpace(analysis.FinalPrompt)
+            ? request.Message
+            : analysis.FinalPrompt.Trim();
+        var platformPreference = ResolvePlatformPreference(scheduleOptions.Targets);
+        var rewriteResult = await _queryRewriter.RewriteAsync(
+            new QueryRewriteRequest(
+                finalPrompt,
+                Platform: platformPreference),
+            cancellationToken);
+
+        if (rewriteResult.IsFailure)
+        {
+            return Result.Failure<AgentChatCompletionResult>(rewriteResult.Error);
+        }
+
+        var normalizedSearch = new PublishingScheduleSearchInput(
+            rewriteResult.Value.PrimaryQuery,
+            5,
+            null,
+            string.IsNullOrWhiteSpace(rewriteResult.Value.Language) ? null : rewriteResult.Value.Language,
+            "pd");
+
+        var scheduleResult = await _mediator.Send(
+            new CreateAgenticPublishingScheduleCommand(
+                request.UserId,
+                request.WorkspaceId,
+                BuildTitle(finalPrompt, analysis.Title),
+                "agentic",
+                NormalizeScheduleExecutionTime(scheduleOptions.ExecuteAtUtc),
+                scheduleOptions.Timezone,
+                false,
+                platformPreference,
+                finalPrompt,
+                scheduleOptions.MaxContentLength,
+                normalizedSearch,
+                scheduleOptions.Targets),
+            cancellationToken);
+
+        if (scheduleResult.IsFailure)
+        {
+            return Result.Failure<AgentChatCompletionResult>(scheduleResult.Error);
+        }
+
+        return Result.Success(new AgentChatCompletionResult(
+            analysis.AssistantMessage ?? "Future AI schedule created. Content will be generated at runtime from fresh web search and RAG grounding.",
+            model,
+            ["create_agentic_schedule"],
+            [
+                new AgentActionResponse(
+                    "schedule_create",
+                    "create_agentic_schedule",
+                    "completed",
+                    "schedule",
+                    scheduleResult.Value.Id,
+                    scheduleResult.Value.Name,
+                    "Future AI schedule created. No draft post was generated up front.",
+                    DateTime.UtcNow)
+            ],
+            AgentActions.FutureAiScheduleCreated,
+            null,
+            analysis.RevisedPrompt,
+            null,
+            scheduleResult.Value.Id));
     }
 
     private async Task<Result<AgentChatCompletionResult>> CreateImageAndPostAsync(
@@ -172,9 +311,9 @@ public sealed class GeminiAgentChatService : IAgentChatService
             AgentActions.ImageAndPostCreated,
             null,
             analysis.RevisedPrompt,
-            postResult.Value.Id,
-            imageResult.Value.ChatId,
-            imageResult.Value.CorrelationId));
+            PostId: postResult.Value.Id,
+            ChatId: imageResult.Value.ChatId,
+            CorrelationId: imageResult.Value.CorrelationId));
     }
 
     private async Task<Result<AgentChatCompletionResult>> CreateDraftPostAsync(
@@ -296,12 +435,10 @@ public sealed class GeminiAgentChatService : IAgentChatService
             AgentActions.WebPostCreated,
             null,
             analysis.RevisedPrompt,
-            webPostResult.Value.PostId,
-            null,
-            null,
-            webPostResult.Value.RetrievalMode,
-            webPostResult.Value.SourceUrls,
-            webPostResult.Value.ImportedResourceIds));
+            PostId: webPostResult.Value.PostId,
+            RetrievalMode: webPostResult.Value.RetrievalMode,
+            SourceUrls: webPostResult.Value.SourceUrls,
+            ImportedResourceIds: webPostResult.Value.ImportedResourceIds));
     }
 
     private async Task<Result<AgentPromptAnalysis>> AnalyzePromptAsync(
@@ -394,6 +531,10 @@ public sealed class GeminiAgentChatService : IAgentChatService
 
             Rules:
             - If the request is ambiguous or contains unresolved personal references such as "doi bong toi yeu", "nguoi toi thich", "thuong hieu cua toi", return action "validation_failed".
+            - Prefer making reasonable assumptions when the user intent is already clear enough for future scheduling content.
+            - If the missing detail is a future result that will only be known at runtime, do NOT fail validation. Rewrite the prompt so it refers to the real-world outcome that will be fetched later.
+            - Example: "dang bai ve doi tuyen chien thang world cup nam nay" is valid for future scheduling. Rewrite it into a prompt about "doi tuyen vo dich World Cup nam nay" and continue.
+            - Only return "validation_failed" when the missing detail is truly blocking and cannot be inferred safely, such as a personal reference ("doi bong toi yeu") or a missing event/topic.
             - When action is "validation_failed", provide both:
               - validationError: one short sentence
               - revisedPrompt: a corrected prompt using placeholders like {{ten doi bong}}
@@ -441,6 +582,36 @@ public sealed class GeminiAgentChatService : IAgentChatService
         }
 
         return null;
+    }
+
+    private static AgentPromptAnalysis? TryBuildFutureEventScheduleInference(string message)
+    {
+        var normalized = NormalizeForInference(message);
+        if (!ContainsAny(normalized, "world cup", "worldcup"))
+        {
+            return null;
+        }
+
+        if (!ContainsAny(
+                normalized,
+                "chien thang",
+                "vo dich",
+                "thang cuoc",
+                "winner",
+                "champion"))
+        {
+            return null;
+        }
+
+        var rewrittenPrompt = RewriteWorldCupWinnerPrompt(message);
+        return new AgentPromptAnalysis(
+            AgentActions.PostCreated,
+            "Tôi sẽ hiểu đây là một bài đăng runtime về đội tuyển vô địch World Cup khi đến thời điểm chạy.",
+            null,
+            rewrittenPrompt,
+            rewrittenPrompt,
+            "Bài đăng đội tuyển vô địch World Cup",
+            "posts");
     }
 
     private static string ExtractJsonPayload(string content)
@@ -531,6 +702,100 @@ public sealed class GeminiAgentChatService : IAgentChatService
         return compact.Length <= 80 ? compact : compact[..80].TrimEnd();
     }
 
+    private static Error? ValidateScheduleOptions(AgentScheduleOptions options)
+    {
+        if (options.Targets is null || options.Targets.Count == 0)
+        {
+            return PublishingScheduleErrors.MissingTargets;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.Timezone))
+        {
+            return PublishingScheduleErrors.InvalidTimezone;
+        }
+
+        try
+        {
+            _ = TimeZoneInfo.FindSystemTimeZoneById(options.Timezone.Trim());
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return PublishingScheduleErrors.InvalidTimezone;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return PublishingScheduleErrors.InvalidTimezone;
+        }
+
+        if (NormalizeScheduleExecutionTime(options.ExecuteAtUtc) <= DateTime.UtcNow)
+        {
+            return PublishingScheduleErrors.ExecuteAtInPast;
+        }
+
+        if (!options.MaxContentLength.HasValue)
+        {
+            return PublishingScheduleErrors.MaxContentLengthRequired;
+        }
+
+        if (options.MaxContentLength.Value < 1 || options.MaxContentLength.Value > 10000)
+        {
+            return PublishingScheduleErrors.InvalidMaxContentLength;
+        }
+
+        return null;
+    }
+
+    private static DateTime NormalizeScheduleExecutionTime(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+    }
+
+    private static string? ResolvePlatformPreference(IReadOnlyList<PublishingScheduleTargetInput>? targets)
+    {
+        return null;
+    }
+
+    private static string RewriteWorldCupWinnerPrompt(string message)
+    {
+        var rewritten = message;
+        rewritten = rewritten.Replace("chiến thắng", "vô địch", StringComparison.OrdinalIgnoreCase);
+        rewritten = rewritten.Replace("chien thang", "vo dich", StringComparison.OrdinalIgnoreCase);
+        rewritten = rewritten.Replace("thắng cuộc", "vô địch", StringComparison.OrdinalIgnoreCase);
+        rewritten = rewritten.Replace("thang cuoc", "vo dich", StringComparison.OrdinalIgnoreCase);
+        rewritten = rewritten.Replace("winner", "champion", StringComparison.OrdinalIgnoreCase);
+
+        if (rewritten.IndexOf("đội tuyển", StringComparison.OrdinalIgnoreCase) >= 0 &&
+            rewritten.IndexOf("vô địch", StringComparison.OrdinalIgnoreCase) < 0 &&
+            rewritten.IndexOf("vo dich", StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            rewritten = rewritten.Replace("đội tuyển", "đội tuyển vô địch", StringComparison.OrdinalIgnoreCase);
+            rewritten = rewritten.Replace("doi tuyen", "doi tuyen vo dich", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (!rewritten.Contains("thời điểm chạy", StringComparison.OrdinalIgnoreCase) &&
+            !rewritten.Contains("runtime", StringComparison.OrdinalIgnoreCase))
+        {
+            rewritten = $"{rewritten.Trim().TrimEnd('.')} dựa trên kết quả thực tế tại thời điểm chạy.";
+        }
+
+        return rewritten;
+    }
+
+    private static string NormalizeForInference(string value)
+    {
+        return value.Trim().ToLowerInvariant();
+    }
+
+    private static bool ContainsAny(string text, params string[] candidates)
+    {
+        return candidates.Any(candidate => text.Contains(candidate, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static class AgentActions
     {
         public const string ValidationFailed = "validation_failed";
@@ -538,6 +803,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
         public const string ImageAndPostCreated = "image_and_post_created";
         public const string PostCreated = "post_created";
         public const string WebPostCreated = "web_post_created";
+        public const string FutureAiScheduleCreated = "future_ai_schedule_created";
         public const string Unsupported = "unsupported";
     }
 

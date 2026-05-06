@@ -13,6 +13,8 @@ public sealed record PublishingScheduleResponse(
     string? CreatedBy,
     string? PlatformPreference,
     string? AgentPrompt,
+    int? MaxContentLength,
+    PublishingScheduleSearchInput? Search,
     string? ExecutionContextJson,
     IReadOnlyList<PublishingScheduleItemResponse> Items,
     IReadOnlyList<PublishingScheduleTargetResponse> Targets,

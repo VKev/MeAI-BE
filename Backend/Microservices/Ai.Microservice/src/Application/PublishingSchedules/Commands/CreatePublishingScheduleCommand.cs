@@ -59,6 +59,7 @@ public sealed class CreatePublishingScheduleCommandHandler
             null,
             null,
             null,
+            null,
             request.Items,
             request.Targets,
             null,

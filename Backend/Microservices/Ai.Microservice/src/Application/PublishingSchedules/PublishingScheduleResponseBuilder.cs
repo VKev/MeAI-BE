@@ -17,6 +17,7 @@ public sealed class PublishingScheduleResponseBuilder
         PublishingSchedule schedule,
         CancellationToken cancellationToken)
     {
+        var executionContext = AgenticScheduleExecutionContextSerializer.Parse(schedule.ExecutionContextJson);
         var activeItems = schedule.Items
             .Where(item => !item.DeletedAt.HasValue)
             .OrderBy(item => item.SortOrder)
@@ -40,6 +41,8 @@ public sealed class PublishingScheduleResponseBuilder
             schedule.CreatedBy,
             schedule.PlatformPreference,
             schedule.AgentPrompt,
+            schedule.MaxContentLength,
+            executionContext.Search,
             schedule.ExecutionContextJson,
             activeItems.Select(item =>
             {
