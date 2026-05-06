@@ -1,9 +1,12 @@
 using Application.Abstractions.Automation;
+using Application.Abstractions.Rag;
 using Application.Posts.Commands;
 using Application.Posts.Models;
 using Domain.Entities;
 using Domain.Repositories;
 using MediatR;
+using Application.Recommendations.Commands;
+using Application.Recommendations.Queries;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
 
@@ -23,17 +26,20 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
     private readonly IAgenticRuntimeContentService _runtimeContentService;
     private readonly IWebSearchEnrichmentService _webSearchEnrichmentService;
     private readonly IMediator _mediator;
+    private readonly IRagClient _ragClient;
 
     public HandleAgentScheduleRuntimeResultCommandHandler(
         IPublishingScheduleRepository publishingScheduleRepository,
         IAgenticRuntimeContentService runtimeContentService,
         IWebSearchEnrichmentService webSearchEnrichmentService,
-        IMediator mediator)
+        IMediator mediator,
+        IRagClient ragClient)
     {
         _publishingScheduleRepository = publishingScheduleRepository;
         _runtimeContentService = runtimeContentService;
         _webSearchEnrichmentService = webSearchEnrichmentService;
         _mediator = mediator;
+        _ragClient = ragClient;
     }
 
     public async Task<Result<bool>> Handle(
@@ -74,12 +80,87 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
         schedule.Status = PublishingScheduleState.StatusExecuting;
         schedule.LastExecutionAt = now;
         schedule.UpdatedAt = now;
+        var groundingTarget = ResolveGroundingTarget(schedule);
+        var recommendationQuery = BuildRecommendationQuery(schedule, enrichedSearch);
+        string? recommendationSummary = null;
+        string? recommendationPageProfile = null;
+        IReadOnlyList<WebSource>? recommendationWebSources = null;
+        string? ragFallbackReason = null;
+
         schedule.ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(context with
         {
             LastProcessedCallbackJobId = request.JobId,
             LastCallbackReceivedAtUtc = now,
             LastQuery = enrichedSearch.Query,
             LastRetrievedAtUtc = enrichedSearch.RetrievedAtUtc,
+            GroundingSocialMediaId = groundingTarget?.SocialMediaId,
+            LastRecommendationQuery = recommendationQuery,
+            LastSearchPayload = enrichedSearch
+        });
+        _publishingScheduleRepository.Update(schedule);
+        await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
+
+        if (groundingTarget is null)
+        {
+            schedule.Status = PublishingScheduleState.StatusFailed;
+            schedule.ErrorCode = PublishingScheduleErrors.MissingTargets.Code;
+            schedule.ErrorMessage = "No active target available to ground the agentic schedule with RAG.";
+            schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            _publishingScheduleRepository.Update(schedule);
+            await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
+            return Result.Failure<bool>(PublishingScheduleErrors.MissingTargets);
+        }
+
+        try
+        {
+            await _ragClient.WaitForRagReadyAsync(cancellationToken);
+
+            var indexResult = await _mediator.Send(
+                new IndexSocialAccountPostsCommand(
+                    schedule.UserId,
+                    groundingTarget.SocialMediaId,
+                    30),
+                cancellationToken);
+
+            if (indexResult.IsFailure)
+            {
+                throw new InvalidOperationException(
+                    $"Indexing failed: {indexResult.Error.Code} {indexResult.Error.Description}");
+            }
+
+            var recommendationResult = await _mediator.Send(
+                new QueryAccountRecommendationsQuery(
+                    schedule.UserId,
+                    groundingTarget.SocialMediaId,
+                    recommendationQuery,
+                    6),
+                cancellationToken);
+
+            if (recommendationResult.IsFailure)
+            {
+                throw new InvalidOperationException(
+                    $"Recommendation failed: {recommendationResult.Error.Code} {recommendationResult.Error.Description}");
+            }
+
+            recommendationSummary = recommendationResult.Value.Answer;
+            recommendationPageProfile = recommendationResult.Value.PageProfileText;
+            recommendationWebSources = recommendationResult.Value.WebSources;
+        }
+        catch (Exception ex)
+        {
+            ragFallbackReason = ex.Message;
+        }
+
+        schedule.ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(context with
+        {
+            LastProcessedCallbackJobId = request.JobId,
+            LastCallbackReceivedAtUtc = now,
+            LastQuery = enrichedSearch.Query,
+            LastRetrievedAtUtc = enrichedSearch.RetrievedAtUtc,
+            GroundingSocialMediaId = groundingTarget.SocialMediaId,
+            LastRecommendationQuery = recommendationQuery,
+            LastRecommendationSummary = Truncate(recommendationSummary, 2000),
+            LastRagFallbackReason = ragFallbackReason,
             LastSearchPayload = enrichedSearch
         });
         _publishingScheduleRepository.Update(schedule);
@@ -91,7 +172,15 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
                 schedule.Name,
                 schedule.AgentPrompt,
                 schedule.PlatformPreference,
-                enrichedSearch),
+                schedule.MaxContentLength,
+                enrichedSearch,
+                groundingTarget.SocialMediaId,
+                groundingTarget.Platform,
+                recommendationQuery,
+                recommendationSummary,
+                recommendationPageProfile,
+                recommendationWebSources,
+                ragFallbackReason),
             cancellationToken);
 
         if (contentDraftResult.IsFailure)
@@ -166,6 +255,10 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
             LastCallbackReceivedAtUtc = now,
             LastQuery = enrichedSearch.Query,
             LastRetrievedAtUtc = enrichedSearch.RetrievedAtUtc,
+            GroundingSocialMediaId = groundingTarget.SocialMediaId,
+            LastRecommendationQuery = recommendationQuery,
+            LastRecommendationSummary = Truncate(recommendationSummary, 2000),
+            LastRagFallbackReason = ragFallbackReason,
             LastSearchPayload = enrichedSearch
         });
         schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
@@ -199,5 +292,71 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
         }
 
         return Result.Success(true);
+    }
+
+    private static PublishingScheduleTarget? ResolveGroundingTarget(PublishingSchedule schedule)
+    {
+        var activeTargets = schedule.Targets
+            .Where(target => !target.DeletedAt.HasValue)
+            .ToList();
+        if (activeTargets.Count == 0)
+        {
+            return null;
+        }
+
+        var preferredPlatform = (schedule.PlatformPreference ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(preferredPlatform))
+        {
+            var platformMatches = activeTargets
+                .Where(target => string.Equals(target.Platform, preferredPlatform, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(target => target.IsPrimary)
+                .ToList();
+            if (platformMatches.Count > 0)
+            {
+                return platformMatches[0];
+            }
+        }
+
+        return activeTargets
+            .OrderByDescending(target => target.IsPrimary)
+            .FirstOrDefault();
+    }
+
+    private static string BuildRecommendationQuery(
+        PublishingSchedule schedule,
+        N8nWebSearchResponse enrichedSearch)
+    {
+        var topResults = enrichedSearch.Results
+            .Take(3)
+            .Select((item, index) =>
+                $"{index + 1}. {item.Title} | {item.Description} | {item.Url}")
+            .ToList();
+
+        var prompt = string.IsNullOrWhiteSpace(schedule.AgentPrompt)
+            ? "Create a scheduled social post from the latest retrieved web context."
+            : schedule.AgentPrompt.Trim();
+
+        return string.Join(
+            "\n",
+            new[]
+            {
+                $"Platform preference: {schedule.PlatformPreference ?? "(none)"}",
+                $"User scheduling intent: {prompt}",
+                $"Fresh web topic query: {enrichedSearch.Query}",
+                topResults.Count > 0
+                    ? $"Top web results:\n{string.Join("\n", topResults)}"
+                    : "Top web results: none",
+                "Recommend one concrete post for immediate publishing that matches this account's historical voice and current web context."
+            });
+    }
+
+    private static string? Truncate(string? value, int max)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length <= max)
+        {
+            return value;
+        }
+
+        return value[..max] + "...";
     }
 }

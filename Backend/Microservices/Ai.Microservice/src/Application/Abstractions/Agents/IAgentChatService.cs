@@ -1,4 +1,5 @@
 using Application.Agents.Models;
+using Application.PublishingSchedules.Models;
 using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Abstractions.Agents;
@@ -16,6 +17,7 @@ public sealed record AgentChatRequest(
     Guid WorkspaceId,
     string Message,
     AgentImageOptions? ImageOptions = null,
+    AgentScheduleOptions? ScheduleOptions = null,
     Guid? AssistantChatId = null);
 
 public sealed record AgentImageOptions(
@@ -30,6 +32,12 @@ public sealed record AgentSocialTarget(
     string Type,
     string Ratio);
 
+public sealed record AgentScheduleOptions(
+    DateTime ExecuteAtUtc,
+    string? Timezone,
+    int? MaxContentLength,
+    IReadOnlyList<PublishingScheduleTargetInput>? Targets);
+
 public sealed record AgentChatCompletionResult(
     string Content,
     string? Model,
@@ -39,6 +47,7 @@ public sealed record AgentChatCompletionResult(
     string? ValidationError = null,
     string? RevisedPrompt = null,
     Guid? PostId = null,
+    Guid? ScheduleId = null,
     Guid? ChatId = null,
     Guid? CorrelationId = null,
     string? RetrievalMode = null,

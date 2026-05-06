@@ -3,6 +3,7 @@ using Application.Agents;
 using Application.Agents.Commands;
 using Application.Agents.Models;
 using Application.ChatSessions;
+using Application.PublishingSchedules.Models;
 using Domain.Entities;
 using Domain.Repositories;
 using FluentAssertions;
@@ -121,7 +122,7 @@ public sealed class SendAgentMessageCommandTests
                 "post_created",
                 null,
                 null,
-                Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))));
+                PostId: Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))));
 
         var handler = new SendAgentMessageCommandHandler(
             chatSessionRepository.Object,
@@ -221,6 +222,98 @@ public sealed class SendAgentMessageCommandTests
         chatRepository.Verify(repository => repository.AddAsync(
             It.Is<Chat>(chat => chat.Prompt == "Yeu cau chua ro doi bong nao."),
             It.IsAny<CancellationToken>()), Times.Never);
+
+        chatSessionRepository.VerifyAll();
+        chatRepository.VerifyAll();
+        agentChatService.VerifyAll();
+    }
+
+    [Fact]
+    public async Task Handle_ShouldForwardScheduleOptionsAndReturnScheduleId()
+    {
+        var userId = Guid.NewGuid();
+        var socialMediaId = Guid.NewGuid();
+        var scheduleId = Guid.NewGuid();
+        var session = new ChatSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            WorkspaceId = Guid.NewGuid()
+        };
+
+        var scheduleOptions = new AgentScheduleOptions(
+            DateTime.UtcNow.AddHours(3),
+            "Asia/Ho_Chi_Minh",
+            280,
+            [new PublishingScheduleTargetInput(socialMediaId, true)]);
+
+        var chatSessionRepository = new Mock<IChatSessionRepository>(MockBehavior.Strict);
+        var chatRepository = new Mock<IChatRepository>(MockBehavior.Strict);
+        chatSessionRepository
+            .Setup(repository => repository.GetByIdForUpdateAsync(session.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(session);
+        chatRepository
+            .Setup(repository => repository.AddAsync(It.IsAny<Chat>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        chatRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2);
+
+        var agentChatService = new Mock<IAgentChatService>(MockBehavior.Strict);
+        agentChatService
+            .Setup(service => service.GenerateReplyAsync(
+                It.Is<AgentChatRequest>(request =>
+                    request.UserId == userId &&
+                    request.SessionId == session.Id &&
+                    request.WorkspaceId == session.WorkspaceId &&
+                    request.Message == "Dang bai tong hop xu huong AI toi 6h toi nay" &&
+                    request.ScheduleOptions != null &&
+                    request.ScheduleOptions.Timezone == "Asia/Ho_Chi_Minh" &&
+                    request.ScheduleOptions.MaxContentLength == 280 &&
+                    request.ScheduleOptions.Targets != null &&
+                    request.ScheduleOptions.Targets.Count == 1 &&
+                    request.ScheduleOptions.Targets[0].SocialMediaId == socialMediaId &&
+                    request.AssistantChatId.HasValue &&
+                    request.AssistantChatId.Value != Guid.Empty),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new AgentChatCompletionResult(
+                "Future AI schedule created.",
+                "gemini-3.1-flash-lite-preview",
+                ["create_agentic_schedule"],
+                [
+                    new AgentActionResponse(
+                        "schedule_create",
+                        "create_agentic_schedule",
+                        "completed",
+                        "schedule",
+                        scheduleId,
+                        "AI trend post",
+                        "Future AI schedule created.")
+                ],
+                "future_ai_schedule_created",
+                null,
+                null,
+                null,
+                scheduleId)));
+
+        var handler = new SendAgentMessageCommandHandler(
+            chatSessionRepository.Object,
+            chatRepository.Object,
+            agentChatService.Object);
+
+        var result = await handler.Handle(
+            new SendAgentMessageCommand(
+                session.Id,
+                userId,
+                "Dang bai tong hop xu huong AI toi 6h toi nay",
+                null,
+                scheduleOptions),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Action.Should().Be("future_ai_schedule_created");
+        result.Value.ScheduleId.Should().Be(scheduleId);
+        result.Value.PostId.Should().BeNull();
 
         chatSessionRepository.VerifyAll();
         chatRepository.VerifyAll();

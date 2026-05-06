@@ -77,6 +77,7 @@ public sealed class ActivatePublishingScheduleCommandHandler
             schedule.IsPrivate,
             schedule.PlatformPreference,
             schedule.AgentPrompt,
+            schedule.MaxContentLength,
             null,
             activeItems,
             activeTargets,

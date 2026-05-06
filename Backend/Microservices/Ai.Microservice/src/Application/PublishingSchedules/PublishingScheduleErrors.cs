@@ -19,6 +19,8 @@ public static class PublishingScheduleErrors
     public static readonly Error AgentPromptRequired = new("PublishingSchedule.AgentPromptRequired", "AgentPrompt is required for agentic schedules");
     public static readonly Error SearchConfigRequired = new("PublishingSchedule.SearchConfigRequired", "Search configuration is required for agentic schedules");
     public static readonly Error SearchQueryTemplateRequired = new("PublishingSchedule.SearchQueryTemplateRequired", "Search query template is required for agentic schedules");
+    public static readonly Error MaxContentLengthRequired = new("PublishingSchedule.MaxContentLengthRequired", "MaxContentLength is required for agentic schedules");
+    public static readonly Error InvalidMaxContentLength = new("PublishingSchedule.InvalidMaxContentLength", "MaxContentLength must be between 1 and 10000 characters");
     public static readonly Error UnsupportedModeForHandler = new("PublishingSchedule.UnsupportedModeForHandler", "This operation does not support the requested schedule mode");
     public static readonly Error InternalCallbackUnauthorized = new("PublishingSchedule.InternalCallbackUnauthorized", "Internal callback authorization failed");
 }

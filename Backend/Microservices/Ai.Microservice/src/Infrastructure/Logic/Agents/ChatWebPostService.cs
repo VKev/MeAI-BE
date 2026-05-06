@@ -93,6 +93,7 @@ public sealed partial class ChatWebPostService : IChatWebPostService
                 request.SuggestedTitle,
                 request.Prompt,
                 null,
+                null,
                 content with { Results = usableSources.Count > 0 ? usableSources : content.Results }),
             cancellationToken);
 

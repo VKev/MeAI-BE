@@ -1,3 +1,4 @@
+using Application.Abstractions.Rag;
 using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Abstractions.Automation;
@@ -14,7 +15,15 @@ public sealed record AgenticRuntimeContentRequest(
     string? ScheduleName,
     string? AgentPrompt,
     string? PlatformPreference,
-    N8nWebSearchResponse Search);
+    int? MaxContentLength,
+    N8nWebSearchResponse Search,
+    Guid? GroundingSocialMediaId = null,
+    string? GroundingPlatform = null,
+    string? RecommendationQuery = null,
+    string? RecommendationSummary = null,
+    string? RecommendationPageProfile = null,
+    IReadOnlyList<WebSource>? RecommendationWebSources = null,
+    string? RagFallbackReason = null);
 
 public sealed record AgenticRuntimePostDraft(
     string? Title,

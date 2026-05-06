@@ -39,6 +39,7 @@ internal sealed class PublishingScheduleCommandSupport
         bool? isPrivate,
         string? platformPreference,
         string? agentPrompt,
+        int? maxContentLength,
         PublishingScheduleSearchInput? search,
         IReadOnlyList<PublishingScheduleItemInput>? items,
         IReadOnlyList<PublishingScheduleTargetInput>? targets,
@@ -95,6 +96,12 @@ internal sealed class PublishingScheduleCommandSupport
             string.IsNullOrWhiteSpace(normalizedAgentPrompt))
         {
             return Result.Failure<ValidatedPublishingScheduleData>(PublishingScheduleErrors.AgentPromptRequired);
+        }
+
+        var normalizedMaxContentLength = NormalizeMaxContentLength(normalizedMode, maxContentLength);
+        if (normalizedMaxContentLength.IsFailure)
+        {
+            return Result.Failure<ValidatedPublishingScheduleData>(normalizedMaxContentLength.Error);
         }
 
         var normalizedTargets = NormalizeTargets(targets);
@@ -191,14 +198,21 @@ internal sealed class PublishingScheduleCommandSupport
             }
         }
 
+        var resolvedPlatformPreference = ResolvePlatformPreference(
+            normalizedMode,
+            NormalizeString(platformPreference),
+            normalizedTargets.Value,
+            socialMediaById);
+
         return Result.Success(new ValidatedPublishingScheduleData(
             NormalizeString(name),
             normalizedMode,
             normalizedExecuteAtUtc,
             normalizedTimezone,
             isPrivate,
-            NormalizeString(platformPreference),
+            resolvedPlatformPreference,
             normalizedAgentPrompt,
+            normalizedMaxContentLength.Value,
             normalizedSearch.Value,
             normalizedItems.Value,
             normalizedTargets.Value,
@@ -435,6 +449,59 @@ internal sealed class PublishingScheduleCommandSupport
             NormalizeString(search.SearchLanguage),
             NormalizeString(search.Freshness)));
     }
+
+    private static Result<int?> NormalizeMaxContentLength(string? normalizedMode, int? maxContentLength)
+    {
+        if (!string.Equals(normalizedMode, PublishingScheduleState.AgenticMode, StringComparison.Ordinal))
+        {
+            return Result.Success<int?>(null);
+        }
+
+        if (!maxContentLength.HasValue)
+        {
+            return Result.Failure<int?>(PublishingScheduleErrors.MaxContentLengthRequired);
+        }
+
+        if (maxContentLength.Value < 1 || maxContentLength.Value > 10000)
+        {
+            return Result.Failure<int?>(PublishingScheduleErrors.InvalidMaxContentLength);
+        }
+
+        return Result.Success<int?>(maxContentLength.Value);
+    }
+
+    private static string? ResolvePlatformPreference(
+        string normalizedMode,
+        string? explicitPlatformPreference,
+        IReadOnlyList<NormalizedPublishingScheduleTarget> targets,
+        IReadOnlyDictionary<Guid, UserSocialMediaResult> socialMediaById)
+    {
+        if (!string.Equals(normalizedMode, PublishingScheduleState.AgenticMode, StringComparison.Ordinal))
+        {
+            return explicitPlatformPreference;
+        }
+
+        if (!string.IsNullOrWhiteSpace(explicitPlatformPreference))
+        {
+            return explicitPlatformPreference;
+        }
+
+        var preferredTarget = targets.FirstOrDefault(target => target.IsPrimary);
+        if (preferredTarget is not null &&
+            socialMediaById.TryGetValue(preferredTarget.SocialMediaId, out var primarySocialMedia))
+        {
+            return NormalizeString(primarySocialMedia.Type);
+        }
+
+        var firstTarget = targets.FirstOrDefault();
+        if (firstTarget is not null &&
+            socialMediaById.TryGetValue(firstTarget.SocialMediaId, out var firstSocialMedia))
+        {
+            return NormalizeString(firstSocialMedia.Type);
+        }
+
+        return null;
+    }
 }
 
 internal sealed record ValidatedPublishingScheduleData(
@@ -445,6 +512,7 @@ internal sealed record ValidatedPublishingScheduleData(
     bool? IsPrivate,
     string? PlatformPreference,
     string? AgentPrompt,
+    int? MaxContentLength,
     NormalizedPublishingScheduleSearch? Search,
     IReadOnlyList<NormalizedPublishingScheduleItem> Items,
     IReadOnlyList<NormalizedPublishingScheduleTarget> Targets,

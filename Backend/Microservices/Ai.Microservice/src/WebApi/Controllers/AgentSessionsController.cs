@@ -3,6 +3,7 @@ using Application.Agents.Commands;
 using Application.Agents.Models;
 using Application.Agents.Queries;
 using Application.Abstractions.Agents;
+using Application.PublishingSchedules.Models;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using SharedLibrary.Attributes;
@@ -86,6 +87,18 @@ public sealed class AgentSessionsController : ApiController
                                 target.Platform!.Trim(),
                                 target.Type!.Trim(),
                                 target.Ratio!.Trim()))
+                            .ToList()),
+                request.ScheduleOptions is null
+                    ? null
+                    : new AgentScheduleOptions(
+                        request.ScheduleOptions.ExecuteAtUtc,
+                        request.ScheduleOptions.Timezone,
+                        request.ScheduleOptions.MaxContentLength,
+                        request.ScheduleOptions.Targets?
+                            .Where(target => target is not null && target.SocialMediaId != Guid.Empty)
+                            .Select(target => new PublishingScheduleTargetInput(
+                                target.SocialMediaId,
+                                target.IsPrimary))
                             .ToList())),
             cancellationToken);
 
@@ -121,7 +134,10 @@ public sealed class AgentSessionsController : ApiController
     }
 }
 
-public sealed record AgentMessageRequest(string? Message, AgentImageOptionsRequest? ImageOptions = null);
+public sealed record AgentMessageRequest(
+    string? Message,
+    AgentImageOptionsRequest? ImageOptions = null,
+    AgentScheduleOptionsRequest? ScheduleOptions = null);
 
 public sealed record AgentImageOptionsRequest(
     string? Model,
@@ -134,3 +150,13 @@ public sealed record AgentSocialTargetRequest(
     string? Platform,
     string? Type,
     string? Ratio);
+
+public sealed record AgentScheduleOptionsRequest(
+    DateTime ExecuteAtUtc,
+    string? Timezone,
+    int? MaxContentLength,
+    List<PublishingScheduleTargetInputRequest>? Targets = null);
+
+public sealed record PublishingScheduleTargetInputRequest(
+    Guid SocialMediaId,
+    bool? IsPrimary = null);

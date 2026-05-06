@@ -97,6 +97,7 @@ public sealed class CreateAgenticPublishingScheduleCommandTests
                 false,
                 "facebook",
                 "Vào 5h chiều hãy tra kết quả xổ số miền bắc rồi đăng nó lên Facebook.",
+                280,
                 new PublishingScheduleSearchInput(
                     "kết quả xổ số miền bắc hôm nay",
                     5,
@@ -111,6 +112,9 @@ public sealed class CreateAgenticPublishingScheduleCommandTests
         storedSchedule!.Mode.Should().Be(PublishingScheduleState.AgenticMode);
         storedSchedule.Status.Should().Be(PublishingScheduleState.StatusWaitingForExecution);
         storedSchedule.Items.Should().BeEmpty();
+        storedSchedule.PlatformPreference.Should().Be("facebook");
+        storedSchedule.MaxContentLength.Should().Be(280);
+        storedSchedule.SearchQueryTemplate.Should().Be("kết quả xổ số miền bắc hôm nay");
         storedSchedule.Targets.Should().ContainSingle(target => target.SocialMediaId == socialMediaId);
 
         var executionContext = AgenticScheduleExecutionContextSerializer.Parse(storedSchedule.ExecutionContextJson);
@@ -121,6 +125,10 @@ public sealed class CreateAgenticPublishingScheduleCommandTests
 
         result.Value.Mode.Should().Be(PublishingScheduleState.AgenticMode);
         result.Value.Status.Should().Be(PublishingScheduleState.StatusWaitingForExecution);
+        result.Value.PlatformPreference.Should().Be("facebook");
+        result.Value.MaxContentLength.Should().Be(280);
+        result.Value.Search.Should().NotBeNull();
+        result.Value.Search!.QueryTemplate.Should().Be("kết quả xổ số miền bắc hôm nay");
         result.Value.Targets.Should().ContainSingle(target => target.SocialMediaId == socialMediaId);
 
         scheduleRepository.VerifyAll();

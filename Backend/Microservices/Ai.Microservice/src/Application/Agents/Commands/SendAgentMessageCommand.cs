@@ -14,7 +14,8 @@ public sealed record SendAgentMessageCommand(
     Guid SessionId,
     Guid UserId,
     string? Message,
-    AgentImageOptions? ImageOptions = null) : IRequest<Result<AgentChatResponse>>;
+    AgentImageOptions? ImageOptions = null,
+    AgentScheduleOptions? ScheduleOptions = null) : IRequest<Result<AgentChatResponse>>;
 
 public sealed class SendAgentMessageCommandHandler
     : IRequestHandler<SendAgentMessageCommand, Result<AgentChatResponse>>
@@ -81,6 +82,7 @@ public sealed class SendAgentMessageCommandHandler
                 session.WorkspaceId,
                 normalizedMessage,
                 request.ImageOptions,
+                request.ScheduleOptions,
                 assistantChatId),
             cancellationToken);
 
@@ -161,6 +163,7 @@ public sealed class SendAgentMessageCommandHandler
             completionResult.Value.ValidationError,
             completionResult.Value.RevisedPrompt,
             completionResult.Value.PostId,
+            completionResult.Value.ScheduleId,
             completionResult.Value.ChatId,
             completionResult.Value.CorrelationId,
             completionResult.Value.RetrievalMode,
