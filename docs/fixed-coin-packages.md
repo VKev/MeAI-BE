@@ -14,6 +14,15 @@ Tài liệu này mô tả trạng thái backend hiện tại của feature coin 
 - [x] `PUT /api/User/admin/billing/coin-packages/{packageId}`
 - [x] `DELETE /api/User/admin/billing/coin-packages/{packageId}`
 
+### Seed data
+
+- [x] Có startup seeder cho `coin_packages`
+- Seeder mặc định tham chiếu 3 tier subscription hiện có để tạo catalog coin package
+- Catalog mặc định:
+  - `Coin Package 10000` -> `coinAmount = 10000`, `bonusCoins = 0`, `price = 3.99`, `currency = usd`
+  - `Coin Package 15000` -> `coinAmount = 15000`, `bonusCoins = 0`, `price = 5.99`, `currency = usd`
+  - `Coin Package 20000` -> `coinAmount = 20000`, `bonusCoins = 0`, `price = 7.99`, `currency = usd`
+
 ## Mục tiêu
 
 Feature này cho phép user mua coin theo package cố định qua Stripe one-time payment.
@@ -31,7 +40,8 @@ Các field public hiện trả về:
 - `currency`
 - `displayOrder`
 
-Chỉ package active mới xuất hiện trong public catalog.
+Public catalog chỉ trả package `active` theo `displayOrder`.
+Package `inactive` vẫn còn trong dữ liệu để admin và các màn hình lịch sử nội bộ có thể resolve lại record cũ.
 
 ## Checkout
 
@@ -39,7 +49,7 @@ Chỉ package active mới xuất hiện trong public catalog.
 
 Luồng hiện tại:
 
-1. Validate package tồn tại, active, giá hợp lệ, và currency `usd`.
+1. Validate package tồn tại, đang `active`, giá hợp lệ, và currency `usd`.
 2. Tạo hoặc resolve Stripe customer cho user.
 3. Tạo `Transaction` pending.
 4. Tạo Stripe `PaymentIntent`.
@@ -69,4 +79,5 @@ Admin có thể:
 
 - Coin package là luồng one-time payment.
 - Không phải subscription recurring.
+- PaymentIntent của coin package không gắn `off_session`, nên không mở đường cho auto-renew hoặc recharge nền.
 - Idempotency được đảm bảo theo transaction.

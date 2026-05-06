@@ -150,8 +150,7 @@ public sealed class StripePaymentService : IStripePaymentService
                 AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
                 {
                     Enabled = true
-                },
-                SetupFutureUsage = "off_session"
+                }
             },
             cancellationToken: cancellationToken);
 
