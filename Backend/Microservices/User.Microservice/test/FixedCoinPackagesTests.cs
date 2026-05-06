@@ -15,14 +15,21 @@ using Infrastructure.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Configs;
 
 namespace test;
 
 public sealed class FixedCoinPackagesTests : IDisposable
 {
     private readonly List<SqliteConnection> _openConnections = [];
+    private static readonly IOptions<BillingCurrencyOptions> StripeOptions = Options.Create(new BillingCurrencyOptions
+    {
+        Currency = "vnd",
+        CurrencyDecimals = 0
+    });
 
     [Fact]
     public async Task GetCoinPackagesQuery_ReturnsOnlyActivePackages()
@@ -87,7 +94,11 @@ public sealed class FixedCoinPackagesTests : IDisposable
                 49900m));
 
         var stripeCustomerResolver = new StripeCustomerResolver(unitOfWork, stripePaymentService.Object);
-        var handler = new PurchaseCoinPackageCommandHandler(unitOfWork, stripeCustomerResolver, stripePaymentService.Object);
+        var handler = new PurchaseCoinPackageCommandHandler(
+            unitOfWork,
+            stripeCustomerResolver,
+            stripePaymentService.Object,
+            StripeOptions);
 
         var result = await handler.Handle(new PurchaseCoinPackageCommand(package.Id, user.Id), CancellationToken.None);
         await unitOfWork.SaveChangesAsync(CancellationToken.None);
@@ -127,7 +138,11 @@ public sealed class FixedCoinPackagesTests : IDisposable
         using var unitOfWork = new UnitOfWork(dbContext);
         var stripePaymentService = new Mock<IStripePaymentService>(MockBehavior.Strict);
         var stripeCustomerResolver = new StripeCustomerResolver(unitOfWork, stripePaymentService.Object);
-        var handler = new PurchaseCoinPackageCommandHandler(unitOfWork, stripeCustomerResolver, stripePaymentService.Object);
+        var handler = new PurchaseCoinPackageCommandHandler(
+            unitOfWork,
+            stripeCustomerResolver,
+            stripePaymentService.Object,
+            StripeOptions);
 
         var result = await handler.Handle(new PurchaseCoinPackageCommand(package.Id, user.Id), CancellationToken.None);
 
@@ -317,7 +332,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
         await using var dbContext = CreateDbContext();
         using var unitOfWork = new UnitOfWork(dbContext);
 
-        var createHandler = new CreateCoinPackageCommandHandler(unitOfWork);
+        var createHandler = new CreateCoinPackageCommandHandler(unitOfWork, StripeOptions);
         var createResult = await createHandler.Handle(
             new CreateCoinPackageCommand("Starter", 300m, 30m, 34900m, "vnd", true, 1),
             CancellationToken.None);
@@ -327,7 +342,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
         createResult.Value.Name.Should().Be("Starter");
         createResult.Value.IsActive.Should().BeTrue();
 
-        var updateHandler = new UpdateCoinPackageCommandHandler(unitOfWork);
+        var updateHandler = new UpdateCoinPackageCommandHandler(unitOfWork, StripeOptions);
         var updateResult = await updateHandler.Handle(
             new UpdateCoinPackageCommand(createResult.Value.Id, "Starter Plus", 400m, 80m, 44900m, "vnd", true, 3),
             CancellationToken.None);
@@ -356,7 +371,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
     public async Task CoinPackageSeeder_SeedsCatalogPackagesOnce()
     {
         await using var dbContext = CreateDbContext();
-        var seeder = new CoinPackageSeeder(dbContext, NullLogger<CoinPackageSeeder>.Instance);
+        var seeder = new CoinPackageSeeder(dbContext, NullLogger<CoinPackageSeeder>.Instance, StripeOptions);
 
         await seeder.SeedAsync();
         await seeder.SeedAsync();

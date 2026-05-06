@@ -2,6 +2,8 @@ using Domain.Entities;
 using Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using SharedLibrary.Configs;
 
 namespace Infrastructure.Logic.Seeding;
 
@@ -9,11 +11,16 @@ public sealed class CoinPackageSeeder
 {
     private readonly MyDbContext _dbContext;
     private readonly ILogger<CoinPackageSeeder> _logger;
+    private readonly string _configuredCurrency;
 
-    public CoinPackageSeeder(MyDbContext dbContext, ILogger<CoinPackageSeeder> logger)
+    public CoinPackageSeeder(
+        MyDbContext dbContext,
+        ILogger<CoinPackageSeeder> logger,
+        IOptions<BillingCurrencyOptions> billingCurrencyOptions)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _configuredCurrency = ResolveCurrency(billingCurrencyOptions.Value);
     }
 
     public async Task SeedAsync(CancellationToken cancellationToken = default)
@@ -41,8 +48,8 @@ public sealed class CoinPackageSeeder
                 Name = seed.CoinPackageName,
                 CoinAmount = seed.CoinAmount,
                 BonusCoins = seed.CoinPackageBonusCoins,
-                Price = seed.CoinPackagePriceVnd,
-                Currency = "vnd",
+                Price = seed.CoinPackagePrice,
+                Currency = _configuredCurrency,
                 IsActive = true,
                 DisplayOrder = seed.CoinPackageDisplayOrder,
                 CreatedAt = now,
@@ -59,5 +66,12 @@ public sealed class CoinPackageSeeder
         _dbContext.CoinPackages.AddRange(toAdd);
         await _dbContext.SaveChangesAsync(cancellationToken);
         _logger.LogInformation("Seeded {Count} coin package(s).", toAdd.Count);
+    }
+
+    private static string ResolveCurrency(BillingCurrencyOptions options)
+    {
+        return string.IsNullOrWhiteSpace(options.Currency)
+            ? "vnd"
+            : options.Currency.Trim().ToLowerInvariant();
     }
 }

@@ -13,7 +13,7 @@ internal static class BillingSeedCatalog
             MaxPages: 10,
             CoinPackageName: "Coin Package 10000",
             CoinPackageBonusCoins: 0m,
-            CoinPackagePriceVnd: 100000m,
+            CoinPackagePrice: 100000m,
             CoinPackageDisplayOrder: 1),
         new(
             SubscriptionName: "Subscription 15000",
@@ -24,7 +24,7 @@ internal static class BillingSeedCatalog
             MaxPages: 20,
             CoinPackageName: "Coin Package 15000",
             CoinPackageBonusCoins: 0m,
-            CoinPackagePriceVnd: 150000m,
+            CoinPackagePrice: 150000m,
             CoinPackageDisplayOrder: 2),
         new(
             SubscriptionName: "Subscription 20000",
@@ -35,7 +35,7 @@ internal static class BillingSeedCatalog
             MaxPages: 50,
             CoinPackageName: "Coin Package 20000",
             CoinPackageBonusCoins: 0m,
-            CoinPackagePriceVnd: 200000m,
+            CoinPackagePrice: 200000m,
             CoinPackageDisplayOrder: 3)
     ];
 }
@@ -49,5 +49,5 @@ internal sealed record BillingSeedTier(
     int MaxPages,
     string CoinPackageName,
     decimal CoinPackageBonusCoins,
-    decimal CoinPackagePriceVnd,
+    decimal CoinPackagePrice,
     int CoinPackageDisplayOrder);

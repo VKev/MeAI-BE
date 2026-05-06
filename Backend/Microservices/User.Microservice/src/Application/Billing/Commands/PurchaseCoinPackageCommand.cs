@@ -5,6 +5,8 @@ using Application.Billing.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using SharedLibrary.Configs;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
@@ -22,6 +24,7 @@ public sealed class PurchaseCoinPackageCommandHandler
     private readonly IRepository<Transaction> _transactionRepository;
     private readonly IStripeCustomerResolver _stripeCustomerResolver;
     private readonly IStripePaymentService _stripePaymentService;
+    private readonly string _configuredCurrency;
 
     // Domain dependency marker for architecture tests
     private static readonly Type CoinPackageEntityType = typeof(CoinPackage);
@@ -29,12 +32,14 @@ public sealed class PurchaseCoinPackageCommandHandler
     public PurchaseCoinPackageCommandHandler(
         IUnitOfWork unitOfWork,
         IStripeCustomerResolver stripeCustomerResolver,
-        IStripePaymentService stripePaymentService)
+        IStripePaymentService stripePaymentService,
+        IOptions<BillingCurrencyOptions> billingCurrencyOptions)
     {
         _coinPackageRepository = unitOfWork.Repository<CoinPackage>();
         _transactionRepository = unitOfWork.Repository<Transaction>();
         _stripeCustomerResolver = stripeCustomerResolver;
         _stripePaymentService = stripePaymentService;
+        _configuredCurrency = ResolveCurrency(billingCurrencyOptions.Value);
     }
 
     public async Task<Result<CoinPackageCheckoutResponse>> Handle(
@@ -56,7 +61,7 @@ public sealed class PurchaseCoinPackageCommandHandler
                 new Error("CoinPackage.InvalidPrice", "Coin package price is not valid."));
         }
 
-        if (!string.Equals(package.Currency, "vnd", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(package.Currency, _configuredCurrency, StringComparison.OrdinalIgnoreCase))
         {
             return Result.Failure<CoinPackageCheckoutResponse>(
                 new Error("CoinPackage.InvalidCurrency", "Coin package currency is not supported."));
@@ -105,7 +110,7 @@ public sealed class PurchaseCoinPackageCommandHandler
                 customerResult.Value.User.Email,
                 customerResult.Value.User.FullName ?? customerResult.Value.User.Username,
                 package.Price,
-                package.Currency,
+                _configuredCurrency,
                 package.Name,
                 metadata,
                 cancellationToken);
@@ -129,5 +134,12 @@ public sealed class PurchaseCoinPackageCommandHandler
             return Result.Failure<CoinPackageCheckoutResponse>(
                 new Error("Stripe.PaymentFailed", ex.Message));
         }
+    }
+
+    private static string ResolveCurrency(BillingCurrencyOptions options)
+    {
+        return string.IsNullOrWhiteSpace(options.Currency)
+            ? "vnd"
+            : options.Currency.Trim().ToLowerInvariant();
     }
 }
