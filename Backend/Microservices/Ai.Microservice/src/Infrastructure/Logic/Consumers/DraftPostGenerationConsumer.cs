@@ -364,6 +364,12 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             return;
         }
 
+        // Tracks whether the empty Post (pre-created by StartDraftPostGenerationCommand)
+        // has been finalized with caption + image. If we fail BEFORE this flips true,
+        // the catch path soft-deletes the empty Post so the FE doesn't see a permanent
+        // blank placeholder. After it's true, the Post has real content and we keep it.
+        bool postFinalized = false;
+
         try
         {
             task.Status = DraftPostTaskStatuses.Processing;
@@ -698,34 +704,58 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             }
             var uploaded = uploadResult.Value[0];
 
-            // Step 6 — persist as a STANDALONE draft Post (no PostBuilder).
-            // We bypass CreatePostCommand here because that command always creates or
-            // upserts a PostBuilder; for AI-generated draft recommendations we want a
-            // bare draft row the user can promote later, not pre-bound to a builder.
-            _logger.LogDebug("DraftPost {Id}: creating standalone draft Post (no PostBuilder)...", task.Id);
+            // Step 6 — populate the draft Post with the generated caption + image.
+            //
+            // The Post row was created EMPTY by StartDraftPostGenerationCommandHandler
+            // at submit time (so the 202 response could return a real postId for FE).
+            // We update it in place rather than inserting a new row — preserves the id
+            // the FE may already be polling.
+            //
+            // Legacy fallback: tasks queued before this change have no ResultPostId
+            // set; for those we keep the old behavior (create a fresh standalone Post).
             var content = new PostContent
             {
                 Content = caption,
                 ResourceList = new List<string> { uploaded.ResourceId.ToString() },
                 PostType = "posts",
             };
-            var draftPost = new Post
+            Post draftPost;
+            if (task.ResultPostId.HasValue)
             {
-                Id = Guid.CreateVersion7(),
-                UserId = msg.UserId,
-                WorkspaceId = msg.WorkspaceId,
-                ChatSessionId = null,
-                SocialMediaId = msg.SocialMediaId,
-                PostBuilderId = null,
-                Platform = null,
-                Title = null,
-                Content = content,
-                Status = "draft",
-                CreatedAt = DateTimeExtensions.PostgreSqlUtcNow,
-                UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow,
-            };
-            await _postRepository.AddAsync(draftPost, ct);
+                _logger.LogDebug(
+                    "DraftPost {Id}: updating pre-created draft Post {PostId}...",
+                    task.Id, task.ResultPostId.Value);
+                draftPost = await _postRepository.GetByIdForUpdateAsync(task.ResultPostId.Value, ct)
+                    ?? throw new InvalidOperationException(
+                        $"Pre-created draft post {task.ResultPostId.Value} disappeared before consumer finalize");
+                draftPost.Content = content;
+                draftPost.Status = "draft";
+                draftPost.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "DraftPost {Id}: ResultPostId not set (legacy task) — creating fresh standalone Post",
+                    task.Id);
+                draftPost = new Post
+                {
+                    Id = Guid.CreateVersion7(),
+                    UserId = msg.UserId,
+                    WorkspaceId = msg.WorkspaceId,
+                    ChatSessionId = null,
+                    SocialMediaId = msg.SocialMediaId,
+                    PostBuilderId = null,
+                    Platform = null,
+                    Title = null,
+                    Content = content,
+                    Status = "draft",
+                    CreatedAt = DateTimeExtensions.PostgreSqlUtcNow,
+                    UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow,
+                };
+                await _postRepository.AddAsync(draftPost, ct);
+            }
             await _postRepository.SaveChangesAsync(ct);
+            postFinalized = true;
 
             // Step 7 — mark task completed + notify
             task.Status = DraftPostTaskStatuses.Completed;
@@ -766,11 +796,44 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         {
             _logger.LogError(ex, "DraftPost {Id}: failed CorrelationId={CorrelationId}", task.Id, task.CorrelationId);
 
+            // Clean up the upfront empty Post if processing failed BEFORE Step 6
+            // finalized it. After finalization the Post has real caption + image
+            // and we keep it. Best-effort: don't let cleanup errors mask the
+            // original failure.
+            if (!postFinalized && task.ResultPostId.HasValue)
+            {
+                try
+                {
+                    var emptyPost = await _postRepository.GetByIdForUpdateAsync(task.ResultPostId.Value, ct);
+                    if (emptyPost != null && emptyPost.DeletedAt is null)
+                    {
+                        emptyPost.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;
+                        emptyPost.UpdatedAt = emptyPost.DeletedAt;
+                        await _postRepository.SaveChangesAsync(ct);
+                        _logger.LogInformation(
+                            "DraftPost {Id}: soft-deleted empty placeholder Post {PostId} on failure",
+                            task.Id, emptyPost.Id);
+                    }
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(cleanupEx,
+                        "DraftPost {Id}: failed to soft-delete empty placeholder Post {PostId}",
+                        task.Id, task.ResultPostId.Value);
+                }
+            }
+
             task.Status = DraftPostTaskStatuses.Failed;
             task.ErrorCode = ex.GetType().Name;
             task.ErrorMessage = ex.Message;
             task.CompletedAt = DateTimeExtensions.PostgreSqlUtcNow;
             task.UpdatedAt = task.CompletedAt;
+            // Clear ResultPostId so the response doesn't dangle a soft-deleted
+            // placeholder id back to the FE on Failed status.
+            if (!postFinalized)
+            {
+                task.ResultPostId = null;
+            }
             try
             {
                 await _taskRepository.SaveChangesAsync(ct);
