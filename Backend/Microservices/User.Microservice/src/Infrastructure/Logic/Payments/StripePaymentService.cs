@@ -138,20 +138,21 @@ public sealed class StripePaymentService : IStripePaymentService
         IDictionary<string, string> metadata,
         CancellationToken cancellationToken = default)
     {
+        var currencyCode = ResolveCurrency();
+
         var paymentIntent = await CreatePaymentIntentService().CreateAsync(
             new PaymentIntentCreateOptions
             {
                 Customer = stripeCustomerId,
                 Amount = ToMinorAmount(amount),
-                Currency = currency.Trim().ToLowerInvariant(),
+                Currency = currencyCode,
                 Description = description,
                 ReceiptEmail = customerEmail,
                 Metadata = metadata.Count == 0 ? null : new Dictionary<string, string>(metadata),
                 AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
                 {
                     Enabled = true
-                },
-                SetupFutureUsage = "off_session"
+                }
             },
             cancellationToken: cancellationToken);
 
@@ -159,7 +160,7 @@ public sealed class StripePaymentService : IStripePaymentService
             paymentIntent.Id,
             paymentIntent.ClientSecret ?? string.Empty,
             NormalizeCheckoutStatus(null, null, paymentIntent.Status),
-            paymentIntent.Currency ?? currency.Trim().ToLowerInvariant(),
+            paymentIntent.Currency ?? currencyCode,
             ToMajorAmount(paymentIntent.Amount));
     }
 

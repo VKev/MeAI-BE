@@ -56,6 +56,8 @@ builder.Services.Configure<EmailOptions>(
     builder.Configuration.GetSection("Email"));
 builder.Services.Configure<StripeOptions>(
     builder.Configuration.GetSection(StripeOptions.SectionName));
+builder.Services.Configure<BillingCurrencyOptions>(
+    builder.Configuration.GetSection(BillingCurrencyOptions.SectionName));
 builder.AddDatabase();
 
 builder.Services

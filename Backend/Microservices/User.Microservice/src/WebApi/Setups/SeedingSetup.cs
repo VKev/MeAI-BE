@@ -63,6 +63,16 @@ public static class SeedingSetup
 
         try
         {
+            var coinPackageSeeder = scope.ServiceProvider.GetRequiredService<CoinPackageSeeder>();
+            await coinPackageSeeder.SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Failed to seed coin packages at startup.");
+        }
+
+        try
+        {
             var sampleDataSeeder = scope.ServiceProvider.GetRequiredService<SampleDataSeeder>();
             await sampleDataSeeder.SeedAsync();
         }

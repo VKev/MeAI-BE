@@ -9,27 +9,36 @@ using Application.Billing.Services;
 using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Context;
+using Infrastructure.Logic.Seeding;
 using Infrastructure.Logic.Services;
 using Infrastructure.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Configs;
 
 namespace test;
 
 public sealed class FixedCoinPackagesTests : IDisposable
 {
     private readonly List<SqliteConnection> _openConnections = [];
+    private static readonly IOptions<BillingCurrencyOptions> StripeOptions = Options.Create(new BillingCurrencyOptions
+    {
+        Currency = "vnd",
+        CurrencyDecimals = 0
+    });
 
     [Fact]
     public async Task GetCoinPackagesQuery_ReturnsOnlyActivePackages()
     {
         await using var dbContext = CreateDbContext();
         dbContext.CoinPackages.AddRange(
-            CreateCoinPackage(Guid.NewGuid(), "Inactive", 100m, 0m, 1.99m, false, 0),
-            CreateCoinPackage(Guid.NewGuid(), "Starter", 500m, 50m, 4.99m, true, 2),
-            CreateCoinPackage(Guid.NewGuid(), "Basic", 250m, 25m, 2.99m, true, 1));
+            CreateCoinPackage(Guid.NewGuid(), "Inactive", 100m, 0m, 19900m, false, 0),
+            CreateCoinPackage(Guid.NewGuid(), "Starter", 500m, 50m, 49900m, true, 2),
+            CreateCoinPackage(Guid.NewGuid(), "Basic", 250m, 25m, 29900m, true, 1));
         await dbContext.SaveChangesAsync();
 
         using var unitOfWork = new UnitOfWork(dbContext);
@@ -40,7 +49,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(2);
         result.Value.Select(item => item.Name).Should().ContainInOrder("Basic", "Starter");
-        result.Value.Should().OnlyContain(item => item.Currency == "usd");
+        result.Value.Should().OnlyContain(item => item.Currency == "vnd");
         result.Value[0].TotalCoins.Should().Be(275m);
         result.Value[1].TotalCoins.Should().Be(550m);
     }
@@ -50,7 +59,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
     {
         await using var dbContext = CreateDbContext();
         var user = CreateUser(Guid.NewGuid(), "buyer", "buyer@example.com");
-        var package = CreateCoinPackage(Guid.NewGuid(), "500 Coins", 500m, 50m, 4.99m, true, 1);
+        var package = CreateCoinPackage(Guid.NewGuid(), "500 Coins", 500m, 50m, 49900m, true, 1);
         dbContext.Users.Add(user);
         dbContext.CoinPackages.Add(package);
         await dbContext.SaveChangesAsync();
@@ -81,11 +90,15 @@ public sealed class FixedCoinPackagesTests : IDisposable
                 "pi_coin_package",
                 "secret_coin_package",
                 "requires_payment_method",
-                "usd",
-                4.99m));
+                "vnd",
+                49900m));
 
         var stripeCustomerResolver = new StripeCustomerResolver(unitOfWork, stripePaymentService.Object);
-        var handler = new PurchaseCoinPackageCommandHandler(unitOfWork, stripeCustomerResolver, stripePaymentService.Object);
+        var handler = new PurchaseCoinPackageCommandHandler(
+            unitOfWork,
+            stripeCustomerResolver,
+            stripePaymentService.Object,
+            StripeOptions);
 
         var result = await handler.Handle(new PurchaseCoinPackageCommand(package.Id, user.Id), CancellationToken.None);
         await unitOfWork.SaveChangesAsync(CancellationToken.None);
@@ -95,8 +108,8 @@ public sealed class FixedCoinPackagesTests : IDisposable
         result.Value.PaymentIntentId.Should().Be("pi_coin_package");
         result.Value.ClientSecret.Should().Be("secret_coin_package");
         result.Value.Status.Should().Be("requires_payment_method");
-        result.Value.AmountDue.Should().Be(4.99m);
-        result.Value.Currency.Should().Be("usd");
+        result.Value.AmountDue.Should().Be(49900m);
+        result.Value.Currency.Should().Be("vnd");
 
         var transaction = await dbContext.Transactions.SingleAsync();
         transaction.UserId.Should().Be(user.Id);
@@ -106,10 +119,36 @@ public sealed class FixedCoinPackagesTests : IDisposable
         transaction.PaymentMethod.Should().Be("Stripe");
         transaction.ProviderReferenceId.Should().Be("pi_coin_package");
         transaction.Status.Should().Be("requires_payment_method");
-        transaction.Cost.Should().Be(4.99m);
+        transaction.Cost.Should().Be(49900m);
 
         var persistedUser = await dbContext.Users.SingleAsync();
         persistedUser.StripeCustomerId.Should().Be("cus_coin_package");
+    }
+
+    [Fact]
+    public async Task PurchaseCoinPackageCommand_FailsForInactivePackage()
+    {
+        await using var dbContext = CreateDbContext();
+        var user = CreateUser(Guid.NewGuid(), "buyer-inactive", "buyer-inactive@example.com");
+        var package = CreateCoinPackage(Guid.NewGuid(), "Inactive Coins", 500m, 50m, 49900m, false, 1);
+        dbContext.Users.Add(user);
+        dbContext.CoinPackages.Add(package);
+        await dbContext.SaveChangesAsync();
+
+        using var unitOfWork = new UnitOfWork(dbContext);
+        var stripePaymentService = new Mock<IStripePaymentService>(MockBehavior.Strict);
+        var stripeCustomerResolver = new StripeCustomerResolver(unitOfWork, stripePaymentService.Object);
+        var handler = new PurchaseCoinPackageCommandHandler(
+            unitOfWork,
+            stripeCustomerResolver,
+            stripePaymentService.Object,
+            StripeOptions);
+
+        var result = await handler.Handle(new PurchaseCoinPackageCommand(package.Id, user.Id), CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("CoinPackage.NotFound");
+        (await dbContext.Transactions.CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -117,7 +156,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
     {
         await using var dbContext = CreateDbContext();
         var user = CreateUser(Guid.NewGuid(), "resolver", "resolver@example.com");
-        var package = CreateCoinPackage(Guid.NewGuid(), "1000 Coins", 1000m, 200m, 9.99m, true, 1);
+        var package = CreateCoinPackage(Guid.NewGuid(), "1000 Coins", 1000m, 200m, 99900m, true, 1);
         var transaction = CreateTransaction(Guid.NewGuid(), user.Id, package.Id, package.Price, "pending", null);
         dbContext.Users.Add(user);
         dbContext.CoinPackages.Add(package);
@@ -213,7 +252,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
     {
         await using var dbContext = CreateDbContext();
         var user = CreateUser(Guid.NewGuid(), "repeat", "repeat@example.com");
-        var package = CreateCoinPackage(Guid.NewGuid(), "250 Coins", 250m, 25m, 2.99m, true, 1);
+        var package = CreateCoinPackage(Guid.NewGuid(), "250 Coins", 250m, 25m, 29900m, true, 1);
         var transaction = CreateTransaction(Guid.NewGuid(), user.Id, package.Id, package.Price, "pending", null);
         dbContext.Users.Add(user);
         dbContext.CoinPackages.Add(package);
@@ -293,9 +332,9 @@ public sealed class FixedCoinPackagesTests : IDisposable
         await using var dbContext = CreateDbContext();
         using var unitOfWork = new UnitOfWork(dbContext);
 
-        var createHandler = new CreateCoinPackageCommandHandler(unitOfWork);
+        var createHandler = new CreateCoinPackageCommandHandler(unitOfWork, StripeOptions);
         var createResult = await createHandler.Handle(
-            new CreateCoinPackageCommand("Starter", 300m, 30m, 3.49m, "usd", true, 1),
+            new CreateCoinPackageCommand("Starter", 300m, 30m, 34900m, "vnd", true, 1),
             CancellationToken.None);
         await unitOfWork.SaveChangesAsync(CancellationToken.None);
 
@@ -303,9 +342,9 @@ public sealed class FixedCoinPackagesTests : IDisposable
         createResult.Value.Name.Should().Be("Starter");
         createResult.Value.IsActive.Should().BeTrue();
 
-        var updateHandler = new UpdateCoinPackageCommandHandler(unitOfWork);
+        var updateHandler = new UpdateCoinPackageCommandHandler(unitOfWork, StripeOptions);
         var updateResult = await updateHandler.Handle(
-            new UpdateCoinPackageCommand(createResult.Value.Id, "Starter Plus", 400m, 80m, 4.49m, "usd", true, 3),
+            new UpdateCoinPackageCommand(createResult.Value.Id, "Starter Plus", 400m, 80m, 44900m, "vnd", true, 3),
             CancellationToken.None);
         await unitOfWork.SaveChangesAsync(CancellationToken.None);
 
@@ -313,7 +352,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
         updateResult.Value.Name.Should().Be("Starter Plus");
         updateResult.Value.CoinAmount.Should().Be(400m);
         updateResult.Value.BonusCoins.Should().Be(80m);
-        updateResult.Value.Price.Should().Be(4.49m);
+        updateResult.Value.Price.Should().Be(44900m);
         updateResult.Value.DisplayOrder.Should().Be(3);
         updateResult.Value.UpdatedAt.Should().NotBeNull();
 
@@ -326,6 +365,49 @@ public sealed class FixedCoinPackagesTests : IDisposable
         var persistedPackage = await dbContext.CoinPackages.SingleAsync();
         persistedPackage.IsActive.Should().BeFalse();
         persistedPackage.Name.Should().Be("Starter Plus");
+    }
+
+    [Fact]
+    public async Task CoinPackageSeeder_SeedsCatalogPackagesOnce()
+    {
+        await using var dbContext = CreateDbContext();
+        var seeder = new CoinPackageSeeder(dbContext, NullLogger<CoinPackageSeeder>.Instance, StripeOptions);
+
+        await seeder.SeedAsync();
+        await seeder.SeedAsync();
+
+        var packages = await dbContext.CoinPackages
+            .OrderBy(item => item.DisplayOrder)
+            .ToListAsync();
+
+        packages.Should().HaveCount(3);
+        packages.Select(item => item.Name).Should().ContainInOrder(
+            "Coin Package 10000",
+            "Coin Package 15000",
+            "Coin Package 20000");
+        packages.Select(item => item.CoinAmount).Should().ContainInOrder(10000m, 15000m, 20000m);
+        packages.Select(item => item.Price).Should().ContainInOrder(100000m, 150000m, 200000m);
+        packages.Should().OnlyContain(item => item.Currency == "vnd");
+    }
+
+    [Fact]
+    public async Task GetAdminCoinPackagesQuery_ReturnsActiveAndInactivePackages()
+    {
+        await using var dbContext = CreateDbContext();
+        dbContext.CoinPackages.AddRange(
+            CreateCoinPackage(Guid.NewGuid(), "Inactive", 100m, 0m, 19900m, false, 0),
+            CreateCoinPackage(Guid.NewGuid(), "Active", 250m, 25m, 29900m, true, 1));
+        await dbContext.SaveChangesAsync();
+
+        using var unitOfWork = new UnitOfWork(dbContext);
+        var handler = new GetAdminCoinPackagesQueryHandler(unitOfWork);
+
+        var result = await handler.Handle(new GetAdminCoinPackagesQuery(), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().HaveCount(2);
+        result.Value.Select(item => item.Name).Should().ContainInOrder("Inactive", "Active");
+        result.Value.Select(item => item.IsActive).Should().ContainInOrder(false, true);
     }
 
     private MyDbContext CreateDbContext()
@@ -399,7 +481,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
             CoinAmount = coinAmount,
             BonusCoins = bonusCoins,
             Price = price,
-            Currency = "usd",
+            Currency = "vnd",
             IsActive = isActive,
             DisplayOrder = displayOrder,
             CreatedAt = DateTime.UtcNow

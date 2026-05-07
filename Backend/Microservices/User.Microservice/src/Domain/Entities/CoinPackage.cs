@@ -19,7 +19,7 @@ public sealed class CoinPackage
     [Column(TypeName = "numeric(18,2)")]
     public decimal Price { get; set; }
 
-    public string Currency { get; set; } = "usd";
+    public string Currency { get; set; } = "vnd";
 
     public bool IsActive { get; set; } = true;
 
