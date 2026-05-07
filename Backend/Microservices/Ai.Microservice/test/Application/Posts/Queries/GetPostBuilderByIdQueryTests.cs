@@ -147,7 +147,8 @@ public sealed class GetPostBuilderByIdQueryTests
         var handler = new GetPostBuilderByIdQueryHandler(
             postBuilderRepository.Object,
             postResponseBuilder,
-            userSocialMediaService.Object);
+            userSocialMediaService.Object,
+            userResourceService.Object);
 
         var result = await handler.Handle(
             new GetPostBuilderByIdQuery(builderId, userId),
@@ -157,7 +158,9 @@ public sealed class GetPostBuilderByIdQueryTests
         result.Value.Id.Should().Be(builderId);
         result.Value.OriginKind.Should().Be(PostBuilderOriginKinds.AiGeminiDraft);
         result.Value.Type.Should().BeNull();
-        result.Value.ResourceIds.Should().Equal(firstResourceId, secondResourceId, thirdResourceId, fourthResourceId);
+        result.Value.Resources.Select(resource => resource.ResourceId)
+            .Should()
+            .Equal(firstResourceId, secondResourceId, thirdResourceId, fourthResourceId);
         result.Value.SocialMedia.Should().HaveCount(3);
         result.Value.SocialMedia[0].Platform.Should().Be("facebook");
         result.Value.SocialMedia[0].Type.Should().Be("posts");
