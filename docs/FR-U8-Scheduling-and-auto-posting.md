@@ -115,6 +115,22 @@ Nếu prompt đủ rõ ràng và `scheduleOptions` hợp lệ:
 
 Không tạo draft post trước. Không cần preview là source of truth.
 
+### 4. Schedule lifecycle
+
+Đối với `agentic` schedule của FR-U8:
+
+- user có thể `cancel` schedule trước thời điểm chạy;
+- user có thể `re-activate` một schedule đã `cancel` nếu `executeAtUtc` vẫn còn ở tương lai;
+- nếu `executeAtUtc` đã ở quá khứ thì backend không được re-activate schedule đó;
+- khi re-activate thành công, backend phải đăng ký lại runtime job mới cho schedule;
+- `cancel` hoặc `re-activate` không được tạo draft post trước;
+- `cancel` không xoá schedule record, mà chuyển schedule sang trạng thái `cancelled`.
+
+Public lifecycle endpoints hiện hành:
+
+- `POST /api/Ai/schedules/{scheduleId}/cancel`
+- `POST /api/Ai/schedules/{scheduleId}/activate`
+
 ## Runtime execution contract
 
 Khi callback runtime xảy ra tại `executeAtUtc`, backend phải:
@@ -174,6 +190,12 @@ RAG failure policy:
 - `ExecutionContextJson` cho state runtime, n8n, và debug
 
 Không cần có `PublishingScheduleItem` ở thời điểm create. Item sẽ được tạo khi runtime thực sự sinh ra post.
+
+`ExecutionContextJson` cũng là nơi backend có thể cập nhật metadata phục vụ re-activation, ví dụ:
+
+- runtime job id mới nhất;
+- thời điểm register gần nhất;
+- callback/runtime debug state gần nhất.
 
 ## Legacy lane
 
