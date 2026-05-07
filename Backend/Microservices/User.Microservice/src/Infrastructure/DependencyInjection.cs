@@ -42,6 +42,7 @@ namespace Infrastructure
             services.AddScoped<ConfigSeeder>();
             services.AddScoped<ApiCredentialSyncSeeder>();
             services.AddScoped<SubscriptionSeeder>();
+            services.AddScoped<CoinPackageSeeder>();
             services.AddScoped<IUnitOfWork, UnitOfWork>();
             services.AddSingleton<ApiCredentialCryptoService>();
             services.AddSingleton<IApiCredentialProvider, ApiCredentialProvider>();

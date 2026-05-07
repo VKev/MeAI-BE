@@ -27,17 +27,10 @@ public sealed class SubscriptionSeeder
         var existingNameSet = new HashSet<string>(existingNames!, StringComparer.OrdinalIgnoreCase);
         var now = DateTime.UtcNow;
 
-        var seeds = new[]
-        {
-            new { Name = "Subscription 10000", Coin = 10000m, SocialAccounts = 8, ContentRate = 5, MaxPages = 10 },
-            new { Name = "Subscription 15000", Coin = 15000m, SocialAccounts = 15, ContentRate = 10, MaxPages = 20 },
-            new { Name = "Subscription 20000", Coin = 20000m, SocialAccounts = 30, ContentRate = 20, MaxPages = 50 }
-        };
-
         var toAdd = new List<Subscription>();
-        foreach (var seed in seeds)
+        foreach (var seed in BillingSeedCatalog.Tiers)
         {
-            if (existingNameSet.Contains(seed.Name))
+            if (existingNameSet.Contains(seed.SubscriptionName))
             {
                 continue;
             }
@@ -45,10 +38,10 @@ public sealed class SubscriptionSeeder
             toAdd.Add(new Subscription
             {
                 Id = Guid.NewGuid(),
-                Name = seed.Name,
-                Cost = (float)(seed.Coin * 10m),
+                Name = seed.SubscriptionName,
+                Cost = (float)seed.SubscriptionCostVnd,
                 DurationMonths = 1,
-                MeAiCoin = seed.Coin,
+                MeAiCoin = seed.CoinAmount,
                 Limits = new SubscriptionLimits
                 {
                     NumberOfSocialAccounts = seed.SocialAccounts,

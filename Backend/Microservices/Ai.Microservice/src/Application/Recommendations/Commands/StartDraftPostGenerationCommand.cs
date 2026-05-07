@@ -34,17 +34,20 @@ public sealed class StartDraftPostGenerationCommandHandler
     private const int MaxAllowedRagPosts = 200;
 
     private readonly IDraftPostTaskRepository _repository;
+    private readonly IPostRepository _postRepository;
     private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<StartDraftPostGenerationCommandHandler> _logger;
 
     public StartDraftPostGenerationCommandHandler(
         IDraftPostTaskRepository repository,
+        IPostRepository postRepository,
         IUserSocialMediaService userSocialMediaService,
         IPublishEndpoint publishEndpoint,
         ILogger<StartDraftPostGenerationCommandHandler> logger)
     {
         _repository = repository;
+        _postRepository = postRepository;
         _userSocialMediaService = userSocialMediaService;
         _publishEndpoint = publishEndpoint;
         _logger = logger;
@@ -104,6 +107,36 @@ public sealed class StartDraftPostGenerationCommandHandler
         var correlationId = Guid.CreateVersion7();
         var now = DateTimeExtensions.PostgreSqlUtcNow;
 
+        // Create the empty draft Post UPFRONT so the caller gets a postId in the
+        // 202 response immediately — the FE can pin a placeholder card in the UI
+        // and poll the task for completion. The consumer's Step 6 looks up THIS
+        // post by id and updates its content with the generated caption + image
+        // resource (rather than creating a new Post at the end of processing).
+        // On failure, the consumer's catch path soft-deletes this empty post so
+        // the user doesn't see a permanently-blank placeholder.
+        var draftPost = new Post
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = request.UserId,
+            WorkspaceId = request.WorkspaceId,
+            ChatSessionId = null,
+            SocialMediaId = request.SocialMediaId,
+            PostBuilderId = null,
+            Platform = null,
+            Title = null,
+            Content = new PostContent
+            {
+                Content = null,
+                Hashtag = null,
+                ResourceList = new List<string>(),
+                PostType = "posts",
+            },
+            Status = "draft",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        await _postRepository.AddAsync(draftPost, cancellationToken);
+
         var task = new DraftPostTask
         {
             Id = Guid.CreateVersion7(),
@@ -118,11 +151,14 @@ public sealed class StartDraftPostGenerationCommandHandler
             MaxReferenceImages = maxRefs,
             MaxRagPosts = maxRagPosts,
             Status = DraftPostTaskStatuses.Submitted,
+            ResultPostId = draftPost.Id,           // ← bind upfront so 202 returns a real postId
             CreatedAt = now,
             UpdatedAt = now,
         };
 
         await _repository.AddAsync(task, cancellationToken);
+        // Single SaveChanges commits both Post and DraftPostTask atomically — they
+        // share the same scoped DbContext via DI.
         await _repository.SaveChangesAsync(cancellationToken);
 
         await _publishEndpoint.Publish(
