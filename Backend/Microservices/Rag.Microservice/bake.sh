@@ -1,32 +1,25 @@
 #!/usr/bin/env bash
 # Re-bake the knowledge base into ./src/bakedknowledge/.
 #
-# What it does:
-#   1. Builds the rag-microservice image (in bake mode).
-#   2. Spins up an empty Qdrant + a one-shot rag-microservice via
-#      bake.compose.yml. The rag container runs the knowledge bootstrap once,
-#      exports the resulting Qdrant points + LightRAG state to ./src/bakedknowledge/,
-#      and exits.
-#   3. Tears the stack down (no volumes left behind).
+# Drives the `bake` profile of `Backend/Compose/docker-compose-production.yml`:
+# spins up `qdrant-bake` (empty disposable Qdrant on its own bake-net) +
+# `rag-bake` (one-shot rag-microservice in bake mode), runs the bootstrap
+# once, exports artifacts to ./src/bakedknowledge/, then stops + removes
+# only those two services. Other prod services on the same compose file
+# are NOT touched.
 #
-# Cost: ~1 LLM-extract call per ## section in src/knowledge/*.md (entity +
-# relation extraction) + 1 embedding call per chunk. ~$0.02-0.10 per full
-# bake on OpenRouter at current pricing. Subsequent runs that change only a
-# few sections cost much less because the fingerprint cache skips unchanged
-# ones — but since the bake's Qdrant is fresh-empty by design, the LightRAG
-# llm_response_cache (kv_store_llm_response_cache.json) carried over from the
-# previous bake is what makes reruns cheap, NOT the fingerprint registry.
-# (The registry still works because the bake mounts and reads the previous
-# baked rag_state if present.)
+# Cost: ~$0.02-0.10 per full bake on OpenRouter (one LLM extract +
+# one embed per ## section in src/knowledge/*.md). Reruns that change a
+# few sections cost much less because the bake's qdrant-bake is fresh-empty
+# every time but the WORKING_DIR is on a tmpfs; the LightRAG llm_response_cache
+# from the previous bake (committed in src/bakedknowledge/rag_state/) is not
+# carried in here, so each bake is a full fresh run. Acceptable — bakes are rare.
 #
-# Required env (or set in a .env beside this file):
-#   LLM_API_KEY    your OpenRouter key (required)
-#   LLM_BASE_URL   defaults to https://openrouter.ai/api/v1
-#   EMBED_MODEL    defaults to openai/text-embedding-3-small
-#   EMBED_DIM      defaults to 1536
+# All API keys are hardcoded in docker-compose-production.yml's `rag-bake`
+# environment block (gitignored), so this script needs zero env setup.
 #
 # After completion:
-#   git status src/bakedknowledge   # review what changed
+#   git status src/bakedknowledge   # review changes
 #   git add src/bakedknowledge
 #   git commit -m "rebake knowledge"
 
@@ -34,31 +27,30 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-if [ -z "${LLM_API_KEY:-}" ]; then
-  echo "ERROR: LLM_API_KEY is not set." >&2
-  echo "Export your OpenRouter key first, e.g.:" >&2
-  echo "  export LLM_API_KEY=sk-or-v1-..." >&2
+COMPOSE_FILE="../../Compose/docker-compose-production.yml"
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+  echo "ERROR: $COMPOSE_FILE not found." >&2
+  echo "This file is gitignored — recreate it locally with the prod env block before baking." >&2
   exit 1
 fi
 
-COMPOSE_FILE="bake.compose.yml"
-
-# Make sure the host-mount target exists so docker doesn't create it as root.
+# Ensure the host-mount target exists so docker doesn't create it as root.
 mkdir -p src/bakedknowledge
 
-echo "→ Building bake image..."
-docker compose -f "$COMPOSE_FILE" build rag-bake
+echo "→ Building bake image (--profile bake)..."
+docker compose -f "$COMPOSE_FILE" --profile bake build rag-bake
 
-echo "→ Running bake (this will run knowledge bootstrap once, ~3-15 min)..."
-# --abort-on-container-exit: when rag-bake exits (success or fail), tear down qdrant
-# --exit-code-from rag-bake: propagate rag-bake's exit code to this script
+echo "→ Running bake (~3-15 min depending on knowledge file count)..."
 exit_code=0
-docker compose -f "$COMPOSE_FILE" up \
+docker compose -f "$COMPOSE_FILE" --profile bake up \
   --abort-on-container-exit \
-  --exit-code-from rag-bake || exit_code=$?
+  --exit-code-from rag-bake \
+  rag-bake qdrant-bake || exit_code=$?
 
-echo "→ Cleaning up..."
-docker compose -f "$COMPOSE_FILE" down --remove-orphans
+echo "→ Cleaning up bake services (other prod services untouched)..."
+docker compose -f "$COMPOSE_FILE" stop rag-bake qdrant-bake 2>/dev/null || true
+docker compose -f "$COMPOSE_FILE" rm -f rag-bake qdrant-bake 2>/dev/null || true
 
 if [ "$exit_code" -ne 0 ]; then
   echo ""
