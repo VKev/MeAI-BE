@@ -1,7 +1,7 @@
 namespace Application.Recommendations.Models;
 
 public sealed record RecommendPostTaskResponse(
-    Guid Id,
+    Guid RecommendId,
     Guid CorrelationId,
     string Status,
     Guid OriginalPostId,

@@ -19,7 +19,14 @@ public sealed record PostResponse(
     IReadOnlyList<PostMediaResponse> Media,
     IReadOnlyList<PostPublicationResponse> Publications,
     DateTime? CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    bool IsAiRecommendedDraft = false,
+    Guid? AiRecommendationCorrelationId = null,
+    string? AiRecommendationStatus = null,
+    bool IsAiRecommendationDone = false,
+    DateTime? AiRecommendationCompletedAt = null,
+    string? AiRecommendationErrorCode = null,
+    string? AiRecommendationErrorMessage = null);
 
 public sealed record PostScheduleInput(
     Guid? ScheduleGroupId,

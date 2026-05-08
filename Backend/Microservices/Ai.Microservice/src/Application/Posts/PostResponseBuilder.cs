@@ -11,13 +11,16 @@ public sealed class PostResponseBuilder
 
     private readonly IUserResourceService _userResourceService;
     private readonly IPostPublicationRepository _postPublicationRepository;
+    private readonly IDraftPostTaskRepository? _draftPostTaskRepository;
 
     public PostResponseBuilder(
         IUserResourceService userResourceService,
-        IPostPublicationRepository postPublicationRepository)
+        IPostPublicationRepository postPublicationRepository,
+        IDraftPostTaskRepository? draftPostTaskRepository = null)
     {
         _userResourceService = userResourceService;
         _postPublicationRepository = postPublicationRepository;
+        _draftPostTaskRepository = draftPostTaskRepository;
     }
 
     public async Task<IReadOnlyList<PostResponse>> BuildManyAsync(
@@ -73,8 +76,10 @@ public sealed class PostResponseBuilder
             .GroupBy(publication => publication.PostId)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<PostPublication>)group.ToList());
 
+        var recommendationTasksByPostId = await BuildRecommendationTasksByPostIdAsync(posts, cancellationToken);
+
         return posts
-            .Select(post => Build(post, resourcesById, publicationsByPostId, authorsById))
+            .Select(post => Build(post, resourcesById, publicationsByPostId, authorsById, recommendationTasksByPostId))
             .ToList();
     }
 
@@ -88,7 +93,8 @@ public sealed class PostResponseBuilder
         Post post,
         IReadOnlyDictionary<Guid, UserResourcePresignResult> resourcesById,
         IReadOnlyDictionary<Guid, IReadOnlyList<PostPublication>> publicationsByPostId,
-        IReadOnlyDictionary<Guid, PublicUserProfileResult> authorsById)
+        IReadOnlyDictionary<Guid, PublicUserProfileResult> authorsById,
+        IReadOnlyDictionary<Guid, DraftPostTask> recommendationTasksByPostId)
     {
         var media = GetResourceIds(post)
             .Where(resourcesById.ContainsKey)
@@ -132,6 +138,11 @@ public sealed class PostResponseBuilder
                 post.ScheduledIsPrivate)
             : null;
 
+        var hasRecommendationTask = recommendationTasksByPostId.TryGetValue(
+            post.Id,
+            out var recommendationTask);
+        var recommendationStatus = recommendationTask?.Status;
+
         return new PostResponse(
             Id: post.Id,
             UserId: post.UserId,
@@ -150,12 +161,56 @@ public sealed class PostResponseBuilder
             Media: media,
             Publications: publications,
             CreatedAt: post.CreatedAt,
-            UpdatedAt: post.UpdatedAt);
+            UpdatedAt: post.UpdatedAt,
+            IsAiRecommendedDraft: hasRecommendationTask,
+            AiRecommendationCorrelationId: recommendationTask?.CorrelationId,
+            AiRecommendationStatus: recommendationStatus,
+            IsAiRecommendationDone: IsTerminalRecommendationStatus(recommendationStatus),
+            AiRecommendationCompletedAt: recommendationTask?.CompletedAt,
+            AiRecommendationErrorCode: recommendationTask?.ErrorCode,
+            AiRecommendationErrorMessage: recommendationTask?.ErrorMessage);
     }
 
     private static PublicUserProfileResult CreateFallbackAuthor(Guid userId)
     {
         return new PublicUserProfileResult(userId, UnknownUsername, null, null);
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, DraftPostTask>> BuildRecommendationTasksByPostIdAsync(
+        IReadOnlyList<Post> posts,
+        CancellationToken cancellationToken)
+    {
+        if (_draftPostTaskRepository is null)
+        {
+            return new Dictionary<Guid, DraftPostTask>();
+        }
+
+        var postIds = posts
+            .Select(post => post.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (postIds.Count == 0)
+        {
+            return new Dictionary<Guid, DraftPostTask>();
+        }
+
+        var tasks = await _draftPostTaskRepository.GetByResultPostIdsAsync(postIds, cancellationToken);
+        return tasks
+            .Where(task => task.ResultPostId.HasValue)
+            .GroupBy(task => task.ResultPostId!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(task => task.CreatedAt)
+                    .ThenByDescending(task => task.CorrelationId)
+                    .First());
+    }
+
+    private static bool IsTerminalRecommendationStatus(string? status)
+    {
+        return string.Equals(status, DraftPostTaskStatuses.Completed, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(status, DraftPostTaskStatuses.Failed, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<Guid> GetResourceIds(Post post)

@@ -10,6 +10,10 @@ public interface IDraftPostTaskRepository
 
     Task<DraftPostTask?> GetByCorrelationIdForUpdateAsync(Guid correlationId, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<DraftPostTask>> GetByResultPostIdsAsync(
+        IReadOnlyList<Guid> postIds,
+        CancellationToken cancellationToken);
+
     void Update(DraftPostTask entity);
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
