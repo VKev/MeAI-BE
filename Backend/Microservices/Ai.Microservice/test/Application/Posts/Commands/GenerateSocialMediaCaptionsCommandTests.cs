@@ -101,11 +101,12 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
                 It.Is<MultimodalAnswerRequest>(request =>
                     request.ModelOverride == "openai/gpt-4o" &&
                     request.MaxOutputTokens == 500 &&
-                    request.WebSearchEnabled == false &&
+                    request.WebSearchEnabled == true &&
                     request.ReferenceImageUrls != null &&
                     request.ReferenceImageUrls.SequenceEqual(new[] { "https://cdn.example.com/resource-1.jpg" }) &&
                     request.UserText.Contains("Brand voice") &&
                     request.UserText.Contains("Caption style: marketing") &&
+                    request.UserText.Contains("Web search: enabled") &&
                     request.UserText.Contains("Marketing style requires direct CTA")),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new MultimodalAnswerResult(
@@ -170,7 +171,8 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
                 "en",
                 "Keep it energetic",
                 500,
-                "marketting"),
+                "marketting",
+                true),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -213,7 +215,8 @@ public sealed class GenerateSocialMediaCaptionsCommandTests
                 "en",
                 null,
                 null,
-                null),
+                null,
+                false),
             CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();

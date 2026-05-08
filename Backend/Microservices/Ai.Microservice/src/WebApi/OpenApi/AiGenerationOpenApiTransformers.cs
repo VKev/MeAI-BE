@@ -40,6 +40,7 @@ internal static class AiGenerationOpenApiTransformers
           "instruction": "Keep each caption concise and platform-native.",
           "style": "branded",
           "maxTokens": 700,
+          "webSearch": false,
           "postId": "11111111-1111-1111-1111-111111111111",
           "platform": "tiktok",
           "resourceIds": [
