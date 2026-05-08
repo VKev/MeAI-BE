@@ -98,13 +98,18 @@ public sealed class OpenRouterMultimodalLlmClient : IMultimodalLlmClient
                 }
             }
         }
+        var effectiveModel = string.IsNullOrWhiteSpace(request.ModelOverride)
+            ? _options.Model
+            : request.ModelOverride.Trim();
+        var webSearchEnabled = request.WebSearchEnabled ?? _options.WebSearchEnabled;
+
         _logger.LogInformation(
             "OpenRouter chat call: model={Model} systemPromptLen={SysLen} userTextLen={UserLen} images={ImageCount} webSearchEnabled={WebSearch}",
-            _options.Model,
+            effectiveModel,
             request.SystemPrompt?.Length ?? 0,
             request.UserText?.Length ?? 0,
             includedImages,
-            _options.WebSearchEnabled);
+            webSearchEnabled);
 
         // Conversation history as raw JsonObjects so we can append tool / assistant
         // turns without leaking into the typed records.
@@ -119,13 +124,17 @@ public sealed class OpenRouterMultimodalLlmClient : IMultimodalLlmClient
 
         while (true)
         {
-            var body = BuildRequestBody(messages);
+            var body = BuildRequestBody(
+                messages,
+                effectiveModel,
+                webSearchEnabled,
+                request.MaxOutputTokens);
             var (msg, _) = await SendChatCompletionAsync(body, cancellationToken);
 
             // Inspect for tool_calls. If present and we have rounds left + search
             // enabled, execute the search and loop. Otherwise treat as final.
             var toolCalls = ExtractToolCalls(msg);
-            if (_options.WebSearchEnabled && toolRoundsRemaining > 0 && toolCalls.Count > 0)
+            if (webSearchEnabled && toolRoundsRemaining > 0 && toolCalls.Count > 0)
             {
                 toolRoundsRemaining--;
                 // Append the assistant's tool-call message to history.
@@ -157,24 +166,30 @@ public sealed class OpenRouterMultimodalLlmClient : IMultimodalLlmClient
         }
     }
 
-    private object BuildRequestBody(IReadOnlyList<object> messages)
+    private object BuildRequestBody(
+        IReadOnlyList<object> messages,
+        string model,
+        bool webSearchEnabled,
+        int? maxOutputTokens)
     {
-        if (_options.WebSearchEnabled)
+        if (webSearchEnabled)
         {
             return new
             {
-                model = _options.Model,
+                model,
                 messages,
                 temperature = 0.4,
+                max_tokens = maxOutputTokens,
                 tools = new object[] { WebSearchToolDefinition },
                 tool_choice = "auto",
             };
         }
         return new
         {
-            model = _options.Model,
+            model,
             messages,
             temperature = 0.4,
+            max_tokens = maxOutputTokens,
         };
     }
 

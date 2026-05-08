@@ -38,35 +38,12 @@ internal static class AiGenerationOpenApiTransformers
         {
           "language": "English",
           "instruction": "Keep each caption concise and platform-native.",
-          "socialMedia": [
-            {
-              "postId": "11111111-1111-1111-1111-111111111111",
-              "platform": "tiktok",
-              "resourceIds": [
-                "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-              ]
-            },
-            {
-              "postId": "22222222-2222-2222-2222-222222222222",
-              "platform": "facebook",
-              "resourceIds": [
-                "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-              ]
-            },
-            {
-              "postId": "33333333-3333-3333-3333-333333333333",
-              "platform": "ig",
-              "resourceIds": [
-                "cccccccc-cccc-cccc-cccc-cccccccccccc"
-              ]
-            },
-            {
-              "postId": "44444444-4444-4444-4444-444444444444",
-              "platform": "threads",
-              "resourceIds": [
-                "dddddddd-dddd-dddd-dddd-dddddddddddd"
-              ]
-            }
+          "style": "branded",
+          "maxTokens": 700,
+          "postId": "11111111-1111-1111-1111-111111111111",
+          "platform": "tiktok",
+          "resourceIds": [
+            "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
           ]
         }
         """;
