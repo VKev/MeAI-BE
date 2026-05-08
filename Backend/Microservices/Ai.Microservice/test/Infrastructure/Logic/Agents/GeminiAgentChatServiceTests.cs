@@ -54,7 +54,7 @@ public sealed class GeminiAgentChatServiceTests
         var mediator = new Mock<IMediator>(MockBehavior.Strict);
         mediator
             .Setup(service => service.Send(
-                It.Is<Application.PublishingSchedules.Commands.CreateAgenticPublishingScheduleCommand>(command =>
+                It.Is<global::Application.PublishingSchedules.Commands.CreateAgenticPublishingScheduleCommand>(command =>
                     command.UserId == userId &&
                     command.WorkspaceId == workspaceId &&
                     command.MaxContentLength == 280 &&
