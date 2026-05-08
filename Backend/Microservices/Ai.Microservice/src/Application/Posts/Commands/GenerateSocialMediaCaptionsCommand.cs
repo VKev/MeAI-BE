@@ -19,7 +19,8 @@ public sealed record GenerateSocialMediaCaptionsCommand(
     string? Language,
     string? Instruction,
     int? MaxTokens,
-    string? Style) : IRequest<Result<GenerateSocialMediaCaptionsResponse>>;
+    string? Style,
+    bool WebSearch) : IRequest<Result<GenerateSocialMediaCaptionsResponse>>;
 
 public sealed record SocialMediaCaptionPostInput(
     Guid PostId,
@@ -195,6 +196,7 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
             knowledgeResult.Value,
             maxTokensResult.Value,
             style,
+            request.WebSearch,
             cancellationToken);
 
         if (captionsResult.IsFailure)
@@ -276,6 +278,7 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
         RagKnowledgeContext knowledge,
         int maxOutputTokens,
         string style,
+        bool webSearchEnabled,
         CancellationToken cancellationToken)
     {
         MultimodalAnswerResult answer;
@@ -283,7 +286,7 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
         {
             answer = await _multimodalLlm.GenerateAnswerAsync(
                 new MultimodalAnswerRequest(
-                    BuildSystemPrompt(captionCount),
+                    BuildSystemPrompt(captionCount, webSearchEnabled),
                     BuildCaptionUserText(
                         post,
                         socialMedia,
@@ -293,11 +296,12 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
                         instruction,
                         knowledge,
                         maxOutputTokens,
-                        style),
+                        style,
+                        webSearchEnabled),
                     BuildReferenceImageUrls(orderedResources),
                     ModelOverride: CaptionModel,
                     MaxOutputTokens: maxOutputTokens,
-                    WebSearchEnabled: false),
+                    WebSearchEnabled: webSearchEnabled),
                 cancellationToken);
         }
         catch (OperationCanceledException)
@@ -561,12 +565,17 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
         return builder.ToString();
     }
 
-    private static string BuildSystemPrompt(int captionCount)
+    private static string BuildSystemPrompt(int captionCount, bool webSearchEnabled)
     {
+        var webSearchInstruction = webSearchEnabled
+            ? "Web search is enabled. Use it only for current public context such as recent trends, timely hooks, or current hashtag ideas when it improves the caption. Still prioritize the user's media and RAG knowledge."
+            : "Web search is disabled. Do not search the public web.";
+
         return $$"""
 You generate platform-ready social captions for MeAI.
 Use only the user's media, post details, and the supplied knowledge context.
-Do not search the public web. Do not use social-media post RAG data.
+{{webSearchInstruction}}
+Do not use social-media post RAG data.
 Return strict JSON only, with this schema:
 {"captions":[{"caption":"...","hashtags":["#..."],"trendingHashtags":["#..."],"callToAction":"..."}]}
 Generate exactly {{captionCount}} caption objects when the output token limit allows it.
@@ -583,7 +592,8 @@ Keep hashtags out of the caption text; place them in the arrays.
         string? instruction,
         RagKnowledgeContext knowledge,
         int maxOutputTokens,
-        string style)
+        string style,
+        bool webSearchEnabled)
     {
         var platformName = DisplayPlatform(socialMedia.SocialMediaType);
         var postTypeLabel = NormalizePostTypeLabel(post.Content?.PostType, socialMedia.SocialMediaType);
@@ -609,6 +619,7 @@ Keep hashtags out of the caption text; place them in the arrays.
         builder.AppendLine($"Target platform: {platformName}");
         builder.AppendLine($"Post format: {postTypeLabel}");
         builder.AppendLine($"Caption style: {style}");
+        builder.AppendLine($"Web search: {(webSearchEnabled ? "enabled" : "disabled")}");
         builder.AppendLine($"Language: {languageHint ?? "English"}");
         builder.AppendLine($"Number of captions to produce: {captionCount} (distinct, different hooks/angles each).");
         builder.AppendLine($"Max output tokens: {maxOutputTokens}");

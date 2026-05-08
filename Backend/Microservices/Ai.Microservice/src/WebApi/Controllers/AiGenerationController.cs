@@ -105,7 +105,8 @@ public sealed class AiGenerationController : ApiController
                 requestResult.Value.Language,
                 requestResult.Value.Instruction,
                 requestResult.Value.MaxTokens,
-                requestResult.Value.Style),
+                requestResult.Value.Style,
+                requestResult.Value.WebSearch),
             cancellationToken);
 
         if (result.IsFailure)
@@ -221,7 +222,7 @@ public sealed class AiGenerationController : ApiController
             return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(
                 new Error(
                     "SocialMedia.InvalidRequest",
-                    "socialMedia arrays are no longer accepted. Send one postId, platform, resourceIds, and optional maxTokens."));
+                    "socialMedia arrays are no longer accepted. Send one postId, platform, resourceIds, and optional maxTokens/webSearch."));
         }
 
         if (request.PostId is null || request.PostId == Guid.Empty)
@@ -243,6 +244,12 @@ public sealed class AiGenerationController : ApiController
             return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(resourceIdsResult.Error);
         }
 
+        var webSearchResult = request.ResolveWebSearch();
+        if (webSearchResult.IsFailure)
+        {
+            return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(webSearchResult.Error);
+        }
+
         return Result.Success(new GenerateSocialMediaCaptionsRequestPayload(
             new SocialMediaCaptionPostInput(
                 request.PostId.Value,
@@ -251,7 +258,8 @@ public sealed class AiGenerationController : ApiController
             request.Language,
             request.Instruction,
             request.MaxTokens,
-            request.Style));
+            request.Style,
+            webSearchResult.Value));
     }
 
     private static IReadOnlyList<string> GetStringList(JsonElement item, params string[] propertyNames)
@@ -399,6 +407,7 @@ public sealed class GenerateSocialMediaCaptionsRequest
     public IReadOnlyList<Guid>? ResourceIds { get; set; }
     public int? MaxTokens { get; set; }
     public string? Style { get; set; }
+    public bool? WebSearch { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
@@ -442,6 +451,21 @@ public sealed class GenerateSocialMediaCaptionsRequest
         }
 
         return Result.Success<IReadOnlyList<Guid>>(Array.Empty<Guid>());
+    }
+
+    public Result<bool> ResolveWebSearch()
+    {
+        if (WebSearch.HasValue)
+        {
+            return Result.Success(WebSearch.Value);
+        }
+
+        if (TryResolveBooleanFromExtensionData(out var extensionResult, "webSearchEnabled", "web_search", "web search"))
+        {
+            return extensionResult;
+        }
+
+        return Result.Success(false);
     }
 
     private bool TryResolveStringFromExtensionData(
@@ -516,6 +540,68 @@ public sealed class GenerateSocialMediaCaptionsRequest
             {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private bool TryResolveBooleanFromExtensionData(
+        out Result<bool> result,
+        params string[] propertyNames)
+    {
+        result = Result.Success(false);
+
+        if (ExtensionData is null || ExtensionData.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var propertyName in propertyNames)
+        {
+            if (TryResolveBooleanFromExtensionData(propertyName, out result))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryResolveBooleanFromExtensionData(
+        string propertyName,
+        out Result<bool> result)
+    {
+        result = Result.Success(false);
+
+        if (ExtensionData is null || ExtensionData.Count == 0)
+        {
+            return false;
+        }
+
+        var normalizedTarget = NormalizePropertyName(propertyName);
+        foreach (var pair in ExtensionData)
+        {
+            if (NormalizePropertyName(pair.Key) != normalizedTarget)
+            {
+                continue;
+            }
+
+            if (pair.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                result = Result.Success(pair.Value.GetBoolean());
+                return true;
+            }
+
+            if (pair.Value.ValueKind == JsonValueKind.String &&
+                bool.TryParse(pair.Value.GetString(), out var parsed))
+            {
+                result = Result.Success(parsed);
+                return true;
+            }
+
+            result = Result.Failure<bool>(
+                new Error("Caption.InvalidWebSearch", $"{propertyName} must be true or false."));
+            return true;
         }
 
         return false;
@@ -663,7 +749,8 @@ sealed record GenerateSocialMediaCaptionsRequestPayload(
     string? Language,
     string? Instruction,
     int? MaxTokens,
-    string? Style);
+    string? Style,
+    bool WebSearch);
 
 public sealed record GeminiPostRequest(
     Guid? WorkspaceId,
