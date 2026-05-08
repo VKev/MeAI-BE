@@ -10,7 +10,10 @@ public interface IMultimodalLlmClient
 public sealed record MultimodalAnswerRequest(
     string SystemPrompt,
     string UserText,
-    IReadOnlyList<string>? ReferenceImageUrls);
+    IReadOnlyList<string>? ReferenceImageUrls,
+    string? ModelOverride = null,
+    int? MaxOutputTokens = null,
+    bool? WebSearchEnabled = null);
 
 public sealed record MultimodalAnswerResult(
     string Answer,

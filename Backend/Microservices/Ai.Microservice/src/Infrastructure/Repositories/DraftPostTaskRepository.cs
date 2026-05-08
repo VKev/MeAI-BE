@@ -25,6 +25,21 @@ public sealed class DraftPostTaskRepository : IDraftPostTaskRepository
     public Task<DraftPostTask?> GetByCorrelationIdForUpdateAsync(Guid correlationId, CancellationToken cancellationToken)
         => _dbSet.FirstOrDefaultAsync(t => t.CorrelationId == correlationId, cancellationToken);
 
+    public async Task<IReadOnlyList<DraftPostTask>> GetByResultPostIdsAsync(
+        IReadOnlyList<Guid> postIds,
+        CancellationToken cancellationToken)
+    {
+        if (postIds.Count == 0)
+        {
+            return Array.Empty<DraftPostTask>();
+        }
+
+        return await _dbSet
+            .AsNoTracking()
+            .Where(task => task.ResultPostId.HasValue && postIds.Contains(task.ResultPostId.Value))
+            .ToListAsync(cancellationToken);
+    }
+
     public void Update(DraftPostTask entity) => _dbSet.Update(entity);
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken)

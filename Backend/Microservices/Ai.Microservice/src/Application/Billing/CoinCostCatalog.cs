@@ -38,6 +38,7 @@ public static class CoinReferenceTypes
 public static class AiSpendProviders
 {
     public const string Kie = "kie";
+    public const string OpenRouter = "openrouter";
 }
 
 public static class AiSpendStatuses

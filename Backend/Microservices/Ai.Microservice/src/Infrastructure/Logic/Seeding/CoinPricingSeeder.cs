@@ -33,9 +33,10 @@ public sealed class CoinPricingSeeder
         (CoinActionTypes.VideoGeneration, "veo3", null, "per_clip", 540m),
         (CoinActionTypes.VideoGeneration, "veo3_quality", null, "per_clip", 540m),
         (CoinActionTypes.VideoGeneration, "*", null, "per_clip", 120m),
-        // Caption generation via Kie's GPT-5.4 Responses API. Per-platform charge (one row
-        // per social type selected in the Generate call). Price tuned to 2x raw Kie-credit
-        // spend so refunds stay whole-number and we absorb small FX drift.
+        // Caption generation is charged per generated social platform/post.
+        // The interactive captions endpoint uses OpenRouter GPT-4o; older flows still
+        // have explicit Kie GPT rows, with "*" as a safety fallback.
+        (CoinActionTypes.CaptionGeneration, "openai/gpt-4o", null, "per_platform", 3m),
         (CoinActionTypes.CaptionGeneration, "gpt-5-4", null, "per_platform", 3m),
         (CoinActionTypes.CaptionGeneration, "gpt-5-2", null, "per_platform", 2m),
         (CoinActionTypes.CaptionGeneration, "*", null, "per_platform", 3m),

@@ -164,7 +164,7 @@ public sealed class StartImprovePostCommandHandler
     internal static RecommendPostTaskResponse MapToResponse(RecommendPost task)
     {
         return new RecommendPostTaskResponse(
-            Id: task.Id,
+            RecommendId: task.Id,
             CorrelationId: task.CorrelationId,
             Status: task.Status,
             OriginalPostId: task.OriginalPostId,

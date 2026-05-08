@@ -103,7 +103,9 @@ public sealed class AiGenerationController : ApiController
                 userId,
                 requestResult.Value.SocialMedia,
                 requestResult.Value.Language,
-                requestResult.Value.Instruction),
+                requestResult.Value.Instruction,
+                requestResult.Value.MaxTokens,
+                requestResult.Value.Style),
             cancellationToken);
 
         if (result.IsFailure)
@@ -214,49 +216,42 @@ public sealed class AiGenerationController : ApiController
                 new Error("Gemini.InvalidRequest", "Request body is required."));
         }
 
-        if (request.SocialMedia is null)
+        if (request.ContainsExtensionProperty("socialMedia"))
         {
             return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(
-                new Error("SocialMedia.InvalidRequest", "socialMedia must be a JSON array."));
+                new Error(
+                    "SocialMedia.InvalidRequest",
+                    "socialMedia arrays are no longer accepted. Send one postId, platform, resourceIds, and optional maxTokens."));
         }
 
-        var socialMedia = new List<SocialMediaCaptionPostInput>();
-        foreach (var item in request.SocialMedia)
-        {
-            if (item is null)
-            {
-                continue;
-            }
-
-            var platform = item.ResolvePlatform();
-            if (string.IsNullOrWhiteSpace(platform))
-            {
-                return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(
-                    new Error("SocialMedia.InvalidRequest", "Each social media item must include a platform."));
-            }
-
-            var resourceIdsResult = item.ResolveResourceIds();
-            if (resourceIdsResult.IsFailure)
-            {
-                return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(resourceIdsResult.Error);
-            }
-
-            socialMedia.Add(new SocialMediaCaptionPostInput(
-                item.PostId ?? Guid.Empty,
-                platform,
-                resourceIdsResult.Value));
-        }
-
-        if (socialMedia.Count == 0)
+        if (request.PostId is null || request.PostId == Guid.Empty)
         {
             return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(
-                new Error("SocialMedia.InvalidRequest", "socialMedia must contain at least one item."));
+                new Error("Post.InvalidRequest", "postId is required."));
+        }
+
+        var platform = request.ResolvePlatform();
+        if (string.IsNullOrWhiteSpace(platform))
+        {
+            return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(
+                new Error("SocialMedia.InvalidRequest", "platform is required."));
+        }
+
+        var resourceIdsResult = request.ResolveResourceIds();
+        if (resourceIdsResult.IsFailure)
+        {
+            return Result.Failure<GenerateSocialMediaCaptionsRequestPayload>(resourceIdsResult.Error);
         }
 
         return Result.Success(new GenerateSocialMediaCaptionsRequestPayload(
-            socialMedia,
+            new SocialMediaCaptionPostInput(
+                request.PostId.Value,
+                platform,
+                resourceIdsResult.Value),
             request.Language,
-            request.Instruction));
+            request.Instruction,
+            request.MaxTokens,
+            request.Style));
     }
 
     private static IReadOnlyList<string> GetStringList(JsonElement item, params string[] propertyNames)
@@ -399,17 +394,25 @@ public sealed class GenerateSocialMediaCaptionsRequest
 {
     public string? Language { get; set; }
     public string? Instruction { get; set; }
-    public IReadOnlyList<GenerateSocialMediaCaptionPostRequest>? SocialMedia { get; set; }
-}
-
-public sealed class GenerateSocialMediaCaptionPostRequest
-{
     public Guid? PostId { get; set; }
     public string? Platform { get; set; }
     public IReadOnlyList<Guid>? ResourceIds { get; set; }
+    public int? MaxTokens { get; set; }
+    public string? Style { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+
+    public bool ContainsExtensionProperty(string propertyName)
+    {
+        if (ExtensionData is null || ExtensionData.Count == 0)
+        {
+            return false;
+        }
+
+        var normalizedTarget = NormalizePropertyName(propertyName);
+        return ExtensionData.Keys.Any(key => NormalizePropertyName(key) == normalizedTarget);
+    }
 
     public string? ResolvePlatform()
     {
@@ -656,9 +659,11 @@ sealed record PrepareGeminiPostsRequestPayload(
     IReadOnlyList<PrepareGeminiPostSocialMediaInput> SocialMedia);
 
 sealed record GenerateSocialMediaCaptionsRequestPayload(
-    IReadOnlyList<SocialMediaCaptionPostInput> SocialMedia,
+    SocialMediaCaptionPostInput SocialMedia,
     string? Language,
-    string? Instruction);
+    string? Instruction,
+    int? MaxTokens,
+    string? Style);
 
 public sealed record GeminiPostRequest(
     Guid? WorkspaceId,
