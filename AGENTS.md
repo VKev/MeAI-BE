@@ -62,10 +62,10 @@ Backend/Microservices/<Service>.Microservice/
 ```
 
 Conventions:
-- **Domain**: `Entities/`, `Repositories/` (interfaces).
-- **Application**: feature-first folders (`Users/`, `Workspaces/`, `Recommendations/`, …) with `Commands/`, `Queries/`, `Models/`, `Validators/`.
-- **Infrastructure**: `Context/`, `Repositories/`, `Migrations/`, `Configs/`, `Common/`, `Logic/` (`Logic/Services/`, `Logic/Consumers/`, `Logic/Sagas/`, `Logic/Payments/`, `Logic/Security/`, `Logic/Storage/`, `Logic/Threads/`, `Logic/TikTok/`, `Logic/Seeding/`, `Logic/Rag/`, …).
-- **WebApi**: `Controllers/`, `Setups/`, `Middleware/`, `Mapping/`, `Properties/`.
+- **Domain**: `Entities/`, optional `Repositories/` (interfaces). Repository interfaces live here when the service exposes them; lighter services (e.g. Feed) keep only `Entities/` and define repository interfaces inline alongside their concrete classes in Infrastructure.
+- **Application**: feature-first folders (`Users/`, `Workspaces/`, `Recommendations/`, `Posts/`, `Subscriptions/`, …) with `Commands/`, `Queries/`, `Models/`, `Validators/`. Cross-cutting folders like `Abstractions/`, `Behaviors/`, `Common/` also live here.
+- **Infrastructure**: `Context/`, `Repositories/`, `Migrations/`, `Logic/`. `Configuration/` (EF Core entity configurations) is always present; `Configs/` (option-binding helpers) and `Common/` appear in the larger services (User, Ai). `Logic/` subfolders are service-specific — common shapes include `Services/`, `Consumers/`, `Sagas/`, `Payments/`, `Security/`, `Storage/`, `Threads/`, `TikTok/`, `Seeding/`, `Rag/`, `Facebook/`, `Instagram/`, `Gemini/`, `Kie/`, `Search/`, `Agents/`.
+- **WebApi**: `Controllers/`, `Setups/`, `Middleware/`, `Properties/`. Service-specific extras: `Grpc/` (User, Ai, Feed — gRPC service implementations), `Hubs/` (Notification — SignalR hubs), `OpenApi/` (Ai — schema/operation transformers), `Mapping/` (User — AutoMapper profiles).
 
 ### 3.2 Rag.Microservice (Python clean architecture)
 
@@ -74,8 +74,9 @@ Backend/Microservices/Rag.Microservice/
   dockerfile
   requirements.txt
   src/
-    composition/        # entrypoint.py, config.py, container.py — manual DI
-    domain/             # documents.py, queries.py — types + IngestPayload/IngestResult
+    composition/        # entrypoint.py, config.py, container.py, seed_loader.py,
+                        # bake_knowledge.py — manual DI + cold-start seed restore
+    domain/             # documents.py, queries.py — types + IngestPayload/IngestResult/DocumentKind
     application/
       ports.py          # typing.Protocol interfaces (FingerprintRegistry,
                         # LightRagFacade, MultimodalEmbedderPort, VisualStorePort,
@@ -149,12 +150,19 @@ them. Don't import `infrastructure.*` from `application.*`.
 - Setup extensions: `*Setup` classes in `WebApi/Setups`.
 - Dockerfiles: `dockerfile` lowercase preferred (CI also accepts `Dockerfile`/`DockerFile`).
 - RabbitMQ queues: dotted lowercase — `meai.rag.ingest`, `meai.rag.query`.
-- Qdrant collections:
-  - LightRAG-managed: `lightrag_vdb_chunks`, `lightrag_vdb_entities`, `lightrag_vdb_relationships` (all in workspace `meai_rag`).
-  - Multimodal visual: `meai_rag_visual_v2` (3072-dim Gemini Embed 2). The `_v2` suffix
-    marks the dim era — switching the multimodal model with a different dim means
-    **new collection name**, never reuse.
-  - VideoRAG frame-level: `meai_rag_video_segments` (3072-dim, frame-level granularity).
+- Qdrant collections (production names — overridden by env vars in
+  `Backend/Compose/docker-compose-production.yml`):
+  - LightRAG-managed: `lightrag_vdb_chunks`, `lightrag_vdb_entities`, `lightrag_vdb_relationships` (all in workspace `meai_rag`, set via `QDRANT_NAMESPACE`).
+  - Multimodal visual: `meai_rag_visual_v2` (3072-dim, `google/gemini-embedding-2-preview`).
+    The `_v2` suffix marks the dim era — switching the multimodal model with a different
+    dim means **new collection name**, never reuse. Set via `MULTIMODAL_VISUAL_COLLECTION` +
+    `MULTIMODAL_EMBED_MODEL` + `MULTIMODAL_EMBED_DIM`.
+  - VideoRAG frame-level: `meai_rag_video_segments` (3072-dim, frame-level granularity). Set
+    via `VIDEORAG_QDRANT_SEGMENT_COLLECTION` + `VIDEORAG_SEGMENT_DIM`.
+  - **Code defaults differ from production**: `src/composition/config.py` defaults to
+    `meai_rag_visual` + `nvidia/llama-nemotron-embed-vl-1b-v2:free` (2048-dim) and
+    `meai_rag_video_frames`. The compose file is the source of truth for the running
+    deployment; treat config.py defaults as fallbacks for local dev without the prod env.
 - Document IDs (RAG): caller-owned opaque strings, prefix-scoped:
   - Per-account posts: `{platform}:{socialMediaId.N}:{postId}` plus suffixes `:img:0` (image-describe),
     `:vis2:0` (multimodal embed), `:vid:0` (video).
@@ -304,7 +312,9 @@ The Ai-side `RabbitMqRagClient.WaitForRagReadyAsync(ct)` calls a dedicated
 `op="wait_ready"` over the RPC queue. It uses a longer per-call timeout
 (`Rag__WaitReadyTimeoutSeconds`, default 1800s = 30 min) so the FIRST cold draft-post
 request can sit through the bootstrap. All other RPC calls keep the regular short
-timeout (`Rag__RpcTimeoutSeconds`, default 60s).
+timeout (`Rag__RpcTimeoutSeconds`, default 30s). The sync gRPC ingest path has its own
+`Rag__GrpcIngestTimeoutSeconds` (default 300s). All three are read in
+`Ai.Microservice/src/Infrastructure/DependencyInjection.cs`.
 
 Convention: any consumer that orchestrates downstream LLM/image-gen work **must**
 `await _ragClient.WaitForRagReadyAsync(ct)` as Step 0, before any indexing or query
@@ -477,8 +487,13 @@ via robots.txt).
 ## 13. API Gateway (YARP)
 
 - Runtime config generated in `Backend/Microservices/ApiGateway/src/Setups/YarpRuntimeSetup.cs`.
-- Default routes for `/api/User` and `/api/Ai` are always added.
-- When Ai is enabled, the gateway also adds `/api/Gemini` as an alias route.
+- Default routes always added: `/api/User`, `/api/Ai`, `/api/Notification`, `/api/Feed`
+  (the four `defaultServices` hardcoded in `YarpRuntimeSetup.cs`).
+- When Ai is registered, the gateway also adds `/api/AiGeneration` as an alias route
+  forwarding to the Ai cluster (used by `POST /api/AiGeneration/post-prepare` etc.).
+- When Notification is registered, the gateway adds three SignalR routes:
+  `/hubs/notifications` (root passthrough), and `/api/Notification/hubs/notifications`
+  (with `PathRemovePrefix: "/api/Notification"` transform) — both root and `{**catch-all}`.
 - Extra services via `Services__{Service}__Host` + `Services__{Service}__Port`
   (or `{PREFIX}_MICROSERVICE_HOST/PORT`).
 - OpenAPI aggregation pulls `/openapi/v1.json` from each .NET service.
@@ -489,27 +504,155 @@ via robots.txt).
 
 ## 14. Scalar / OpenAPI docs
 
-- Scalar UI is generated from each .NET service's ASP.NET OpenAPI document
-  (`app.MapOpenApi()` + `app.MapScalarApiReference("docs", ...)`) and aggregated by the
-  gateway.
-- When adding/changing endpoints: add `[ProducesResponseType]` for success, validation/
-  business failures, and unauthorized responses; use request/response DTO records that
-  reflect the actual JSON contract; align route names, auth attributes, HTTP verbs.
-- Custom request-body / schema behavior: add an OpenAPI transformer under
-  `WebApi/Setups/OpenApi/` and register it in `Program.cs` (mirror the Resources multipart
-  transformer).
+Scalar is the primary developer-facing API explorer. Every .NET service ships its own
+OpenAPI document **and** a Scalar UI; the gateway aggregates all of them into one
+multi-document Scalar at `/scalar`. **Treat docs as part of the contract, not an
+afterthought** — broken or stale docs are a release blocker, same as a broken endpoint.
+
+### 14.1 Per-service docs
+
+- Each .NET service must call `app.MapOpenApi()` (mounts `/openapi/v1.json`) and
+  `app.MapScalarApiReference("docs", opts => opts.WithTitle("<Service> API"))` (mounts
+  Scalar at `/docs`). Titles already present: `User API`, `Ai API`, `Feed API`,
+  `Notification API`. Keep this naming pattern when adding a service.
+- Service-local Scalar URL: `http://localhost:<port>/docs`. The OpenAPI raw doc lives
+  at `http://localhost:<port>/openapi/v1.json`.
+- The OpenAPI document is generated at request time from MVC metadata + transformers.
+  Don't ship hand-written OpenAPI YAML — there is no committed `openapi.json` and there
+  must not be one.
+
+### 14.2 Endpoint-level annotations (mandatory)
+
+When adding or changing any controller action:
+
+- Add `[ProducesResponseType<TResponse>(StatusCodes.Status200OK)]` (or 201/202 as
+  appropriate) for the success branch. Use the **actual** response DTO type — do not
+  type as `object` or omit the generic.
+- Add `[ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]` for
+  validator/business failures (FluentValidation surfaces through `HandleFailure(result)`
+  as `ProblemDetails`; see §7).
+- Add `[ProducesResponseType(StatusCodes.Status401Unauthorized)]` whenever the action
+  requires `[Authorize]` (with or without a body type — the doc must surface that the
+  endpoint can 401).
+- Add `[ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]` for
+  lookup endpoints that can miss.
+- Use **DTO records** (e.g. `public sealed record FooResponse(...)`) for both request and
+  response bodies. Anonymous types or untyped `object` returns produce useless schemas
+  in Scalar.
+- Route attributes (`[HttpPost("...")]`), HTTP verbs, and `[Authorize]` / `[AllowAnonymous]`
+  must match the actual behavior — Scalar mirrors them verbatim.
+- Enums should serialize as strings (preserve the project-wide
+  `JsonStringEnumConverter`). Don't sneak in `int` enum payloads.
+
+### 14.3 OpenAPI transformers
+
+Custom schema/operation behavior lives under `WebApi/Setups/OpenApi/` (User) or
+`WebApi/OpenApi/` (Ai), registered in `Program.cs` via:
+
+```csharp
+builder.Services.AddOpenApi(options =>
+{
+    options.AddSchemaTransformer<TFooSchemaTransformer>();
+    options.AddOperationTransformer<TFooOperationTransformer>();
+});
+```
+
+Currently committed transformers — when adding similar behavior, mirror these:
+
+| Service | Transformer | Purpose |
+|---|---|---|
+| User | `FileUploadSchemaTransformer` | Renders `IFormFile` fields as `binary` strings in schemas. |
+| User | `ResourcesMultipartOperationTransformer` | Marks the resources-upload endpoint as `multipart/form-data` with a flat field map (Scalar otherwise renders it as JSON). |
+| Ai | `AiGenerationOpenApiTransformers` | Documents the post-prepare/draft endpoints. |
+| Ai | `PostsOpenApiTransformers` | Adjusts post-builder/post operations. |
+| Ai | `RecommendationsOpenApiTransformers` | Adjusts recommendation/improve operations. |
+
+Rules:
+- **One transformer per concern** — don't pile unrelated tweaks into one class.
+- Transformer names end with `SchemaTransformer` or `OperationTransformer` so register
+  calls stay readable.
+- Transformers must be deterministic — never reach into `HttpContext`, `IServiceProvider`
+  scope state, or env vars from inside a transformer; they run at doc-generation time and
+  must produce the same output every time.
+- If a transformer is purely defensive (e.g. workaround for a Scalar/OpenAPI quirk),
+  comment WHY at the top of the class so it isn't deleted by a future cleanup.
+
+### 14.4 Gateway aggregation (`/scalar`)
+
+`Backend/Microservices/ApiGateway/src/Setups/OpenApiSetup.cs` exposes:
+
+- `GET /openapi` → JSON list of `{ key, title }` for every aggregated service.
+- `GET /openapi/{service}` → proxies that service's `/openapi/v1.json` and **rewrites
+  the `servers[]` array** to point at the gateway's externally visible URL, plus injects
+  a `Bearer` (JWT) security scheme + global `security` requirement so "Try it" requests
+  through Scalar carry the bearer token. Don't bypass this — direct
+  `/openapi/v1.json` from a service contains the internal container URL, which is unusable
+  from a browser.
+- `GET /scalar` → multi-document Scalar UI; first registered service is the default tab.
+- `ENABLE_DOCS_UI` env toggle gates the aggregated Scalar UI. Default is on for
+  dev/staging; **set `ENABLE_DOCS_UI=false` for any deploy that puts the gateway behind a
+  public hostname**. See §14.6 for production posture.
+
+Server-URL rewriting respects `CloudFront-Forwarded-Proto`, `X-Forwarded-Proto`,
+`CF-Visitor`, `Forwarded`, `X-Forwarded-Host`, `CF-Connecting-Host`, and
+`Request.Host` in that order — so behind CloudFront/Cloudflare, Scalar shows the real
+public URL, not the ALB origin. If you add a new edge, make sure it forwards one of
+those headers.
+
+### 14.5 Adding endpoints — docs checklist
+
+Before considering an endpoint "done":
+
+1. Action has correct `[Authorize]` / `[AllowAnonymous]`.
+2. All `[ProducesResponseType]` attributes set (200/201/202 + 400 + 401 + 404 as
+   applicable).
+3. Request and response are typed records (not `object`, not anonymous).
+4. If the endpoint accepts `multipart/form-data` or any non-JSON body, a transformer
+   exists and is registered.
+5. Built service starts; `GET /openapi/v1.json` returns 200 and contains the new path.
+6. `GET /docs` renders the new endpoint with correct schemas.
+7. Gateway `GET /scalar` shows the new endpoint under the right service tab with a
+   resolvable `servers[0].url` (test via the gateway, not direct).
+8. If the endpoint changes an existing FE-facing contract, coordinate with FE in the
+   same change set (§7) — and bump the doc transformer if the response shape was
+   reworked.
+
+### 14.6 Deploy posture for docs
+
+- Local dev: `/scalar` and per-service `/docs` always on.
+- Deployed dev/staging: `ENABLE_DOCS_UI=true`, gateway behind ALB + Cloudflare; bearer
+  auth required for "Try it" calls against authenticated routes.
+- Production-public hostname: **set `ENABLE_DOCS_UI=false`**. Scalar leaks endpoint
+  surface area and cookie/header expectations — gate it behind an internal-only host or
+  a path-prefix rule on the edge if discoverability is needed.
+- CI/CD: don't gate deploys on Scalar HTML rendering, but `dotnet build` + the
+  architecture tests already catch the most common contract regressions. If you add a
+  smoke-test step, hit `GET /openapi/v1.json` per service and assert HTTP 200 + non-empty
+  paths — that catches a misregistered transformer crash without needing a browser.
+
+### 14.7 Rag.Microservice has no Scalar
+
+The Python Rag service exposes only `GET /health` (FastAPI). All real traffic is
+RabbitMQ + gRPC (§9.5). Do **not** add HTTP routes or Scalar to Rag — the gRPC service
+descriptors in `SharedLibrary/Protos/rag_service.proto` are the contract. If a new RPC
+needs documentation, document it in the `.proto` file with comments and update §9 here.
 
 ## 15. Docker & Compose
 
-- `Backend/Compose/docker-compose.yml`: dev placeholder stack (n8n + nginx).
+- `Backend/Compose/docker-compose.yml`: dev stack — builds and runs the four .NET services
+  (`ai-microservice`, `user-microservice`, `notification-microservice`, `feed-microservice`)
+  + `api-gateway` + `rabbit-mq` + `redis` + `postgres` + `nginx` + a few `n8n-*` helpers.
+  **Does NOT include `rag-microservice` or `qdrant`** — Rag-dependent flows (draft posts,
+  recommendations) require the production compose. Env values are placeholder/`changeme`.
 - `Backend/Compose/docker-compose-production.yml`: prod-like stack — **gitignored, treat
-  as sensitive**. Contains real OpenRouter / Jina / Brave / Stripe / Facebook keys etc.
-  If you inspect it, never echo literal secrets back into chat, logs, commits, or new
-  tracked files.
+  as sensitive**. Adds `rag-microservice`, `qdrant`, `mailpit`, plus `bake` profile
+  services (`rag-bake`, `qdrant-bake`). Contains real OpenRouter / Jina / Brave / Stripe /
+  Facebook keys etc. If you inspect it, never echo literal secrets back into chat, logs,
+  commits, or new tracked files.
 - Compose service names are kebab-case: `ai-microservice`, `user-microservice`,
   `rag-microservice`, `api-gateway`, etc.
-- Postgres init: `Backend/Compose/postgres/init.sql` creates `aidb` + `userdb` on first
-  boot.
+- Postgres init: `Backend/Compose/postgres/init.sql` creates `aidb`, `userdb`,
+  `notificationdb`, and `feeddb` on first boot.
 - **Volumes** (top-level in compose):
   - `postgres-data` — never delete unless wiping users/posts state.
   - `qdrant-data` — vectors. Drop together with `rag-data`.
@@ -612,16 +755,21 @@ Async pipeline (see `DraftPostGenerationConsumer`):
    waits ~90–180s, subsequent calls instant).
 2. Step 1 — `IndexSocialAccountPostsCommand` (fetch FB Graph posts → fingerprint diff →
    sync gRPC `IngestBatch` for new/changed only).
-3. Step 2 — `QueryAccountRecommendationsQuery` (multimodal RAG; text-leg via LightRAG
+3. Step 1.5 — `IQueryRewriter` LLM call (single gpt-4o-mini up-front; produces
+   `language`/`intent`/`primary_query`/`alt_queries`/`visual_query`/`key_terms` — fed into
+   every downstream retrieval/rerank slot, see §9.3.1).
+4. Step 2 — `QueryAccountRecommendationsQuery` (multimodal RAG; text-leg via LightRAG
    hybrid mode + Jina rerank, visual-leg via Qdrant `meai_rag_visual_v2`, video-leg via
    `meai_rag_video_segments`).
-4. Step 3 — caption gen (gpt-4o-mini multimodal, style-aware).
-5. Step 3.3 — fresh-topic image search (Brave) — references for style/subject.
-6. Step 3.35 — Jina-m0 multimodal rerank of (past-post + fresh-topic) candidate pool.
-7. Step 3.4 — fetch style-knowledge for the requested style
+5. Step 3 — caption gen (gpt-4o-mini multimodal, style-aware).
+6. Step 3.3 — fresh-topic image search (Brave) — references for style/subject.
+7. Step 3.35 — Jina-m0 multimodal rerank of (past-post + fresh-topic) candidate pool.
+8. Step 3.4 — fetch style-knowledge for the requested style
    (`knowledge:image-design-{style}:*`).
-8. Step 4 — image-gen (Kie / OpenRouter image model). **Costs ~$0.234 per fire.**
-9. Step 5 — persist result, mark `Completed`.
+9. Step 3.5 — image-brief LLM (gpt-4o-mini, JSON output: `prompt`, `aspect_ratio`,
+   `style_notes`).
+10. Step 4 — image-gen (Kie / OpenRouter image model). **Costs ~$0.234 per fire.**
+11. Step 5 — persist result, mark `Completed`.
 
 HTTP returns 202 with `correlationId`; poll `draft_post_tasks` row by correlationId for
 status.
@@ -700,6 +848,8 @@ the matching GH secret.
 
 ## 20. CI/CD (GitHub Actions)
 
+### 20.1 Workflows
+
 - `full-deploy.yml` — bootstrap backend, build/push images, Terraform plan/apply/destroy.
 - `terraform-deploy.yml` — infra-only plan/apply/destroy.
 - `build-and-push-ecr.yml` — build/push microservice images to ECR.
@@ -707,6 +857,42 @@ the matching GH secret.
 - `bootstrap-terraform-backend.yml` — create S3/DynamoDB backend.
 - `acm-certificate.yml` — ACM cert via Cloudflare DNS.
 - Destructive: `nuke-aws-except-ecr.yml`, `erase-ecr.yml` (explicit confirmations required).
+
+### 20.2 Deploy rules
+
+- **Image tagging**: every build pushes both a `latest` tag and a SHA-pinned tag. Production
+  task definitions / k8s manifests should reference SHA tags so a `latest` push doesn't
+  silently re-deploy. Don't break that pattern.
+- **Migration policy**: `AutoApply__Migrations=true` is on for prod compose and the deploy
+  workflow. EF Core runs migrations at container start. Migrations must therefore be
+  **forward-compatible with the previous container image** during a rolling deploy — never
+  drop or rename a column the running pods still read. Add a column, deploy, then a
+  follow-up release removes the old reference.
+- **Order of deploys**: when both `Terraform/` and image changes are in the same PR, push
+  images first (so the new task def / pod template can pull them), then apply Terraform.
+  `full-deploy.yml` does this in the right order — don't reverse it.
+- **Destructive workflows** (`nuke-aws-except-ecr.yml`, `erase-ecr.yml`,
+  `cloudflare_nuke/`, `aws_nuke/`): require typed confirmation strings in the workflow
+  inputs. Never wire these into automated triggers; only run manually with explicit
+  approval. Document the reason in the run notes.
+- **Rollback**: re-deploy the previous SHA tag via `build-and-push-ecr.yml`'s "deploy
+  existing image" path (or the equivalent k8s rollout). Don't `terraform destroy` to
+  roll back a code regression — that wipes shared state (RDS, S3 buckets,
+  CloudFront/Cloudflare).
+- **Secrets rotation**: `Backend/Compose/docker-compose-production.yml` is the local
+  source of secrets. Rotated values must also be updated in the corresponding GitHub
+  Environment secret (`TERRAFORM_VARS_*`, `OPENROUTER_API_KEY`, `JINA_API_KEY`,
+  `BRAVE_API_KEY`, `STRIPE_*`, `FACEBOOK_*`, etc.). A rotation that's only in compose
+  will look fine locally and break the next deploy.
+- **`ENABLE_DOCS_UI`**: see §14.6 — deploy posture rules for the gateway's Scalar UI.
+- **Health checks**: ECS task definitions and k8s deployments use each service's HTTP
+  port for liveness; Rag uses `/health` on `HEALTH_PORT` (default 8000). If you change
+  a port or rename `/health`, update the corresponding `health_check` block in
+  `Terraform-vars/*-service.auto.tfvars` and the k8s probe in
+  `Backend/Kubernetes/manifests/`.
+- **Volumes that must survive a deploy**: `postgres-data`, `qdrant-data`, `rag-data`.
+  Never include them in a workflow that runs `docker compose down -v`. The ECS task
+  defs / k8s PVCs treat them as durable — match that locally.
 
 ## 21. Security & secrets
 
@@ -787,6 +973,6 @@ the matching GH secret.
 
 | Env var (rag-microservice) | Default | Set to | Effect |
 |---|---|---|---|
-| `MAX_PARALLEL_INSERT` | `1` | `4` | LightRAG ingests N docs concurrently. Cuts knowledge bootstrap and FB ingest by ~30–50%; the upstream LLM-extract calls are I/O-bound on OpenRouter. |
-| `CHUNK_TOP_K` | `20` | `10` | LightRAG pulls fewer chunks per query (post-rerank). Cuts query latency ~30%; downstream context is trimmed to ~6–8 chunks anyway. |
-| `RERANK_API_KEY` | unset | Jina key | Wires LightRAG's internal `rerank_model_func` to Jina; silences the "rerank not configured" warning and improves retrieval quality. Separate from the Ai service's external Jina-m0 multimodal rerank. |
+| `MAX_PARALLEL_INSERT` | `1` | `4` | **Read directly by `lightrag-hku`**, not surfaced in `Rag.Microservice/src/composition/config.py`. LightRAG ingests N docs concurrently. Cuts knowledge bootstrap and FB ingest by ~30–50%; the upstream LLM-extract calls are I/O-bound on OpenRouter. |
+| `CHUNK_TOP_K` | `20` | `10` | **Read directly by `lightrag-hku`**, not surfaced in this service's `Config`. LightRAG pulls fewer chunks per query (post-rerank). Cuts query latency ~30%; downstream context is trimmed to ~6–8 chunks anyway. |
+| `RERANK_API_KEY` | `""` (disabled) | Jina key | Surfaced in `Config.rerank_api_key`; wires LightRAG's internal `rerank_model_func` to Jina via `RERANK_BASE_URL` (default `https://api.jina.ai/v1/rerank`) and `RERANK_MODEL` (default `jina-reranker-v2-base-multilingual`). Silences the "rerank not configured" warning and improves retrieval quality. Separate from the Ai service's external Jina-m0 multimodal rerank. |

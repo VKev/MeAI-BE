@@ -343,6 +343,53 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         _logger = logger;
     }
 
+    private async Task PublishThinkingAsync(
+        ConsumeContext<GenerateDraftPostStarted> context,
+        DraftPostTask task,
+        string action,
+        string title,
+        string message,
+        object? details,
+        CancellationToken cancellationToken,
+        string phaseStatus = "processing")
+    {
+        var createdAt = DateTimeExtensions.PostgreSqlUtcNow;
+
+        try
+        {
+            await context.Publish(
+                NotificationRequestedEventFactory.CreateForUser(
+                    task.UserId,
+                    NotificationTypes.AiDraftPostGenerationThinking,
+                    title,
+                    message,
+                    new
+                    {
+                        correlationId = task.CorrelationId,
+                        draftPostId = task.ResultPostId,
+                        postId = task.ResultPostId,
+                        socialMediaId = task.SocialMediaId,
+                        workspaceId = task.WorkspaceId,
+                        taskStatus = task.Status,
+                        phaseStatus,
+                        action,
+                        details,
+                        createdAt,
+                    },
+                    createdAt: createdAt,
+                    source: NotificationSourceConstants.Creator),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "DraftPost {Id}: failed to publish thinking notification action={Action}",
+                task.Id,
+                action);
+        }
+    }
+
     public async Task Consume(ConsumeContext<GenerateDraftPostStarted> context)
     {
         var msg = context.Message;
@@ -376,18 +423,72 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             task.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
             await _taskRepository.SaveChangesAsync(ct);
 
+            await PublishThinkingAsync(
+                context,
+                task,
+                "generation_started",
+                "AI recommendation started",
+                "AI started preparing your recommendation draft.",
+                new
+                {
+                    style,
+                    userPrompt = msg.UserPrompt,
+                    isAutoTopic,
+                    topK = msg.TopK,
+                    maxReferenceImages = msg.MaxReferenceImages,
+                    maxRagPosts = msg.MaxRagPosts,
+                },
+                ct);
+
             // Step 0 — block until rag-microservice's lazy knowledge bootstrap is done.
             // After the first cold call this returns instantly. Doing this BEFORE Step 1
             // means every downstream RAG/LLM/image-gen call runs against a fully-built
             // knowledge index, never a half-built one.
             _logger.LogInformation("DraftPost {Id}: waiting for RAG to be ready...", task.Id);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "rag_ready_wait_started",
+                "AI is checking knowledge",
+                "AI is waiting for the RAG knowledge service to be ready.",
+                new
+                {
+                    waitTarget = "rag-microservice",
+                    reason = "Knowledge search, caption writing, and image planning need the RAG index ready.",
+                },
+                ct);
             await _ragClient.WaitForRagReadyAsync(ct);
             _logger.LogInformation("DraftPost {Id}: RAG ready", task.Id);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "rag_ready_wait_completed",
+                "Knowledge service is ready",
+                "AI can now read account and knowledge context.",
+                new
+                {
+                    waitTarget = "rag-microservice",
+                },
+                ct,
+                phaseStatus: "completed");
 
             // Step 1 — auto-index. Existing skip-if-unchanged logic ensures only new/changed
             // posts hit RAG; unchanged ones are no-ops.
             var indexMaxPosts = msg.MaxRagPosts > 0 ? msg.MaxRagPosts : 30;
             _logger.LogDebug("DraftPost {Id}: indexing posts (max={Max})...", task.Id, indexMaxPosts);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "account_posts_indexing_started",
+                "AI is reading account posts",
+                "AI is checking recent account posts before writing the recommendation.",
+                new
+                {
+                    socialMediaId = msg.SocialMediaId,
+                    maxPosts = indexMaxPosts,
+                    purpose = "Find new or changed account content and make it available to RAG.",
+                },
+                ct);
             var indexResult = await _mediator.Send(
                 new IndexSocialAccountPostsCommand(msg.UserId, msg.SocialMediaId, indexMaxPosts), ct);
             if (indexResult.IsFailure)
@@ -402,6 +503,28 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 indexResult.Value.NewPosts,
                 indexResult.Value.UpdatedPosts,
                 indexResult.Value.UnchangedPosts);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "account_posts_indexing_completed",
+                "Account posts were checked",
+                "AI finished syncing recent account content into knowledge.",
+                new
+                {
+                    socialMediaId = indexResult.Value.SocialMediaId,
+                    platform = indexResult.Value.Platform,
+                    documentIdPrefix = indexResult.Value.DocumentIdPrefix,
+                    totalPostsScanned = indexResult.Value.TotalPostsScanned,
+                    newPosts = indexResult.Value.NewPosts,
+                    updatedPosts = indexResult.Value.UpdatedPosts,
+                    unchangedPosts = indexResult.Value.UnchangedPosts,
+                    queuedTextDocuments = indexResult.Value.QueuedTextDocuments,
+                    queuedImageDocuments = indexResult.Value.QueuedImageDocuments,
+                    queuedVideoDocuments = indexResult.Value.QueuedVideoDocuments,
+                    queuedProfileDocuments = indexResult.Value.QueuedProfileDocuments,
+                },
+                ct,
+                phaseStatus: "completed");
 
             // Step 2 — RAG multimodal query. Reuses the same retrieval as /query: text context
             // + visual hits with image URLs. In auto-topic mode we substitute a
@@ -410,6 +533,19 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             var recommendationQuery = isAutoTopic
                 ? BuildAutoTopicRecommendationQuery(DateTime.UtcNow)
                 : msg.UserPrompt;
+            await PublishThinkingAsync(
+                context,
+                task,
+                "query_rewrite_started",
+                "AI is planning the knowledge search",
+                "AI is rewriting the request into search terms for RAG and visual retrieval.",
+                new
+                {
+                    style,
+                    isAutoTopic,
+                    recommendationQuery,
+                },
+                ct);
 
             // Step 1.5 — query rewriter. ONE LLM call up-front; outputs feed every
             // retrieval/rerank query in QueryAccountRecommendationsQuery handler AND
@@ -443,10 +579,70 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 Truncate(rewrite.PrimaryQuery, 180),
                 Truncate(rewrite.VisualQuery, 180),
                 string.Join(", ", rewrite.KeyTerms));
+            await PublishThinkingAsync(
+                context,
+                task,
+                "query_rewrite_completed",
+                "AI planned the knowledge search",
+                "AI created the text, visual, and keyword queries used for retrieval.",
+                new
+                {
+                    rewriteResult.IsSuccess,
+                    language = rewrite.Language,
+                    intent = rewrite.Intent,
+                    primaryQuery = rewrite.PrimaryQuery,
+                    altQueries = rewrite.AltQueries,
+                    visualQuery = rewrite.VisualQuery,
+                    keyTerms = rewrite.KeyTerms,
+                    sourceQuery = recommendationQuery,
+                },
+                ct,
+                phaseStatus: "completed");
 
             _logger.LogDebug(
                 "DraftPost {Id}: querying RAG (autoTopic={Auto}, queryLen={Len})...",
                 task.Id, isAutoTopic, recommendationQuery.Length);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "rag_query_started",
+                "AI is reading knowledge",
+                "AI is searching account knowledge, platform guidance, content formulas, and visual references.",
+                new
+                {
+                    socialMediaId = msg.SocialMediaId,
+                    query = recommendationQuery,
+                    topK = msg.TopK,
+                    precomputedRewrite = new
+                    {
+                        language = rewrite.Language,
+                        intent = rewrite.Intent,
+                        primaryQuery = rewrite.PrimaryQuery,
+                        altQueries = rewrite.AltQueries,
+                        visualQuery = rewrite.VisualQuery,
+                        keyTerms = rewrite.KeyTerms,
+                    },
+                },
+                ct);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "web_search_started",
+                "AI is searching the web",
+                "AI is checking fresh web context for current trends and timely facts.",
+                new
+                {
+                    query = recommendationQuery,
+                    primaryQuery = rewrite.PrimaryQuery,
+                    altQueries = rewrite.AltQueries,
+                    visualQuery = rewrite.VisualQuery,
+                    keyTerms = rewrite.KeyTerms,
+                    provider = "recommendation-llm-web-search",
+                    reason = isAutoTopic
+                        ? "Auto-discovery needs fresh current context before choosing the topic."
+                        : "Recommendation generation can use fresh current context when useful.",
+                },
+                ct);
             var queryResult = await _mediator.Send(
                 new QueryAccountRecommendationsQuery(
                     msg.UserId, msg.SocialMediaId, recommendationQuery, msg.TopK,
@@ -457,6 +653,20 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     $"RAG query failed: {queryResult.Error.Code} {queryResult.Error.Description}");
             }
             var rag = queryResult.Value;
+            await PublishThinkingAsync(
+                context,
+                task,
+                "web_search_completed",
+                "AI searched the web",
+                "AI finished checking fresh web context.",
+                new
+                {
+                    query = recommendationQuery,
+                    sourceCount = rag.WebSources?.Count ?? 0,
+                    webSources = rag.WebSources,
+                },
+                ct,
+                phaseStatus: "completed");
 
             // Prefer the S3-mirrored URL (OpenAI / OpenRouter can fetch it) over the
             // raw FB CDN URL (which they refuse — same robots.txt issue Vertex hits).
@@ -522,6 +732,23 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     "DraftPost {Id}: refImage[{Idx}] = {Url}",
                     task.Id, i, topImageUrls[i][..Math.Min(topImageUrls[i].Length, 120)]);
             }
+            await PublishThinkingAsync(
+                context,
+                task,
+                "rag_query_completed",
+                "AI read knowledge",
+                "AI finished reading account knowledge and selected references.",
+                new
+                {
+                    documentIdPrefix = rag.DocumentIdPrefix,
+                    answer = rag.Answer,
+                    pageProfileText = rag.PageProfileText,
+                    references = rag.References,
+                    webSources = rag.WebSources,
+                    selectedPastPostImageUrls = topImageUrls,
+                },
+                ct,
+                phaseStatus: "completed");
 
             // Step 3 — caption generation (gpt-4o-mini multimodal). The caption system
             // prompt is style-aware: creative omits contact info entirely, branded
@@ -545,6 +772,21 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             _logger.LogInformation(
                 "LLM[caption] INPUT for DraftPost {Id} Style={Style} ({UserTextLen} chars, {RefCount} ref images):\n{UserText}",
                 task.Id, style, captionUserText.Length, captionRefImageUrls.Count, Truncate(captionUserText, 4000));
+            await PublishThinkingAsync(
+                context,
+                task,
+                "caption_generation_started",
+                "AI is writing the caption",
+                "AI is writing the recommendation caption using the retrieved knowledge and reference images.",
+                new
+                {
+                    style,
+                    topic = topicForDownstream,
+                    systemPrompt = captionSystemPrompt,
+                    userText = captionUserText,
+                    referenceImageUrls = captionRefImageUrls,
+                },
+                ct);
             var captionResult = await _multimodalLlm.GenerateAnswerAsync(
                 new MultimodalAnswerRequest(
                     SystemPrompt: captionSystemPrompt,
@@ -569,6 +811,20 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             {
                 throw new InvalidOperationException("Caption generation returned empty content.");
             }
+            await PublishThinkingAsync(
+                context,
+                task,
+                "caption_generation_completed",
+                "AI wrote the caption",
+                "AI finished writing the recommendation caption.",
+                new
+                {
+                    caption,
+                    sources = captionResult.Sources,
+                    discardedSourceCount = captionResult.Sources.Count,
+                },
+                ct,
+                phaseStatus: "completed");
 
             // Step 3.3 — fetch FRESH real-world reference images for the chosen topic.
             // Past-post images anchor visual STYLE / palette; fresh-topic images
@@ -577,6 +833,18 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             // Query is the user's topic if explicit, or the auto-discovery LLM's chosen
             // topic line if not. Brave's image search runs ~$0.003 per call.
             var refImageQuery = ExtractRefImageQuery(msg.UserPrompt, isAutoTopic, rag.Answer);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "fresh_image_search_started",
+                "AI is finding visual references",
+                "AI is searching for fresh real-world image references for the chosen topic.",
+                new
+                {
+                    query = refImageQuery,
+                    source = "brave-image-search",
+                },
+                ct);
             var freshRefImageHits = await FetchFreshTopicImageHitsAsync(refImageQuery, ct);
             _logger.LogInformation(
                 "DraftPost {Id}: fresh-ref-image search query=\"{Query}\" → {Count} hit(s)",
@@ -599,7 +867,49 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             // topic + caption, keeping only the truly relevant ones up to the per-draft
             // cap. Threshold-gated: a draft with no relevant candidates simply gets fewer
             // refs (or zero) rather than the previous behavior of forwarding noise.
+            await PublishThinkingAsync(
+                context,
+                task,
+                "fresh_image_search_completed",
+                "AI found visual references",
+                "AI finished searching for fresh image references.",
+                new
+                {
+                    query = refImageQuery,
+                    hits = freshRefImageHits,
+                    candidateUrls = freshTopicCandidates.Select(candidate => candidate.ImageUrl).ToList(),
+                    candidates = freshTopicCandidates.Select(candidate => new
+                    {
+                        candidate.ImageUrl,
+                        candidate.Source,
+                        candidate.DescriptiveText,
+                    }).ToList(),
+                },
+                ct,
+                phaseStatus: "completed");
             var rerankCandidates = pastPostCandidates.Concat(freshTopicCandidates).ToList();
+            await PublishThinkingAsync(
+                context,
+                task,
+                "reference_rerank_started",
+                "AI is choosing reference images",
+                "AI is ranking past-post and fresh-topic images against the caption and topic.",
+                new
+                {
+                    topic = refImageQuery,
+                    caption,
+                    visualQuery = rewrite.VisualQuery,
+                    keyTerms = rewrite.KeyTerms,
+                    cap = msg.MaxReferenceImages,
+                    candidateCount = rerankCandidates.Count,
+                    candidates = rerankCandidates.Select(candidate => new
+                    {
+                        candidate.ImageUrl,
+                        candidate.Source,
+                        candidate.DescriptiveText,
+                    }).ToList(),
+                },
+                ct);
             var imageBriefRefImageUrls = await SelectReferenceImagesAsync(
                 taskId: task.Id,
                 candidates: rerankCandidates,
@@ -609,12 +919,41 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 keyTerms: rewrite.KeyTerms,                        // ← K4 enhancement
                 cap: msg.MaxReferenceImages,
                 cancellationToken: ct);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "reference_rerank_completed",
+                "AI chose reference images",
+                "AI selected the images that best match the draft topic and caption.",
+                new
+                {
+                    selectedReferenceImageUrls = imageBriefRefImageUrls,
+                    selectedCount = imageBriefRefImageUrls.Count,
+                    candidateCount = rerankCandidates.Count,
+                    cap = msg.MaxReferenceImages,
+                },
+                ct,
+                phaseStatus: "completed");
             // Surface freshRefImageUrls for downstream logs that distinguish the two sources.
             var freshRefImageUrls = freshTopicCandidates.Select(c => c.ImageUrl).ToList();
 
             // Step 3.4 — fetch style-specific design rules from the knowledge base.
             // Each style maps 1:1 to a knowledge namespace (knowledge:image-design-{style}:)
             // bootstrapped at rag-microservice startup from service/knowledge/*.md.
+            var styleKnowledgeDocumentIdPrefix = $"knowledge:image-design-{style}:";
+            await PublishThinkingAsync(
+                context,
+                task,
+                "style_knowledge_started",
+                "AI is reading style knowledge",
+                $"AI is reading {style} image-design knowledge from RAG.",
+                new
+                {
+                    style,
+                    language = rewrite.Language,
+                    documentIdPrefix = styleKnowledgeDocumentIdPrefix,
+                },
+                ct);
             var styleKnowledge = await FetchStyleKnowledgeAsync(style, rewrite.Language, ct);
             _logger.LogInformation(
                 "DraftPost {Id}: style-knowledge[{Style}] fetched ({Len} chars)",
@@ -633,6 +972,37 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             _logger.LogInformation(
                 "DraftPost {Id}: building image brief (caption={CaptionLen} chars, pastPostRefs={PastCount}, freshTopicRefs={FreshCount}, style={Style})",
                 task.Id, caption.Length, topImageUrls.Count, freshRefImageUrls.Count, style);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "style_knowledge_completed",
+                "AI read style knowledge",
+                $"AI finished reading {style} image-design knowledge.",
+                new
+                {
+                    style,
+                    language = rewrite.Language,
+                    documentIdPrefix = styleKnowledgeDocumentIdPrefix,
+                    knowledge = styleKnowledge,
+                },
+                ct,
+                phaseStatus: "completed");
+            await PublishThinkingAsync(
+                context,
+                task,
+                "image_brief_generation_started",
+                "AI is planning the image",
+                "AI is turning the caption, RAG answer, style knowledge, and reference images into an image brief.",
+                new
+                {
+                    style,
+                    topic = topicForDownstream,
+                    caption,
+                    ragAnswer = rag.Answer,
+                    styleKnowledge,
+                    referenceImageUrls = imageBriefRefImageUrls,
+                },
+                ct);
             var brief = await BuildImageBriefAsync(
                 userPrompt: topicForDownstream,
                 caption: caption,
@@ -658,6 +1028,21 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             // prompt is the LLM-authored brief; the system prompt is style-aware
             // (creative = no text on image, branded = optional headline, marketing =
             // full quoted-text rendering) plus the brief's style_notes.
+            await PublishThinkingAsync(
+                context,
+                task,
+                "image_brief_generation_completed",
+                "AI planned the image",
+                "AI finished the image-generation brief.",
+                new
+                {
+                    prompt = brief.Prompt,
+                    brief.AspectRatio,
+                    brief.StyleNotes,
+                    referenceImageUrls = imageBriefRefImageUrls,
+                },
+                ct,
+                phaseStatus: "completed");
             var imageBaseSystem = ImageSystemPromptFor(style);
             var fullImagePrompt =
                 $"{brief.Prompt}\n\n" +
@@ -671,6 +1056,20 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 task.Id, style, imageBriefRefImageUrls.Count, topImageUrls.Count, freshRefImageUrls.Count,
                 Truncate(fullImagePrompt, 2500),
                 Truncate(fullImageSystemPrompt, 1500));
+            await PublishThinkingAsync(
+                context,
+                task,
+                "image_generation_started",
+                "AI is generating the image",
+                "AI is generating the draft image from the brief and selected references.",
+                new
+                {
+                    style,
+                    prompt = fullImagePrompt,
+                    systemPrompt = fullImageSystemPrompt,
+                    referenceImageUrls = imageBriefRefImageUrls,
+                },
+                ct);
             var imageResult = await _imageGenClient.GenerateImageAsync(
                 new ImageGenerationRequest(
                     Prompt: fullImagePrompt,
@@ -681,10 +1080,41 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 "IMAGEGEN OUTPUT for DraftPost {Id}: mime={MimeType}, dataUrlLen={Len}, promptTokens={Pt}, completionTokens={Ct}, costUsd={Cost}",
                 task.Id, imageResult.MimeType, imageResult.DataUrl.Length,
                 imageResult.PromptTokens, imageResult.CompletionTokens, imageResult.CostUsd);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "image_generation_completed",
+                "AI generated the image",
+                "AI finished generating the draft image.",
+                new
+                {
+                    imageResult.MimeType,
+                    dataUrlLength = imageResult.DataUrl.Length,
+                    imageResult.PromptTokens,
+                    imageResult.CompletionTokens,
+                    imageResult.CostUsd,
+                },
+                ct,
+                phaseStatus: "completed");
 
             // Step 5 — upload generated image to S3. The User microservice's
             // CreateResourcesFromUrlsAsync handles `data:` URLs by decoding base64 server-side.
             _logger.LogDebug("DraftPost {Id}: uploading generated image to S3...", task.Id);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "resource_upload_started",
+                "AI is saving the image",
+                "AI is uploading the generated image to workspace storage.",
+                new
+                {
+                    workspaceId = msg.WorkspaceId,
+                    resourceType = "image",
+                    status = "generated",
+                    contentType = imageResult.MimeType,
+                    originKind = ResourceOriginKinds.AiGenerated,
+                },
+                ct);
             var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
                 userId: msg.UserId,
                 urls: new[] { imageResult.DataUrl },
@@ -703,6 +1133,25 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     $"S3 upload failed: {uploadResult.Error?.Code} {uploadResult.Error?.Description}");
             }
             var uploaded = uploadResult.Value[0];
+            await PublishThinkingAsync(
+                context,
+                task,
+                "resource_upload_completed",
+                "AI saved the image",
+                "AI finished uploading the generated image.",
+                new
+                {
+                    uploaded.ResourceId,
+                    uploaded.PresignedUrl,
+                    uploaded.ContentType,
+                    uploaded.ResourceType,
+                    uploaded.OriginKind,
+                    uploaded.OriginSourceUrl,
+                    uploaded.OriginChatSessionId,
+                    uploaded.OriginChatId,
+                },
+                ct,
+                phaseStatus: "completed");
 
             // Step 6 — populate the draft Post with the generated caption + image.
             //
@@ -713,6 +1162,20 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             //
             // Legacy fallback: tasks queued before this change have no ResultPostId
             // set; for those we keep the old behavior (create a fresh standalone Post).
+            await PublishThinkingAsync(
+                context,
+                task,
+                "draft_post_finalizing_started",
+                "AI is finalizing the draft",
+                "AI is saving the generated caption and image on the draft post.",
+                new
+                {
+                    draftPostId = task.ResultPostId,
+                    hasPrecreatedDraftPost = task.ResultPostId.HasValue,
+                    resourceId = uploaded.ResourceId,
+                    caption,
+                },
+                ct);
             var content = new PostContent
             {
                 Content = caption,
@@ -756,6 +1219,22 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             }
             await _postRepository.SaveChangesAsync(ct);
             postFinalized = true;
+            task.ResultPostId = draftPost.Id;
+            await PublishThinkingAsync(
+                context,
+                task,
+                "draft_post_finalized",
+                "AI finalized the draft",
+                "AI saved the generated caption and image on the draft post.",
+                new
+                {
+                    draftPostId = draftPost.Id,
+                    resourceId = uploaded.ResourceId,
+                    presignedUrl = uploaded.PresignedUrl,
+                    caption,
+                },
+                ct,
+                phaseStatus: "completed");
 
             // Step 7 — mark task completed + notify
             task.Status = DraftPostTaskStatuses.Completed;
@@ -779,6 +1258,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     {
                         correlationId = task.CorrelationId,
                         socialMediaId = task.SocialMediaId,
+                        draftPostId = task.ResultPostId,
                         postId = task.ResultPostId,
                         resourceId = task.ResultResourceId,
                         presignedUrl = task.ResultPresignedUrl,
@@ -795,6 +1275,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         catch (Exception ex)
         {
             _logger.LogError(ex, "DraftPost {Id}: failed CorrelationId={CorrelationId}", task.Id, task.CorrelationId);
+            var failedDraftPostId = task.ResultPostId;
 
             // Clean up the upfront empty Post if processing failed BEFORE Step 6
             // finalized it. After finalization the Post has real caption + image
@@ -855,6 +1336,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                         {
                             correlationId = task.CorrelationId,
                             socialMediaId = task.SocialMediaId,
+                            draftPostId = failedDraftPostId,
+                            postId = failedDraftPostId,
                             errorCode = task.ErrorCode,
                             errorMessage = task.ErrorMessage,
                         },

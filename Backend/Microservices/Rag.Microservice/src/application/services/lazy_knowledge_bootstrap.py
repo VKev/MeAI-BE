@@ -76,3 +76,4 @@ class LazyKnowledgeBootstrap:
             )
         except Exception:
             logger.exception("Lazy knowledge bootstrap failed")
+            raise
