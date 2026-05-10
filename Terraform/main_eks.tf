@@ -93,7 +93,7 @@ resource "aws_security_group_rule" "eks_nodeports_from_alb" {
 }
 
 resource "kubernetes_storage_class_v1" "ebs_csi" {
-  count = local.eks_enabled && local.eks_storage_class != "" ? 1 : 0
+  count = local.eks_enabled && local.eks_storage_class != "" && local.eks_storage_class != "gp2" ? 1 : 0
 
   metadata {
     name = local.eks_storage_class
@@ -223,6 +223,7 @@ resource "kubectl_manifest" "microservices_prereq" {
 
   depends_on = [
     module.eks,
+    kubernetes_storage_class_v1.ebs_csi,
     kubernetes_namespace.microservices,
     data.external.resolve_manifest
   ]
