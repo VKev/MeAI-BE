@@ -154,7 +154,7 @@ public sealed class S3ObjectStorageService : IObjectStorageService
                 Expires = DateTime.UtcNow.Add(ttl)
             };
 
-            var url = _client.GetPreSignedURL(request);
+            var url = BuildPublicPresignedUrl(_client.GetPreSignedURL(request));
             TrySetCachedUrl(cacheKey, url, NormalizeCacheTtl(ttl));
             return Result.Success(url);
         }
@@ -373,7 +373,21 @@ public sealed class S3ObjectStorageService : IObjectStorageService
     private string BuildPresignCacheKey(string key, TimeSpan ttl)
     {
         var ttlSeconds = (int)Math.Round(ttl.TotalSeconds);
-        return $"s3:presign:{_bucket}:{ttlSeconds}:{key}";
+        var publicBaseUrl = string.IsNullOrWhiteSpace(_publicBaseUrl)
+            ? "raw"
+            : _publicBaseUrl.TrimEnd('/');
+        return $"s3:presign:{_bucket}:{ttlSeconds}:{publicBaseUrl}:{key}";
+    }
+
+    private string BuildPublicPresignedUrl(string signedUrl)
+    {
+        if (string.IsNullOrWhiteSpace(_publicBaseUrl) ||
+            !Uri.TryCreate(signedUrl, UriKind.Absolute, out var signedUri))
+        {
+            return signedUrl;
+        }
+
+        return $"{_publicBaseUrl.TrimEnd('/')}{signedUri.PathAndQuery}";
     }
 
     private string BuildUrl(string key)

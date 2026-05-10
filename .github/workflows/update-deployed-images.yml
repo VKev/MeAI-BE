@@ -34,6 +34,12 @@ on:
         options: ["false", "true"]
         default: "false"
         required: true
+      pre_pull_images:
+        description: "Pre-pull new images on every EKS node before replacing pods."
+        type: choice
+        options: ["true", "false"]
+        default: "true"
+        required: true
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || '' }}
@@ -413,21 +419,48 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           SKIP_MISSING_DEPLOYMENTS: ${{ inputs.skip_missing_deployments }}
+          PRE_PULL_IMAGES: ${{ inputs.pre_pull_images }}
           ROLLOUT_TIMEOUT: ${{ inputs.rollout_timeout }}
+          RUN_STAMP: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
 
           map_service() {
             case "$1" in
-              Ai.Microservice) echo "ai-microservice ai-microservice" ;;
-              User.Microservice) echo "user-microservice user-microservice" ;;
-              ApiGateway) echo "api-gateway api-gateway" ;;
-              Notification.Microservice) echo "notification-microservice notification-microservice" ;;
-              Feed.Microservice) echo "feed-microservice feed-microservice" ;;
-              Rag.Microservice) echo "rag-microservice rag-microservice" ;;
+              User.Microservice) echo "10 user-microservice user-microservice" ;;
+              Notification.Microservice) echo "20 notification-microservice notification-microservice" ;;
+              Feed.Microservice) echo "30 feed-microservice feed-microservice" ;;
+              Rag.Microservice) echo "40 rag-microservice rag-microservice" ;;
+              Ai.Microservice) echo "50 ai-microservice ai-microservice" ;;
+              ApiGateway) echo "90 api-gateway api-gateway" ;;
               *) echo "" ;;
             esac
           }
+
+          plan_file="$(mktemp)"
+          unsorted_plan="$(mktemp)"
+          strategy_dir="$(mktemp -d)"
+          prepull_name="meai-prepull-${RUN_STAMP}"
+          prepull_manifest="$(mktemp)"
+
+          restore_strategies() {
+            for strategy_file in "$strategy_dir"/*.json; do
+              [ -e "$strategy_file" ] || continue
+              deployment="$(basename "$strategy_file" .json)"
+              payload="$(jq -c '[{op:"replace",path:"/spec/strategy",value:.}]' "$strategy_file")"
+              kubectl -n "$K8S_NAMESPACE" patch deployment "$deployment" --type json -p "$payload" >/dev/null 2>&1 || true
+            done
+          }
+
+          cleanup_prepull() {
+            kubectl -n "$K8S_NAMESPACE" delete daemonset "$prepull_name" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+          }
+
+          cleanup() {
+            cleanup_prepull
+            restore_strategies
+          }
+          trap cleanup EXIT
 
           echo "## EKS Image Rollout" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -441,8 +474,9 @@ jobs:
               exit 1
             fi
 
-            deployment=$(echo "$mapping" | awk '{print $1}')
-            container=$(echo "$mapping" | awk '{print $2}')
+            order=$(echo "$mapping" | awk '{print $1}')
+            deployment=$(echo "$mapping" | awk '{print $2}')
+            container=$(echo "$mapping" | awk '{print $3}')
             image="${ECR_REGISTRY}/${ECR_REPO_NAME}:${service}-${IMAGE_TAG}"
 
             if ! kubectl -n "$K8S_NAMESPACE" get deployment "$deployment" >/dev/null 2>&1; then
@@ -454,9 +488,105 @@ jobs:
               exit 1
             fi
 
-            echo "Updating $deployment/$container to $image"
-            kubectl -n "$K8S_NAMESPACE" set image "deployment/$deployment" "$container=$image"
-            kubectl -n "$K8S_NAMESPACE" rollout status "deployment/$deployment" --timeout="$ROLLOUT_TIMEOUT"
-            echo "| $service | $deployment | $image | rolled out |" >> "$GITHUB_STEP_SUMMARY"
+            if ! kubectl -n "$K8S_NAMESPACE" get deployment "$deployment" -o json \
+              | jq -e --arg container "$container" '.spec.template.spec.containers[] | select(.name == $container)' >/dev/null; then
+              echo "Container $container does not exist in deployment $deployment" >&2
+              exit 1
+            fi
+
+            printf '%s\t%s\t%s\t%s\t%s\n' "$order" "$service" "$deployment" "$container" "$image" >> "$unsorted_plan"
           done
 
+          sort -n "$unsorted_plan" > "$plan_file"
+
+          if [ ! -s "$plan_file" ]; then
+            echo "No deployments selected for rollout."
+            exit 0
+          fi
+
+          echo "Preparing no-surge rollout strategy for selected deployments..."
+          while IFS=$'\t' read -r _ service deployment container image; do
+            kubectl -n "$K8S_NAMESPACE" get deployment "$deployment" -o json | jq '.spec.strategy' > "$strategy_dir/$deployment.json"
+            kubectl -n "$K8S_NAMESPACE" patch deployment "$deployment" --type json -p \
+              '[{"op":"replace","path":"/spec/strategy","value":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":0,"maxUnavailable":1}}}]' >/dev/null
+            echo "Prepared $deployment for no-surge rollout."
+          done < "$plan_file"
+
+          if [ "$PRE_PULL_IMAGES" = "true" ]; then
+            echo "Pre-pulling selected images on every schedulable node..."
+            containers_json="$(jq -Rn '
+              [inputs | select(length > 0) | split("\t") |
+                {
+                  name: ("pull-" + (.[1] | ascii_downcase | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | sub("^-"; "") | sub("-$"; ""))),
+                  image: .[4],
+                  imagePullPolicy: "Always",
+                  command: ["/bin/sh", "-c", "sleep 300"],
+                  resources: {
+                    requests: { cpu: "5m", memory: "16Mi" },
+                    limits: { cpu: "25m", memory: "64Mi" }
+                  }
+                }
+              ]' < "$plan_file")"
+
+            jq -n \
+              --arg name "$prepull_name" \
+              --argjson containers "$containers_json" \
+              '{
+                apiVersion: "apps/v1",
+                kind: "DaemonSet",
+                metadata: {
+                  name: $name,
+                  labels: {
+                    "app.kubernetes.io/name": "meai-image-prepull",
+                    "app.kubernetes.io/managed-by": "github-actions"
+                  }
+                },
+                spec: {
+                  selector: { matchLabels: { name: $name } },
+                  template: {
+                    metadata: { labels: { name: $name } },
+                    spec: {
+                      terminationGracePeriodSeconds: 0,
+                      tolerations: [ { operator: "Exists" } ],
+                      containers: $containers
+                    }
+                  }
+                }
+              }' > "$prepull_manifest"
+
+            kubectl -n "$K8S_NAMESPACE" apply -f "$prepull_manifest"
+            kubectl -n "$K8S_NAMESPACE" rollout status "daemonset/$prepull_name" --timeout=5m
+            echo "Image pre-pull completed."
+          fi
+
+          while IFS=$'\t' read -r _ service deployment container image; do
+            echo "Updating $deployment/$container to $image"
+            patch_payload="$(jq -nc \
+              --arg container "$container" \
+              --arg image "$image" \
+              --arg stamp "${RUN_STAMP}-${service}" \
+              '{
+                spec: {
+                  template: {
+                    metadata: {
+                      annotations: {
+                        "meai.dev/image-update-run": $stamp
+                      }
+                    },
+                    spec: {
+                      containers: [
+                        {
+                          name: $container,
+                          image: $image,
+                          imagePullPolicy: "Always"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }')"
+
+            kubectl -n "$K8S_NAMESPACE" patch deployment "$deployment" --type strategic -p "$patch_payload"
+            kubectl -n "$K8S_NAMESPACE" rollout status "deployment/$deployment" --timeout="$ROLLOUT_TIMEOUT"
+            echo "| $service | $deployment | $image | rolled out |" >> "$GITHUB_STEP_SUMMARY"
+          done < "$plan_file"
