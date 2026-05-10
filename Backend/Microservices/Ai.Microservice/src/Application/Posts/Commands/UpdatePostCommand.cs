@@ -1,4 +1,5 @@
 using Application.Posts.Models;
+using Application.PublishingSchedules;
 using Domain.Repositories;
 using MediatR;
 using SharedLibrary.Common.ResponseModel;
@@ -20,17 +21,20 @@ public sealed class UpdatePostCommandHandler
     : IRequestHandler<UpdatePostCommand, Result<PostResponse>>
 {
     private readonly IPostRepository _postRepository;
+    private readonly IPublishingScheduleRepository _publishingScheduleRepository;
     private readonly IWorkspaceRepository _workspaceRepository;
     private readonly IChatSessionRepository _chatSessionRepository;
     private readonly PostResponseBuilder _postResponseBuilder;
 
     public UpdatePostCommandHandler(
         IPostRepository postRepository,
+        IPublishingScheduleRepository publishingScheduleRepository,
         IWorkspaceRepository workspaceRepository,
         IChatSessionRepository chatSessionRepository,
         PostResponseBuilder postResponseBuilder)
     {
         _postRepository = postRepository;
+        _publishingScheduleRepository = publishingScheduleRepository;
         _workspaceRepository = workspaceRepository;
         _chatSessionRepository = chatSessionRepository;
         _postResponseBuilder = postResponseBuilder;
@@ -117,6 +121,11 @@ public sealed class UpdatePostCommandHandler
         var normalizedStatus = NormalizeString(request.Status);
         if (normalizedStatus is not null)
         {
+            if (IsDraftStatus(normalizedStatus))
+            {
+                await ClearSchedulingAsync(post, request.UserId, cancellationToken);
+            }
+
             post.Status = normalizedStatus;
         }
 
@@ -158,9 +167,72 @@ public sealed class UpdatePostCommandHandler
         return Result.Success(response);
     }
 
+    private async Task ClearSchedulingAsync(Domain.Entities.Post post, Guid userId, CancellationToken cancellationToken)
+    {
+        var scheduleId = post.ScheduleGroupId;
+        if (!scheduleId.HasValue && !post.ScheduledAtUtc.HasValue)
+        {
+            return;
+        }
+
+        post.ScheduleGroupId = null;
+        post.ScheduledAtUtc = null;
+        post.ScheduleTimezone = null;
+        post.ScheduledSocialMediaIds = Array.Empty<Guid>();
+        post.ScheduledIsPrivate = null;
+
+        if (!scheduleId.HasValue)
+        {
+            return;
+        }
+
+        var schedule = await _publishingScheduleRepository.GetByIdForUpdateAsync(scheduleId.Value, cancellationToken);
+        if (schedule is null || schedule.DeletedAt.HasValue || schedule.UserId != userId)
+        {
+            return;
+        }
+
+        var now = DateTimeExtensions.PostgreSqlUtcNow;
+        var scheduleItem = schedule.Items.FirstOrDefault(item =>
+            !item.DeletedAt.HasValue &&
+            item.ItemId == post.Id &&
+            string.Equals(item.ItemType, PublishingScheduleState.ItemTypePost, StringComparison.OrdinalIgnoreCase));
+
+        if (scheduleItem is null)
+        {
+            return;
+        }
+
+        scheduleItem.Status = PublishingScheduleState.ItemStatusCancelled;
+        scheduleItem.ErrorMessage = null;
+        scheduleItem.UpdatedAt = now;
+
+        var activePostItems = schedule.Items
+            .Where(item => !item.DeletedAt.HasValue &&
+                           string.Equals(item.ItemType, PublishingScheduleState.ItemTypePost, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (activePostItems.All(item => string.Equals(item.Status, PublishingScheduleState.ItemStatusCancelled, StringComparison.OrdinalIgnoreCase)))
+        {
+            schedule.Status = PublishingScheduleState.StatusCancelled;
+        }
+
+        schedule.ErrorCode = null;
+        schedule.ErrorMessage = null;
+        schedule.NextRetryAt = null;
+        schedule.UpdatedAt = now;
+
+        _publishingScheduleRepository.Update(schedule);
+    }
+
     private static string? NormalizeString(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static bool IsDraftStatus(string? value)
+    {
+        return string.Equals(value, "draft", StringComparison.OrdinalIgnoreCase);
     }
 
     private static Guid? NormalizeGuid(Guid? value)
