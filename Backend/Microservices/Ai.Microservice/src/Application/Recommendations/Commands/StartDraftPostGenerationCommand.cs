@@ -6,6 +6,7 @@ using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Contracts.Recommendations;
 using SharedLibrary.Extensions;
 
@@ -176,6 +177,32 @@ public sealed class StartDraftPostGenerationCommandHandler
                 MaxRagPosts = maxRagPosts,
                 StartedAt = now,
             },
+            cancellationToken);
+
+        await _publishEndpoint.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                request.UserId,
+                NotificationTypes.AiDraftPostGenerationSubmitted,
+                "AI recommendation queued",
+                "AI is preparing your recommendation draft.",
+                new
+                {
+                    correlationId = task.CorrelationId,
+                    draftPostId = draftPost.Id,
+                    postId = draftPost.Id,
+                    socialMediaId = task.SocialMediaId,
+                    workspaceId = task.WorkspaceId,
+                    status = task.Status,
+                    style = task.Style,
+                    userPrompt = task.UserPrompt,
+                    isAutoTopic = task.IsAutoTopic,
+                    topK = task.TopK,
+                    maxReferenceImages = task.MaxReferenceImages,
+                    maxRagPosts = task.MaxRagPosts,
+                    createdAt = task.CreatedAt,
+                },
+                createdAt: now,
+                source: NotificationSourceConstants.Creator),
             cancellationToken);
 
         _logger.LogInformation(

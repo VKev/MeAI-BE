@@ -13,6 +13,7 @@ public static class NotificationTypes
     public const string AiVideoExtensionSubmitted = "ai.video_extension.submitted";
 
     public const string AiDraftPostGenerationSubmitted = "ai.draft_post_generation.submitted";
+    public const string AiDraftPostGenerationThinking = "ai.draft_post_generation.thinking";
     public const string AiDraftPostGenerationCompleted = "ai.draft_post_generation.completed";
     public const string AiDraftPostGenerationFailed = "ai.draft_post_generation.failed";
 

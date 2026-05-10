@@ -124,7 +124,7 @@ jobs:
         run: |
           terraform init
           terraform plan -var="project_name=${PROJECT_NAME}" -var="region=${AWS_REGION}"
-          terraform apply -parallelism=2 -auto-approve -var="project_name=${PROJECT_NAME}" -var="region=${AWS_REGION}"
+          terraform apply -auto-approve -var="project_name=${PROJECT_NAME}" -var="region=${AWS_REGION}"
 
   # Step 2: Discover and Build Microservices
   discover-services:
@@ -591,7 +591,7 @@ jobs:
       - name: Terraform Apply
         if: ${{ inputs.terraform_action == 'apply' }}
         working-directory: Terraform
-        run: terraform apply -parallelism=2 -auto-approve
+        run: terraform apply -auto-approve
 
       - name: Terraform Destroy
         if: ${{ inputs.terraform_action == 'destroy' }}
