@@ -21,6 +21,8 @@ resource "terraform_data" "ses_domain_verification_cleanup" {
   ]
 
   provisioner "local-exec" {
+    interpreter = ["/usr/bin/env", "bash", "-c"]
+
     environment = {
       CLOUDFLARE_API_TOKEN = var.cloudflare_api_token
       CLOUDFLARE_ZONE_ID   = var.cloudflare_zone_id
