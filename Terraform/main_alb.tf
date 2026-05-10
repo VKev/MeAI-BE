@@ -36,7 +36,7 @@ module "alb" {
         unhealthy_threshold = service_config.alb_health_check.unhealthy_threshold
       }
     }
-    if service_config.alb_target_group_port != null || (var.use_eks && service_name == "apigateway")
+    if var.use_eks ? service_name == "apigateway" : service_config.alb_target_group_port != null
   ]
 
   # SSL/TLS Certificate Configuration
@@ -55,7 +55,7 @@ module "alb" {
       target_group_suffix = service_name
       conditions          = service_config.alb_listener_rule_conditions
     }
-    if service_config.alb_listener_rule_priority != null
+    if !var.use_eks && service_config.alb_listener_rule_priority != null
   ]
 }
 

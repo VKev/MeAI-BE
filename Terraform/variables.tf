@@ -301,7 +301,7 @@ variable "eks_default_storage_class_name" {
 variable "eks_ebs_volume_type" {
   description = "EBS volume type for the CSI driver storage class (e.g., gp2, gp3, io1)."
   type        = string
-  default     = "gp3"
+  default     = "gp2"
 }
 
 variable "kubernete" {
