@@ -144,7 +144,7 @@ jobs:
                   try (.services.user.ecs_container_image_repository_url | repo_name) catch empty,
                   try (.services.apigateway.ecs_container_image_repository_url | repo_name) catch empty,
                   try (.services.ai.ecs_container_image_repository_url | repo_name) catch empty,
-                  try (.k8s_microservices_manifest | capture("image:\\s+[^\\s/]+/(?<repo>[^\\s:]+):(Ai\\.Microservice|User\\.Microservice|ApiGateway|Notification\\.Microservice|Feed\\.Microservice)-latest").repo) catch empty
+                  try (.k8s_microservices_manifest | capture("image:\\s+[^\\s/]+/(?<repo>[^\\s:]+):(Ai\\.Microservice|User\\.Microservice|ApiGateway|Notification\\.Microservice|Feed\\.Microservice|Rag\\.Microservice)-latest").repo) catch empty
                 ] | map(select(. != "" and . != "null")) | .[0] // ""
               ' Terraform/00-all.auto.tfvars.json)
             else
