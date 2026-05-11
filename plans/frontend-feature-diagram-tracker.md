@@ -1,0 +1,38 @@
+# Frontend Feature Diagram Tracker
+
+This tracker maps every frontend feature diagrammed in `plantuml/features/` to the frontend routes that exposed it.
+
+| Status | Feature | Repo | Frontend Routes | Diagram |
+|---|---|---|---|---|
+| Drawn | User Signs Up With Email Verification | MeAI-FE | /auth/sign-up<br>/auth/send-verification-code | [meai-user-sign-up-and-email-verification.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-sign-up-and-email-verification.puml:1) |
+| Drawn | User Signs In And Frontend Keeps The Session Fresh | MeAI-FE | /auth/sign-in<br>/api/refresh<br>/api/session-check | [meai-user-sign-in-and-session-refresh.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-sign-in-and-session-refresh.puml:1) |
+| Drawn | User Resets A Forgotten Password | MeAI-FE, MeAI-Social-Platform | /auth/forgot-password<br>/auth/send-verification-code | [meai-user-forgot-and-reset-password.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-forgot-and-reset-password.puml:1) |
+| Drawn | User Connects A Social Account And Returns To The Workspace Flow | MeAI-FE | /user/social-links<br>/auth/facebook.callback<br>/auth/instagram.callback<br>/auth/threads.callback<br>/auth/tiktok.callback | [meai-user-connects-social-account-and-returns-to-workspace.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-connects-social-account-and-returns-to-workspace.puml:1) |
+| Drawn | User Reviews, Refreshes And Disconnects Social Links | MeAI-FE | /user/social-links | [meai-user-manages-social-links.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-manages-social-links.puml:1) |
+| Drawn | User Creates, Updates And Removes Workspaces | MeAI-FE | /user/workspace<br>/workspace/:workspaceId | [meai-user-manages-workspaces.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-manages-workspaces.puml:1) |
+| Drawn | User Uploads Resources And Sends Them To The Post Builder | MeAI-FE | /user/library<br>/workspace/:workspaceId/post-builder/:id | [meai-user-library-upload-and-send-to-post-builder.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-library-upload-and-send-to-post-builder.puml:1) |
+| Drawn | User Generates Images Or Videos From The AI Workspace | MeAI-FE | /ai-generation/:sessionId/:mode? | [meai-user-generates-images-and-videos-with-ai.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-generates-images-and-videos-with-ai.puml:1) |
+| Drawn | User Edits A Post Builder And Auto Save Keeps Every Draft Bucket In Sync | MeAI-FE | /workspace/:workspaceId/post-builder/:id | [meai-user-edits-a-post-builder-with-auto-save.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-edits-a-post-builder-with-auto-save.puml:1) |
+| Drawn | User Publishes Or Unpublishes A Draft And The Frontend Tracks Every Target In Real Time | MeAI-FE | /workspace/:workspaceId/post-builder/:id | [meai-user-publishes-a-post-builder-and-receives-realtime-status.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-publishes-a-post-builder-and-receives-realtime-status.puml:1) |
+| Drawn | User Opens An AI Recommendation Draft Post And Follows The Retrieval Pipeline | MeAI-FE | /ai-recommendation/:correlationId | [meai-user-fetches-ai-recommendation-draft-posts.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-fetches-ai-recommendation-draft-posts.puml:1) |
+| Drawn | User Updates Profile Fields, Avatar And Password | MeAI-FE, MeAI-Social-Platform | /user/user-settings | [meai-user-manages-profile-avatar-and-password.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-manages-profile-avatar-and-password.puml:1) |
+| Drawn | User Purchases Or Schedules A Subscription Plan Change | MeAI-FE | /checkout/:planId<br>/user/plans<br>/user/billing-history | [meai-user-purchases-a-subscription-plan.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-purchases-a-subscription-plan.puml:1) |
+| Drawn | User Purchases A Coin Package And The Balance Refreshes After Confirmation | MeAI-FE | /checkout/coin-package<br>/user/plans | [meai-user-purchases-a-coin-package.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-purchases-a-coin-package.puml:1) |
+| Drawn | User Reviews Dashboard Summaries, Product Lists And Analytics Snapshots | MeAI-FE | /user/dashboard<br>/user/product<br>/user/product-detail | [meai-user-dashboard-and-product-analytics.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-user-dashboard-and-product-analytics.puml:1) |
+| Drawn | Admin Manages Users And Their Subscription Status | MeAI-FE | /admin/admin-users | [meai-admin-manages-users-and-subscriptions.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-admin-manages-users-and-subscriptions.puml:1) |
+| Drawn | Admin Reviews Transactions, System Config And Storage Usage | MeAI-FE | /admin/admin-transactions<br>/admin/admin-config<br>/admin/admin-resource<br>/admin/dashboard | [meai-admin-manages-transactions-config-storage-and-usage.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-admin-manages-transactions-config-storage-and-usage.puml:1) |
+| Drawn | Admin Reviews Reported Feed Content And Resolves The Decision | MeAI-FE | /admin/admin-report | [meai-admin-reviews-and-resolves-feed-reports.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/meai-admin-reviews-and-resolves-feed-reports.puml:1) |
+| Drawn | Community User Signs In, Signs Up Or Uses Forgot Password In The Social Platform | MeAI-Social-Platform | /auth/signin<br>/auth/signup<br>/auth/forgot-password | [social-platform-authentication-journey.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/social-platform-authentication-journey.puml:1) |
+| Drawn | Community User Browses The Feed And Toggles Likes With Optimistic UI | MeAI-Social-Platform | /<br>/:username | [social-platform-feed-browsing-and-like-toggle.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/social-platform-feed-browsing-and-like-toggle.puml:1) |
+| Drawn | Community User Opens A Post, Talks In Comments And Reports Problematic Content | MeAI-Social-Platform | /:username/post/:postId | [social-platform-post-discussion-reporting-and-moderation-entry.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/social-platform-post-discussion-reporting-and-moderation-entry.puml:1) |
+| Drawn | Community User Follows People And Explores Followers, Following And Suggestions | MeAI-Social-Platform | /:username<br>/followers<br>/activity | [social-platform-user-follows-and-explores-the-social-graph.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/social-platform-user-follows-and-explores-the-social-graph.puml:1) |
+| Drawn | Community User Updates Public Profile Details, Avatar And Password | MeAI-Social-Platform | /activity | [social-platform-profile-edit-avatar-and-password.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/social-platform-profile-edit-avatar-and-password.puml:1) |
+| Drawn | Community User Receives Realtime Notifications And Marks Them As Read | MeAI-Social-Platform | /activity | [social-platform-realtime-notifications.puml](/home/vinhdo/Documents/GitHub/MeAI-BE/plantuml/features/social-platform-realtime-notifications.puml:1) |
+
+## Excluded UI Surfaces
+
+| Repo | Route Or Area | Reason |
+|---|---|---|
+| MeAI-FE | /guest/* and /errors/* | Informational or static pages with no backend workflow. |
+| MeAI-FE | /ai-content-automation | Current screen is a UI placeholder with no active API flow. |
+| MeAI-FE | /checkout/stripe-result | Completion state is folded into the checkout diagrams above. |

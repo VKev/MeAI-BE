@@ -1,0 +1,130 @@
+@startuml
+title User Creates, Updates And Removes Workspaces
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Workspace List Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Workspace Detail Shell" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Workspace Mutation Client" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "User Workspace Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Workspace Application Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Workspace Repository" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Workspace Database" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Workspace Social Media Link Store" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title User Creates, Updates And Removes Workspaces
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : open the workspace area
+Screen -> Hook : load workspace list
+Hook -> Gateway : GET /api/User/workspaces
+Gateway -> PrimaryService : list workspaces for current user
+PrimaryService -> DomainLayer : read workspace rows and metadata
+DomainLayer --> PrimaryService : workspace collection
+PrimaryService --> Gateway : success response
+Gateway --> Hook : workspace list
+Hook -> Store : cache workspaces
+Store --> Screen : render cards and workspace entry points
+group Create or update a workspace
+  User -> Screen : submit workspace name, type or settings
+  Screen -> Hook : call create or update mutation
+  Hook -> Gateway : POST or PUT workspace endpoint
+  Gateway -> PrimaryService : validate payload and ownership
+  PrimaryService -> DomainLayer : persist workspace changes
+  alt validation fails
+    DomainLayer --> PrimaryService : domain error
+    PrimaryService --> Gateway : problem details
+    Gateway --> Hook : failure
+    Hook --> Screen : show inline error state
+  else save succeeds
+    DomainLayer --> PrimaryService : workspace saved
+    PrimaryService --> Gateway : updated workspace
+    Gateway --> Hook : mutation success
+    Hook -> Store : invalidate list and detail queries
+    Store --> Screen : show refreshed workspace inventory
+  end
+end
+group Delete a workspace
+  User -> Screen : confirm workspace deletion
+  Screen -> Hook : call delete mutation
+  Hook -> Gateway : DELETE /api/User/workspaces/{id}
+  Gateway -> PrimaryService : delete workspace
+  PrimaryService -> SupportingService : remove workspace-social links and dependent rows
+  SupportingService --> PrimaryService : cleanup completed
+  PrimaryService --> Gateway : success response
+  Gateway --> Hook : deletion success
+  Hook -> Store : remove workspace from cache
+  Store --> Screen : route user back to the remaining workspace list
+end
+@enduml

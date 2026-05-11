@@ -1,0 +1,134 @@
+@startuml
+title Community User Receives Realtime Notifications And Marks Them As Read
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Notification Provider" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Notification Bell And Activity UI" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "SignalR Connection Helper" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "Notification Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Notification Hub" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Notification Persistence Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "Integrations And Delivery" {
+class "SignalR Transport" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Notification Database" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title Community User Receives Realtime Notifications And Marks Them As Read
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+box "Async And Delivery" #E8F5E9
+participant "gRPC Or RabbitMQ Channel" as AsyncBus
+participant "Notification Service And Hub" as NotificationHub
+end box
+
+User -> Screen : open the area that contains notifications
+Screen -> Hook : fetch initial notification list
+Hook -> Gateway : GET /api/Notification/notifications
+Gateway -> PrimaryService : read stored notifications for the current user
+PrimaryService -> DomainLayer : query notifications and unread state
+DomainLayer --> PrimaryService : notification list
+PrimaryService --> Gateway : list response
+Gateway --> Hook : notifications payload
+Hook -> Store : cache notifications and unread count
+Store --> Screen : render the initial list
+group Frontend opens realtime delivery
+  Hook -> NotificationHub : start SignalR connection
+  NotificationHub --> Hook : connected
+  Hook -> Store : mark realtime channel as connected
+  Store --> Screen : show live notification state
+end
+group A new notification arrives later
+  PrimaryService -> NotificationHub : publish NotificationReceived event
+  NotificationHub --> Hook : deliver notification payload
+  Hook -> Store : upsert the notification at the top of the list
+  Store --> Screen : update unread badge and visible activity stream without full page reload
+  opt Reconnect happens after network loss
+    NotificationHub --> Hook : reconnected event
+    Hook -> Gateway : refetch notifications
+    Gateway -> PrimaryService : read authoritative list
+    PrimaryService --> Gateway : refreshed notifications
+    Gateway --> Hook : latest payload
+    Hook -> Store : resynchronize with server truth
+    Store --> Screen : keep the badge and list accurate after reconnect
+  end
+end
+group User marks notifications as read
+  User -> Screen : mark one item or all items as read
+  Screen -> Hook : send mark-read mutation
+  Hook -> Gateway : PATCH notification read endpoint
+  Gateway -> PrimaryService : persist read timestamp
+  PrimaryService --> Gateway : success
+  Gateway --> Hook : mutation success
+  Hook -> Store : update local read flags immediately
+  Store --> Screen : drop unread counts and update styling
+end
+@enduml

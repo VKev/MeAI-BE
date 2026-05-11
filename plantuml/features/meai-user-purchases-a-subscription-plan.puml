@@ -1,0 +1,127 @@
+@startuml
+title User Purchases Or Schedules A Subscription Plan Change
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Plan Selection Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Stripe Checkout Screen" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Current User Store" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "User Subscription Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Stripe Purchase Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Entitlement Update Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Stripe Payment Intent" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Subscription And Transaction Database" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title User Purchases Or Schedules A Subscription Plan Change
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : choose a recurring plan
+Screen -> Hook : open the dedicated checkout route
+Hook -> Gateway : GET public plans and current user subscriptions
+Gateway -> PrimaryService : load available plans and current entitlements
+PrimaryService -> DomainLayer : compare active plan, scheduled plan and requested plan
+alt requested plan is already active or already scheduled
+  DomainLayer --> PrimaryService : reject duplicate purchase
+  PrimaryService --> Gateway : business error
+  Gateway --> Hook : checkout cannot proceed
+  Hook --> Screen : show explanation and send user back to Plans
+else purchase can proceed
+  Hook -> Gateway : POST create subscription purchase
+  Gateway -> PrimaryService : create Stripe purchase session or immediate plan switch
+  PrimaryService -> SupportingService : compute credits, next billing date and required payment
+  alt no payment is required
+    SupportingService --> PrimaryService : immediate activation or scheduled change created
+    PrimaryService --> Gateway : completed-without-payment payload
+    Gateway --> Hook : purchase completed
+    Hook -> Store : refetch current user entitlements
+    Store --> Screen : route user to dashboard or plans summary
+  else payment is required
+    SupportingService --> PrimaryService : Stripe client secret and transaction metadata
+    PrimaryService --> Gateway : checkout payload
+    Gateway --> Hook : render Stripe payment form
+  end
+end
+group Frontend confirms Stripe payment
+  User -> Screen : complete card payment in Stripe form
+  Screen -> Hook : confirm payment
+  Hook -> Gateway : POST confirm purchase or Stripe webhook-driven completion
+  Gateway -> PrimaryService : finalize subscription and transaction
+  PrimaryService -> DomainLayer : activate plan or schedule the next renewal change
+  DomainLayer --> PrimaryService : entitlements updated
+  PrimaryService --> Gateway : final subscription result
+  Gateway --> Hook : confirmation success
+  Hook -> Store : refetch current user session and entitlements
+  Store --> Screen : expose updated plan state and billing-history access
+end
+@enduml

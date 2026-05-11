@@ -1,0 +1,112 @@
+@startuml
+title User Reviews Dashboard Summaries, Product Lists And Analytics Snapshots
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Dashboard Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Product List Screen" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Analytics Query Layer" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "AI Post Query Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Dashboard Summary Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Feed Analytics Bridge" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Feed Analytics gRPC" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "AI Post Database" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title User Reviews Dashboard Summaries, Product Lists And Analytics Snapshots
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : open the dashboard or product area
+Screen -> Hook : request post lists, dashboard summaries and analytics slices
+Hook -> Gateway : GET post summaries and list endpoints
+Gateway -> PrimaryService : load AI-owned posts for the user or workspace
+PrimaryService -> DomainLayer : fetch draft, published and failed post groups
+opt Dashboard requires analytics enrichment
+  DomainLayer -> SupportingService : ask Feed service for analytics snapshots over gRPC
+  SupportingService --> DomainLayer : engagement metrics and time-series summaries
+end
+DomainLayer --> PrimaryService : merged post and analytics view
+PrimaryService --> Gateway : response payloads
+Gateway --> Hook : dashboard and product data
+Hook -> Store : cache post groups, charts and summary tiles
+Store --> Screen : render published, draft and failure states
+opt User refreshes or changes filters
+  Screen -> Hook : rerun the affected list or summary query
+  Hook -> Gateway : GET filtered data
+  Gateway -> PrimaryService : execute filtered read model
+  PrimaryService --> Gateway : refreshed payload
+  Gateway --> Hook : new slice
+  Hook -> Store : update cached cards and charts
+  Store --> Screen : keep the dashboard synchronized without leaving the page
+end
+@enduml

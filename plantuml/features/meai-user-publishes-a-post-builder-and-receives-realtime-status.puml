@@ -1,0 +1,176 @@
+@startuml
+title User Publishes Or Unpublishes A Draft And The Frontend Tracks Every Target In Real Time
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Publish Dialog" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Notification Hub Hook" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Post Builder Store" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "AI Post Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Publish To Target Consumer" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Notification API" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "Integrations And Delivery" {
+class "User Social Media gRPC" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Feed Publish gRPC" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "RabbitMQ And SignalR" as INT3 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+BE3 --> INT3
+INT1 --> INT2
+INT2 --> INT3
+@enduml
+
+@startuml
+title User Publishes Or Unpublishes A Draft And The Frontend Tracks Every Target In Real Time
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+box "Async And Delivery" #E8F5E9
+participant "gRPC Or RabbitMQ Channel" as AsyncBus
+participant "Notification Service And Hub" as NotificationHub
+end box
+
+User -> Screen : open the publish dialog from the post-builder
+Screen -> Hook : load connected accounts and workspace-linked accounts
+Hook -> Gateway : GET social-media list and workspace-linked list
+Gateway -> SupportingService : return account inventory and existing workspace links
+SupportingService --> Gateway : linked and available accounts
+Gateway --> Hook : account payload
+Hook -> Store : preselect accounts already linked to the workspace
+Store --> Screen : render publish targets and scheduling choices
+group User confirms publish now or schedule later
+  User -> Screen : choose accounts and confirm publish
+  Screen -> Hook : sync current draft buckets before enqueueing
+  group Preflight and local save
+    Hook -> Gateway : create missing child post or update existing draft posts
+    Gateway -> PrimaryService : persist latest content and resources
+    PrimaryService --> Gateway : latest draft state saved
+    Gateway --> Hook : ready for publish
+  end
+  Hook -> Gateway : POST /api/Ai/posts/publish or schedule endpoint
+  Gateway -> PrimaryService : create publish requests per social-media target
+  PrimaryService -> DomainLayer : validate platform media rules and builder ownership
+  alt platform or media validation fails
+    DomainLayer --> PrimaryService : reject target
+    PrimaryService --> Gateway : validation error
+    Gateway --> Hook : publish rejected
+    Hook --> Screen : show precise platform error
+  else publish accepted
+    DomainLayer -> AsyncBus : enqueue one target per selected account
+    AsyncBus --> DomainLayer : queue accepted
+    PrimaryService --> Gateway : 202 accepted
+    Gateway --> Hook : publish accepted
+    Hook -> Store : mark selected buckets as publishing
+    Store --> Screen : close dialog and show publishing banners immediately
+  end
+end
+group Background target processing
+  AsyncBus -> PrimaryService : deliver publish-to-target work
+  PrimaryService -> SupportingService : load account tokens and media resources through gRPC
+  SupportingService --> PrimaryService : account credentials and publishable resources ready
+  PrimaryService -> DomainLayer : publish to Facebook, Instagram, TikTok or Threads
+  opt User also enabled MeAI feed publication
+    DomainLayer -> SupportingService : mirror the AI post into the Feed service over gRPC
+    SupportingService --> DomainLayer : feed mirror created
+  end
+  alt one target fails
+    DomainLayer -> NotificationHub : emit target-failed notification
+  else one target succeeds
+    DomainLayer -> NotificationHub : emit target-completed notification
+  end
+  opt all targets in the batch are now finished
+    DomainLayer -> NotificationHub : emit batch-completed notification
+  end
+end
+group Frontend reacts to SignalR events from the same flow
+  NotificationHub --> Hook : NotificationReceived
+  Hook -> Store : invalidate notifications, post-builder and posts queries
+  alt target failed
+    Store --> Screen : show failure toast and keep the bucket editable after refresh
+  else target or batch completed
+    Store -> Gateway : refetch post-builder and posts
+    Gateway -> PrimaryService : reload the latest publish state
+    PrimaryService --> Gateway : published and failed targets with timestamps
+    Gateway --> Store : refreshed data
+    Store --> Screen : update banners, target chips and published cards in one continuous loop
+  end
+end
+opt User later unpublishes a live post
+  User -> Screen : confirm unpublish
+  Screen -> Hook : POST unpublish request
+  Hook -> Gateway : /api/Ai/posts/{id}/unpublish
+  Gateway -> PrimaryService : enqueue unpublish requests
+  PrimaryService -> AsyncBus : send unpublish work
+  AsyncBus -> NotificationHub : target-completed or target-failed updates
+  NotificationHub --> Store : refresh the same post-builder and post lists
+  Store --> Screen : clear published state or surface failures
+end
+@enduml

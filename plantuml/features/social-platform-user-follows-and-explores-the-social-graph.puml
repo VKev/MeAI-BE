@@ -1,0 +1,128 @@
+@startuml
+title Community User Follows People And Explores Followers, Following And Suggestions
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Profile And Follower Screens" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Follow Query Hooks" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "React Query Cache" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "Feed Follow Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Follow Graph Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Suggestion Query Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "Integrations And Delivery" {
+class "Follow Graph Database" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Notification Delivery Pipeline" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title Community User Follows People And Explores Followers, Following And Suggestions
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+box "Async And Delivery" #E8F5E9
+participant "gRPC Or RabbitMQ Channel" as AsyncBus
+participant "Notification Service And Hub" as NotificationHub
+end box
+
+User -> Screen : open a profile, follower list or activity area
+Screen -> Hook : load follow suggestions, followers or following pages
+Hook -> Gateway : GET follow suggestions, followers or following endpoints
+Gateway -> PrimaryService : execute the requested social-graph query
+PrimaryService -> DomainLayer : read suggestion or follow-edge pages
+DomainLayer --> PrimaryService : graph slice and cursor
+PrimaryService --> Gateway : paged result
+Gateway --> Hook : follow payload
+Hook -> Store : cache graph data
+Store --> Screen : render suggestions and relationship lists
+group Follow or unfollow another user
+  User -> Screen : click Follow or Unfollow
+  Screen -> Hook : submit follow mutation
+  Hook -> Gateway : POST or DELETE /api/Feed/follow/{userId}
+  Gateway -> PrimaryService : validate relationship change
+  PrimaryService -> DomainLayer : create or remove follow edge
+  opt Following someone should notify them
+    DomainLayer -> AsyncBus : request follow notification
+    AsyncBus -> NotificationHub : notification queued
+  end
+  DomainLayer --> PrimaryService : updated follow relationship
+  PrimaryService --> Gateway : success
+  Gateway --> Hook : mutation result
+  Hook -> Store : invalidate suggestion and follower queries
+  Store --> Screen : refresh counts, buttons and list membership
+end
+opt User loads more followers or following
+  Screen -> Hook : fetch next cursor page
+  Hook -> Gateway : GET next follower page
+  Gateway -> PrimaryService : continue graph query
+  PrimaryService --> Gateway : next page
+  Gateway --> Hook : next slice
+  Hook -> Store : append to the cached list
+  Store --> Screen : keep the infinite list continuous
+end
+@enduml

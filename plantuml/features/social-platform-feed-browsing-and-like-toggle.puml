@@ -1,0 +1,128 @@
+@startuml
+title Community User Browses The Feed And Toggles Likes With Optimistic UI
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Feed Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Feed Query Hooks" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "React Query Cache" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "Feed Post Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Feed Query Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Like Toggle Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Feed Database" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Public Profile Read Model" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title Community User Browses The Feed And Toggles Likes With Optimistic UI
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : open the home feed or a user profile
+Screen -> Hook : start infinite feed or profile queries
+Hook -> Gateway : GET feed posts, profile and profile-posts endpoints
+Gateway -> PrimaryService : load the requested slice
+PrimaryService -> DomainLayer : read posts, owners and cursor state
+DomainLayer --> PrimaryService : post list and cursor
+PrimaryService --> Gateway : paged payload
+Gateway --> Hook : page response
+Hook -> Store : cache pages for infinite scrolling
+Store --> Screen : render posts and next-page cursor
+opt User scrolls further
+  Screen -> Hook : fetch next page
+  Hook -> Gateway : GET next cursor page
+  Gateway -> PrimaryService : execute feed cursor query
+  PrimaryService --> Gateway : next page
+  Gateway --> Hook : append page
+  Hook -> Store : extend cached feed pages
+  Store --> Screen : continue the scroll without resetting prior items
+end
+group User toggles a post like
+  User -> Screen : tap like or unlike
+  Screen -> Store : optimistically flip like state and count
+  Store -> Hook : fire like or unlike mutation in the background
+  Hook -> Gateway : POST or DELETE /api/Feed/posts/{id}/like
+  Gateway -> PrimaryService : update like state
+  alt backend rejects the mutation
+    PrimaryService --> Gateway : failure
+    Gateway --> Hook : error
+    Hook -> Store : roll back the optimistic state
+    Store --> Screen : restore the previous count
+  else backend accepts the mutation
+    PrimaryService -> DomainLayer : persist like edge
+    DomainLayer --> PrimaryService : final like state
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : authoritative count and flag
+    Hook -> Store : reconcile optimistic cache with the final values
+    Store --> Screen : keep the liked state stable
+  end
+end
+@enduml

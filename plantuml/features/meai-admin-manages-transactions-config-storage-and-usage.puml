@@ -1,0 +1,127 @@
+@startuml
+title Admin Reviews Transactions, System Config And Storage Usage
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Admin Dashboard Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Admin Transactions Screen" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Admin Storage And Config Screen" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "Admin Transaction Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Admin Config Controller" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Admin Storage Controller" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Transaction Database" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Storage Usage Store" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "AI Spending Read Model" as INT3 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+BE3 --> INT3
+INT1 --> INT2
+INT2 --> INT3
+@enduml
+
+@startuml
+title Admin Reviews Transactions, System Config And Storage Usage
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor Admin
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+Admin -> Screen : open an admin dashboard, transaction or storage/config page
+Screen -> Hook : request the required datasets
+Hook -> Gateway : GET admin transactions, storage usage, plan settings, config and spending summaries
+Gateway -> PrimaryService : route each request to the proper admin controller
+PrimaryService -> DomainLayer : read transaction rows, configuration values and quota aggregates
+opt Admin dashboard requests AI spending history too
+  DomainLayer -> SupportingService : read AI spending and usage snapshots from the AI service
+  SupportingService --> DomainLayer : spending overview and history
+end
+DomainLayer --> PrimaryService : combined read models
+PrimaryService --> Gateway : admin payloads
+Gateway --> Hook : responses for tables, charts and forms
+Hook -> Store : cache admin read models
+Store --> Screen : render transaction review, system config and storage analysis
+group Admin updates config or storage limits
+  Admin -> Screen : submit a config or quota change
+  Screen -> Hook : call update mutation
+  Hook -> Gateway : PUT or PATCH admin config or storage endpoint
+  Gateway -> PrimaryService : validate admin command
+  PrimaryService -> DomainLayer : persist new limit, free tier or cleanup settings
+  opt Admin runs cleanup or reconcile
+    DomainLayer -> SupportingService : execute maintenance operation
+    SupportingService --> DomainLayer : maintenance summary
+  end
+  DomainLayer --> PrimaryService : updated configuration
+  PrimaryService --> Gateway : success response
+  Gateway --> Hook : mutation success
+  Hook -> Store : invalidate config and usage queries
+  Store --> Screen : show refreshed values and maintenance outcomes
+end
+@enduml

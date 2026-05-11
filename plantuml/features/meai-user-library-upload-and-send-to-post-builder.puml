@@ -1,0 +1,131 @@
+@startuml
+title User Uploads Resources And Sends Them To The Post Builder
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Library Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Resource Upload Flow" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Post Prepare Client" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "User Resource Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "AI Post Prepare Controller" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Post Builder Creation Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "S3 Resource Storage" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Resource Database" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title User Uploads Resources And Sends Them To The Post Builder
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : open the library page
+Screen -> Hook : load storage usage and resource pages
+Hook -> Gateway : GET resources and storage usage
+Gateway -> PrimaryService : fetch resource inventory
+PrimaryService -> DomainLayer : read user-owned and AI-generated resources
+DomainLayer -> SupportingService : build presigned resource links and storage totals
+SupportingService --> DomainLayer : enriched resources and quota data
+PrimaryService --> Gateway : resource list and quota
+Gateway --> Hook : resource payload
+Hook -> Store : cache resources and pagination cursors
+Store --> Screen : render previews, filters and selection state
+group Upload a new resource
+  User -> Screen : choose a file from the device
+  Screen -> Hook : submit multipart upload
+  Hook -> Gateway : POST /api/User/resources
+  Gateway -> PrimaryService : validate media type and storage quota
+  alt storage limit exceeded or media invalid
+    PrimaryService --> Gateway : business failure
+    Gateway --> Hook : upload rejected
+    Hook --> Screen : show error toast
+  else upload accepted
+    PrimaryService -> SupportingService : store file in S3 and persist metadata
+    SupportingService --> PrimaryService : resource id and presigned link
+    PrimaryService --> Gateway : upload success
+    Gateway --> Hook : resource created
+    Hook -> Store : invalidate resource queries
+    Store --> Screen : append the new item to the library
+  end
+end
+group Send selected resources into a post-builder
+  User -> Screen : pick resources and choose a workspace
+  Screen -> Hook : fetch available workspaces and submit post-prepare payload
+  Hook -> Gateway : POST /api/AiGeneration/post-prepare
+  Gateway -> PrimaryService : create post-builder and seed draft posts
+  PrimaryService -> DomainLayer : validate builder resources and social targets
+  DomainLayer -> SupportingService : persist post-builder with workspace relation
+  SupportingService --> DomainLayer : post-builder id ready
+  PrimaryService --> Gateway : builder id and workspace id
+  Gateway --> Hook : preparation success
+  Hook -> Store : keep selected resources until navigation completes
+  Store --> Screen : navigate user into the matching post-builder screen
+end
+@enduml

@@ -1,0 +1,112 @@
+• FR-U1 Authentication and profile
+– FR-U1.1 The system shall allow users to register a new account using an email address and password.
+– FR-U1.2 The system shall allow users to log in using their registered credentials.
+– FR-U1.3 The system shall allow users to view and update their personal profile information.
+• FR-U2 Workspaces
+– FR-U2.1 The system shall allow users to create new workspaces.
+– FR-U2.2 The system shall allow users to rename and delete existing workspaces.
+– FR-U2.3 The system shall group posts by content or topic within a workspace.
+– FR-U2.4 The system shall host the full AI post-creation and editing flow inside a workspace.
+• FR-U3 AI video/post generation from prompts
+– FR-U3.1 The system shall allow users to request AI-generated draft posts and videos from a text
+prompt.
+– FR-U3.2 The AI engine shall be allowed to retrieve relevant content from the internet as supporting
+material, subject to platform policies.
+– FR-U3.3 The system shall return an editable draft when a user requests AI to create a post or video.
+– FR-U3.4 The system shall allow users to request the AI engine to enhance or refine an existing draft.
+5
+– FR-U3.5 The AI engine shall be able to propose background music for generated videos.
+– FR-U3.6 The AI engine shall support Nano Banana–style automatic clipping and cutting of videos
+into short, social-ready versions.
+– FR-U3.7 The AI engine shall be able to suggest posts similar to content already published on MeAI.
+– FR-U3.8 The AI engine shall support generating long-form videos (around 30 minutes) when explicitly
+requested by the user.
+• FR-U4 Use of uploaded resources
+– FR-U4.1 The system shall allow users to upload images and videos to their workspaces.
+– FR-U4.2 The AI engine shall be able to use uploaded images and videos as resources when generating
+posts and videos.
+• FR-U5 Editing videos and posts
+– FR-U5.1 The system shall allow users to edit generated or uploaded videos (e.g., cut, trim, replace
+media).
+– FR-U5.2 The system shall allow users to edit post metadata such as title, caption, and description.
+• FR-U6 Content management
+– FR-U6.1 The system shall allow users to view all videos and posts belonging to a workspace.
+– FR-U6.2 The system shall allow users to update the state of their content (e.g., draft, scheduled,
+published).
+– FR-U6.3 The system shall allow users to organize content within a workspace (e.g., by tags, folders,
+or filters).
+• FR-U7 Analytics and AI recommendations
+– FR-U7.1 The system shall display views and basic statistics (e.g., likes, comments, engagement) for
+videos and posts.
+– FR-U7.2 The system shall aggregate analytics from multiple connected platforms where possible.
+– FR-U7.3 The AI recommendation module shall suggest new content ideas or post types based on
+past statistics and user performance.
+• FR-U8 Scheduling and auto-posting
+– FR-U8.1 The system shall allow users to create schedules specifying when content should be posted.
+– FR-U8.2 The system shall allow users to associate one or more posts or videos with a schedule.
+– FR-U8.3 The AI engine shall be able to select or assemble suitable content based on the user’s
+requirements for a scheduled slot.
+– FR-U8.4 The system shall automatically publish scheduled content at the specified time.
+• FR-U9 Multi-platform posting
+– FR-U9.1 The system shall allow users to connect their accounts on supported social networks via
+OAuth or equivalent mechanisms.
+– FR-U9.2 The system shall allow users to select one or more connected social networks as targets for
+a post.
+– FR-U9.3 The system shall publish content to the selected social networks in a platform-aware format.
+• FR-U10 Posting and interacting on MeAI
+6
+– FR-U10.1 The system shall allow users to publish posts and videos directly to the MeAI feed.
+– FR-U10.2 The system shall allow users to comment on posts and reply to comments on MeAI.
+– FR-U10.3 The system shall allow users to follow and unfollow other MeAI users.
+– FR-U10.4 The system shall notify users when followed accounts publish new posts or upload videos.
+– FR-U10.5 The system shall allow users to add hashtags to posts on MeAI.
+– FR-U10.6 The system shall allow users to report posts and comments on MeAI for inappropriate
+content.
+– FR-U10.7 The system may support chat and video calls between users (optional feature).
+– FR-U10.8 The system may allow users to save or bookmark posts for later viewing (optional feature).
+• FR-U11 Subscription packages
+– FR-U11.1 The system shall define subscription packages based on credits or usage quotas.
+– FR-U11.2 The system shall allow users to purchase and upgrade subscription packages.
+– FR-U11.3 The system shall visually mark subscribed users with a VIP logo.
+• FR-U12 Free tier
+– FR-U12.1 The system shall provide a free tier that allows users to use their own posts to push
+content to multiple social networks.
+– FR-U12.2 The system shall enforce limitations for free-tier users according to defined quotas or
+feature access.
+• FR-U13 Payments
+– FR-U13.1 The system shall integrate with the Stripe API to process payments using Visa cards.
+– FR-U13.2 The system shall record successful and failed payment transactions.
+– FR-U13.3 The system shall link payment transactions to user subscription packages and credit
+balances.
+5.2 Admin requirements
+• FR-A1 User management
+– FR-A1.1 The system shall provide an admin interface to view a list of users.
+– FR-A1.2 The system shall allow admins to create, update, and delete user accounts.
+– FR-A1.3 The system shall allow admins to ban or lock user accounts.
+• FR-A2 Report and post management
+– FR-A2.1 The system shall allow admins to view reported posts and comments.
+– FR-A2.2 The system shall allow admins to mark reports as resolved and take actions such as hiding
+or deleting content.
+• FR-A3 Subscription management
+– FR-A3.1 The system shall allow admins to define and update subscription packages.
+– FR-A3.2 The system shall allow admins to view and adjust user subscription status when necessary.
+• FR-A4 Transaction management
+– FR-A4.1 The system shall allow admins to view a history of Stripe payment transactions.
+7
+– FR-A4.2 The system shall allow admins to filter transactions by user, date range, and status.
+• FR-A5 API key management
+– FR-A5.1 The system shall allow admins to configure and rotate API keys or credentials for social
+networks, Stripe, and AI providers.
+– FR-A5.2 The system shall restrict access to API key management to authorized admin roles only.
+• FR-A6 System spending
+– FR-A6.1 The system shall provide an overview of spending related to external services (e.g., AI usage,
+storage, bandwidth).
+– FR-A6.2 The system shall allow admins to view spending trends over a configurable time range.
+• FR-A7 Resource management
+– FR-A7.1 The system shall allow admins to view and manage storage resources used for videos and
+images (e.g., S3 buckets or compatible storage).
+– FR-A7.2 The system shall allow admins to configure retention or cleanup policies for stored media.
+• FR-A8 Revenue statistics
+– FR-A8.1 The system shall provide aggregated revenue statistics over time.
+– FR-A8.2 The system shall allow admins to break down revenue by subscription package or user
+segment.

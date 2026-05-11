@@ -1,0 +1,124 @@
+@startuml
+title Admin Reviews Reported Feed Content And Resolves The Decision
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Admin Report Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Report Review Query Layer" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Report Decision Dialog" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "Feed Report Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Report Review Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Feed Moderation Repository" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "Integrations And Delivery" {
+class "Feed Database" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Notification Delivery Pipeline" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title Admin Reviews Reported Feed Content And Resolves The Decision
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor Admin
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+box "Async And Delivery" #E8F5E9
+participant "gRPC Or RabbitMQ Channel" as AsyncBus
+participant "Notification Service And Hub" as NotificationHub
+end box
+
+Admin -> Screen : open the moderation report page
+Screen -> Hook : load admin report list and preview data
+Hook -> Gateway : GET admin reports and report preview endpoints
+Gateway -> PrimaryService : fetch moderation data from the Feed service
+PrimaryService -> DomainLayer : load report rows, target content and reporter context
+DomainLayer --> PrimaryService : moderation preview model
+PrimaryService --> Gateway : report payloads
+Gateway --> Hook : report list and preview
+Hook -> Store : cache report queue and selected report details
+Store --> Screen : render the moderation workspace
+group Admin reviews one report
+  Admin -> Screen : accept, reject or otherwise resolve the report
+  Screen -> Hook : submit report-review mutation
+  Hook -> Gateway : POST or PATCH review endpoint
+  Gateway -> PrimaryService : validate admin decision
+  PrimaryService -> DomainLayer : update report state and apply moderation outcome
+  alt content must be hidden or removed
+    DomainLayer -> SupportingService : update feed visibility and final moderation state
+    SupportingService --> DomainLayer : moderated content saved
+  else report dismissed
+    DomainLayer --> PrimaryService : report closed without content change
+  end
+  opt resolution emits downstream notifications
+    DomainLayer -> AsyncBus : request moderation-related notification delivery
+    AsyncBus -> NotificationHub : notification accepted
+  end
+  PrimaryService --> Gateway : review result
+  Gateway --> Hook : success
+  Hook -> Store : invalidate report list and selected preview
+  Store --> Screen : remove or update the reviewed item in the queue
+end
+@enduml

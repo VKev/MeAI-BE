@@ -1,0 +1,131 @@
+@startuml
+title Community User Signs In, Signs Up Or Uses Forgot Password In The Social Platform
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Community Auth Screens" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Axios Fetcher With Refresh" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Community Session Store" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "User Auth Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Refresh Token Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Registration And Reset Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Redis Refresh Store" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Verification Mail Sender" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title Community User Signs In, Signs Up Or Uses Forgot Password In The Social Platform
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : choose sign in, sign up or forgot-password on the community site
+group Sign in path
+  Screen -> Hook : submit credentials
+  Hook -> Gateway : POST /api/User/auth/login
+  Gateway -> PrimaryService : authenticate community user
+  alt login fails
+    PrimaryService --> Gateway : unauthorized response
+    Gateway --> Hook : error
+    Hook --> Screen : show sign-in failure
+  else login succeeds
+    PrimaryService --> Gateway : cookies and authenticated user
+    Gateway --> Hook : success
+    Hook -> Store : persist community session
+    Store --> Screen : route user to the feed
+  end
+end
+group Sign up or forgot-password path
+  User -> Screen : request verification code and submit the follow-up form
+  Screen -> Hook : call the same user-auth flows used by the main product
+  Hook -> Gateway : verification and register or reset endpoints
+  Gateway -> PrimaryService : execute registration or reset workflow
+  PrimaryService -> SupportingService : deliver email code and persist result
+  alt request fails
+    SupportingService --> PrimaryService : failure
+    PrimaryService --> Gateway : error contract
+    Gateway --> Hook : failure
+    Hook --> Screen : show the issue
+  else flow succeeds
+    SupportingService --> PrimaryService : success
+    PrimaryService --> Gateway : final success payload
+    Gateway --> Hook : success
+    Hook -> Store : update auth state when appropriate
+    Store --> Screen : route the user back to sign in or into the feed
+  end
+end
+opt A protected request later receives 401
+  Hook -> PrimaryService : use the shared refresh-token interceptor
+  PrimaryService -> SupportingService : validate refresh token
+  SupportingService --> PrimaryService : refreshed access or logout instruction
+  PrimaryService --> Hook : session result
+  Hook --> Screen : continue the action or redirect to sign-in
+end
+@enduml

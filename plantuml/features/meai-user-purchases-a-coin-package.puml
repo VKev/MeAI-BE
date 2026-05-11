@@ -1,0 +1,116 @@
+@startuml
+title User Purchases A Coin Package And The Balance Refreshes After Confirmation
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Coin Package Checkout Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Stripe Payment Form" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Current User Store" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "Coin Package Billing Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Coin Checkout Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Balance Update Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Stripe Payment Intent" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Transaction And Coin Balance Store" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title User Purchases A Coin Package And The Balance Refreshes After Confirmation
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : choose a coin package from the plans area
+Screen -> Hook : open coin-package checkout with client secret and payment metadata
+Hook -> Gateway : POST coin-package checkout
+Gateway -> PrimaryService : create one-time payment intent
+PrimaryService -> SupportingService : persist pending transaction and Stripe identifiers
+SupportingService --> PrimaryService : checkout state ready
+PrimaryService --> Gateway : client secret and transaction id
+Gateway --> Hook : payment form can render
+Hook --> Screen : display package size, price and payment widget
+group Successful payment confirmation
+  User -> Screen : submit the Stripe payment form
+  Screen -> Hook : wait for Stripe success then resolve checkout
+  Hook -> Gateway : POST resolve coin-package checkout
+  Gateway -> PrimaryService : confirm payment intent and transaction
+  alt payment could not be confirmed
+    PrimaryService --> Gateway : failure
+    Gateway --> Hook : resolution error
+    Hook --> Screen : show payment confirmation failure
+  else checkout resolved
+    PrimaryService -> DomainLayer : credit coins to the user balance
+    DomainLayer --> PrimaryService : new balance and added-coin amount
+    PrimaryService --> Gateway : checkout resolved
+    Gateway --> Hook : success with new balance
+    Hook -> Store : refetch current user balance
+    Store --> Screen : return user to plans with the updated coin total
+  end
+end
+@enduml

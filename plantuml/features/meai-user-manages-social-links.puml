@@ -1,0 +1,127 @@
+@startuml
+title User Reviews, Refreshes And Disconnects Social Links
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Social Links Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Social Media Query Cache" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Disconnect Dialog" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "User Social Media Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Social Media Management Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Subscription Guard" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Social Media Database" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Workspace Link Database" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title User Reviews, Refreshes And Disconnects Social Links
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : open Social Links
+Screen -> Hook : start account query
+Hook -> Gateway : GET /api/User/social-medias
+Gateway -> PrimaryService : list connected accounts
+PrimaryService -> DomainLayer : read connected social-media rows
+DomainLayer --> PrimaryService : accounts grouped by platform
+PrimaryService --> Gateway : account list
+Gateway --> Hook : list response
+Hook -> Store : cache account inventory
+Store --> Screen : render connected and disconnected states
+opt User presses Sync Now
+  Screen -> Hook : refetch the list
+  Hook -> Gateway : GET social-media list again
+  Gateway -> PrimaryService : reload latest rows
+  PrimaryService --> Gateway : refreshed list
+  Gateway --> Hook : new payload
+  Hook -> Store : replace cached accounts
+  Store --> Screen : show the latest connection state
+end
+group Disconnect an account
+  User -> Screen : confirm disconnect for one linked account
+  Screen -> Hook : call delete social-media endpoint
+  Hook -> Gateway : DELETE /api/User/social-medias/{id}
+  Gateway -> PrimaryService : remove account
+  PrimaryService -> SupportingService : validate subscription rules and detach workspace links
+  alt subscription rule blocks the action
+    SupportingService --> PrimaryService : business failure
+    PrimaryService --> Gateway : problem details
+    Gateway --> Hook : failure
+    Hook --> Screen : show toast with the precise reason
+  else account removed
+    SupportingService --> PrimaryService : account and workspace links deleted
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : mutation success
+    Hook -> Store : invalidate social-media queries
+    Store --> Screen : refresh visible cards and counts
+  end
+end
+@enduml

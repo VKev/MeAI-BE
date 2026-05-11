@@ -1,0 +1,127 @@
+@startuml
+title Admin Manages Users And Their Subscription Status
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Admin Users Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Admin Query Layer" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "User Edit Dialog" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "Admin User Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Admin User Subscription Controller" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Admin User Management Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "User Database" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Subscription Database" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title Admin Manages Users And Their Subscription Status
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor Admin
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+Admin -> Screen : open the user administration page
+Screen -> Hook : load users, subscription plans and user-subscription rows
+Hook -> Gateway : GET admin users, subscriptions and user subscriptions
+Gateway -> PrimaryService : fetch user inventory
+PrimaryService -> SupportingService : read available plans and each user's active or scheduled subscription
+SupportingService --> PrimaryService : user and subscription datasets
+PrimaryService --> Gateway : combined admin payloads
+Gateway --> Hook : administration data
+Hook -> Store : cache rows for sorting, filtering and dialogs
+Store --> Screen : render the full admin table
+group Create, update or activate a user
+  Admin -> Screen : submit a create or update dialog
+  Screen -> Hook : call the relevant admin mutation
+  Hook -> Gateway : POST, PUT or activate admin-user endpoint
+  Gateway -> PrimaryService : validate admin command
+  alt validation fails
+    PrimaryService --> Gateway : problem details
+    Gateway --> Hook : failure
+    Hook --> Screen : show field-level or toast error
+  else command succeeds
+    PrimaryService -> DomainLayer : persist user changes
+    DomainLayer --> PrimaryService : updated user state
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : mutation success
+    Hook -> Store : invalidate admin user queries
+    Store --> Screen : refresh the table and subscription badges
+  end
+end
+group Change one user's subscription status
+  Admin -> Screen : choose a status update or manual reassignment
+  Screen -> Hook : call admin user-subscription mutation
+  Hook -> Gateway : PATCH user-subscription endpoint
+  Gateway -> SupportingService : update subscription state and effective dates
+  SupportingService --> Gateway : updated entitlement
+  Gateway --> Hook : success
+  Hook -> Store : refetch user-subscription data
+  Store --> Screen : show the new entitlement state in the same grid
+end
+@enduml

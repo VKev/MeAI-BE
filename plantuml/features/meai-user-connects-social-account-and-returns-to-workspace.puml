@@ -1,0 +1,123 @@
+@startuml
+title User Connects A Social Account And Returns To The Workspace Flow
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Social Links Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "OAuth Callback Screen" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Workspace Auto Link Helper" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "User Social Authorization Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Social Media Application Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Workspace Link Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Facebook Or Instagram Or TikTok Or Threads API" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Social Media Database" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title User Connects A Social Account And Returns To The Workspace Flow
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : choose a platform to connect
+Screen -> Hook : request authorization URL
+Hook -> Gateway : GET social authorize endpoint
+Gateway -> PrimaryService : forward authorize request
+PrimaryService -> DomainLayer : build provider state and callback url
+DomainLayer -> SupportingService : store provider handshake metadata
+SupportingService --> DomainLayer : state persisted
+PrimaryService --> Gateway : authorization url
+Gateway --> Hook : auth url response
+Hook --> Screen : redirect browser to provider
+group Provider callback returns to frontend
+  User -> Screen : finish consent on the social network
+  Screen -> Hook : load callback route with code and state
+  Hook -> Gateway : POST provider callback via FE client
+  Gateway -> PrimaryService : exchange code for account tokens
+  PrimaryService -> SupportingService : fetch profile or pages and persist social-media records
+  SupportingService --> PrimaryService : linked accounts saved
+  alt callback fails or provider rejects consent
+    PrimaryService --> Gateway : failure contract
+    Gateway --> Hook : callback failed
+    Hook --> Screen : show error and send user back to Social Links
+  else callback succeeds
+    PrimaryService --> Gateway : connected account payload
+    Gateway --> Hook : success
+    opt User started OAuth from a publish dialog
+      Hook -> Store : read stashed workspace continuation
+      Store -> Gateway : create workspace-social-media links for matching accounts
+      Gateway -> SupportingService : persist workspace links
+      SupportingService --> Gateway : links saved
+      Gateway --> Store : continuation restored
+    end
+    Hook --> Screen : redirect user to Social Links or back to the post-builder publish dialog
+  end
+end
+@enduml

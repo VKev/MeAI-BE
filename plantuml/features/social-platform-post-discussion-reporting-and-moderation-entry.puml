@@ -1,0 +1,131 @@
+@startuml
+title Community User Opens A Post, Talks In Comments And Reports Problematic Content
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Post Detail Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Comment And Report Mutations" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "React Query Cache" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "Feed Post Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Comment Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Report Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "Integrations And Delivery" {
+class "Feed Database" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Notification Delivery Pipeline" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title Community User Opens A Post, Talks In Comments And Reports Problematic Content
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+box "Async And Delivery" #E8F5E9
+participant "gRPC Or RabbitMQ Channel" as AsyncBus
+participant "Notification Service And Hub" as NotificationHub
+end box
+
+User -> Screen : open a post detail page
+Screen -> Hook : load post detail and first page of comments
+Hook -> Gateway : GET post detail and comments endpoints
+Gateway -> PrimaryService : fetch post and discussion state
+PrimaryService -> DomainLayer : read post, author and comment cursor
+DomainLayer --> PrimaryService : detail payload
+PrimaryService --> Gateway : post and comments
+Gateway --> Hook : detail response
+Hook -> Store : cache detail and comment lists
+Store --> Screen : render the post, comment composer and moderation actions
+group Create a comment or reply
+  User -> Screen : type a comment or a reply
+  Screen -> Hook : submit create-comment or create-reply mutation
+  Hook -> Gateway : POST comment endpoint
+  Gateway -> PrimaryService : validate author and target post or comment
+  PrimaryService -> DomainLayer : persist the new discussion item
+  opt New interaction should notify the owner
+    DomainLayer -> AsyncBus : request notification delivery
+    AsyncBus -> NotificationHub : notification queued for realtime delivery
+  end
+  DomainLayer --> PrimaryService : comment created
+  PrimaryService --> Gateway : success
+  Gateway --> Hook : comment payload
+  Hook -> Store : invalidate post detail and comment queries
+  Store --> Screen : refresh counts and show the new discussion item
+end
+group Report or delete content
+  User -> Screen : report a post or comment, or delete own content
+  Screen -> Hook : submit report or delete mutation
+  Hook -> Gateway : POST /reports or DELETE comment or post endpoint
+  Gateway -> PrimaryService : validate ownership or report target
+  PrimaryService -> DomainLayer : persist the report row or remove owned content
+  DomainLayer --> PrimaryService : mutation result
+  PrimaryService --> Gateway : success
+  Gateway --> Hook : final response
+  Hook -> Store : invalidate the affected queries
+  Store --> Screen : update the discussion view and moderation state
+end
+@enduml

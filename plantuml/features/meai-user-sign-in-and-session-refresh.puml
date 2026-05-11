@@ -1,0 +1,128 @@
+@startuml
+title User Signs In And Frontend Keeps The Session Fresh
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Sign In Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Auth Fetch Client" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Session State Store" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "User Auth Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Refresh Token Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Session Server Helpers" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Redis Refresh Store" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "User Database" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title User Signs In And Frontend Keeps The Session Fresh
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : enter email or username and password
+Screen -> Hook : submit sign-in form
+Hook -> Gateway : POST /api/User/auth/login
+Gateway -> PrimaryService : forward credentials
+PrimaryService -> DomainLayer : validate credentials and build access session
+alt credentials invalid or account blocked
+  DomainLayer --> PrimaryService : authentication failure
+  PrimaryService --> Gateway : unauthorized contract
+  Gateway --> Hook : login failure
+  Hook --> Screen : show error without losing entered values
+else credentials valid
+  DomainLayer -> SupportingService : create refresh token and cookie set
+  SupportingService --> DomainLayer : token persisted
+  PrimaryService --> Gateway : authenticated response
+  Gateway --> Hook : cookies and user payload
+  Hook -> Store : cache current user and role
+  Store --> Screen : render authenticated shell
+end
+opt Later API call receives expired access token
+  Hook -> Gateway : call protected API
+  Gateway --> Hook : 401 unauthorized
+  Hook -> PrimaryService : call refresh helper route
+  PrimaryService -> SupportingService : validate refresh token in Redis
+  alt refresh token invalid
+    SupportingService --> PrimaryService : reject refresh
+    PrimaryService --> Hook : clear auth state
+    Hook -> Store : remove session
+    Store --> Screen : redirect to sign-in
+  else refresh token valid
+    SupportingService --> PrimaryService : new access cookie
+    PrimaryService --> Hook : refreshed session
+    Hook -> Store : update current user session
+    Hook -> Gateway : replay original protected request
+    Gateway -> PrimaryService : protected endpoint executes normally
+    PrimaryService --> Gateway : business response
+    Gateway --> Hook : final payload
+    Hook --> Screen : continue user action seamlessly
+  end
+end
+@enduml
