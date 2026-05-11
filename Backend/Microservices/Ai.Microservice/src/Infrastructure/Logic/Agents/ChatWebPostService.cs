@@ -14,18 +14,18 @@ public sealed partial class ChatWebPostService : IChatWebPostService
     private const int MaxUrlsPerPrompt = 3;
     private const int SearchResultCount = 5;
 
-    private readonly IN8nWorkflowClient _n8nWorkflowClient;
+    private readonly IAgentWebSearchService _agentWebSearchService;
     private readonly IWebSearchEnrichmentService _webSearchEnrichmentService;
     private readonly IAgenticRuntimeContentService _runtimeContentService;
     private readonly IMediator _mediator;
 
     public ChatWebPostService(
-        IN8nWorkflowClient n8nWorkflowClient,
+        IAgentWebSearchService agentWebSearchService,
         IWebSearchEnrichmentService webSearchEnrichmentService,
         IAgenticRuntimeContentService runtimeContentService,
         IMediator mediator)
     {
-        _n8nWorkflowClient = n8nWorkflowClient;
+        _agentWebSearchService = agentWebSearchService;
         _webSearchEnrichmentService = webSearchEnrichmentService;
         _runtimeContentService = runtimeContentService;
         _mediator = mediator;
@@ -36,7 +36,7 @@ public sealed partial class ChatWebPostService : IChatWebPostService
         CancellationToken cancellationToken)
     {
         var urls = ExtractUrls(request.Prompt);
-        Result<N8nWebSearchResponse> contentResult;
+        Result<AgentWebSearchResponse> contentResult;
         var retrievalMode = urls.Count > 0 ? "direct_url" : "web_search";
 
         if (urls.Count > 0)
@@ -54,12 +54,10 @@ public sealed partial class ChatWebPostService : IChatWebPostService
         }
         else
         {
-            contentResult = await _n8nWorkflowClient.WebSearchAsync(
-                new N8nWebSearchRequest(
-                    QueryTemplate: request.Prompt,
+            contentResult = await _agentWebSearchService.SearchAsync(
+                new AgentWebSearchRequest(
+                    Query: request.Prompt,
                     Count: SearchResultCount,
-                    Country: null,
-                    SearchLanguage: null,
                     Freshness: "pd",
                     UserId: request.UserId,
                     WorkspaceId: request.WorkspaceId,

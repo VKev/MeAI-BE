@@ -16,7 +16,7 @@ public sealed record AgenticRuntimeContentRequest(
     string? AgentPrompt,
     string? PlatformPreference,
     int? MaxContentLength,
-    N8nWebSearchResponse Search,
+    AgentWebSearchResponse Search,
     Guid? GroundingSocialMediaId = null,
     string? GroundingPlatform = null,
     string? RecommendationQuery = null,

@@ -17,7 +17,7 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace AiMicroservice.Tests.Application.PublishingSchedules.Commands;
 
-public sealed class HandleAgentScheduleRuntimeResultCommandTests
+public sealed class ExecuteAgenticPublishingScheduleCommandTests
 {
     [Fact]
     public async Task Handle_ShouldCreateRuntimePostAndPublishIt()
@@ -28,7 +28,6 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
         var primarySocialMediaId = Guid.NewGuid();
         var socialMediaId = Guid.NewGuid();
         var runtimePostId = Guid.NewGuid();
-        var callbackJobId = Guid.NewGuid();
 
         var schedule = new PublishingSchedule
         {
@@ -50,8 +49,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                         5,
                         "VN",
                         "vi",
-                        "pd"),
-                    N8nJobId: callbackJobId)),
+                        "pd"))),
             Targets =
             [
                 new PublishingScheduleTarget
@@ -84,40 +82,38 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
             .ReturnsAsync(1);
 
         var runtimeContentService = new Mock<IAgenticRuntimeContentService>(MockBehavior.Strict);
-        var webSearchEnrichmentService = new Mock<IWebSearchEnrichmentService>(MockBehavior.Strict);
-        webSearchEnrichmentService
-            .Setup(service => service.EnrichAsync(
-                It.Is<N8nWebSearchResponse>(search =>
+        var agentWebSearchService = new Mock<IAgentWebSearchService>(MockBehavior.Strict);
+        agentWebSearchService
+            .Setup(service => service.SearchAsync(
+                It.Is<AgentWebSearchRequest>(search =>
                     search.Query == "kết quả xổ số miền bắc hôm nay" &&
-                    search.Results.Count == 1),
-                userId,
-                workspaceId,
-                null,
-                null,
+                    search.Count == 5 &&
+                    search.UserId == userId &&
+                    search.WorkspaceId == workspaceId),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new N8nWebSearchResponse(
+            .ReturnsAsync(Result.Success(new AgentWebSearchResponse(
                 "kết quả xổ số miền bắc hôm nay",
                 DateTime.UtcNow,
                 [
-                    new N8nWebSearchResultItem(
+                    new AgentWebSearchResultItem(
                         "KQXS",
                         "https://example.com",
                         "Mô tả",
-                        "example.com",
+                        "search",
                         "KQXS Mien Bac",
                         "Chi tiet noi dung trang",
                         ["https://example.com/image.jpg"])
                 ],
                 "context",
                 [
-                    new N8nImportedResourceItem(
+                    new ImportedResourceItem(
                         Guid.NewGuid(),
                         "https://cdn.example.com/image.jpg",
                         "image/jpeg",
                         "image",
                         "https://example.com/image.jpg",
                         "https://example.com")
-                ]));
+                ])));
         runtimeContentService
             .Setup(service => service.GeneratePostDraftAsync(
                 It.Is<AgenticRuntimeContentRequest>(request =>
@@ -244,28 +240,15 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                     ])
             ])));
 
-        var handler = new HandleAgentScheduleRuntimeResultCommandHandler(
+        var handler = new ExecuteAgenticPublishingScheduleCommandHandler(
             scheduleRepository.Object,
             runtimeContentService.Object,
-            webSearchEnrichmentService.Object,
+            agentWebSearchService.Object,
             mediator.Object,
             ragClient.Object);
 
         var result = await handler.Handle(
-            new HandleAgentScheduleRuntimeResultCommand(
-                scheduleId,
-                callbackJobId,
-                new N8nWebSearchResponse(
-                    "kết quả xổ số miền bắc hôm nay",
-                    DateTime.UtcNow,
-                    [
-                        new N8nWebSearchResultItem(
-                            "KQXS",
-                            "https://example.com",
-                            "Mô tả",
-                            "example.com")
-                    ],
-                    "context")),
+            new ExecuteAgenticPublishingScheduleCommand(scheduleId),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -278,7 +261,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
             item.Status == PublishingScheduleState.ItemStatusPublishing);
 
         var updatedContext = AgenticScheduleExecutionContextSerializer.Parse(schedule.ExecutionContextJson);
-        updatedContext.LastProcessedCallbackJobId.Should().Be(callbackJobId);
+        updatedContext.LastExecutionRunId.Should().NotBeNull();
         updatedContext.RuntimePostId.Should().Be(runtimePostId);
         updatedContext.LastQuery.Should().Be("kết quả xổ số miền bắc hôm nay");
         updatedContext.GroundingSocialMediaId.Should().Be(socialMediaId);
@@ -286,7 +269,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
         updatedContext.LastRecommendationSummary.Should().Contain("xổ số");
 
         scheduleRepository.VerifyAll();
-        webSearchEnrichmentService.VerifyAll();
+        agentWebSearchService.VerifyAll();
         runtimeContentService.VerifyAll();
         ragClient.VerifyAll();
         mediator.VerifyAll();
@@ -300,7 +283,6 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
         var workspaceId = Guid.NewGuid();
         var socialMediaId = Guid.NewGuid();
         var runtimePostId = Guid.NewGuid();
-        var callbackJobId = Guid.NewGuid();
 
         var schedule = new PublishingSchedule
         {
@@ -316,7 +298,8 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
             AgentPrompt = "Đăng tin nóng lên Facebook.",
             MaxContentLength = 220,
             ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(
-                new AgenticScheduleExecutionContext(N8nJobId: callbackJobId)),
+                new AgenticScheduleExecutionContext(
+                    Search: new PublishingScheduleSearchInput("tin nóng AI", 5, null, null, "pd"))),
             Targets =
             [
                 new PublishingScheduleTarget
@@ -354,22 +337,18 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 null,
                 "posts")));
 
-        var webSearchEnrichmentService = new Mock<IWebSearchEnrichmentService>(MockBehavior.Strict);
-        webSearchEnrichmentService
-            .Setup(service => service.EnrichAsync(
-                It.IsAny<N8nWebSearchResponse>(),
-                userId,
-                workspaceId,
-                null,
-                null,
+        var agentWebSearchService = new Mock<IAgentWebSearchService>(MockBehavior.Strict);
+        agentWebSearchService
+            .Setup(service => service.SearchAsync(
+                It.IsAny<AgentWebSearchRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new N8nWebSearchResponse(
+            .ReturnsAsync(Result.Success(new AgentWebSearchResponse(
                 "tin nóng AI",
                 DateTime.UtcNow,
                 [
-                    new N8nWebSearchResultItem("Tin nóng", "https://example.com", "Mô tả", "example.com")
+                    new AgentWebSearchResultItem("Tin nóng", "https://example.com", "Mô tả", "search")
                 ],
-                "context"));
+                "context")));
 
         var ragClient = new Mock<IRagClient>(MockBehavior.Strict);
         ragClient
@@ -430,22 +409,15 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                     ])
             ])));
 
-        var handler = new HandleAgentScheduleRuntimeResultCommandHandler(
+        var handler = new ExecuteAgenticPublishingScheduleCommandHandler(
             scheduleRepository.Object,
             runtimeContentService.Object,
-            webSearchEnrichmentService.Object,
+            agentWebSearchService.Object,
             mediator.Object,
             ragClient.Object);
 
         var result = await handler.Handle(
-            new HandleAgentScheduleRuntimeResultCommand(
-                scheduleId,
-                callbackJobId,
-                new N8nWebSearchResponse(
-                    "tin nóng AI",
-                    DateTime.UtcNow,
-                    [new N8nWebSearchResultItem("Tin nóng", "https://example.com", "Mô tả", "example.com")],
-                    "context")),
+            new ExecuteAgenticPublishingScheduleCommand(scheduleId),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -456,7 +428,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
 
         scheduleRepository.VerifyAll();
         runtimeContentService.VerifyAll();
-        webSearchEnrichmentService.VerifyAll();
+        agentWebSearchService.VerifyAll();
         ragClient.VerifyAll();
         mediator.VerifyAll();
     }

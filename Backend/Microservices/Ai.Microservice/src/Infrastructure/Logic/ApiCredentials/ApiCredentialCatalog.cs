@@ -7,8 +7,7 @@ public static class ApiCredentialCatalog
     public static readonly IReadOnlyList<ApiCredentialDefinition> Definitions =
     [
         new("Gemini", "ApiKey", "Gemini API key", "Gemini:ApiKey", "Gemini__ApiKey"),
-        new("Kie", "ApiKey", "Kie API key", "Kie:ApiKey", "Kie__ApiKey"),
-        new("N8n", "InternalCallbackToken", "n8n internal callback token", "N8n:InternalCallbackToken", "N8n__InternalCallbackToken")
+        new("Kie", "ApiKey", "Kie API key", "Kie:ApiKey", "Kie__ApiKey")
     ];
 
     public static ApiCredentialDefinition? Find(string provider, string keyName)

@@ -70,7 +70,6 @@ namespace Infrastructure
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");
             services.AddHttpClient("TikTok");
-            services.AddHttpClient("n8n");
             services.AddHttpClient("WebSearchContent", client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(12);
@@ -84,7 +83,7 @@ namespace Infrastructure
             services.AddScoped<GeminiCaptionService>();
             services.AddScoped<IFormulaTemplateRenderer, FormulaTemplateRenderer>();
             services.AddScoped<IFormulaGenerationService, FormulaGenerationService>();
-            services.AddScoped<IN8nWorkflowClient, N8nWorkflowClient>();
+            services.AddScoped<IAgentWebSearchService, AgentWebSearchService>();
             services.AddScoped<IWebSearchEnrichmentService, WebSearchEnrichmentService>();
             services.AddScoped<IAgenticRuntimeContentService, AgenticRuntimeContentService>();
             services.AddScoped<IFacebookContentService, FacebookContentService>();
@@ -376,9 +375,11 @@ namespace Infrastructure
             services.AddScoped<PostResponseBuilder>();
             services.AddScoped<PublishingScheduleResponseBuilder>();
             services.AddScoped<ScheduledPostDispatchService>();
+            services.AddScoped<AgenticPublishingScheduleDispatchService>();
             services.AddScoped<ResourceProvenanceBackfillService>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddHostedService<ScheduledPostPublishingWorker>();
+            services.AddHostedService<AgenticPublishingScheduleWorker>();
 
             services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Application.AssemblyReference).Assembly));
 
