@@ -289,6 +289,13 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             "When picking a topic, anchor it explicitly in the current year " + year + " or the most recent " +
             "month / quarter where applicable; do NOT title or frame the post around an older year (no '2022', " +
             "'2023', etc. in the headline) unless you are deliberately retrospecting. " +
+            "IMPORTANT NOVELTY RULE: use the past posts as an exclusion list for the specific subject and angle, " +
+            "not as a list of topics to repeat. The new topic may stay inside the same broad content pillar or " +
+            "product/service category, but it must NOT be the same specific item, model, offer, event, claim, " +
+            "audience problem, use case, or hook that the account already published recently. If the best current " +
+            "trend overlaps with a prior post, choose a meaningfully distinct adjacent angle: a new subtopic, " +
+            "new feature/benefit, comparison, seasonal/current development, audience segment, objection, or " +
+            "practical use case. Balance freshness with brand fit; do not force novelty by going off-niche. " +
             "Pick ONE concrete topic that is on-brand AND timely. " +
             "State the chosen topic explicitly at the top of your answer in the page's primary language. " +
             "Then write the full post recommendation for that topic — caption, formula used, visual " +

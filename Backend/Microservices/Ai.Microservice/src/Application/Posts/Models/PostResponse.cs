@@ -26,7 +26,15 @@ public sealed record PostResponse(
     bool IsAiRecommendationDone = false,
     DateTime? AiRecommendationCompletedAt = null,
     string? AiRecommendationErrorCode = null,
-    string? AiRecommendationErrorMessage = null);
+    string? AiRecommendationErrorMessage = null,
+    Guid? AiImproveRecommendPostId = null,
+    Guid? AiImproveCorrelationId = null,
+    string? AiImproveStatus = null,
+    bool IsAiImproving = false,
+    bool IsAiImproveDone = false,
+    DateTime? AiImproveCompletedAt = null,
+    string? AiImproveErrorCode = null,
+    string? AiImproveErrorMessage = null);
 
 public sealed record PostScheduleInput(
     Guid? ScheduleGroupId,

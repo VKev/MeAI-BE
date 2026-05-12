@@ -6,6 +6,7 @@ using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Contracts.Recommendations;
 using SharedLibrary.Extensions;
 
@@ -147,6 +148,38 @@ public sealed class StartImprovePostCommandHandler
                 UserInstruction = trimmedInstruction,
                 StartedAt = now,
             },
+            cancellationToken);
+
+        await _publishEndpoint.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                request.UserId,
+                NotificationTypes.AiPostImproveSubmitted,
+                "Post improvement queued",
+                "AI is preparing your post improvement.",
+                new
+                {
+                    correlationId = entity.CorrelationId,
+                    recommendPostId = entity.Id,
+                    originalPostId = entity.OriginalPostId,
+                    postId = entity.OriginalPostId,
+                    userId = entity.UserId,
+                    workspaceId = entity.WorkspaceId,
+                    status = entity.Status,
+                    taskStatus = entity.Status,
+                    improveCaption = entity.ImproveCaption,
+                    improveImage = entity.ImproveImage,
+                    style = entity.Style,
+                    userInstruction = entity.UserInstruction,
+                    resultCaption = entity.ResultCaption,
+                    resultResourceId = entity.ResultResourceId,
+                    resultPresignedUrl = entity.ResultPresignedUrl,
+                    errorCode = entity.ErrorCode,
+                    errorMessage = entity.ErrorMessage,
+                    createdAt = entity.CreatedAt,
+                    completedAt = entity.CompletedAt,
+                },
+                createdAt: now,
+                source: NotificationSourceConstants.Creator),
             cancellationToken);
 
         _logger.LogInformation(

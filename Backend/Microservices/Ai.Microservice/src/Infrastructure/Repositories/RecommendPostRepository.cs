@@ -28,6 +28,21 @@ public sealed class RecommendPostRepository : IRecommendPostRepository
     public Task<RecommendPost?> GetByOriginalPostIdAsync(Guid originalPostId, CancellationToken cancellationToken)
         => _dbSet.AsNoTracking().FirstOrDefaultAsync(t => t.OriginalPostId == originalPostId, cancellationToken);
 
+    public async Task<IReadOnlyList<RecommendPost>> GetByOriginalPostIdsAsync(
+        IReadOnlyList<Guid> originalPostIds,
+        CancellationToken cancellationToken)
+    {
+        if (originalPostIds.Count == 0)
+        {
+            return Array.Empty<RecommendPost>();
+        }
+
+        return await _dbSet
+            .AsNoTracking()
+            .Where(t => originalPostIds.Contains(t.OriginalPostId))
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<RecommendPost?> GetByOriginalPostIdForUpdateAsync(Guid originalPostId, CancellationToken cancellationToken)
         => _dbSet.FirstOrDefaultAsync(t => t.OriginalPostId == originalPostId, cancellationToken);
 

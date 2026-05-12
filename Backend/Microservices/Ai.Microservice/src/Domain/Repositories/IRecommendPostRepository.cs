@@ -15,6 +15,10 @@ public interface IRecommendPostRepository
     /// Replace-on-rerun deletion uses <see cref="GetByOriginalPostIdForUpdateAsync"/>.</summary>
     Task<RecommendPost?> GetByOriginalPostIdAsync(Guid originalPostId, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<RecommendPost>> GetByOriginalPostIdsAsync(
+        IReadOnlyList<Guid> originalPostIds,
+        CancellationToken cancellationToken);
+
     /// <summary>Tracked variant — the start command uses this to fetch the existing
     /// row before hard-deleting it under replace-on-rerun semantics.</summary>
     Task<RecommendPost?> GetByOriginalPostIdForUpdateAsync(Guid originalPostId, CancellationToken cancellationToken);

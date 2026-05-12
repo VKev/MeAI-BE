@@ -194,6 +194,16 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             task.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
             await _taskRepository.SaveChangesAsync(ct);
 
+            await PublishImproveNotificationAsync(
+                context,
+                msg.UserId,
+                NotificationTypes.AiPostImproveProcessing,
+                "Post improvement started",
+                "AI is improving your post now.",
+                task,
+                task.UpdatedAt,
+                ct);
+
             // ── Load original post + original resources ─────────────────────
             var originalPost = await _postRepository.GetByIdAsync(msg.OriginalPostId, ct);
             if (originalPost is null || originalPost.DeletedAt.HasValue)
@@ -446,25 +456,14 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             task.UpdatedAt = task.CompletedAt;
             await _taskRepository.SaveChangesAsync(ct);
 
-            await context.Publish(
-                NotificationRequestedEventFactory.CreateForUser(
-                    msg.UserId,
-                    NotificationTypes.AiDraftPostGenerationCompleted,
-                    "Post improvement is ready",
-                    "Your AI-improved post is ready to review.",
-                    new
-                    {
-                        correlationId = task.CorrelationId,
-                        recommendPostId = task.Id,
-                        originalPostId = task.OriginalPostId,
-                        improveCaption = task.ImproveCaption,
-                        improveImage = task.ImproveImage,
-                        resultCaption = task.ResultCaption,
-                        resultResourceId = task.ResultResourceId,
-                        resultPresignedUrl = task.ResultPresignedUrl,
-                    },
-                    createdAt: task.CompletedAt,
-                    source: NotificationSourceConstants.Creator),
+            await PublishImproveNotificationAsync(
+                context,
+                msg.UserId,
+                NotificationTypes.AiPostImproveCompleted,
+                "Post improvement is ready",
+                "Your AI-improved post is ready to review.",
+                task,
+                task.CompletedAt,
                 ct);
 
             _logger.LogInformation(
@@ -490,22 +489,14 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
 
             try
             {
-                await context.Publish(
-                    NotificationRequestedEventFactory.CreateForUser(
-                        msg.UserId,
-                        NotificationTypes.AiDraftPostGenerationFailed,
-                        "Post improvement failed",
-                        "Your AI post improvement could not be generated. Please try again.",
-                        new
-                        {
-                            correlationId = task.CorrelationId,
-                            recommendPostId = task.Id,
-                            originalPostId = task.OriginalPostId,
-                            errorCode = task.ErrorCode,
-                            errorMessage = task.ErrorMessage,
-                        },
-                        createdAt: task.CompletedAt,
-                        source: NotificationSourceConstants.Creator),
+                await PublishImproveNotificationAsync(
+                    context,
+                    msg.UserId,
+                    NotificationTypes.AiPostImproveFailed,
+                    "Post improvement failed",
+                    "Your AI post improvement could not be generated. Please try again.",
+                    task,
+                    task.CompletedAt,
                     ct);
             }
             catch (Exception notifyEx)
@@ -516,6 +507,49 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
+
+    private static Task PublishImproveNotificationAsync(
+        ConsumeContext<GenerateRecommendPostStarted> context,
+        Guid userId,
+        string type,
+        string title,
+        string message,
+        RecommendPost task,
+        DateTime? createdAt,
+        CancellationToken cancellationToken)
+    {
+        return context.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                userId,
+                type,
+                title,
+                message,
+                new
+                {
+                    correlationId = task.CorrelationId,
+                    recommendPostId = task.Id,
+                    originalPostId = task.OriginalPostId,
+                    postId = task.OriginalPostId,
+                    userId = userId,
+                    workspaceId = task.WorkspaceId,
+                    status = task.Status,
+                    taskStatus = task.Status,
+                    improveCaption = task.ImproveCaption,
+                    improveImage = task.ImproveImage,
+                    style = task.Style,
+                    userInstruction = task.UserInstruction,
+                    resultCaption = task.ResultCaption,
+                    resultResourceId = task.ResultResourceId,
+                    resultPresignedUrl = task.ResultPresignedUrl,
+                    errorCode = task.ErrorCode,
+                    errorMessage = task.ErrorMessage,
+                    createdAt = task.CreatedAt,
+                    completedAt = task.CompletedAt,
+                },
+                createdAt: createdAt,
+                source: NotificationSourceConstants.Creator),
+            cancellationToken);
+    }
 
     private static List<Guid> ParseResourceIds(IReadOnlyList<string>? raw)
     {

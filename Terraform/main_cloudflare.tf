@@ -106,10 +106,21 @@ resource "cloudflare_workers_script" "static_assets_proxy" {
       async fetch(request, env, ctx) {
         const url = new URL(request.url);
         const bucketHost = "${var.static_assets_bucket_domain_name}";
+        const corsHeaders = {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+          "Access-Control-Allow-Headers": request.headers.get("Access-Control-Request-Headers") || "*",
+          "Access-Control-Expose-Headers": "Content-Length, Content-Type, ETag",
+          "Access-Control-Max-Age": "86400"
+        };
+
+        if (request.method === "OPTIONS") {
+          return new Response(null, { status: 204, headers: corsHeaders });
+        }
 
         // Only allow safe methods to the bucket.
         if (request.method !== "GET" && request.method !== "HEAD") {
-          return new Response("Method Not Allowed", { status: 405 });
+          return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
         }
 
         const originUrl = `https://$${bucketHost}$${url.pathname}$${url.search}`;
@@ -124,7 +135,12 @@ resource "cloudflare_workers_script" "static_assets_proxy" {
           cf: { cacheEverything: true, cacheTtl: 86400 }
         };
 
-        return fetch(originUrl, init);
+        const originResponse = await fetch(originUrl, init);
+        const response = new Response(originResponse.body, originResponse);
+        for (const [key, value] of Object.entries(corsHeaders)) {
+          response.headers.set(key, value);
+        }
+        return response;
       }
     };
   EOF
