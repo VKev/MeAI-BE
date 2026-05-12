@@ -45,12 +45,36 @@ public sealed class FeedPostPublishGrpcClient : IFeedPostPublishService
         }
     }
 
+    public async Task<Result<FeedPostModerationContent>> GetFeedPostForModerationAsync(
+        Guid postId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _client.GetFeedPostForModerationAsync(new GetFeedPostForModerationRequest
+            {
+                PostId = postId.ToString(),
+                UserId = userId.ToString()
+            }, cancellationToken: cancellationToken);
+
+            var parsedPostId = Guid.TryParse(response.PostId, out var id) ? id : postId;
+            return Result.Success(new FeedPostModerationContent(parsedPostId, response.Content));
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<FeedPostModerationContent>(new Error(MapErrorCode(ex.StatusCode), ex.Status.Detail));
+        }
+    }
+
     private static string MapErrorCode(StatusCode statusCode)
     {
         return statusCode switch
         {
             StatusCode.AlreadyExists => "Post.AlreadyPublishedToFeed",
             StatusCode.InvalidArgument => "FeedPublish.InvalidArgument",
+            StatusCode.NotFound => "Feed.Post.NotFound",
+            StatusCode.PermissionDenied => "Feed.Post.Unauthorized",
             _ => "FeedPublish.GrpcError"
         };
     }

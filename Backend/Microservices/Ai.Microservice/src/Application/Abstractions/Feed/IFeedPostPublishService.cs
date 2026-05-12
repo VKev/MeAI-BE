@@ -7,6 +7,11 @@ public interface IFeedPostPublishService
     Task<Result<FeedDirectPublishResult>> PublishAiPostToFeedAsync(
         FeedDirectPublishRequest request,
         CancellationToken cancellationToken);
+
+    Task<Result<FeedPostModerationContent>> GetFeedPostForModerationAsync(
+        Guid postId,
+        Guid userId,
+        CancellationToken cancellationToken);
 }
 
 public sealed record FeedDirectPublishRequest(
@@ -20,3 +25,7 @@ public sealed record FeedDirectPublishRequest(
 public sealed record FeedDirectPublishResult(
     Guid FeedPostId,
     DateTime? CreatedAt);
+
+public sealed record FeedPostModerationContent(
+    Guid PostId,
+    string? Content);

@@ -1,6 +1,9 @@
 using Application.Posts.Commands;
+using Domain.Entities;
 using Grpc.Core;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
+using Application.Abstractions.Data;
 using SharedLibrary.Grpc.FeedPosts;
 
 namespace WebApi.Grpc;
@@ -8,10 +11,12 @@ namespace WebApi.Grpc;
 public sealed class FeedPostPublishGrpcService : FeedPostPublishService.FeedPostPublishServiceBase
 {
     private readonly IMediator _mediator;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public FeedPostPublishGrpcService(IMediator mediator)
+    public FeedPostPublishGrpcService(IMediator mediator, IUnitOfWork unitOfWork)
     {
         _mediator = mediator;
+        _unitOfWork = unitOfWork;
     }
 
     public override async Task<PublishAiPostToFeedResponse> PublishAiPostToFeed(
@@ -63,6 +68,43 @@ public sealed class FeedPostPublishGrpcService : FeedPostPublishService.FeedPost
         {
             FeedPostId = result.Value.Id.ToString(),
             CreatedAt = result.Value.CreatedAt?.ToString("O") ?? string.Empty
+        };
+    }
+
+    public override async Task<GetFeedPostForModerationResponse> GetFeedPostForModeration(
+        GetFeedPostForModerationRequest request,
+        ServerCallContext context)
+    {
+        if (!Guid.TryParse(request.PostId, out var postId) || postId == Guid.Empty)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid postId."));
+        }
+
+        if (!Guid.TryParse(request.UserId, out var userId) || userId == Guid.Empty)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid userId."));
+        }
+
+        var post = await _unitOfWork.Repository<Post>()
+            .GetAll()
+            .Where(item => item.Id == postId && !item.IsDeleted && item.DeletedAt == null)
+            .Select(item => new { item.Id, item.UserId, item.Content })
+            .FirstOrDefaultAsync(context.CancellationToken);
+
+        if (post is null)
+        {
+            throw new RpcException(new Status(StatusCode.NotFound, "Feed post not found."));
+        }
+
+        if (post.UserId != userId)
+        {
+            throw new RpcException(new Status(StatusCode.PermissionDenied, "User does not own this feed post."));
+        }
+
+        return new GetFeedPostForModerationResponse
+        {
+            PostId = post.Id.ToString(),
+            Content = post.Content ?? string.Empty
         };
     }
 
