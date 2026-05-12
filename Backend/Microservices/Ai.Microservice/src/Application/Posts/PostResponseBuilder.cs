@@ -165,6 +165,7 @@ public sealed class PostResponseBuilder
             PostBuilderId: post.PostBuilderId,
             ChatSessionId: post.ChatSessionId,
             SocialMediaId: post.SocialMediaId,
+            Platform: post.Platform,
             Title: post.Title,
             Content: post.Content,
             Status: responseStatus,

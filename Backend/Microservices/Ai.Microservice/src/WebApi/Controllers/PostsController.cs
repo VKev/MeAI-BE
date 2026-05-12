@@ -21,6 +21,9 @@ public sealed class PostsController : ApiController
     {
     }
 
+    /// <summary>
+    /// Lists the current user's posts. Each post response includes the draft target platform in `platform`.
+    /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(Result<IEnumerable<PostResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -47,6 +50,9 @@ public sealed class PostsController : ApiController
         return Ok(result);
     }
 
+    /// <summary>
+    /// Lists workspace posts. Each post response includes the draft target platform in `platform`.
+    /// </summary>
     [HttpGet("workspace/{workspaceId:guid}")]
     [ProducesResponseType(typeof(Result<IEnumerable<PostResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -80,6 +86,9 @@ public sealed class PostsController : ApiController
         return Ok(result);
     }
 
+    /// <summary>
+    /// Lists chat-session posts. Each post response includes the draft target platform in `platform`.
+    /// </summary>
     [HttpGet("chat-session/{chatSessionId:guid}")]
     [ProducesResponseType(typeof(Result<IEnumerable<PostResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -113,6 +122,9 @@ public sealed class PostsController : ApiController
         return Ok(result);
     }
 
+    /// <summary>
+    /// Gets a post by id. The response includes the draft target platform in `platform`.
+    /// </summary>
     [HttpGet("{postId:guid}")]
     [ProducesResponseType(typeof(Result<PostResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

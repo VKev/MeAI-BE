@@ -124,6 +124,7 @@ Envelope:
       "postBuilderId": "55555555-5555-5555-5555-555555555555",
       "chatSessionId": null,
       "socialMediaId": "11111111-1111-1111-1111-111111111111",
+      "platform": "facebook",
       "title": "Summer launch post",
       "content": {
         "content": "Launching our summer campaign this week.",
@@ -185,6 +186,7 @@ Envelope:
 | `postBuilderId` | uuid | Yes | Nhóm post builder nếu post thuộc builder flow. |
 | `chatSessionId` | uuid | Yes | Chat session liên quan nếu có. |
 | `socialMediaId` | uuid | Yes | Account social đang gắn với post. |
+| `platform` | string | Yes | Nền tảng nháp/target của post, ví dụ `facebook`, `instagram`, `tiktok`, `threads`. |
 | `title` | string | Yes | Tiêu đề post. |
 | `content` | object | Yes | Nội dung post. Xem `PostContent`. |
 | `status` | string | Yes | Trạng thái post hiện tại. |

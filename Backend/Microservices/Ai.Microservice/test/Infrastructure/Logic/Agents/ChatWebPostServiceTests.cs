@@ -97,6 +97,7 @@ public sealed class ChatWebPostServiceTests
                 postBuilderId,
                 sessionId,
                 null,
+                null,
                 "Generated title",
                 new PostContent
                 {
@@ -204,6 +205,7 @@ public sealed class ChatWebPostServiceTests
                 workspaceId,
                 postBuilderId,
                 sessionId,
+                null,
                 null,
                 "Create a post about today's AI news",
                 new PostContent { Content = "AI summary content" },

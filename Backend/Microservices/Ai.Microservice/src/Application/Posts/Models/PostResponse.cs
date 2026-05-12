@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Domain.Entities;
 
 namespace Application.Posts.Models;
@@ -11,6 +12,8 @@ public sealed record PostResponse(
     Guid? PostBuilderId,
     Guid? ChatSessionId,
     Guid? SocialMediaId,
+    [property: Description("Draft target platform for the post, for example facebook, instagram, tiktok, or threads.")]
+    string? Platform,
     string? Title,
     PostContent? Content,
     string? Status,

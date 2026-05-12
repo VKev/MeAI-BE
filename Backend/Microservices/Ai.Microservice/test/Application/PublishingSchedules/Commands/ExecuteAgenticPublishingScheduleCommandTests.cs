@@ -191,6 +191,7 @@ public sealed class ExecuteAgenticPublishingScheduleCommandTests
                 Guid.NewGuid(),
                 null,
                 null,
+                "facebook",
                 "KQXS Miền Bắc",
                 new PostContent
                 {
@@ -375,6 +376,7 @@ public sealed class ExecuteAgenticPublishingScheduleCommandTests
                 Guid.NewGuid(),
                 null,
                 null,
+                "facebook",
                 "Fallback post",
                 new PostContent
                 {

@@ -18,6 +18,7 @@ internal static class PostMapping
             PostBuilderId: post.PostBuilderId,
             ChatSessionId: post.ChatSessionId,
             SocialMediaId: post.SocialMediaId,
+            Platform: post.Platform,
             Title: post.Title,
             Content: post.Content,
             Status: post.Status,

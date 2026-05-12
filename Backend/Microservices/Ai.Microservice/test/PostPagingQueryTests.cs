@@ -43,6 +43,7 @@ public sealed class PostPagingQueryTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().ContainSingle();
         result.Value.Single().Id.Should().Be(post.Id);
+        result.Value.Single().Platform.Should().Be("facebook");
         postRepository.VerifyAll();
     }
 
@@ -116,6 +117,7 @@ public sealed class PostPagingQueryTests
             Id = Guid.NewGuid(),
             UserId = userId,
             WorkspaceId = workspaceId,
+            Platform = "facebook",
             Title = "Post",
             Content = new PostContent
             {
