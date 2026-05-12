@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Resources;
 using Application.Common;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -12,10 +13,12 @@ public sealed record DeletePostCommand(Guid UserId, Guid PostId, bool IsAdmin = 
 public sealed class DeletePostCommandHandler : ICommandHandler<DeletePostCommand, bool>
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IUserResourceService _userResourceService;
 
-    public DeletePostCommandHandler(IUnitOfWork unitOfWork)
+    public DeletePostCommandHandler(IUnitOfWork unitOfWork, IUserResourceService userResourceService)
     {
         _unitOfWork = unitOfWork;
+        _userResourceService = userResourceService;
     }
 
     public async Task<Result<bool>> Handle(DeletePostCommand request, CancellationToken cancellationToken)
@@ -34,7 +37,26 @@ public sealed class DeletePostCommandHandler : ICommandHandler<DeletePostCommand
             return Result.Failure<bool>(FeedErrors.Forbidden);
         }
 
+        var resourceIds = post.ResourceIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
         await FeedModerationSupport.SoftDeletePostAsync(_unitOfWork, post, cancellationToken);
+
+        if (resourceIds.Count > 0)
+        {
+            var deleteResourcesResult = await _userResourceService.DeleteResourcesAsync(
+                post.UserId,
+                resourceIds,
+                cancellationToken);
+
+            if (deleteResourcesResult.IsFailure)
+            {
+                return Result.Failure<bool>(deleteResourcesResult.Error);
+            }
+        }
+
         return Result.Success(true);
     }
 }

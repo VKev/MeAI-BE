@@ -10,6 +10,7 @@ service UserResourceService {
   rpc GetPublicUserProfileByUsername (GetPublicUserProfileByUsernameRequest) returns (GetPublicUserProfileByUsernameResponse);
   rpc GetPublicUserProfilesByIds (GetPublicUserProfilesByIdsRequest) returns (GetPublicUserProfilesByIdsResponse);
   rpc CreateResourcesFromUrls (CreateResourcesFromUrlsRequest) returns (CreateResourcesFromUrlsResponse);
+  rpc DeleteResources (DeleteResourcesRequest) returns (DeleteResourcesResponse);
   rpc CheckStorageQuota (CheckStorageQuotaRequest) returns (CheckStorageQuotaResponse);
   rpc BackfillResourceProvenance (BackfillResourceProvenanceRequest) returns (BackfillResourceProvenanceResponse);
   rpc GetActiveConfig (GetActiveConfigRequest) returns (GetActiveConfigResponse);
@@ -100,6 +101,15 @@ message CreatedResource {
 
 message CreateResourcesFromUrlsResponse {
   repeated CreatedResource resources = 1;
+}
+
+message DeleteResourcesRequest {
+  string user_id = 1;
+  repeated string resource_ids = 2;
+}
+
+message DeleteResourcesResponse {
+  int32 deleted_count = 1;
 }
 
 message CheckStorageQuotaRequest {
