@@ -113,6 +113,7 @@ def build_container(cfg: Config) -> Container:
             region=cfg.s3_region,
             key_prefix=cfg.s3_image_key_prefix,
             ttl_seconds=cfg.s3_presign_ttl_seconds,
+            public_base_url=cfg.s3_public_base_url,
         )
 
     presigner = image_mirror.presign if image_mirror else _no_presign

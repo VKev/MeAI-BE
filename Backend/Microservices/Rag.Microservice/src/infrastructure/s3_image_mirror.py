@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from urllib.parse import urlparse, urlunparse
 
 import aiohttp
 import boto3
@@ -31,11 +32,13 @@ class S3ImageMirror:
         region: str = "ap-southeast-1",
         key_prefix: str = "local-vinhdo/videorag-frames/images/",
         ttl_seconds: int = 604800,
+        public_base_url: str | None = "https://static.vkev.me",
     ) -> None:
         self._bucket = bucket
         self._region = region
         self._key_prefix = key_prefix.rstrip("/") + "/"
         self._ttl = ttl_seconds
+        self._public_base_url = (public_base_url or "").rstrip("/")
         self._client = None
         self._lock = threading.Lock()
 
@@ -46,6 +49,7 @@ class S3ImageMirror:
                     self._client = boto3.client(
                         "s3",
                         region_name=self._region,
+                        endpoint_url=f"https://s3.{self._region}.amazonaws.com",
                         config=Config(
                             signature_version="s3v4",
                             retries={"max_attempts": 3, "mode": "standard"},
@@ -116,11 +120,32 @@ class S3ImageMirror:
         if not key:
             return None
         try:
-            return self._get_client().generate_presigned_url(
+            url = self._get_client().generate_presigned_url(
                 "get_object",
                 Params={"Bucket": self._bucket, "Key": key},
                 ExpiresIn=self._ttl,
             )
+            return self._to_public_url(url)
         except Exception:
             logger.warning("presign failed for key=%s", key, exc_info=True)
             return None
+
+    def _to_public_url(self, signed_url: str) -> str:
+        """Rewrite path-style S3 presigned URLs through the public CDN host."""
+        if not self._public_base_url:
+            return signed_url
+
+        source = urlparse(signed_url)
+        public_base = urlparse(self._public_base_url)
+        if not public_base.scheme or not public_base.netloc:
+            logger.warning("invalid S3 public base URL %r; using direct S3 URL", self._public_base_url)
+            return signed_url
+
+        return urlunparse((
+            public_base.scheme,
+            public_base.netloc,
+            source.path,
+            "",
+            source.query,
+            "",
+        ))

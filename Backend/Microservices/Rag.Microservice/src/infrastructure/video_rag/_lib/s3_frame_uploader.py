@@ -13,6 +13,7 @@ import logging
 import os
 import threading
 from typing import Iterable
+from urllib.parse import urlparse, urlunparse
 
 import boto3
 from botocore.config import Config
@@ -32,6 +33,7 @@ def _client():
                 _CLIENT = boto3.client(
                     "s3",
                     region_name=region,
+                    endpoint_url=f"https://s3.{region}.amazonaws.com",
                     config=Config(
                         signature_version="s3v4",
                         retries={"max_attempts": 3, "mode": "standard"},
@@ -55,6 +57,35 @@ def _ttl_seconds() -> int:
     return int(os.environ.get("VIDEORAG_S3_FRAME_TTL_SECONDS", "604800"))  # 7 days
 
 
+def _public_base_url() -> str:
+    return (
+        os.environ.get("VIDEORAG_S3_PUBLIC_BASE_URL")
+        or os.environ.get("S3__PublicBaseUrl")
+        or "https://static.vkev.me"
+    ).rstrip("/")
+
+
+def _to_public_url(signed_url: str) -> str:
+    public_base = _public_base_url()
+    if not public_base:
+        return signed_url
+
+    source = urlparse(signed_url)
+    public = urlparse(public_base)
+    if not public.scheme or not public.netloc:
+        logger.warning("invalid S3 public base URL %r; using direct S3 URL", public_base)
+        return signed_url
+
+    return urlunparse((
+        public.scheme,
+        public.netloc,
+        source.path,
+        "",
+        source.query,
+        "",
+    ))
+
+
 def upload_frame_jpeg(jpeg_bytes: bytes, *, scope_hash: str, post_id: str,
                       segment_id: str, frame_index: int) -> str:
     """Uploads one JPEG to S3 and returns a presigned GET URL.
@@ -73,7 +104,7 @@ def upload_frame_jpeg(jpeg_bytes: bytes, *, scope_hash: str, post_id: str,
         Params={"Bucket": _bucket(), "Key": key},
         ExpiresIn=_ttl_seconds(),
     )
-    return url
+    return _to_public_url(url)
 
 
 def upload_pil_frames(pil_frames: Iterable, *, scope_hash: str, post_id: str,
