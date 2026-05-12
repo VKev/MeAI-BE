@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -51,10 +52,16 @@ public sealed class MultimodalLlmOptions
 /// </summary>
 public sealed class OpenRouterMultimodalLlmClient : IMultimodalLlmClient
 {
+    private const int MaxInlineImageCount = 4;
+    private const int MaxInlineImageBytes = 3 * 1024 * 1024;
+    private const int MaxInlineImageBytesTotal = 6 * 1024 * 1024;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
+
+    private static readonly HttpClient ImageDownloadHttp = CreateImageDownloadHttpClient();
 
     private readonly HttpClient _http;
     private readonly MultimodalLlmOptions _options;
@@ -82,22 +89,7 @@ public sealed class OpenRouterMultimodalLlmClient : IMultimodalLlmClient
         MultimodalAnswerRequest request,
         CancellationToken cancellationToken)
     {
-        var userParts = new List<object>
-        {
-            new TextPart("text", request.UserText),
-        };
-        var includedImages = 0;
-        if (request.ReferenceImageUrls != null)
-        {
-            foreach (var url in request.ReferenceImageUrls)
-            {
-                if (!string.IsNullOrWhiteSpace(url))
-                {
-                    userParts.Add(new ImagePart("image_url", new ImageUrl(url)));
-                    includedImages++;
-                }
-            }
-        }
+        var imageUrls = NormalizeImageUrls(request.ReferenceImageUrls);
         var effectiveModel = string.IsNullOrWhiteSpace(request.ModelOverride)
             ? _options.Model
             : request.ModelOverride.Trim();
@@ -108,15 +100,74 @@ public sealed class OpenRouterMultimodalLlmClient : IMultimodalLlmClient
             effectiveModel,
             request.SystemPrompt?.Length ?? 0,
             request.UserText?.Length ?? 0,
-            includedImages,
+            imageUrls.Count,
             webSearchEnabled);
 
-        // Conversation history as raw JsonObjects so we can append tool / assistant
-        // turns without leaking into the typed records.
+        try
+        {
+            return await GenerateWithImagesAsync(
+                request,
+                effectiveModel,
+                webSearchEnabled,
+                imageUrls,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OpenRouterChatException ex) when (
+            imageUrls.Count > 0 && LooksLikeImageDownloadFailure(ex.Body))
+        {
+            _logger.LogWarning(
+                "OpenRouter could not fetch one or more reference images; retrying with inline data URLs when possible. status={Status}",
+                (int)ex.ResponseStatusCode);
+
+            var inlineImageUrls = await BuildInlineImageUrlsAsync(imageUrls, cancellationToken)
+                .ConfigureAwait(false);
+            if (inlineImageUrls.Count > 0)
+            {
+                try
+                {
+                    _logger.LogInformation(
+                        "Retrying OpenRouter chat with {ImageCount} inline reference image(s)",
+                        inlineImageUrls.Count);
+                    return await GenerateWithImagesAsync(
+                        request,
+                        effectiveModel,
+                        webSearchEnabled,
+                        inlineImageUrls,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                catch (OpenRouterChatException retryEx)
+                {
+                    _logger.LogWarning(
+                        retryEx,
+                        "OpenRouter inline-image retry failed; retrying text-only. status={Status}",
+                        (int)retryEx.ResponseStatusCode);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("No reference images could be inlined; retrying text-only.");
+            }
+
+            return await GenerateWithImagesAsync(
+                request,
+                effectiveModel,
+                webSearchEnabled,
+                Array.Empty<string>(),
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<MultimodalAnswerResult> GenerateWithImagesAsync(
+        MultimodalAnswerRequest request,
+        string effectiveModel,
+        bool webSearchEnabled,
+        IReadOnlyList<string> imageUrls,
+        CancellationToken cancellationToken)
+    {
         var messages = new List<object>
         {
             new { role = "system", content = request.SystemPrompt },
-            new { role = "user", content = userParts },
+            new { role = "user", content = BuildUserParts(request.UserText, imageUrls) },
         };
 
         var sourcesAccumulated = new List<WebSource>();
@@ -204,7 +255,7 @@ public sealed class OpenRouterMultimodalLlmClient : IMultimodalLlmClient
             _logger.LogError(
                 "Multimodal LLM call failed: HTTP {Status} body={Body}",
                 (int)response.StatusCode, raw[..Math.Min(raw.Length, 600)]);
-            response.EnsureSuccessStatusCode();
+            throw new OpenRouterChatException(response.StatusCode, raw);
         }
 
         // Note: we clone the JsonElement out of the disposing JsonDocument so the
@@ -220,6 +271,143 @@ public sealed class OpenRouterMultimodalLlmClient : IMultimodalLlmClient
                 $"Multimodal LLM response had no message. Raw: {raw[..Math.Min(raw.Length, 400)]}");
         }
         return (msg.Clone(), raw);
+    }
+
+    private async Task<IReadOnlyList<string>> BuildInlineImageUrlsAsync(
+        IReadOnlyList<string> imageUrls,
+        CancellationToken cancellationToken)
+    {
+        var inlineUrls = new List<string>();
+        long totalBytes = 0;
+
+        foreach (var url in imageUrls.Take(MaxInlineImageCount))
+        {
+            if (url.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            {
+                inlineUrls.Add(url);
+                continue;
+            }
+
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                _logger.LogWarning("Skipping invalid reference image URL during inline retry.");
+                continue;
+            }
+
+            try
+            {
+                using var response = await ImageDownloadHttp.GetAsync(
+                    uri,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning(
+                        "Skipping reference image during inline retry: host={Host} status={Status}",
+                        uri.Host,
+                        (int)response.StatusCode);
+                    continue;
+                }
+
+                var contentType = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+                if (!contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning(
+                        "Skipping reference image during inline retry: host={Host} contentType={ContentType}",
+                        uri.Host,
+                        contentType);
+                    continue;
+                }
+
+                var declaredLength = response.Content.Headers.ContentLength;
+                if (declaredLength is > MaxInlineImageBytes ||
+                    totalBytes + (declaredLength ?? 0) > MaxInlineImageBytesTotal)
+                {
+                    _logger.LogWarning(
+                        "Skipping reference image during inline retry: host={Host} declaredBytes={Bytes}",
+                        uri.Host,
+                        declaredLength);
+                    continue;
+                }
+
+                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                if (bytes.Length == 0 ||
+                    bytes.Length > MaxInlineImageBytes ||
+                    totalBytes + bytes.Length > MaxInlineImageBytesTotal)
+                {
+                    _logger.LogWarning(
+                        "Skipping reference image during inline retry: host={Host} bytes={Bytes}",
+                        uri.Host,
+                        bytes.Length);
+                    continue;
+                }
+
+                totalBytes += bytes.Length;
+                inlineUrls.Add($"data:{contentType};base64,{Convert.ToBase64String(bytes)}");
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    "Timed out downloading reference image during inline retry: host={Host}",
+                    uri.Host);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed downloading reference image during inline retry: host={Host}",
+                    uri.Host);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Invalid reference image URL during inline retry: host={Host}",
+                    uri.Host);
+            }
+        }
+
+        return inlineUrls;
+    }
+
+    private static IReadOnlyList<string> NormalizeImageUrls(IReadOnlyList<string>? imageUrls)
+    {
+        if (imageUrls is null || imageUrls.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return imageUrls
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Select(url => url.Trim())
+            .ToArray();
+    }
+
+    private static List<object> BuildUserParts(string userText, IReadOnlyList<string> imageUrls)
+    {
+        var parts = new List<object>
+        {
+            new TextPart("text", userText),
+        };
+        foreach (var url in imageUrls)
+        {
+            parts.Add(new ImagePart("image_url", new ImageUrl(url)));
+        }
+        return parts;
+    }
+
+    private static bool LooksLikeImageDownloadFailure(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return false;
+        }
+
+        return body.Contains("Failed to download image", StringComparison.OrdinalIgnoreCase) ||
+               body.Contains("Error while downloading", StringComparison.OrdinalIgnoreCase) ||
+               body.Contains("Cannot fetch content from the provided URL", StringComparison.OrdinalIgnoreCase) ||
+               body.Contains("URL_ERROR", StringComparison.OrdinalIgnoreCase);
     }
 
     private static List<ToolCall> ExtractToolCalls(JsonElement msg)
@@ -366,6 +554,16 @@ public sealed class OpenRouterMultimodalLlmClient : IMultimodalLlmClient
         return merged;
     }
 
+    private static HttpClient CreateImageDownloadHttpClient()
+    {
+        var client = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(20),
+        };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; MeAIAi/1.0)");
+        return client;
+    }
+
     private static readonly object WebSearchToolDefinition = new
     {
         type = "function",
@@ -396,6 +594,19 @@ public sealed class OpenRouterMultimodalLlmClient : IMultimodalLlmClient
     };
 
     private sealed record ToolCall(string Id, string Name, string Arguments);
+
+    private sealed class OpenRouterChatException : HttpRequestException
+    {
+        public OpenRouterChatException(HttpStatusCode responseStatusCode, string body)
+            : base($"OpenRouter chat call failed: HTTP {(int)responseStatusCode} ({responseStatusCode})")
+        {
+            ResponseStatusCode = responseStatusCode;
+            Body = body;
+        }
+
+        public HttpStatusCode ResponseStatusCode { get; }
+        public string Body { get; }
+    }
 
     private sealed record TextPart(string Type, string Text)
     {
