@@ -172,7 +172,8 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
                 EmbedUrl: null,
                 DurationSeconds: null,
                 PublishedAt: ToDateTimeOffset(postDetails.CreatedTime),
-                Stats: stats);
+                Stats: stats,
+                VideoDownloadUrl: postDetails.VideoSourceUrl);
 
             var response = new SocialPlatformPostAnalyticsResponse(
                 SocialMediaId: request.SocialMediaId,

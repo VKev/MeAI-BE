@@ -23,8 +23,22 @@ import requests
 logger = logging.getLogger("rag-service.videorag-downloader")
 
 
+class VideoDownloadUnavailableError(RuntimeError):
+    """Raised when a social video page cannot be converted into local video bytes."""
+
+
 def _http_timeout() -> int:
     return int(os.environ.get("VIDEORAG_HTTP_TIMEOUT", "120"))
+
+
+def _download_headers() -> dict[str, str]:
+    return {
+        "User-Agent": (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "video/mp4,video/*;q=0.9,*/*;q=0.8",
+    }
 
 
 def _looks_like_viewer_page(url: str) -> bool:
@@ -51,13 +65,26 @@ def _download_via_yt_dlp(url: str, out_dir: str, base_name: str) -> str:
         "writeinfojson": False,
         "concurrent_fragment_downloads": 4,
         "socket_timeout": _http_timeout(),
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                          "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        },
+        "http_headers": _download_headers(),
     }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+    except yt_dlp.utils.DownloadError as ex:
+        raw_message = str(ex)
+        if "Cannot parse data" in raw_message and "facebook" in raw_message.lower():
+            logger.warning("yt-dlp could not parse Facebook video page: %s", raw_message[:300])
+            raise VideoDownloadUnavailableError(
+                "Facebook video could not be indexed by VideoRAG because the viewer page could not be parsed. "
+                "This is usually caused by a private, expired, restricted, or unsupported Facebook video page. "
+                "AI can still use the post caption and image context that indexed successfully."
+            ) from ex
+
+        logger.warning("yt-dlp video download failed: %s", raw_message[:300])
+        raise VideoDownloadUnavailableError(
+            "Video could not be indexed by VideoRAG because the source video could not be downloaded. "
+            "AI can still use any text or image context that indexed successfully."
+        ) from ex
 
     candidates = [
         os.path.join(out_dir, f"{base_name}.mp4"),
@@ -77,7 +104,12 @@ def _download_via_yt_dlp(url: str, out_dir: str, base_name: str) -> str:
 
 
 def _download_via_requests(url: str, out_path: str) -> None:
-    with requests.get(url, stream=True, timeout=_http_timeout()) as resp:
+    with requests.get(
+        url,
+        stream=True,
+        timeout=_http_timeout(),
+        headers=_download_headers(),
+    ) as resp:
         if resp.status_code != 200:
             raise RuntimeError(
                 f"video download HTTP {resp.status_code} for {url}: "

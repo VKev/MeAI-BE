@@ -28,6 +28,9 @@ public sealed class NotificationsController : ApiController
         [FromQuery] bool onlyUnread = false,
         [FromQuery] int limit = 50,
         [FromQuery] string? source = null,
+        [FromQuery] string? typePrefix = null,
+        [FromQuery] string? relatedId = null,
+        [FromQuery] DateTime? beforeCreatedAt = null,
         CancellationToken cancellationToken = default)
     {
         if (!TryGetUserId(out var userId))
@@ -36,7 +39,7 @@ public sealed class NotificationsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetUserNotificationsQuery(userId, onlyUnread, limit, source),
+            new GetUserNotificationsQuery(userId, onlyUnread, limit, source, typePrefix, relatedId, beforeCreatedAt),
             cancellationToken);
 
         if (result.IsFailure)

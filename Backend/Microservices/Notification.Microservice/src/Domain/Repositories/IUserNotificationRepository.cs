@@ -14,5 +14,8 @@ public interface IUserNotificationRepository
         bool onlyUnread,
         int limit,
         string? source,
+        string? typePrefix,
+        string? relatedId,
+        DateTime? beforeCreatedAt,
         CancellationToken cancellationToken);
 }

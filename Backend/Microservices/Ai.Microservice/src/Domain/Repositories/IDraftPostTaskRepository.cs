@@ -8,6 +8,8 @@ public interface IDraftPostTaskRepository
 
     Task<DraftPostTask?> GetByCorrelationIdAsync(Guid correlationId, CancellationToken cancellationToken);
 
+    Task<DraftPostTask?> GetByCorrelationIdOrResultPostIdAsync(Guid id, CancellationToken cancellationToken);
+
     Task<DraftPostTask?> GetByCorrelationIdForUpdateAsync(Guid correlationId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<DraftPostTask>> GetByResultPostIdsAsync(

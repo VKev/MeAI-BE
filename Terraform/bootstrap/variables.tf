@@ -29,6 +29,6 @@ variable "app_cors_allowed_origins" {
     "http://localhost:3030",
     "http://localhost:2406",
     "http://localhost:5173",
-    "https://meai-fe.vkev.me",
+    "https://creator.meai.vkev.me",
   ]
 }

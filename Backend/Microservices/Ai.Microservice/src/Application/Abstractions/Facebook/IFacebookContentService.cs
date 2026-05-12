@@ -70,7 +70,8 @@ public sealed record FacebookPostDetails(
     long? ShareCount,
     IReadOnlyDictionary<string, long>? ReactionBreakdown = null,
     long? ReachCount = null,
-    long? ImpressionCount = null);
+    long? ImpressionCount = null,
+    string? VideoSourceUrl = null);
 
 public sealed record FacebookPageInsights(
     string PageId,

@@ -88,6 +88,9 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         "  * Preserve the subject of the original image — same product / scene / person — unless " +
         "    the user's instruction explicitly asks to change it.\n" +
         "  * Improve composition, lighting, palette, or text overlay quality per the style-knowledge.\n" +
+        "  * IMPORTANT: The original/reference image is for reference only; do not make the new image " +
+        "too similar. Use it for subject, palette, lighting, mood, and brand cues, then create a " +
+        "new composition.\n" +
         "  * If the user's instruction targets the IMAGE specifically (e.g. 'cooler palette', " +
         "    'less busy', 'add product close-up'), apply it faithfully. If the instruction is " +
         "    caption-only, default to a refined version of the original visual concept.\n" +
@@ -102,6 +105,11 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         "  }\n\n" +
         "Output JSON ONLY — no preamble, no Markdown fence.";
 
+    private const string ReferenceImageSimilarityGuard =
+        "IMPORTANT: Reference images are for reference only; do not make the generated image " +
+        "too similar to any reference image. Use them for palette, lighting, mood, and brand " +
+        "cues, then create a new composition. ";
+
     /// <summary>
     /// Style-aware image-gen system prompt. Same shape as DraftPostGenerationConsumer's
     /// version (creative = no on-image text; branded = optional short headline; marketing
@@ -112,17 +120,20 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
     {
         DraftPostStyles.Creative =>
             "Generate a single editorial / lifestyle photograph. NO on-image text of any kind. " +
+            ReferenceImageSimilarityGuard +
             "The brand identity is carried by the visual mood + composition, not by overlays.",
         DraftPostStyles.Marketing =>
             "Generate a single promotional social-media image. Render on-image text VERBATIM as " +
             "specified in the brief — brand name, headline, value prop, CTA, contact line — using " +
-            "high-contrast type that's legible at thumbnail size. Treat any URL/email/phone in the " +
-            "brief as exact: do NOT shorten, normalize, or canonicalize.",
+            "high-contrast type that's legible at thumbnail size. " +
+            ReferenceImageSimilarityGuard +
+            "Treat any URL/email/phone in the brief as exact: do NOT shorten, normalize, or canonicalize.",
         _ /* Branded */ =>
             "Generate a single branded social-media image. Optional short headline overlay (<= 6 " +
             "words) at top-left or center-top — only render text if the brief explicitly includes " +
-            "it. Subtle brand mark welcome (corner watermark scale). Treat any URL/email/phone in " +
-            "the brief as exact verbatim text.",
+            "it. Subtle brand mark welcome (corner watermark scale). " +
+            ReferenceImageSimilarityGuard +
+            "Treat any URL/email/phone in the brief as exact verbatim text.",
     };
 
     private const int DefaultRagTopK = 6;

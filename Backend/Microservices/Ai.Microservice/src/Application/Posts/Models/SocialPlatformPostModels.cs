@@ -20,7 +20,8 @@ public sealed record SocialPlatformPostSummaryResponse(
     string? EmbedUrl,
     int? DurationSeconds,
     DateTimeOffset? PublishedAt,
-    SocialPlatformPostStatsResponse? Stats);
+    SocialPlatformPostStatsResponse? Stats,
+    string? VideoDownloadUrl = null);
 
 public sealed record SocialPlatformPostAnalyticsResponse(
     Guid SocialMediaId,
