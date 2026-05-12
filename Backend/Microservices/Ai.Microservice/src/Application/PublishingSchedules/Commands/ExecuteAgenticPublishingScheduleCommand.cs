@@ -80,10 +80,22 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
             return Result.Failure<bool>(PublishingScheduleErrors.SearchConfigRequired);
         }
 
+        if (string.IsNullOrWhiteSpace(search.QueryTemplate))
+        {
+            schedule.Status = PublishingScheduleState.StatusFailed;
+            schedule.ErrorCode = PublishingScheduleErrors.SearchQueryTemplateRequired.Code;
+            schedule.ErrorMessage = PublishingScheduleErrors.SearchQueryTemplateRequired.Description;
+            schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            _publishingScheduleRepository.Update(schedule);
+            await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
+            return Result.Failure<bool>(PublishingScheduleErrors.SearchQueryTemplateRequired);
+        }
+
+        var searchCount = Math.Clamp(search.Count ?? 5, 1, 10);
         var searchResult = await _agentWebSearchService.SearchAsync(
             new AgentWebSearchRequest(
                 search.QueryTemplate,
-                search.Count,
+                searchCount,
                 search.Country,
                 search.SearchLanguage,
                 search.Freshness,
