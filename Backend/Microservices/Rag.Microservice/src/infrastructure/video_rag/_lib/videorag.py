@@ -379,12 +379,16 @@ class VideoRAG:
 
             # ---------- extract/summary entity and upsert to graph
             logger.info("[Entity Extraction]...")
-            maybe_new_kg, _, _ = await self.entity_extraction_func(
+            extraction_result = await self.entity_extraction_func(
                 inserting_chunks,
                 knowledge_graph_inst=self.chunk_entity_relation_graph,
                 entity_vdb=self.entities_vdb,
                 global_config=asdict(self),
             )
+            if extraction_result is None:
+                logger.warning("Entity extraction returned no result")
+                return
+            maybe_new_kg, _, _ = extraction_result
             if maybe_new_kg is None:
                 logger.warning("No new entities found")
                 return
