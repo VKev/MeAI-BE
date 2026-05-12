@@ -29,8 +29,8 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
         _logger = logger;
     }
 
-    public async Task<N8nWebSearchResponse> EnrichAsync(
-        N8nWebSearchResponse response,
+    public async Task<AgentWebSearchResponse> EnrichAsync(
+        AgentWebSearchResponse response,
         Guid? userId,
         Guid? workspaceId,
         Guid? originChatSessionId,
@@ -46,7 +46,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
             };
         }
 
-        var enrichedResults = new List<N8nWebSearchResultItem>(response.Results.Count);
+        var enrichedResults = new List<AgentWebSearchResultItem>(response.Results.Count);
         var importCandidates = new List<MediaImportCandidate>();
         var importDedup = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -128,7 +128,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
         };
     }
 
-    public async Task<N8nWebSearchResponse> EnrichUrlsAsync(
+    public async Task<AgentWebSearchResponse> EnrichUrlsAsync(
         IReadOnlyList<string> urls,
         string query,
         Guid? userId,
@@ -139,13 +139,13 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
     {
         if (urls.Count == 0)
         {
-            return new N8nWebSearchResponse(query, DateTime.UtcNow, [], query, []);
+            return new AgentWebSearchResponse(query, DateTime.UtcNow, [], query, []);
         }
 
         var seedResults = urls
             .Where(url => !string.IsNullOrWhiteSpace(url))
             .Take(MaxResultsToFetch)
-            .Select(url => new N8nWebSearchResultItem(
+            .Select(url => new AgentWebSearchResultItem(
                 Title: null,
                 Url: url.Trim(),
                 Description: null,
@@ -153,7 +153,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
             .ToList();
 
         return await EnrichAsync(
-            new N8nWebSearchResponse(
+            new AgentWebSearchResponse(
                 query,
                 DateTime.UtcNow,
                 seedResults,
@@ -218,7 +218,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
         }
     }
 
-    private async Task<IReadOnlyList<N8nImportedResourceItem>> ImportMediaAsync(
+    private async Task<IReadOnlyList<ImportedResourceItem>> ImportMediaAsync(
         Guid userId,
         Guid? workspaceId,
         Guid? originChatSessionId,
@@ -226,7 +226,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
         IReadOnlyList<MediaImportCandidate> candidates,
         CancellationToken cancellationToken)
     {
-        var created = new List<N8nImportedResourceItem>();
+        var created = new List<ImportedResourceItem>();
 
         foreach (var group in candidates.GroupBy(candidate => candidate.ResourceType, StringComparer.OrdinalIgnoreCase))
         {
@@ -257,7 +257,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
             {
                 var resource = uploadResult.Value[index];
                 var source = sourceCandidates[index];
-                created.Add(new N8nImportedResourceItem(
+                created.Add(new ImportedResourceItem(
                     resource.ResourceId,
                     resource.PresignedUrl,
                     resource.ContentType,
@@ -270,7 +270,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
         return created;
     }
 
-    private static string BuildLlmContext(string query, IReadOnlyList<N8nWebSearchResultItem> results)
+    private static string BuildLlmContext(string query, IReadOnlyList<AgentWebSearchResultItem> results)
     {
         if (results.Count == 0)
         {

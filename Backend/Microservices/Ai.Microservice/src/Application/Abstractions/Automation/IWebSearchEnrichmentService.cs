@@ -2,15 +2,15 @@ namespace Application.Abstractions.Automation;
 
 public interface IWebSearchEnrichmentService
 {
-    Task<N8nWebSearchResponse> EnrichAsync(
-        N8nWebSearchResponse response,
+    Task<AgentWebSearchResponse> EnrichAsync(
+        AgentWebSearchResponse response,
         Guid? userId,
         Guid? workspaceId,
         Guid? originChatSessionId,
         Guid? originChatId,
         CancellationToken cancellationToken);
 
-    Task<N8nWebSearchResponse> EnrichUrlsAsync(
+    Task<AgentWebSearchResponse> EnrichUrlsAsync(
         IReadOnlyList<string> urls,
         string query,
         Guid? userId,

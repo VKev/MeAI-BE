@@ -28,7 +28,6 @@ public sealed class UpdateAgenticPublishingScheduleCommandHandler
     private readonly IPublishingScheduleRepository _publishingScheduleRepository;
     private readonly PublishingScheduleCommandSupport _support;
     private readonly PublishingScheduleResponseBuilder _responseBuilder;
-    private readonly IN8nWorkflowClient _n8nWorkflowClient;
 
     public UpdateAgenticPublishingScheduleCommandHandler(
         IPublishingScheduleRepository publishingScheduleRepository,
@@ -36,8 +35,7 @@ public sealed class UpdateAgenticPublishingScheduleCommandHandler
         IPostRepository postRepository,
         IPostPublicationRepository postPublicationRepository,
         Application.Abstractions.SocialMedias.IUserSocialMediaService userSocialMediaService,
-        PublishingScheduleResponseBuilder responseBuilder,
-        IN8nWorkflowClient n8nWorkflowClient)
+        PublishingScheduleResponseBuilder responseBuilder)
     {
         _publishingScheduleRepository = publishingScheduleRepository;
         _support = new PublishingScheduleCommandSupport(
@@ -46,7 +44,6 @@ public sealed class UpdateAgenticPublishingScheduleCommandHandler
             postPublicationRepository,
             userSocialMediaService);
         _responseBuilder = responseBuilder;
-        _n8nWorkflowClient = n8nWorkflowClient;
     }
 
     public async Task<Result<PublishingScheduleResponse>> Handle(
@@ -119,7 +116,6 @@ public sealed class UpdateAgenticPublishingScheduleCommandHandler
             });
         }
 
-        var jobId = Guid.CreateVersion7();
         var executionContext = new AgenticScheduleExecutionContext(
             Search: new PublishingScheduleSearchInput(
                 validated.Value.Search!.QueryTemplate,
@@ -127,13 +123,12 @@ public sealed class UpdateAgenticPublishingScheduleCommandHandler
                 validated.Value.Search.Country,
                 validated.Value.Search.SearchLanguage,
                 validated.Value.Search.Freshness),
-            N8nJobId: jobId,
             RegisteredAtUtc: now);
 
         schedule.WorkspaceId = request.WorkspaceId;
         schedule.Name = validated.Value.Name;
         schedule.Mode = validated.Value.Mode;
-        schedule.Status = "draft";
+        schedule.Status = PublishingScheduleState.StatusWaitingForExecution;
         schedule.Timezone = validated.Value.Timezone;
         schedule.ExecuteAtUtc = validated.Value.ExecuteAtUtc;
         schedule.IsPrivate = validated.Value.IsPrivate;
@@ -147,49 +142,6 @@ public sealed class UpdateAgenticPublishingScheduleCommandHandler
         schedule.NextRetryAt = null;
         schedule.UpdatedAt = now;
 
-        _publishingScheduleRepository.Update(schedule);
-        await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
-
-        var registerResult = await _n8nWorkflowClient.RegisterScheduledAgentJobAsync(
-            new N8nScheduledAgentJobRequest(
-                jobId,
-                schedule.Id,
-                schedule.UserId,
-                schedule.WorkspaceId,
-                schedule.ExecuteAtUtc,
-                schedule.Timezone ?? "UTC",
-                new N8nWebSearchRequest(
-                    validated.Value.Search.QueryTemplate,
-                    validated.Value.Search.Count,
-                    validated.Value.Search.Country,
-                    validated.Value.Search.SearchLanguage,
-                    validated.Value.Search.Freshness,
-                    schedule.Timezone,
-                    schedule.ExecuteAtUtc)),
-            cancellationToken);
-
-        if (registerResult.IsFailure)
-        {
-            schedule.Status = PublishingScheduleState.StatusFailed;
-            schedule.ErrorCode = registerResult.Error.Code;
-            schedule.ErrorMessage = registerResult.Error.Description;
-            schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
-            _publishingScheduleRepository.Update(schedule);
-            await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
-            return Result.Failure<PublishingScheduleResponse>(registerResult.Error);
-        }
-
-        executionContext = executionContext with
-        {
-            N8nExecutionId = registerResult.Value.ExecutionId,
-            RegisteredAtUtc = registerResult.Value.AcceptedAtUtc
-        };
-
-        schedule.Status = PublishingScheduleState.StatusWaitingForExecution;
-        schedule.ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(executionContext);
-        schedule.ErrorCode = null;
-        schedule.ErrorMessage = null;
-        schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         _publishingScheduleRepository.Update(schedule);
         await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
 

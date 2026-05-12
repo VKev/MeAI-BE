@@ -2,48 +2,45 @@ using Application.Abstractions.Automation;
 using Application.Abstractions.Rag;
 using Application.Posts.Commands;
 using Application.Posts.Models;
+using Application.PublishingSchedules.Models;
+using Application.Recommendations.Commands;
+using Application.Recommendations.Queries;
 using Domain.Entities;
 using Domain.Repositories;
 using MediatR;
-using Application.Recommendations.Commands;
-using Application.Recommendations.Queries;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
 
 namespace Application.PublishingSchedules.Commands;
 
-public sealed record HandleAgentScheduleRuntimeResultCommand(
-    Guid ScheduleId,
-    Guid JobId,
-    N8nWebSearchResponse Search,
-    Guid? CorrelationId = null,
-    int? AttemptNumber = null) : IRequest<Result<bool>>;
+public sealed record ExecuteAgenticPublishingScheduleCommand(
+    Guid ScheduleId) : IRequest<Result<bool>>;
 
-public sealed class HandleAgentScheduleRuntimeResultCommandHandler
-    : IRequestHandler<HandleAgentScheduleRuntimeResultCommand, Result<bool>>
+public sealed class ExecuteAgenticPublishingScheduleCommandHandler
+    : IRequestHandler<ExecuteAgenticPublishingScheduleCommand, Result<bool>>
 {
     private readonly IPublishingScheduleRepository _publishingScheduleRepository;
     private readonly IAgenticRuntimeContentService _runtimeContentService;
-    private readonly IWebSearchEnrichmentService _webSearchEnrichmentService;
+    private readonly IAgentWebSearchService _agentWebSearchService;
     private readonly IMediator _mediator;
     private readonly IRagClient _ragClient;
 
-    public HandleAgentScheduleRuntimeResultCommandHandler(
+    public ExecuteAgenticPublishingScheduleCommandHandler(
         IPublishingScheduleRepository publishingScheduleRepository,
         IAgenticRuntimeContentService runtimeContentService,
-        IWebSearchEnrichmentService webSearchEnrichmentService,
+        IAgentWebSearchService agentWebSearchService,
         IMediator mediator,
         IRagClient ragClient)
     {
         _publishingScheduleRepository = publishingScheduleRepository;
         _runtimeContentService = runtimeContentService;
-        _webSearchEnrichmentService = webSearchEnrichmentService;
+        _agentWebSearchService = agentWebSearchService;
         _mediator = mediator;
         _ragClient = ragClient;
     }
 
     public async Task<Result<bool>> Handle(
-        HandleAgentScheduleRuntimeResultCommand request,
+        ExecuteAgenticPublishingScheduleCommand request,
         CancellationToken cancellationToken)
     {
         var schedule = await _publishingScheduleRepository.GetByIdForUpdateAsync(request.ScheduleId, cancellationToken);
@@ -63,20 +60,51 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
         }
 
         var context = AgenticScheduleExecutionContextSerializer.Parse(schedule.ExecutionContextJson);
-        if (context.LastProcessedCallbackJobId == request.JobId)
+        var search = context.Search ?? (!string.IsNullOrWhiteSpace(schedule.SearchQueryTemplate)
+            ? new PublishingScheduleSearchInput(
+                schedule.SearchQueryTemplate,
+                5,
+                null,
+                null,
+                null)
+            : null);
+
+        if (search is null)
         {
-            return Result.Success(true);
+            schedule.Status = PublishingScheduleState.StatusFailed;
+            schedule.ErrorCode = PublishingScheduleErrors.SearchConfigRequired.Code;
+            schedule.ErrorMessage = PublishingScheduleErrors.SearchConfigRequired.Description;
+            schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            _publishingScheduleRepository.Update(schedule);
+            await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
+            return Result.Failure<bool>(PublishingScheduleErrors.SearchConfigRequired);
         }
 
-        var enrichedSearch = await _webSearchEnrichmentService.EnrichAsync(
-            request.Search,
-            schedule.UserId,
-            schedule.WorkspaceId,
-            null,
-            null,
+        var searchResult = await _agentWebSearchService.SearchAsync(
+            new AgentWebSearchRequest(
+                search.QueryTemplate,
+                search.Count,
+                search.Country,
+                search.SearchLanguage,
+                search.Freshness,
+                schedule.UserId,
+                schedule.WorkspaceId),
             cancellationToken);
 
+        if (searchResult.IsFailure)
+        {
+            schedule.Status = PublishingScheduleState.StatusFailed;
+            schedule.ErrorCode = searchResult.Error.Code;
+            schedule.ErrorMessage = searchResult.Error.Description;
+            schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            _publishingScheduleRepository.Update(schedule);
+            await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
+            return Result.Failure<bool>(searchResult.Error);
+        }
+
+        var enrichedSearch = searchResult.Value;
         var now = DateTimeExtensions.PostgreSqlUtcNow;
+        var executionRunId = Guid.CreateVersion7();
         schedule.Status = PublishingScheduleState.StatusExecuting;
         schedule.LastExecutionAt = now;
         schedule.UpdatedAt = now;
@@ -89,8 +117,8 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
 
         schedule.ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(context with
         {
-            LastProcessedCallbackJobId = request.JobId,
-            LastCallbackReceivedAtUtc = now,
+            LastExecutionRunId = executionRunId,
+            LastExecutionStartedAtUtc = now,
             LastQuery = enrichedSearch.Query,
             LastRetrievedAtUtc = enrichedSearch.RetrievedAtUtc,
             GroundingSocialMediaId = groundingTarget?.SocialMediaId,
@@ -153,8 +181,8 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
 
         schedule.ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(context with
         {
-            LastProcessedCallbackJobId = request.JobId,
-            LastCallbackReceivedAtUtc = now,
+            LastExecutionRunId = executionRunId,
+            LastExecutionStartedAtUtc = now,
             LastQuery = enrichedSearch.Query,
             LastRetrievedAtUtc = enrichedSearch.RetrievedAtUtc,
             GroundingSocialMediaId = groundingTarget.SocialMediaId,
@@ -250,9 +278,9 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
         schedule.Status = PublishingScheduleState.StatusPublishing;
         schedule.ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(context with
         {
-            LastProcessedCallbackJobId = request.JobId,
+            LastExecutionRunId = executionRunId,
             RuntimePostId = runtimePostId,
-            LastCallbackReceivedAtUtc = now,
+            LastExecutionStartedAtUtc = now,
             LastQuery = enrichedSearch.Query,
             LastRetrievedAtUtc = enrichedSearch.RetrievedAtUtc,
             GroundingSocialMediaId = groundingTarget.SocialMediaId,
@@ -324,7 +352,7 @@ public sealed class HandleAgentScheduleRuntimeResultCommandHandler
 
     private static string BuildRecommendationQuery(
         PublishingSchedule schedule,
-        N8nWebSearchResponse enrichedSearch)
+        AgentWebSearchResponse enrichedSearch)
     {
         var topResults = enrichedSearch.Results
             .Take(3)

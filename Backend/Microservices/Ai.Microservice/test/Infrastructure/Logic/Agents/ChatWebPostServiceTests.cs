@@ -23,7 +23,7 @@ public sealed class ChatWebPostServiceTests
         var postBuilderId = Guid.NewGuid();
         var importedResourceId = Guid.NewGuid();
 
-        var n8nWorkflowClient = new Mock<IN8nWorkflowClient>(MockBehavior.Strict);
+        var agentWebSearchService = new Mock<IAgentWebSearchService>(MockBehavior.Strict);
         var webSearchEnrichmentService = new Mock<IWebSearchEnrichmentService>(MockBehavior.Strict);
         var runtimeContentService = new Mock<IAgenticRuntimeContentService>(MockBehavior.Strict);
         var mediator = new Mock<IMediator>(MockBehavior.Strict);
@@ -37,11 +37,11 @@ public sealed class ChatWebPostServiceTests
                 sessionId,
                 null,
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new N8nWebSearchResponse(
+            .ReturnsAsync(new AgentWebSearchResponse(
                 "Create a post from https://example.com/article",
                 DateTime.UtcNow,
                 [
-                    new N8nWebSearchResultItem(
+                    new AgentWebSearchResultItem(
                         "Example article",
                         "https://example.com/article",
                         "Example description",
@@ -52,7 +52,7 @@ public sealed class ChatWebPostServiceTests
                 ],
                 "Detailed page content",
                 [
-                    new N8nImportedResourceItem(
+                    new ImportedResourceItem(
                         importedResourceId,
                         "https://cdn.example.com/image.jpg",
                         "image/jpeg",
@@ -112,7 +112,7 @@ public sealed class ChatWebPostServiceTests
                 DateTime.UtcNow)));
 
         var service = new ChatWebPostService(
-            n8nWorkflowClient.Object,
+            agentWebSearchService.Object,
             webSearchEnrichmentService.Object,
             runtimeContentService.Object,
             mediator.Object);
@@ -132,7 +132,7 @@ public sealed class ChatWebPostServiceTests
         result.Value.SourceUrls.Should().BeEquivalentTo(["https://example.com/article"]);
         result.Value.ImportedResourceIds.Should().BeEquivalentTo([importedResourceId]);
 
-        n8nWorkflowClient.VerifyNoOtherCalls();
+        agentWebSearchService.VerifyNoOtherCalls();
         webSearchEnrichmentService.VerifyAll();
         runtimeContentService.VerifyAll();
         mediator.VerifyAll();
@@ -147,25 +147,25 @@ public sealed class ChatWebPostServiceTests
         var postId = Guid.NewGuid();
         var postBuilderId = Guid.NewGuid();
 
-        var n8nWorkflowClient = new Mock<IN8nWorkflowClient>(MockBehavior.Strict);
+        var agentWebSearchService = new Mock<IAgentWebSearchService>(MockBehavior.Strict);
         var webSearchEnrichmentService = new Mock<IWebSearchEnrichmentService>(MockBehavior.Strict);
         var runtimeContentService = new Mock<IAgenticRuntimeContentService>(MockBehavior.Strict);
         var mediator = new Mock<IMediator>(MockBehavior.Strict);
 
-        n8nWorkflowClient
-            .Setup(service => service.WebSearchAsync(
-                It.Is<N8nWebSearchRequest>(request =>
-                    request.QueryTemplate == "Create a post about today's AI news" &&
+        agentWebSearchService
+            .Setup(service => service.SearchAsync(
+                It.Is<AgentWebSearchRequest>(request =>
+                    request.Query == "Create a post about today's AI news" &&
                     request.Count == 5 &&
                     request.Freshness == "pd" &&
                     request.UserId == userId &&
                     request.WorkspaceId == workspaceId),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new N8nWebSearchResponse(
+            .ReturnsAsync(Result.Success(new AgentWebSearchResponse(
                 "Create a post about today's AI news",
                 DateTime.UtcNow,
                 [
-                    new N8nWebSearchResultItem(
+                    new AgentWebSearchResultItem(
                         "AI news",
                         "https://example.com/news",
                         "Latest AI update",
@@ -216,7 +216,7 @@ public sealed class ChatWebPostServiceTests
                 DateTime.UtcNow)));
 
         var service = new ChatWebPostService(
-            n8nWorkflowClient.Object,
+            agentWebSearchService.Object,
             webSearchEnrichmentService.Object,
             runtimeContentService.Object,
             mediator.Object);
@@ -236,7 +236,7 @@ public sealed class ChatWebPostServiceTests
         result.Value.SourceUrls.Should().BeEquivalentTo(["https://example.com/news"]);
         result.Value.ImportedResourceIds.Should().BeEmpty();
 
-        n8nWorkflowClient.VerifyAll();
+        agentWebSearchService.VerifyAll();
         webSearchEnrichmentService.VerifyNoOtherCalls();
         runtimeContentService.VerifyAll();
         mediator.VerifyAll();
