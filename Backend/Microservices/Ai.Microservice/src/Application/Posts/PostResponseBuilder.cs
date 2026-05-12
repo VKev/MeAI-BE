@@ -142,6 +142,12 @@ public sealed class PostResponseBuilder
             post.Id,
             out var recommendationTask);
         var recommendationStatus = recommendationTask?.Status;
+        var responseStatus = string.Equals(
+            recommendationStatus,
+            DraftPostTaskStatuses.Failed,
+            StringComparison.OrdinalIgnoreCase)
+                ? "failed"
+                : post.Status;
 
         return new PostResponse(
             Id: post.Id,
@@ -154,7 +160,7 @@ public sealed class PostResponseBuilder
             SocialMediaId: post.SocialMediaId,
             Title: post.Title,
             Content: post.Content,
-            Status: post.Status,
+            Status: responseStatus,
             Schedule: schedule,
             IsPublished: publications.Any(publication =>
                 string.Equals(publication.PublishStatus, "published", StringComparison.OrdinalIgnoreCase)),

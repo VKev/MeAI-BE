@@ -83,10 +83,15 @@ public sealed class PostRepository : IPostRepository
         string? platform,
         CancellationToken cancellationToken)
     {
+        var failedRecommendationPostIds = FailedRecommendationPostIds(userId);
+        var includeFailedRecommendationPosts = IsFailedStatusFilter(status);
         var query = _dbSet.AsNoTracking()
-            .Where(p => p.UserId == userId && p.DeletedAt == null);
+            .Where(p =>
+                p.UserId == userId &&
+                (p.DeletedAt == null ||
+                 (includeFailedRecommendationPosts && failedRecommendationPostIds.Contains(p.Id))));
 
-        query = ApplyFilters(query, status, socialMediaId, platform);
+        query = ApplyFilters(query, status, socialMediaId, platform, failedRecommendationPostIds);
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
         {
@@ -124,12 +129,15 @@ public sealed class PostRepository : IPostRepository
         string? platform,
         CancellationToken cancellationToken)
     {
+        var failedRecommendationPostIds = FailedRecommendationPostIds(userId);
+        var includeFailedRecommendationPosts = IsFailedStatusFilter(status);
         var query = _dbSet.AsNoTracking()
             .Where(p => p.UserId == userId &&
                         p.WorkspaceId == workspaceId &&
-                        p.DeletedAt == null);
+                        (p.DeletedAt == null ||
+                         (includeFailedRecommendationPosts && failedRecommendationPostIds.Contains(p.Id))));
 
-        query = ApplyFilters(query, status, socialMediaId, platform);
+        query = ApplyFilters(query, status, socialMediaId, platform, failedRecommendationPostIds);
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
         {
@@ -158,12 +166,15 @@ public sealed class PostRepository : IPostRepository
         string? platform,
         CancellationToken cancellationToken)
     {
+        var failedRecommendationPostIds = FailedRecommendationPostIds(userId);
+        var includeFailedRecommendationPosts = IsFailedStatusFilter(status);
         var query = _dbSet.AsNoTracking()
             .Where(p => p.UserId == userId &&
                         p.ChatSessionId == chatSessionId &&
-                        p.DeletedAt == null);
+                        (p.DeletedAt == null ||
+                         (includeFailedRecommendationPosts && failedRecommendationPostIds.Contains(p.Id))));
 
-        query = ApplyFilters(query, status, socialMediaId, platform);
+        query = ApplyFilters(query, status, socialMediaId, platform, failedRecommendationPostIds);
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
         {
@@ -280,15 +291,42 @@ public sealed class PostRepository : IPostRepository
                 .SetProperty(post => post.UpdatedAt, now), cancellationToken);
     }
 
+    private IQueryable<Guid> FailedRecommendationPostIds(Guid userId)
+    {
+        return _dbContext.Set<DraftPostTask>()
+            .AsNoTracking()
+            .Where(task =>
+                task.UserId == userId &&
+                task.Status == DraftPostTaskStatuses.Failed &&
+                task.ResultPostId.HasValue)
+            .Select(task => task.ResultPostId!.Value);
+    }
+
+    private static bool IsFailedStatusFilter(string? status)
+    {
+        return string.Equals(status?.Trim(), FailedStatus, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static IQueryable<Post> ApplyFilters(
         IQueryable<Post> query,
         string? status,
         Guid? socialMediaId,
-        string? platform)
+        string? platform,
+        IQueryable<Guid>? failedRecommendationPostIds = null)
     {
         if (!string.IsNullOrWhiteSpace(status))
         {
-            query = query.Where(post => post.Status == status);
+            var normalizedStatus = status.Trim();
+            if (IsFailedStatusFilter(normalizedStatus) && failedRecommendationPostIds is not null)
+            {
+                query = query.Where(post =>
+                    post.Status == FailedStatus ||
+                    failedRecommendationPostIds.Contains(post.Id));
+            }
+            else
+            {
+                query = query.Where(post => post.Status == normalizedStatus);
+            }
         }
 
         if (socialMediaId.HasValue && socialMediaId.Value != Guid.Empty)

@@ -6,7 +6,14 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Notifications.Queries;
 
-public sealed record GetUserNotificationsQuery(Guid UserId, bool OnlyUnread, int Limit, string? Source)
+public sealed record GetUserNotificationsQuery(
+    Guid UserId,
+    bool OnlyUnread,
+    int Limit,
+    string? Source,
+    string? TypePrefix,
+    string? RelatedId,
+    DateTime? BeforeCreatedAt = null)
     : IQuery<IReadOnlyList<NotificationDeliveryModel>>;
 
 public sealed class GetUserNotificationsQueryHandler
@@ -23,11 +30,15 @@ public sealed class GetUserNotificationsQueryHandler
         GetUserNotificationsQuery request,
         CancellationToken cancellationToken)
     {
+        var limit = Math.Clamp(request.Limit, 1, 200);
         var userNotifications = await _userNotificationRepository.GetByUserIdAsync(
             request.UserId,
             request.OnlyUnread,
-            request.Limit,
+            limit,
             request.Source,
+            request.TypePrefix,
+            request.RelatedId,
+            request.BeforeCreatedAt,
             cancellationToken);
 
         var response = userNotifications

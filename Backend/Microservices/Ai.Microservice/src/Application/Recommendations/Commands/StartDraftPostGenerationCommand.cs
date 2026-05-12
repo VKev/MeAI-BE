@@ -113,8 +113,8 @@ public sealed class StartDraftPostGenerationCommandHandler
         // and poll the task for completion. The consumer's Step 6 looks up THIS
         // post by id and updates its content with the generated caption + image
         // resource (rather than creating a new Post at the end of processing).
-        // On failure, the consumer's catch path soft-deletes this empty post so
-        // the user doesn't see a permanently-blank placeholder.
+        // On failure, the consumer marks this placeholder as failed so the user can
+        // find the stopped recommendation under the Product Failed tab.
         var draftPost = new Post
         {
             Id = Guid.CreateVersion7(),

@@ -18,6 +18,9 @@ public sealed class UserNotificationConfiguration : IEntityTypeConfiguration<Use
         entity.HasIndex(e => new { e.UserId, e.IsRead, e.CreatedAt }, "ix_user_notifications_user_read_created_at")
             .IsDescending(false, false, true);
 
+        entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "ix_user_notifications_user_created_at")
+            .IsDescending(false, true);
+
         entity.HasIndex(e => new { e.UserId, e.WasOnlineWhenCreated }, "ix_user_notifications_user_online_snapshot");
 
         entity.Property(e => e.Id).HasColumnName("id");

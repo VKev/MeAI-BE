@@ -118,15 +118,15 @@ public sealed class RecommendationsController : ApiController
     }
 
     /// <summary>
-    /// Status of an async draft-post generation by correlation id. The final result
-    /// (post-builder id, resource id, presigned image URL, caption) populates here once done.
+    /// Status of an async draft-post generation by correlation id or the pre-created draft post id.
+    /// The final result (post-builder id, resource id, presigned image URL, caption) populates here once done.
     /// </summary>
-    [HttpGet("draft-posts/{correlationId:guid}")]
+    [HttpGet("draft-posts/{id:guid}")]
     [ProducesResponseType(typeof(Result<DraftPostTaskResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDraftPostStatus(
-        Guid correlationId,
+        Guid id,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(out var userId))
@@ -135,7 +135,7 @@ public sealed class RecommendationsController : ApiController
         }
 
         var result = await _mediator.Send(
-            new GetDraftPostTaskQuery(userId, correlationId),
+            new GetDraftPostTaskQuery(userId, id),
             cancellationToken);
 
         if (result.IsFailure)

@@ -8,7 +8,7 @@ namespace Application.Recommendations.Queries;
 
 public sealed record GetDraftPostTaskQuery(
     Guid UserId,
-    Guid CorrelationId) : IRequest<Result<DraftPostTaskResponse>>;
+    Guid Id) : IRequest<Result<DraftPostTaskResponse>>;
 
 public sealed class GetDraftPostTaskQueryHandler
     : IRequestHandler<GetDraftPostTaskQuery, Result<DraftPostTaskResponse>>
@@ -24,7 +24,7 @@ public sealed class GetDraftPostTaskQueryHandler
         GetDraftPostTaskQuery request,
         CancellationToken cancellationToken)
     {
-        var task = await _repository.GetByCorrelationIdAsync(request.CorrelationId, cancellationToken);
+        var task = await _repository.GetByCorrelationIdOrResultPostIdAsync(request.Id, cancellationToken);
         if (task is null)
         {
             return Result.Failure<DraftPostTaskResponse>(

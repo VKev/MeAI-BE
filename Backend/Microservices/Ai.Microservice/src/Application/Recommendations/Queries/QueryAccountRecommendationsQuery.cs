@@ -34,7 +34,12 @@ public sealed record AccountRecommendationsAnswer(
     /// quote contact info EXACTLY rather than paraphrasing it from the recommendation
     /// summary (paraphrasing was causing them to hallucinate canonical-looking URLs).
     /// </summary>
-    string? PageProfileText = null);
+    string? PageProfileText = null,
+    IReadOnlyList<RagRetrievalError>? RetrievalErrors = null);
+
+public sealed record RagRetrievalError(
+    string Source,
+    string Error);
 
 public sealed record RecommendationReference(
     string DocumentId,
@@ -372,8 +377,10 @@ public sealed class QueryAccountRecommendationsQueryHandler
                 request.SocialMediaId, Truncate(rag.Text!.Context, 1500));
         }
 
+        var retrievalErrors = new List<RagRetrievalError>();
         if (rag.VisualError != null)
         {
+            retrievalErrors.Add(new RagRetrievalError("visual", rag.VisualError));
             _logger.LogWarning(
                 "Visual retrieval failed for socialMediaId={SocialMediaId}: {Error}",
                 request.SocialMediaId,
@@ -381,6 +388,7 @@ public sealed class QueryAccountRecommendationsQueryHandler
         }
         if (rag.VideoError != null)
         {
+            retrievalErrors.Add(new RagRetrievalError("video", rag.VideoError));
             _logger.LogWarning(
                 "Video retrieval failed for socialMediaId={SocialMediaId}: {Error}",
                 request.SocialMediaId,
@@ -514,7 +522,8 @@ public sealed class QueryAccountRecommendationsQueryHandler
             DocumentIdPrefix: prefix,
             References: fusedReferences,
             WebSources: llmResult.Sources.Count > 0 ? llmResult.Sources : null,
-            PageProfileText: pageProfile?.Answer));
+            PageProfileText: pageProfile?.Answer,
+            RetrievalErrors: retrievalErrors));
     }
 
     /// <summary>

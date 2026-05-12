@@ -82,15 +82,49 @@ def compute_mdhash_id(content, prefix: str = ""):
 
 
 def write_json(json_obj, file_name):
-    with open(file_name, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(file_name) or ".", exist_ok=True)
+    tmp_file_name = f"{file_name}.tmp.{os.getpid()}"
+    with open(tmp_file_name, "w", encoding="utf-8") as f:
         json.dump(json_obj, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_file_name, file_name)
+
+
+def _backup_corrupt_json(file_name: str) -> str | None:
+    for index in range(10):
+        suffix = "corrupt" if index == 0 else f"corrupt.{index}"
+        backup_file_name = f"{file_name}.{suffix}"
+        if not os.path.exists(backup_file_name):
+            os.replace(file_name, backup_file_name)
+            return backup_file_name
+    return None
 
 
 def load_json(file_name):
     if not os.path.exists(file_name):
         return None
     with open(file_name, encoding="utf-8") as f:
-        return json.load(f)
+        content = f.read()
+    if not content.strip():
+        backup_file_name = _backup_corrupt_json(file_name)
+        logger.warning(
+            "JSON storage file %s was empty; backed up to %s and reinitializing it",
+            file_name,
+            backup_file_name,
+        )
+        return None
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        backup_file_name = _backup_corrupt_json(file_name)
+        logger.warning(
+            "JSON storage file %s was invalid; backed up to %s and reinitializing it",
+            file_name,
+            backup_file_name,
+            exc_info=True,
+        )
+        return None
 
 
 # it's dirty to type, so it's a good way to have fun

@@ -8,6 +8,9 @@ public sealed class GetUserNotificationsQueryValidator : AbstractValidator<GetUs
     public GetUserNotificationsQueryValidator()
     {
         RuleFor(x => x.UserId).NotEmpty();
-        RuleFor(x => x.Limit).InclusiveBetween(1, 100);
+        RuleFor(x => x.Limit).InclusiveBetween(1, 200);
+        RuleFor(x => x.RelatedId)
+            .Must(value => string.IsNullOrWhiteSpace(value) || Guid.TryParse(value, out _))
+            .WithMessage("RelatedId must be a valid GUID.");
     }
 }

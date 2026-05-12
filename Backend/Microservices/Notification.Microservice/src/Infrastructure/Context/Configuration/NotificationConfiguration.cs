@@ -15,6 +15,9 @@ public sealed class NotificationConfiguration : IEntityTypeConfiguration<Notific
         entity.HasIndex(e => new { e.Type, e.CreatedAt }, "ix_notifications_type_created_at")
             .IsDescending(false, true);
 
+        entity.HasIndex(e => new { e.Source, e.Type, e.CreatedAt }, "ix_notifications_source_type_created_at")
+            .IsDescending(false, false, true);
+
         entity.Property(e => e.Id).HasColumnName("id");
         entity.Property(e => e.Source).HasColumnName("source").HasMaxLength(100).IsRequired();
         entity.Property(e => e.Type).HasColumnName("type").HasMaxLength(100).IsRequired();

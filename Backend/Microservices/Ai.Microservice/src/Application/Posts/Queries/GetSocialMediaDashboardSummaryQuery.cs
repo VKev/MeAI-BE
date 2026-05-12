@@ -181,7 +181,8 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
                         ["likes"] = post.ReactionCount ?? 0,
                         ["comments"] = post.CommentCount ?? 0,
                         ["shares"] = post.ShareCount ?? 0
-                    })))
+                    }),
+                VideoDownloadUrl: post.VideoSourceUrl))
             .ToList();
 
         var dashboardPosts = CreateDashboardPosts(posts);

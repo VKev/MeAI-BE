@@ -135,7 +135,8 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
                             ["likes"] = post.ReactionCount ?? 0,
                             ["comments"] = post.CommentCount ?? 0,
                             ["shares"] = post.ShareCount ?? 0
-                        })))
+                        }),
+                    VideoDownloadUrl: post.VideoSourceUrl))
                 .ToList();
 
             return Result.Success(new SocialPlatformPostsResponse(

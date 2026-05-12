@@ -5,6 +5,7 @@ using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
 using Application.Abstractions.Search;
 using Application.Recommendations.Commands;
+using Application.Recommendations.Models;
 using Application.Recommendations.Queries;
 using Domain.Entities;
 using Domain.Repositories;
@@ -125,6 +126,11 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         "a strong value-prop hook (the offer / benefit) in the first line. Use 3–6 hashtags " +
         "including the brand name as one of them.";
 
+    private const string ReferenceImageSimilarityGuard =
+        "IMPORTANT: Reference images are for reference only; do not make the generated image " +
+        "too similar to any reference image. Use them for palette, lighting, mood, and brand " +
+        "cues, then create a new composition. ";
+
     /// <summary>
     /// Image-gen system prompt for <c>creative</c> — pure visual, NO text rendering.
     /// </summary>
@@ -132,6 +138,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         "You are an image-generation assistant for social media. Produce ONE editorial-style " +
         "image that fits the user's topic AND matches the visual style of the reference images " +
         "attached (color palette, lighting, composition, mood, subject framing). " +
+        ReferenceImageSimilarityGuard +
         "DO NOT render any text, words, letters, logos, or watermarks on the image. " +
         "The image is purely photographic / illustrative — all copy lives in the caption, not the pixels. " +
         "Output an image, not text.";
@@ -143,6 +150,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         "You are an image-generation assistant for social media. Produce ONE branded image that " +
         "fits the user's topic AND matches the visual style of the reference images attached " +
         "(color palette, lighting, composition, mood). " +
+        ReferenceImageSimilarityGuard +
         "If the prompt includes quoted text strings (headline or short subhead), render them EXACTLY " +
         "as quoted, with strong contrast and clean typography in a top-or-bottom safe area. " +
         "Place the brand mark / logo subtly in one corner (small, low-emphasis). " +
@@ -156,6 +164,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         "You are an image-generation assistant producing a promotional / marketing image for social media. " +
         "Produce ONE high-contrast marketing image that fits the user's topic AND matches the brand " +
         "palette from the reference images attached. " +
+        ReferenceImageSimilarityGuard +
         "RENDER EVERY QUOTED TEXT STRING in the prompt EXACTLY as quoted — headline, subhead, CTA " +
         "button text, and contact line (website / email / phone). Use clear typographic hierarchy: " +
         "headline largest and bold, subhead smaller, CTA inside a brand-colored button shape, " +
@@ -199,6 +208,9 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         "video segments + transcripts when available, (e) STYLE-SPECIFIC design rules from the " +
         "RAG knowledge base (image-design-{style}) — these are AUTHORITATIVE and must be followed, " +
         "(f) the target platform, (g) the requested STYLE.\n\n" +
+        "IMPORTANT: Reference images are for reference only; do not make the generated image too " +
+        "similar to any reference image. Use them for palette, lighting, mood, and brand cues, " +
+        "then create a new composition.\n\n" +
         "Output STRICT JSON only — no preface, no markdown, no code fences — with these keys:\n" +
         "  \"prompt\": string. The actual image-gen prompt. Be vivid and specific. Cap ~150 words. " +
         "Describe the SUBJECT first, then composition (rule of thirds, framing, safe areas for any " +
@@ -289,6 +301,27 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     /// better with terse, vivid prompts than with walls of context.
     /// </summary>
     private sealed record ImageBrief(string Prompt, string StyleNotes, string AspectRatio);
+
+    private sealed record FreshTopicImageSearchOutcome(
+        IReadOnlyList<Application.Abstractions.Search.ImageSearchHit> Hits,
+        Exception? Error = null);
+
+    private sealed record FreshTopicImageMirrorOutcome(
+        IReadOnlyList<Application.Abstractions.Search.ImageSearchHit> Hits,
+        IReadOnlyList<object> Mirrors,
+        IReadOnlyList<object> Failures);
+
+    private sealed record ReferenceImageSelectionOutcome(
+        List<string> SelectedImageUrls,
+        Exception? Error = null);
+
+    private sealed record StyleKnowledgeOutcome(
+        string Knowledge,
+        Exception? Error = null);
+
+    private sealed record ImageBriefOutcome(
+        ImageBrief Brief,
+        Exception? Error = null);
 
     /// <summary>
     /// Cohere Rerank 4 Pro relevance scores are roughly probabilistic (0..1). Production
@@ -390,6 +423,104 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         }
     }
 
+    private Task PublishErrorThinkingAsync(
+        ConsumeContext<GenerateDraftPostStarted> context,
+        DraftPostTask task,
+        string action,
+        string title,
+        string message,
+        Exception error,
+        object? details,
+        CancellationToken cancellationToken,
+        string phaseStatus = "failed")
+    {
+        return PublishThinkingAsync(
+            context,
+            task,
+            action,
+            title,
+            message,
+            new
+            {
+                errorCode = error.GetType().Name,
+                errorMessage = error.Message,
+                exception = Truncate(error.ToString(), 6000),
+                details,
+            },
+            cancellationToken,
+            phaseStatus: phaseStatus);
+    }
+
+    private static bool IsVisualIngestFailure(IndexSocialAccountIngestFailure failure)
+    {
+        return failure.DocumentId.Contains(":vis2:", StringComparison.OrdinalIgnoreCase)
+               || failure.DocumentId.Contains(":img:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikeProviderCreditFailure(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            return false;
+        }
+
+        return error.Contains("HTTP 402", StringComparison.OrdinalIgnoreCase)
+               || error.Contains("Insufficient credits", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private Task PublishIngestFailureWarningAsync(
+        ConsumeContext<GenerateDraftPostStarted> context,
+        DraftPostTask task,
+        IndexSocialAccountIngestFailureBatch batch,
+        CancellationToken cancellationToken)
+    {
+        var isCreditFailure = batch.FailedDocuments.Any(item => LooksLikeProviderCreditFailure(item.Error));
+        return PublishThinkingAsync(
+            context,
+            task,
+            isCreditFailure ? "rag_provider_credit_failed" : "rag_ingest_batch_warning",
+            isCreditFailure ? "OpenRouter needs credits" : "Some account media could not be indexed",
+            isCreditFailure
+                ? "AI stopped because OpenRouter rejected media analysis with insufficient credits."
+                : "RAG could not index some account media. AI will continue with the content that indexed successfully.",
+            new
+            {
+                socialMediaId = batch.SocialMediaId,
+                platform = batch.Platform,
+                documentIdPrefix = batch.DocumentIdPrefix,
+                failedCount = batch.FailedDocuments.Count,
+                provider = isCreditFailure ? "OpenRouter" : null,
+                failedDocuments = batch.FailedDocuments,
+            },
+            cancellationToken,
+            phaseStatus: isCreditFailure ? "failed" : "warning");
+    }
+
+    private Task PublishReadBatchAsync(
+        ConsumeContext<GenerateDraftPostStarted> context,
+        DraftPostTask task,
+        IndexSocialAccountReadBatch batch,
+        int batchNumber,
+        CancellationToken cancellationToken)
+    {
+        return PublishThinkingAsync(
+            context,
+            task,
+            "rag_account_context_indexing_batch",
+            "AI is updating RAG knowledge",
+            "AI is indexing page profile and account post context for retrieval.",
+            new
+            {
+                socialMediaId = batch.SocialMediaId,
+                platform = batch.Platform,
+                documentIdPrefix = batch.DocumentIdPrefix,
+                batchNumber,
+                knowledgeItems = batch.Posts,
+                posts = batch.Posts,
+            },
+            cancellationToken);
+    }
+
     public async Task Consume(ConsumeContext<GenerateDraftPostStarted> context)
     {
         var msg = context.Message;
@@ -445,32 +576,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             // means every downstream RAG/LLM/image-gen call runs against a fully-built
             // knowledge index, never a half-built one.
             _logger.LogInformation("DraftPost {Id}: waiting for RAG to be ready...", task.Id);
-            await PublishThinkingAsync(
-                context,
-                task,
-                "rag_ready_wait_started",
-                "AI is checking knowledge",
-                "AI is waiting for the RAG knowledge service to be ready.",
-                new
-                {
-                    waitTarget = "rag-microservice",
-                    reason = "Knowledge search, caption writing, and image planning need the RAG index ready.",
-                },
-                ct);
             await _ragClient.WaitForRagReadyAsync(ct);
             _logger.LogInformation("DraftPost {Id}: RAG ready", task.Id);
-            await PublishThinkingAsync(
-                context,
-                task,
-                "rag_ready_wait_completed",
-                "Knowledge service is ready",
-                "AI can now read account and knowledge context.",
-                new
-                {
-                    waitTarget = "rag-microservice",
-                },
-                ct,
-                phaseStatus: "completed");
 
             // Step 1 — auto-index. Existing skip-if-unchanged logic ensures only new/changed
             // posts hit RAG; unchanged ones are no-ops.
@@ -479,22 +586,73 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             await PublishThinkingAsync(
                 context,
                 task,
-                "account_posts_indexing_started",
+                "account_posts_reading_started",
                 "AI is reading account posts",
-                "AI is checking recent account posts before writing the recommendation.",
+                "AI is fetching recent account posts before updating RAG knowledge.",
                 new
                 {
                     socialMediaId = msg.SocialMediaId,
                     maxPosts = indexMaxPosts,
-                    purpose = "Find new or changed account content and make it available to RAG.",
+                    purpose = "Read recent account content before RAG indexing.",
                 },
                 ct);
+            var liveIngestCreditWarningSent = false;
+            var liveIngestWarningSent = false;
+            var readBatchNumber = 0;
+            async Task PublishLiveIngestWarningAsync(
+                IndexSocialAccountIngestFailureBatch batch,
+                CancellationToken cancellationToken)
+            {
+                var isCreditFailure = batch.FailedDocuments.Any(item => LooksLikeProviderCreditFailure(item.Error));
+                if (isCreditFailure)
+                {
+                    if (liveIngestCreditWarningSent)
+                    {
+                        return;
+                    }
+
+                    liveIngestCreditWarningSent = true;
+                }
+                else
+                {
+                    if (liveIngestWarningSent)
+                    {
+                        return;
+                    }
+
+                    liveIngestWarningSent = true;
+                }
+
+                await PublishIngestFailureWarningAsync(context, task, batch, cancellationToken);
+            }
+
+            Task PublishLiveReadBatchAsync(
+                IndexSocialAccountReadBatch batch,
+                CancellationToken cancellationToken)
+            {
+                readBatchNumber++;
+                return PublishReadBatchAsync(context, task, batch, readBatchNumber, cancellationToken);
+            }
+
             var indexResult = await _mediator.Send(
-                new IndexSocialAccountPostsCommand(msg.UserId, msg.SocialMediaId, indexMaxPosts), ct);
+                new IndexSocialAccountPostsCommand(
+                    msg.UserId,
+                    msg.SocialMediaId,
+                    indexMaxPosts,
+                    PublishLiveIngestWarningAsync,
+                    PublishLiveReadBatchAsync,
+                    StopOnProviderCreditFailure: true),
+                ct);
             if (indexResult.IsFailure)
             {
                 throw new InvalidOperationException(
                     $"Indexing failed: {indexResult.Error.Code} {indexResult.Error.Description}");
+            }
+            var failedIngestDocuments = indexResult.Value.FailedIngestDocuments ?? Array.Empty<IndexSocialAccountIngestFailure>();
+            if (failedIngestDocuments.Any(item => LooksLikeProviderCreditFailure(item.Error)))
+            {
+                throw new InvalidOperationException(
+                    "OpenRouter has insufficient credits for RAG media analysis. Add credits in OpenRouter, then try generating this recommendation again.");
             }
             _logger.LogInformation(
                 "DraftPost {Id}: indexed total={Total} new={New} updated={Updated} unchanged={Unchanged}",
@@ -522,9 +680,80 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     queuedImageDocuments = indexResult.Value.QueuedImageDocuments,
                     queuedVideoDocuments = indexResult.Value.QueuedVideoDocuments,
                     queuedProfileDocuments = indexResult.Value.QueuedProfileDocuments,
+                    failedIngestDocuments,
                 },
                 ct,
                 phaseStatus: "completed");
+            if (failedIngestDocuments.Count > 0)
+            {
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "account_posts_indexing_partial_failure",
+                    "Some account knowledge could not be indexed",
+                    "AI will continue with the account content that indexed successfully.",
+                    new
+                    {
+                        socialMediaId = indexResult.Value.SocialMediaId,
+                        platform = indexResult.Value.Platform,
+                        documentIdPrefix = indexResult.Value.DocumentIdPrefix,
+                        failedCount = failedIngestDocuments.Count,
+                        failedDocuments = failedIngestDocuments,
+                    },
+                    ct,
+                    phaseStatus: "warning");
+
+                var visualEmbeddingFailures = failedIngestDocuments
+                    .Where(IsVisualIngestFailure)
+                    .ToArray();
+                if (visualEmbeddingFailures.Length > 0 && !liveIngestCreditWarningSent && !liveIngestWarningSent)
+                {
+                    var isCreditFailure = visualEmbeddingFailures.Any(item =>
+                        LooksLikeProviderCreditFailure(item.Error));
+                    await PublishThinkingAsync(
+                        context,
+                        task,
+                        "rag_visual_embedding_failed",
+                        isCreditFailure
+                            ? "Image embedding provider needs credits"
+                            : "Some image knowledge could not be embedded",
+                        isCreditFailure
+                            ? "OpenRouter rejected image embedding because the configured account has insufficient credits. AI will continue with available knowledge and retry during the next sync."
+                            : "RAG could not embed some account images. AI will continue with available knowledge and retry during the next sync.",
+                        new
+                        {
+                            socialMediaId = indexResult.Value.SocialMediaId,
+                            platform = indexResult.Value.Platform,
+                            failedCount = visualEmbeddingFailures.Length,
+                            provider = isCreditFailure ? "OpenRouter" : null,
+                            retryPolicy = "The RAG service does not record the fingerprint when every visual embedding fails, so the same image document is retried on the next /index.",
+                            failedDocuments = visualEmbeddingFailures,
+                        },
+                        ct,
+                        phaseStatus: "warning");
+                }
+            }
+            if (indexResult.Value.QueuedVideoDocuments > 0)
+            {
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "video_rag_indexing_completed",
+                    "AI processed video knowledge",
+                    "RAG split video posts into searchable frame and segment context for recommendation retrieval.",
+                    new
+                    {
+                        socialMediaId = indexResult.Value.SocialMediaId,
+                        platform = indexResult.Value.Platform,
+                        queuedVideoDocuments = indexResult.Value.QueuedVideoDocuments,
+                        documentIdPrefix = indexResult.Value.DocumentIdPrefix,
+                        failedVideoDocuments = (indexResult.Value.FailedIngestDocuments ?? Array.Empty<Application.Recommendations.Models.IndexSocialAccountIngestFailure>())
+                            .Where(item => item.DocumentId.Contains(":vid:", StringComparison.OrdinalIgnoreCase))
+                            .ToArray(),
+                    },
+                    ct,
+                    phaseStatus: "completed");
+            }
 
             // Step 2 — RAG multimodal query. Reuses the same retrieval as /query: text context
             // + visual hits with image URLs. In auto-topic mode we substitute a
@@ -653,6 +882,23 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     $"RAG query failed: {queryResult.Error.Code} {queryResult.Error.Description}");
             }
             var rag = queryResult.Value;
+            if (rag.RetrievalErrors is { Count: > 0 } retrievalErrors)
+            {
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "rag_retrieval_partial_failure",
+                    "Some knowledge retrieval failed",
+                    "AI will continue with the RAG context that was retrieved successfully.",
+                    new
+                    {
+                        socialMediaId = msg.SocialMediaId,
+                        query = recommendationQuery,
+                        retrievalErrors,
+                    },
+                    ct,
+                    phaseStatus: "warning");
+            }
             await PublishThinkingAsync(
                 context,
                 task,
@@ -740,11 +986,17 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 "AI finished reading account knowledge and selected references.",
                 new
                 {
+                    query = recommendationQuery,
+                    primaryQuery = rewrite.PrimaryQuery,
+                    altQueries = rewrite.AltQueries,
+                    visualQuery = rewrite.VisualQuery,
+                    keyTerms = rewrite.KeyTerms,
                     documentIdPrefix = rag.DocumentIdPrefix,
                     answer = rag.Answer,
                     pageProfileText = rag.PageProfileText,
                     references = rag.References,
                     webSources = rag.WebSources,
+                    retrievalErrors = rag.RetrievalErrors,
                     selectedPastPostImageUrls = topImageUrls,
                 },
                 ct,
@@ -845,7 +1097,30 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     source = "brave-image-search",
                 },
                 ct);
-            var freshRefImageHits = await FetchFreshTopicImageHitsAsync(refImageQuery, ct);
+            var freshRefImageOutcome = await FetchFreshTopicImageHitsAsync(refImageQuery, ct);
+            if (freshRefImageOutcome.Error is not null)
+            {
+                await PublishErrorThinkingAsync(
+                    context,
+                    task,
+                    "fresh_image_search_failed",
+                    "Fresh image search failed",
+                    "AI could not search fresh image references, so it will continue with account references.",
+                    freshRefImageOutcome.Error,
+                    new
+                    {
+                        query = refImageQuery,
+                        source = "brave-image-search",
+                    },
+                    ct,
+                    phaseStatus: "warning");
+            }
+            var freshRefImageMirrorOutcome = await MirrorFreshTopicImageHitsAsync(
+                msg.UserId,
+                msg.WorkspaceId,
+                freshRefImageOutcome.Hits,
+                ct);
+            var freshRefImageHits = freshRefImageMirrorOutcome.Hits;
             _logger.LogInformation(
                 "DraftPost {Id}: fresh-ref-image search query=\"{Query}\" → {Count} hit(s)",
                 task.Id, refImageQuery ?? "(empty)", freshRefImageHits.Count);
@@ -877,6 +1152,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 {
                     query = refImageQuery,
                     hits = freshRefImageHits,
+                    mirroredImages = freshRefImageMirrorOutcome.Mirrors,
+                    mirrorFailures = freshRefImageMirrorOutcome.Failures,
                     candidateUrls = freshTopicCandidates.Select(candidate => candidate.ImageUrl).ToList(),
                     candidates = freshTopicCandidates.Select(candidate => new
                     {
@@ -910,7 +1187,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     }).ToList(),
                 },
                 ct);
-            var imageBriefRefImageUrls = await SelectReferenceImagesAsync(
+            var referenceSelection = await SelectReferenceImagesAsync(
                 taskId: task.Id,
                 candidates: rerankCandidates,
                 topic: refImageQuery,
@@ -919,6 +1196,28 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 keyTerms: rewrite.KeyTerms,                        // ← K4 enhancement
                 cap: msg.MaxReferenceImages,
                 cancellationToken: ct);
+            if (referenceSelection.Error is not null)
+            {
+                await PublishErrorThinkingAsync(
+                    context,
+                    task,
+                    "reference_rerank_failed",
+                    "Reference image ranking failed",
+                    "AI could not rank reference images, so it will continue with the original candidate order.",
+                    referenceSelection.Error,
+                    new
+                    {
+                        topic = refImageQuery,
+                        caption,
+                        visualQuery = rewrite.VisualQuery,
+                        keyTerms = rewrite.KeyTerms,
+                        cap = msg.MaxReferenceImages,
+                        candidateCount = rerankCandidates.Count,
+                    },
+                    ct,
+                    phaseStatus: "warning");
+            }
+            var imageBriefRefImageUrls = referenceSelection.SelectedImageUrls;
             await PublishThinkingAsync(
                 context,
                 task,
@@ -954,7 +1253,26 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     documentIdPrefix = styleKnowledgeDocumentIdPrefix,
                 },
                 ct);
-            var styleKnowledge = await FetchStyleKnowledgeAsync(style, rewrite.Language, ct);
+            var styleKnowledgeOutcome = await FetchStyleKnowledgeAsync(style, rewrite.Language, ct);
+            if (styleKnowledgeOutcome.Error is not null)
+            {
+                await PublishErrorThinkingAsync(
+                    context,
+                    task,
+                    "style_knowledge_failed",
+                    "Style knowledge lookup failed",
+                    $"AI could not read {style} image-design knowledge, so it will continue with built-in style guidance.",
+                    styleKnowledgeOutcome.Error,
+                    new
+                    {
+                        style,
+                        language = rewrite.Language,
+                        documentIdPrefix = styleKnowledgeDocumentIdPrefix,
+                    },
+                    ct,
+                    phaseStatus: "warning");
+            }
+            var styleKnowledge = styleKnowledgeOutcome.Knowledge;
             _logger.LogInformation(
                 "DraftPost {Id}: style-knowledge[{Style}] fetched ({Len} chars)",
                 task.Id, style, styleKnowledge.Length);
@@ -1003,7 +1321,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     referenceImageUrls = imageBriefRefImageUrls,
                 },
                 ct);
-            var brief = await BuildImageBriefAsync(
+            var imageBriefOutcome = await BuildImageBriefAsync(
                 userPrompt: topicForDownstream,
                 caption: caption,
                 rag: rag,
@@ -1011,6 +1329,26 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 style: style,
                 styleKnowledge: styleKnowledge,
                 cancellationToken: ct);
+            if (imageBriefOutcome.Error is not null)
+            {
+                await PublishErrorThinkingAsync(
+                    context,
+                    task,
+                    "image_brief_generation_failed",
+                    "Image brief generation fell back",
+                    "AI could not create a structured image brief, so it will continue with a fallback brief.",
+                    imageBriefOutcome.Error,
+                    new
+                    {
+                        style,
+                        topic = topicForDownstream,
+                        caption,
+                        referenceImageUrls = imageBriefRefImageUrls,
+                    },
+                    ct,
+                    phaseStatus: "warning");
+            }
+            var brief = imageBriefOutcome.Brief;
             _logger.LogInformation(
                 "LLM[imageBrief] OUTPUT for DraftPost {Id} Style={Style}: aspect={AspectRatio}, prompt={PromptLen} chars, styleNotes={StyleLen} chars",
                 task.Id, style, brief.AspectRatio, brief.Prompt.Length, brief.StyleNotes?.Length ?? 0);
@@ -1276,45 +1614,58 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         {
             _logger.LogError(ex, "DraftPost {Id}: failed CorrelationId={CorrelationId}", task.Id, task.CorrelationId);
             var failedDraftPostId = task.ResultPostId;
-
-            // Clean up the upfront empty Post if processing failed BEFORE Step 6
-            // finalized it. After finalization the Post has real caption + image
-            // and we keep it. Best-effort: don't let cleanup errors mask the
-            // original failure.
-            if (!postFinalized && task.ResultPostId.HasValue)
-            {
-                try
-                {
-                    var emptyPost = await _postRepository.GetByIdForUpdateAsync(task.ResultPostId.Value, ct);
-                    if (emptyPost != null && emptyPost.DeletedAt is null)
-                    {
-                        emptyPost.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;
-                        emptyPost.UpdatedAt = emptyPost.DeletedAt;
-                        await _postRepository.SaveChangesAsync(ct);
-                        _logger.LogInformation(
-                            "DraftPost {Id}: soft-deleted empty placeholder Post {PostId} on failure",
-                            task.Id, emptyPost.Id);
-                    }
-                }
-                catch (Exception cleanupEx)
-                {
-                    _logger.LogWarning(cleanupEx,
-                        "DraftPost {Id}: failed to soft-delete empty placeholder Post {PostId}",
-                        task.Id, task.ResultPostId.Value);
-                }
-            }
-
             task.Status = DraftPostTaskStatuses.Failed;
             task.ErrorCode = ex.GetType().Name;
             task.ErrorMessage = ex.Message;
             task.CompletedAt = DateTimeExtensions.PostgreSqlUtcNow;
             task.UpdatedAt = task.CompletedAt;
-            // Clear ResultPostId so the response doesn't dangle a soft-deleted
-            // placeholder id back to the FE on Failed status.
-            if (!postFinalized)
+
+            await PublishErrorThinkingAsync(
+                context,
+                task,
+                "generation_failed",
+                "AI recommendation failed",
+                "AI hit an error and stopped generating the recommendation draft.",
+                ex,
+                new
+                {
+                    socialMediaId = task.SocialMediaId,
+                    workspaceId = task.WorkspaceId,
+                    draftPostId = failedDraftPostId,
+                    postId = failedDraftPostId,
+                    postFinalized,
+                },
+                ct);
+
+            // Keep the upfront empty Post visible as a failed draft when processing
+            // stops before Step 6. This lets the FE put the item in Product > Failed
+            // instead of leaving a missing/processing placeholder.
+            if (!postFinalized && task.ResultPostId.HasValue)
             {
-                task.ResultPostId = null;
+                try
+                {
+                    var failedPost = await _postRepository.GetByIdForUpdateAsync(task.ResultPostId.Value, ct);
+                    if (failedPost != null && failedPost.DeletedAt is null)
+                    {
+                        failedPost.Status = "failed";
+                        failedPost.UpdatedAt = task.CompletedAt;
+                        await _postRepository.SaveChangesAsync(ct);
+                        _logger.LogInformation(
+                            "DraftPost {Id}: marked placeholder Post {PostId} as failed",
+                            task.Id, failedPost.Id);
+                    }
+                }
+                catch (Exception markPostFailedEx)
+                {
+                    _logger.LogWarning(markPostFailedEx,
+                        "DraftPost {Id}: failed to mark placeholder Post {PostId} as failed",
+                        task.Id, task.ResultPostId.Value);
+                }
             }
+
+            // Keep ResultPostId on failed tasks. The FE may only know that
+            // pre-created post id, and still needs to resolve the failed task plus
+            // its notification timeline.
             try
             {
                 await _taskRepository.SaveChangesAsync(ct);
@@ -1340,6 +1691,11 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                             postId = failedDraftPostId,
                             errorCode = task.ErrorCode,
                             errorMessage = task.ErrorMessage,
+                            details = new
+                            {
+                                exception = Truncate(ex.ToString(), 6000),
+                                postFinalized,
+                            },
                         },
                         createdAt: task.CompletedAt,
                         source: NotificationSourceConstants.Creator),
@@ -1508,28 +1864,117 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     /// to score against). Returns empty on null/blank query, no API key configured,
     /// or a transport error — never throws (a search failure must not drop the draft).
     /// </summary>
-    private async Task<IReadOnlyList<Application.Abstractions.Search.ImageSearchHit>> FetchFreshTopicImageHitsAsync(
+    private async Task<FreshTopicImageMirrorOutcome> MirrorFreshTopicImageHitsAsync(
+        Guid userId,
+        Guid? workspaceId,
+        IReadOnlyList<Application.Abstractions.Search.ImageSearchHit> hits,
+        CancellationToken cancellationToken)
+    {
+        if (hits.Count == 0)
+        {
+            return new FreshTopicImageMirrorOutcome(
+                Array.Empty<Application.Abstractions.Search.ImageSearchHit>(),
+                Array.Empty<object>(),
+                Array.Empty<object>());
+        }
+
+        var mirroredHits = new List<Application.Abstractions.Search.ImageSearchHit>(hits.Count);
+        var mirrors = new List<object>();
+        var failures = new List<object>();
+
+        foreach (var hit in hits)
+        {
+            var originalUrl = hit.ImageUrl;
+            if (!Uri.TryCreate(originalUrl, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                mirroredHits.Add(hit);
+                continue;
+            }
+
+            try
+            {
+                var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
+                    userId: userId,
+                    urls: new[] { originalUrl },
+                    status: "reference",
+                    resourceType: "image",
+                    cancellationToken: cancellationToken,
+                    workspaceId: workspaceId,
+                    provenance: new ResourceProvenanceMetadata(
+                        OriginKind: ResourceOriginKinds.AiImportedUrl,
+                        OriginSourceUrl: originalUrl));
+
+                var uploaded = uploadResult.IsSuccess ? uploadResult.Value.FirstOrDefault() : null;
+                if (uploaded is null || string.IsNullOrWhiteSpace(uploaded.PresignedUrl))
+                {
+                    failures.Add(new
+                    {
+                        originalUrl,
+                        title = hit.Title,
+                        errorCode = uploadResult.Error?.Code,
+                        errorMessage = uploadResult.Error?.Description,
+                    });
+                    mirroredHits.Add(hit);
+                    continue;
+                }
+
+                mirrors.Add(new
+                {
+                    originalUrl,
+                    mirroredUrl = uploaded.PresignedUrl,
+                    resourceId = uploaded.ResourceId,
+                    contentType = uploaded.ContentType,
+                    title = hit.Title,
+                    sourcePageUrl = hit.SourcePageUrl,
+                });
+                mirroredHits.Add(hit with { ImageUrl = uploaded.PresignedUrl });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Fresh-topic image mirror failed for url={Url}; keeping original URL",
+                    originalUrl);
+                failures.Add(new
+                {
+                    originalUrl,
+                    title = hit.Title,
+                    errorCode = ex.GetType().Name,
+                    errorMessage = ex.Message,
+                });
+                mirroredHits.Add(hit);
+            }
+        }
+
+        return new FreshTopicImageMirrorOutcome(mirroredHits, mirrors, failures);
+    }
+
+    private async Task<FreshTopicImageSearchOutcome> FetchFreshTopicImageHitsAsync(
         string? query,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
-            return Array.Empty<Application.Abstractions.Search.ImageSearchHit>();
+            return new FreshTopicImageSearchOutcome(Array.Empty<Application.Abstractions.Search.ImageSearchHit>());
         }
 
         try
         {
             var hits = await _imageSearchClient.SearchImagesAsync(
                 query, MaxFreshTopicImages, cancellationToken);
-            return hits
+            var filteredHits = hits
                 .Where(h => !string.IsNullOrWhiteSpace(h.ImageUrl))
                 .Take(MaxFreshTopicImages)
                 .ToList();
+            return new FreshTopicImageSearchOutcome(filteredHits);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Fresh-topic image search failed for query='{Query}'", query);
-            return Array.Empty<Application.Abstractions.Search.ImageSearchHit>();
+            return new FreshTopicImageSearchOutcome(
+                Array.Empty<Application.Abstractions.Search.ImageSearchHit>(),
+                ex);
         }
     }
 
@@ -1627,7 +2072,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     /// we fall back to the original RAG ordering, capped — so reranker outage degrades
     /// gracefully rather than dropping the draft.
     /// </summary>
-    private async Task<List<string>> SelectReferenceImagesAsync(
+    private async Task<ReferenceImageSelectionOutcome> SelectReferenceImagesAsync(
         Guid taskId,
         IReadOnlyList<ImageRefCandidate> candidates,
         string? topic,
@@ -1640,7 +2085,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         if (candidates.Count == 0)
         {
             _logger.LogInformation("DraftPost {Id}: rerank skipped — empty candidate pool", taskId);
-            return new List<string>();
+            return new ReferenceImageSelectionOutcome(new List<string>());
         }
 
         // Compose the rerank query. Topic alone is too thin; the caption gives the
@@ -1669,7 +2114,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             _logger.LogInformation(
                 "DraftPost {Id}: rerank skipped — empty query; falling back to candidate order",
                 taskId);
-            return candidates.Take(cap).Select(c => c.ImageUrl).ToList();
+            return new ReferenceImageSelectionOutcome(candidates.Take(cap).Select(c => c.ImageUrl).ToList());
         }
 
         // Multimodal: each candidate sends both its descriptive text AND its image URL,
@@ -1688,7 +2133,9 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "DraftPost {Id}: rerank threw; falling back to candidate order", taskId);
-            return candidates.Take(cap).Select(c => c.ImageUrl).ToList();
+            return new ReferenceImageSelectionOutcome(
+                candidates.Take(cap).Select(c => c.ImageUrl).ToList(),
+                ex);
         }
 
         if (scored.Count == 0)
@@ -1696,7 +2143,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             _logger.LogWarning(
                 "DraftPost {Id}: rerank returned 0 results for {DocCount} docs; falling back to candidate order",
                 taskId, docs.Count);
-            return candidates.Take(cap).Select(c => c.ImageUrl).ToList();
+            return new ReferenceImageSelectionOutcome(candidates.Take(cap).Select(c => c.ImageUrl).ToList());
         }
 
         // Apply threshold + cap. Log the full picture so it's easy to tune the threshold.
@@ -1724,7 +2171,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             "DraftPost {Id}: rerank kept {Kept}/{Total} (threshold={Threshold:F2}, cap={Cap}, dropped {Dropped})",
             taskId, kept.Count, ordered.Count, RerankRelevanceThreshold, cap, dropped);
 
-        return kept;
+        return new ReferenceImageSelectionOutcome(kept);
     }
 
     /// <summary>
@@ -1736,7 +2183,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     /// — a missing knowledge fetch must NOT drop the pipeline; the per-style addendum
     /// in the brief system prompt already encodes the most important rules.
     /// </summary>
-    private async Task<string> FetchStyleKnowledgeAsync(string style, string language, CancellationToken cancellationToken)
+    private async Task<StyleKnowledgeOutcome> FetchStyleKnowledgeAsync(string style, string language, CancellationToken cancellationToken)
     {
         try
         {
@@ -1750,7 +2197,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     TopK: 8,
                     OnlyNeedContext: true),
                 cancellationToken);
-            return resp.Answer ?? string.Empty;
+            return new StyleKnowledgeOutcome(resp.Answer ?? string.Empty);
         }
         catch (Exception ex)
         {
@@ -1758,7 +2205,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 ex,
                 "Failed to fetch style knowledge for style={Style} — proceeding with brief-prompt addendum only",
                 style);
-            return string.Empty;
+            return new StyleKnowledgeOutcome(string.Empty, ex);
         }
     }
 
@@ -1771,7 +2218,9 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     private static string BuildImagePrompt(string userPrompt)
         => $"Generate an image for a social media post on this topic: {userPrompt}.\n\n" +
            "Match the visual style of the attached reference images: same palette, same lighting, " +
-           "similar composition. Keep it brand-consistent.";
+           "similar composition. " +
+           ReferenceImageSimilarityGuard +
+           "Keep it brand-consistent.";
 
     /// <summary>
     /// Step 3.5 — calls gpt-4o-mini with the post caption + all RAG context (text refs,
@@ -1781,7 +2230,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     /// Falls back to a generic brief if the LLM call fails or produces malformed JSON
     /// — we never want a single failing brief to drop the whole draft pipeline.
     /// </summary>
-    private async Task<ImageBrief> BuildImageBriefAsync(
+    private async Task<ImageBriefOutcome> BuildImageBriefAsync(
         string userPrompt,
         string caption,
         AccountRecommendationsAnswer rag,
@@ -1881,14 +2330,14 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             if (string.IsNullOrWhiteSpace(prompt))
             {
                 _logger.LogWarning("Image brief LLM returned empty prompt — falling back to generic");
-                return BuildFallbackBrief(userPrompt);
+                return new ImageBriefOutcome(BuildFallbackBrief(userPrompt));
             }
-            return new ImageBrief(prompt, styleNotes, aspectRatio);
+            return new ImageBriefOutcome(new ImageBrief(prompt, styleNotes, aspectRatio));
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Image brief LLM call or JSON parse failed — falling back to generic");
-            return BuildFallbackBrief(userPrompt);
+            return new ImageBriefOutcome(BuildFallbackBrief(userPrompt), ex);
         }
     }
 

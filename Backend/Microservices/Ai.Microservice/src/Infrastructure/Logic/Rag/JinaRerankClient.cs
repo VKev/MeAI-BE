@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Application.Abstractions.Rag;
 using Microsoft.Extensions.Logging;
 
@@ -16,9 +17,8 @@ public sealed class RerankOptions
     public string ApiKey { get; init; } = string.Empty;
 
     /// <summary>
-    /// Jina model id. <c>jina-reranker-m0</c> is the multimodal flagship —
-    /// genuinely fetches image URLs and scores their pixel content (verified
-    /// experimentally; unlike Cohere's <c>/v2/rerank</c> which silently text-only-scores).
+    /// Jina model id. <c>jina-reranker-m0</c> is the multimodal flagship: it
+    /// fetches image URLs and scores their pixel content.
     /// </summary>
     public string Model { get; init; } = "jina-reranker-m0";
 
@@ -27,21 +27,24 @@ public sealed class RerankOptions
 
 /// <summary>
 /// Jina-reranker-m0 client. True multimodal cross-encoder: each candidate is sent
-/// as EITHER <c>{"image": "url"}</c> OR <c>{"text": "..."}</c> — Jina then fetches
+/// as either <c>{"image": "url"}</c> or <c>{"text": "..."}</c>. Jina then fetches
 /// image URLs and scores actual pixel content against the query.
 ///
-/// Important Jina quirks (verified against the live API):
-///  1. A document object passing BOTH <c>image</c> AND <c>text</c> fields collapses
-///     to text-only scoring (image is ignored). So we deliberately pick ONE field
-///     per candidate — image when the candidate is a visual reference, text otherwise.
-///  2. If Jina cannot fetch an image URL the WHOLE batch fails with HTTP 400. There
-///     is no per-document failure mode. We treat any 400 as a rerank-failed signal
-///     and return empty so the consumer falls back to the un-reranked ordering.
-///  3. Jina respects scraper-friendly hosts (S3, Github raw, most CDNs) but rejects
-///     some sources (Wikipedia /commons/ blocks Jina's UA).
+/// Important Jina quirks:
+/// 1. A document object passing both <c>image</c> and <c>text</c> fields collapses
+///    to text-only scoring, so we deliberately pick one field per candidate.
+/// 2. If Jina cannot fetch an image URL, the whole batch can fail with HTTP 400/500.
+///    We remove the rejected URL and retry so one bad fresh-search hit does not poison
+///    the whole reference selection pass.
 /// </summary>
 public sealed class JinaRerankClient : IRerankClient
 {
+    private const int MaxRejectedImageUrlRetries = 5;
+
+    private static readonly Regex UnloadableImageUrlRegex = new(
+        @"The URL (?<url>https?://[^\s'""}]+) cannot be loaded",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -85,17 +88,90 @@ public sealed class JinaRerankClient : IRerankClient
             return Array.Empty<RerankResult>();
         }
 
-        // Build the documents array. Per Jina semantics: emit ONE field per doc.
-        // Prefer image when a visual ref exists (we want the cross-encoder to score
-        // pixel content); fall back to text when no image is available.
-        //
-        // We track an apiIndex → originalIndex map so we can map results back even
-        // when some input candidates were skipped (empty Text + empty ImageUrl).
+        try
+        {
+            var activeDocuments = documents
+                .Select((document, index) => new IndexedRerankDocument(index, document))
+                .ToList();
+
+            for (var attempt = 0; attempt <= MaxRejectedImageUrlRetries; attempt++)
+            {
+                var (docArray, indexMap) = BuildDocumentPayload(activeDocuments);
+                if (docArray.Count == 0)
+                {
+                    return Array.Empty<RerankResult>();
+                }
+
+                var bodyNode = new JsonObject
+                {
+                    ["model"] = _options.Model,
+                    ["query"] = query,
+                    ["documents"] = docArray,
+                    ["return_documents"] = false,
+                };
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, _options.BaseUrl)
+                {
+                    Content = JsonContent.Create(bodyNode, options: JsonOptions),
+                };
+                using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                var raw = await response.Content
+                    .ReadAsStringAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var rejectedUrl = TryFindRejectedImageUrl(raw, activeDocuments);
+                    if (!string.IsNullOrWhiteSpace(rejectedUrl) &&
+                        attempt < MaxRejectedImageUrlRetries &&
+                        RemoveImageUrl(activeDocuments, rejectedUrl))
+                    {
+                        _logger.LogWarning(
+                            "Jina rerank rejected image URL; retrying without it (model={Model} status={Status} url={Url} remainingDocs={RemainingDocs})",
+                            _options.Model,
+                            (int)response.StatusCode,
+                            rejectedUrl[..Math.Min(rejectedUrl.Length, 200)],
+                            activeDocuments.Count);
+                        continue;
+                    }
+
+                    _logger.LogWarning(
+                        "Jina rerank HTTP {Status} (model={Model} docs={DocCount}): {Body}",
+                        (int)response.StatusCode, _options.Model, docArray.Count,
+                        raw[..Math.Min(raw.Length, 500)]);
+                    return Array.Empty<RerankResult>();
+                }
+
+                var payload = JsonSerializer.Deserialize<JinaRerankResponse>(raw, JsonOptions);
+                var results = payload?.Results ?? Array.Empty<JinaRerankResultDto>();
+
+                var mapped = new List<RerankResult>(results.Length);
+                foreach (var r in results)
+                {
+                    if (r.Index < 0 || r.Index >= indexMap.Count) continue;
+                    mapped.Add(new RerankResult(indexMap[r.Index], r.RelevanceScore));
+                }
+                return mapped;
+            }
+
+            return Array.Empty<RerankResult>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Jina rerank call failed for {DocCount} documents", documents.Count);
+            return Array.Empty<RerankResult>();
+        }
+    }
+
+    private static (JsonArray Documents, List<int> IndexMap) BuildDocumentPayload(
+        IReadOnlyList<IndexedRerankDocument> documents)
+    {
         var docArray = new JsonArray();
         var indexMap = new List<int>(documents.Count);
-        for (var i = 0; i < documents.Count; i++)
+
+        foreach (var indexedDocument in documents)
         {
-            var d = documents[i];
+            var d = indexedDocument.Document;
             JsonObject? doc = null;
             if (!string.IsNullOrWhiteSpace(d.ImageUrl))
             {
@@ -109,61 +185,57 @@ public sealed class JinaRerankClient : IRerankClient
             {
                 continue;
             }
+
             docArray.Add(doc);
-            indexMap.Add(i);
-        }
-        if (docArray.Count == 0)
-        {
-            return Array.Empty<RerankResult>();
+            indexMap.Add(indexedDocument.OriginalIndex);
         }
 
-        var bodyNode = new JsonObject
-        {
-            ["model"] = _options.Model,
-            ["query"] = query,
-            ["documents"] = docArray,
-            ["return_documents"] = false,
-        };
-
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, _options.BaseUrl)
-            {
-                Content = JsonContent.Create(bodyNode, options: JsonOptions),
-            };
-            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            var raw = await response.Content
-                .ReadAsStringAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                // Jina aborts the batch on any unfetchable image URL with a 400.
-                // Log + bail; consumer falls back to the original candidate order.
-                _logger.LogWarning(
-                    "Jina rerank HTTP {Status} (model={Model} docs={DocCount}): {Body}",
-                    (int)response.StatusCode, _options.Model, docArray.Count,
-                    raw[..Math.Min(raw.Length, 500)]);
-                return Array.Empty<RerankResult>();
-            }
-
-            var payload = JsonSerializer.Deserialize<JinaRerankResponse>(raw, JsonOptions);
-            var results = payload?.Results ?? Array.Empty<JinaRerankResultDto>();
-
-            var mapped = new List<RerankResult>(results.Length);
-            foreach (var r in results)
-            {
-                if (r.Index < 0 || r.Index >= indexMap.Count) continue;
-                mapped.Add(new RerankResult(indexMap[r.Index], r.RelevanceScore));
-            }
-            return mapped;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Jina rerank call failed for {DocCount} documents", documents.Count);
-            return Array.Empty<RerankResult>();
-        }
+        return (docArray, indexMap);
     }
+
+    private static bool RemoveImageUrl(List<IndexedRerankDocument> documents, string imageUrl)
+    {
+        var removed = false;
+        for (var i = documents.Count - 1; i >= 0; i--)
+        {
+            if (!StringComparer.OrdinalIgnoreCase.Equals(documents[i].Document.ImageUrl, imageUrl))
+            {
+                continue;
+            }
+
+            documents.RemoveAt(i);
+            removed = true;
+        }
+
+        return removed;
+    }
+
+    private static string? TryFindRejectedImageUrl(
+        string responseBody,
+        IReadOnlyList<IndexedRerankDocument> documents)
+    {
+        foreach (var url in documents
+                     .Select(d => d.Document.ImageUrl)
+                     .Where(url => !string.IsNullOrWhiteSpace(url))
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderByDescending(url => url!.Length))
+        {
+            if (responseBody.Contains(url!, StringComparison.OrdinalIgnoreCase))
+            {
+                return url;
+            }
+        }
+
+        var match = UnloadableImageUrlRegex.Match(responseBody);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        return match.Groups["url"].Value.TrimEnd('.', ',', ';');
+    }
+
+    private sealed record IndexedRerankDocument(int OriginalIndex, RerankDocument Document);
 
     private sealed class JinaRerankResponse
     {
