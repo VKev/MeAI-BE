@@ -175,11 +175,12 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         var msg = context.Message;
         var ct = context.CancellationToken;
         var style = DraftPostStyles.NormalizeOrDefault(msg.Style);
+        var notificationPlatform = NormalizePlatform(msg.Platform);
 
         _logger.LogInformation(
-            "ImprovePost: starting CorrelationId={CorrelationId} UserId={UserId} OriginalPostId={PostId} ImproveCaption={Caption} ImproveImage={Image} Style={Style}",
+            "ImprovePost: starting CorrelationId={CorrelationId} UserId={UserId} OriginalPostId={PostId} ImproveCaption={Caption} ImproveImage={Image} Style={Style} PlatformHint={Platform}",
             msg.CorrelationId, msg.UserId, msg.OriginalPostId,
-            msg.ImproveCaption, msg.ImproveImage, style);
+            msg.ImproveCaption, msg.ImproveImage, style, notificationPlatform);
 
         var task = await _taskRepository.GetByCorrelationIdForUpdateAsync(msg.CorrelationId, ct);
         if (task is null)
@@ -202,6 +203,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 "AI is improving your post now.",
                 task,
                 task.UpdatedAt,
+                notificationPlatform,
                 ct);
 
             // ── Load original post + original resources ─────────────────────
@@ -213,9 +215,11 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             }
             var originalCaption = originalPost.Content?.Content ?? string.Empty;
             var originalResourceIds = ParseResourceIds(originalPost.Content?.ResourceList);
+            var targetPlatform = notificationPlatform ?? NormalizePlatform(originalPost.Platform);
+            notificationPlatform = targetPlatform;
             _logger.LogInformation(
-                "ImprovePost {Id}: original captionLen={CaptionLen} chars, originalResources={ResCount}",
-                task.Id, originalCaption.Length, originalResourceIds.Count);
+                "ImprovePost {Id}: original captionLen={CaptionLen} chars, originalResources={ResCount}, platform={Platform}",
+                task.Id, originalCaption.Length, originalResourceIds.Count, targetPlatform);
 
             // ── Step 0 — WaitForRagReady (same contract as draft-post) ──────
             _logger.LogInformation("ImprovePost {Id}: waiting for RAG to be ready...", task.Id);
@@ -268,7 +272,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 new Application.Recommendations.Services.QueryRewriteRequest(
                     UserPrompt: rewriterPrompt,
                     PageProfileSnippet: null,
-                    Platform: null,
+                    Platform: targetPlatform,
                     Style: style),
                 ct);
             var rewrite = rewriteResult.IsSuccess
@@ -284,6 +288,14 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 "ImprovePost {Id}: rewriter lang={Lang} intent={Intent} primary={Primary} visual={Visual}",
                 task.Id, rewrite.Language, rewrite.Intent,
                 Truncate(rewrite.PrimaryQuery, 180), Truncate(rewrite.VisualQuery, 180));
+
+            var platformKnowledge = await FetchPlatformKnowledgeAsync(targetPlatform, rewrite.Language, ct);
+            if (!string.IsNullOrWhiteSpace(platformKnowledge))
+            {
+                _logger.LogInformation(
+                    "ImprovePost {Id}: platform-knowledge[{Platform}] fetched ({Len} chars)",
+                    task.Id, targetPlatform, platformKnowledge.Length);
+            }
 
             // ── Step 2 — RAG query anchored on the original caption ────────
             // The original caption IS the topic anchor here; we pull past-post
@@ -334,6 +346,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     originalCaption: originalCaption,
                     userInstruction: msg.UserInstruction,
                     ragAnswer: ragAnswer,
+                    platform: targetPlatform,
+                    platformKnowledge: platformKnowledge,
                     style: style);
                 _logger.LogInformation(
                     "LLM[improveCaption] INPUT for ImprovePost {Id} Style={Style} ({UserTextLen} chars, {RefCount} ref images):\n{UserText}",
@@ -376,6 +390,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     captionForImage: improvedCaption,
                     userInstruction: msg.UserInstruction,
                     styleKnowledge: styleKnowledge,
+                    platform: targetPlatform,
+                    platformKnowledge: platformKnowledge,
                     style: style);
                 _logger.LogInformation(
                     "LLM[improveImageBrief] INPUT for ImprovePost {Id} Style={Style} ({UserTextLen} chars, {RefCount} ref images)",
@@ -464,6 +480,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 "Your AI-improved post is ready to review.",
                 task,
                 task.CompletedAt,
+                notificationPlatform,
                 ct);
 
             _logger.LogInformation(
@@ -497,6 +514,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     "Your AI post improvement could not be generated. Please try again.",
                     task,
                     task.CompletedAt,
+                    notificationPlatform,
                     ct);
             }
             catch (Exception notifyEx)
@@ -516,6 +534,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         string message,
         RecommendPost task,
         DateTime? createdAt,
+        string? platform,
         CancellationToken cancellationToken)
     {
         return context.Publish(
@@ -537,6 +556,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     improveCaption = task.ImproveCaption,
                     improveImage = task.ImproveImage,
                     style = task.Style,
+                    platform = platform,
                     userInstruction = task.UserInstruction,
                     resultCaption = task.ResultCaption,
                     resultResourceId = task.ResultResourceId,
@@ -583,10 +603,16 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         string originalCaption,
         string? userInstruction,
         string ragAnswer,
+        string? platform,
+        string platformKnowledge,
         string style)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"Requested post STYLE: {style}");
+        if (!string.IsNullOrWhiteSpace(platform))
+        {
+            sb.AppendLine($"Target platform: {platform}");
+        }
         sb.AppendLine();
         sb.AppendLine("=== Current caption ===");
         sb.AppendLine(string.IsNullOrWhiteSpace(originalCaption) ? "(empty)" : originalCaption);
@@ -603,6 +629,12 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             sb.AppendLine(ragAnswer);
             sb.AppendLine();
         }
+        if (!string.IsNullOrWhiteSpace(platformKnowledge))
+        {
+            sb.AppendLine("=== Platform guidance ===");
+            sb.AppendLine(platformKnowledge);
+            sb.AppendLine();
+        }
         sb.AppendLine("Now write the IMPROVED caption (plain text, no Markdown).");
         return sb.ToString();
     }
@@ -611,10 +643,16 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         string captionForImage,
         string? userInstruction,
         string styleKnowledge,
+        string? platform,
+        string platformKnowledge,
         string style)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"Requested post STYLE: {style}");
+        if (!string.IsNullOrWhiteSpace(platform))
+        {
+            sb.AppendLine($"Target platform: {platform}");
+        }
         sb.AppendLine();
         sb.AppendLine("=== Caption (the new image must illustrate this) ===");
         sb.AppendLine(string.IsNullOrWhiteSpace(captionForImage) ? "(empty)" : captionForImage);
@@ -629,6 +667,12 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         {
             sb.AppendLine($"=== Style-knowledge: {style} ===");
             sb.AppendLine(styleKnowledge);
+            sb.AppendLine();
+        }
+        if (!string.IsNullOrWhiteSpace(platformKnowledge))
+        {
+            sb.AppendLine("=== Platform guidance ===");
+            sb.AppendLine(platformKnowledge);
             sb.AppendLine();
         }
         sb.AppendLine("Author the brief (JSON only).");
@@ -656,6 +700,40 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             _logger.LogWarning(ex,
                 "ImprovePost: style-knowledge fetch failed for style={Style} — proceeding with empty knowledge",
                 style);
+            return string.Empty;
+        }
+    }
+
+    private async Task<string> FetchPlatformKnowledgeAsync(
+        string? platform,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(platform))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var prefix = $"knowledge:content-formulas:platform-mapping-{platform}:";
+            var query = LocalizedPlatformFormulasLiteral(language, platform);
+            var resp = await _ragClient.QueryAsync(
+                new RagQueryRequest(
+                    Query: query,
+                    DocumentIdPrefix: prefix,
+                    Mode: "naive",
+                    TopK: 2,
+                    OnlyNeedContext: true),
+                cancellationToken);
+            return resp?.Answer ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "ImprovePost: platform-knowledge fetch failed for platform={Platform}; proceeding with empty knowledge",
+                platform);
             return string.Empty;
         }
     }
@@ -738,6 +816,37 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             "de" => $"Bilddesign-Regeln für {style}-Stil in sozialen Medien",
             "id" => $"aturan desain gambar untuk gaya {style} di media sosial",
             _ => $"image design rules for {style} style social media post",
+        };
+    }
+
+    private static string LocalizedPlatformFormulasLiteral(string language, string platform)
+    {
+        return language switch
+        {
+            "vi" => $"cong thuc noi dung chinh cho {platform}",
+            "es" => $"formulas de contenido principales para {platform}",
+            "pt" => $"formulas de conteudo principais para {platform}",
+            "fr" => $"formules de contenu principales pour {platform}",
+            "de" => $"primaere Content-Formeln fuer {platform}",
+            "id" => $"formula konten utama untuk {platform}",
+            _ => $"primary content formulas for {platform}",
+        };
+    }
+
+    private static string? NormalizePlatform(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "facebook" or "fb" => "facebook",
+            "instagram" or "ig" => "instagram",
+            "tiktok" or "tik tok" => "tiktok",
+            "threads" or "thread" => "threads",
+            _ => null,
         };
     }
 }

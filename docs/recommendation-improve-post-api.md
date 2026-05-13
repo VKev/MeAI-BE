@@ -60,6 +60,7 @@ export type AiPostImproveRealtimePayload = {
   improveCaption: boolean;
   improveImage: boolean;
   style: string;
+  platform: 'facebook' | 'instagram' | 'tiktok' | 'threads' | null;
   userInstruction: string | null;
   resultCaption: string | null;
   resultResourceId: string | null;
@@ -80,6 +81,7 @@ await startAiPostImprove(postId, {
   improveCaption: true,
   improveImage: true,
   style: 'branded',
+  platform: 'facebook',
   userInstruction: 'Viết caption ngắn hơn và tạo ảnh sạch hơn.'
 });
 ```
@@ -91,6 +93,7 @@ Request:
   "improveCaption": true,
   "improveImage": true,
   "style": "branded",
+  "platform": "facebook",
   "userInstruction": "Viết caption ngắn hơn và tạo ảnh sạch hơn."
 }
 ```
@@ -100,6 +103,7 @@ Rules:
 - Ít nhất một trong `improveCaption` hoặc `improveImage` phải là `true`.
 - `style` nhận `creative`, `branded`, `marketing`.
 - Nếu không gửi `style`, BE dùng style đang lưu trên post gốc, fallback `branded`.
+- `platform` optional, nhận `facebook`, `instagram`, `tiktok`, `threads`. FE nên gửi khi draft post không có `socialMediaId`; BE dùng làm platform hint cho caption/image generation. Thứ tự ưu tiên của BE: social account đang gắn với post -> platform đang lưu trên post -> platform input.
 
 Response `202 Accepted` vẫn trả `AiPostImproveResponse`. FE dùng response này để set optimistic state `Submitted`, nhưng trạng thái tiếp theo phải đến từ SignalR.
 
@@ -318,6 +322,7 @@ Không cho submit lại khi status đang `Submitted` hoặc `Processing`.
 |---|---|
 | `ImprovePost.NothingToImprove` | Form error: chọn caption hoặc image. |
 | `ImprovePost.InvalidStyle` | Reset style về `branded`. |
+| `ImprovePost.InvalidPlatform` | Reset platform về platform đang lưu trên post hoặc yêu cầu user chọn lại. |
 | `Post.NotFound` | Post không tồn tại, quay lại list. |
 | `Post.Unauthorized` | Không có quyền với post. |
 | `RecommendPost.NotFound` | Chưa có suggestion hoặc đã approve/reject. |
