@@ -135,7 +135,7 @@ public sealed class PublishPostsCommandTests
     }
 
     [Fact]
-    public async Task Handle_ShouldPublishToMeAiFeedOnlyWithoutCreatingExternalPlaceholders()
+    public async Task Handle_ShouldPublishToMeAiFeedOnlyAndCreateFeedPublication()
     {
         var userId = Guid.NewGuid();
         var postId = Guid.NewGuid();
@@ -156,6 +156,18 @@ public sealed class PublishPostsCommandTests
         postPublicationRepository
             .Setup(repository => repository.GetByPostIdForUpdateAsync(postId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Array.Empty<PostPublication>());
+        postPublicationRepository
+            .Setup(repository => repository.AddRangeAsync(
+                It.Is<IEnumerable<PostPublication>>(publications =>
+                    publications.Count() == 1 &&
+                    publications.Single().PostId == postId &&
+                    publications.Single().SocialMediaId == Guid.Empty &&
+                    publications.Single().SocialMediaType == "meai_feed" &&
+                    publications.Single().DestinationOwnerId == "meai_feed" &&
+                    publications.Single().ExternalContentId == feedPostId.ToString() &&
+                    publications.Single().PublishStatus == "published"),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var userSocialMediaService = new Mock<IUserSocialMediaService>();
         var feedPostPublishService = new Mock<IFeedPostPublishService>();
@@ -195,7 +207,7 @@ public sealed class PublishPostsCommandTests
 
         postPublicationRepository.Verify(
             repository => repository.AddRangeAsync(It.IsAny<IEnumerable<PostPublication>>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+            Times.Once);
         bus.Verify(instance => instance.Publish(It.IsAny<PublishToTargetRequested>(), It.IsAny<CancellationToken>()), Times.Never);
         userSocialMediaService.VerifyNoOtherCalls();
     }

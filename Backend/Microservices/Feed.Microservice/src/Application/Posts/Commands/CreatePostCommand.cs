@@ -169,6 +169,8 @@ public sealed class CreatePostCommandHandler : ICommandHandler<CreatePostCommand
             {
                 return Result.Failure<PostResponse>(mirrorResult.Error);
             }
+
+            post.AiPostId = mirrorResult.Value.PostId;
         }
 
         await _feedNotificationService.NotifyNewPostAsync(

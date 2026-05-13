@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Application.Abstractions.Feed;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.SocialMedias;
 using Domain.Repositories;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Contracts.Publishing;
+using SharedLibrary.Extensions;
 
 namespace Infrastructure.Logic.Consumers;
 
@@ -16,20 +18,24 @@ public sealed class UpdatePublishedTargetConsumer : IConsumer<UpdatePublishedTar
     private const string InstagramType = "instagram";
     private const string ThreadsType = "threads";
     private const string TikTokType = "tiktok";
+    private const string MeAiFeedType = "meai_feed";
 
     private readonly IPostPublicationRepository _postPublicationRepository;
     private readonly IUserSocialMediaService _userSocialMediaService;
+    private readonly IFeedPostPublishService _feedPostPublishService;
     private readonly IFacebookPublishService _facebookPublishService;
     private readonly ILogger<UpdatePublishedTargetConsumer> _logger;
 
     public UpdatePublishedTargetConsumer(
         IPostPublicationRepository postPublicationRepository,
         IUserSocialMediaService userSocialMediaService,
+        IFeedPostPublishService feedPostPublishService,
         IFacebookPublishService facebookPublishService,
         ILogger<UpdatePublishedTargetConsumer> logger)
     {
         _postPublicationRepository = postPublicationRepository;
         _userSocialMediaService = userSocialMediaService;
+        _feedPostPublishService = feedPostPublishService;
         _facebookPublishService = facebookPublishService;
         _logger = logger;
     }
@@ -47,6 +53,13 @@ public sealed class UpdatePublishedTargetConsumer : IConsumer<UpdatePublishedTar
         if (publication is null || publication.DeletedAt.HasValue)
         {
             await PublishFailureAsync(context, message, "Publication.NotFound", "Publication no longer exists.");
+            return;
+        }
+
+        if (string.Equals(message.SocialMediaType, MeAiFeedType, StringComparison.OrdinalIgnoreCase))
+        {
+            await UpdateFeedAsync(context, message, publication, ct);
+            await PublishBatchCompletedAsync(context, message, ct);
             return;
         }
 
@@ -109,6 +122,51 @@ public sealed class UpdatePublishedTargetConsumer : IConsumer<UpdatePublishedTar
             await PublishFailureAsync(context, message, result.Error.Code, result.Error.Description);
         }
 
+        await PublishBatchCompletedAsync(context, message, ct);
+    }
+
+    private async Task UpdateFeedAsync(
+        ConsumeContext<UpdatePublishedTargetRequested> context,
+        UpdatePublishedTargetRequested message,
+        Domain.Entities.PostPublication publication,
+        CancellationToken ct)
+    {
+        if (!Guid.TryParse(message.ExternalContentId, out var feedPostId) || feedPostId == Guid.Empty)
+        {
+            await PublishFailureAsync(context, message, "Feed.InvalidPostId", "Invalid Feed post id.");
+            return;
+        }
+
+        var result = await _feedPostPublishService.UpdateAiPostOnFeedAsync(
+            new FeedDirectUpdateRequest(message.UserId, feedPostId, message.NewCaption),
+            ct);
+
+        if (result.IsFailure)
+        {
+            await PublishFailureAsync(context, message, result.Error.Code, result.Error.Description);
+            return;
+        }
+
+        publication.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        _postPublicationRepository.Update(publication);
+        await _postPublicationRepository.SaveChangesAsync(ct);
+
+        await context.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                message.UserId,
+                NotificationTypes.PostUpdateTargetCompleted,
+                "Post caption updated",
+                "Updated caption on MeAI Feed.",
+                new { message.CorrelationId, message.PostId, message.SocialMediaId, message.SocialMediaType, message.PublicationId },
+                source: NotificationSourceConstants.Creator),
+            ct);
+    }
+
+    private static async Task PublishBatchCompletedAsync(
+        ConsumeContext<UpdatePublishedTargetRequested> context,
+        UpdatePublishedTargetRequested message,
+        CancellationToken ct)
+    {
         await context.Publish(
             NotificationRequestedEventFactory.CreateForUser(
                 message.UserId,

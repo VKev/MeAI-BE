@@ -157,6 +157,22 @@ public sealed class PublishPostsCommandHandler
                     null,
                     "published",
                     MeAiFeedKey));
+
+                placeholders.Add(new PostPublication
+                {
+                    Id = Guid.CreateVersion7(),
+                    PostId = post.Id,
+                    WorkspaceId = post.WorkspaceId!.Value,
+                    SocialMediaId = Guid.Empty,
+                    SocialMediaType = MeAiFeedType,
+                    DestinationOwnerId = MeAiFeedKey,
+                    ExternalContentId = feedPublishResult.Value.FeedPostId.ToString(),
+                    ExternalContentIdType = "post_id",
+                    ContentType = postType,
+                    PublishStatus = "published",
+                    PublishedAt = feedPublishResult.Value.CreatedAt ?? now,
+                    CreatedAt = now
+                });
                 createdFeedTarget = true;
             }
 

@@ -1,3 +1,4 @@
+using Application.Abstractions.Ai;
 using Application.Abstractions.Resources;
 using Application.Posts.Commands;
 using Domain.Entities;
@@ -42,11 +43,53 @@ public sealed class DeletePostCommandTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(1));
 
-        var handler = new DeletePostCommandHandler(unitOfWork, userResourceService.Object);
+        var aiFeedPostService = new Mock<IAiFeedPostService>(MockBehavior.Strict);
+
+        var handler = new DeletePostCommandHandler(unitOfWork, userResourceService.Object, aiFeedPostService.Object);
 
         var result = await handler.Handle(new DeletePostCommand(userId, post.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
+        userResourceService.VerifyAll();
+        aiFeedPostService.VerifyAll();
+    }
+
+    [Fact]
+    public async Task Handle_Should_DeleteAiMirrorPost_WhenFeedPostHasAiPostId()
+    {
+        await using var dbContext = CreateDbContext();
+        using var unitOfWork = new UnitOfWork(dbContext);
+
+        var userId = Guid.NewGuid();
+        var aiPostId = Guid.NewGuid();
+        var post = new Post
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Content = "Feed post",
+            AiPostId = aiPostId,
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            UpdatedAt = DateTime.UtcNow.AddHours(-1),
+            IsDeleted = false
+        };
+
+        await dbContext.Posts.AddAsync(post);
+        await dbContext.SaveChangesAsync();
+
+        var userResourceService = new Mock<IUserResourceService>(MockBehavior.Strict);
+        var aiFeedPostService = new Mock<IAiFeedPostService>(MockBehavior.Strict);
+        aiFeedPostService
+            .Setup(service => service.DeleteMirrorPostAsync(
+                It.Is<DeleteAiMirrorPostRequest>(request => request.UserId == userId && request.PostId == aiPostId),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(true));
+
+        var handler = new DeletePostCommandHandler(unitOfWork, userResourceService.Object, aiFeedPostService.Object);
+
+        var result = await handler.Handle(new DeletePostCommand(userId, post.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        aiFeedPostService.VerifyAll();
         userResourceService.VerifyAll();
     }
 

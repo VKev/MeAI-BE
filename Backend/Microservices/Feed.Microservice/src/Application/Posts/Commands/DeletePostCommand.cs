@@ -1,3 +1,4 @@
+using Application.Abstractions.Ai;
 using Application.Abstractions.Data;
 using Application.Abstractions.Resources;
 using Application.Common;
@@ -8,17 +9,26 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Application.Posts.Commands;
 
-public sealed record DeletePostCommand(Guid UserId, Guid PostId, bool IsAdmin = false) : ICommand<bool>;
+public sealed record DeletePostCommand(
+    Guid UserId,
+    Guid PostId,
+    bool IsAdmin = false,
+    bool SkipAiMirrorDelete = false) : ICommand<bool>;
 
 public sealed class DeletePostCommandHandler : ICommandHandler<DeletePostCommand, bool>
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IUserResourceService _userResourceService;
+    private readonly IAiFeedPostService _aiFeedPostService;
 
-    public DeletePostCommandHandler(IUnitOfWork unitOfWork, IUserResourceService userResourceService)
+    public DeletePostCommandHandler(
+        IUnitOfWork unitOfWork,
+        IUserResourceService userResourceService,
+        IAiFeedPostService aiFeedPostService)
     {
         _unitOfWork = unitOfWork;
         _userResourceService = userResourceService;
+        _aiFeedPostService = aiFeedPostService;
     }
 
     public async Task<Result<bool>> Handle(DeletePostCommand request, CancellationToken cancellationToken)
@@ -54,6 +64,18 @@ public sealed class DeletePostCommandHandler : ICommandHandler<DeletePostCommand
             if (deleteResourcesResult.IsFailure)
             {
                 return Result.Failure<bool>(deleteResourcesResult.Error);
+            }
+        }
+
+        if (post.AiPostId.HasValue && !request.SkipAiMirrorDelete)
+        {
+            var deleteMirrorResult = await _aiFeedPostService.DeleteMirrorPostAsync(
+                new DeleteAiMirrorPostRequest(post.UserId, post.AiPostId.Value),
+                cancellationToken);
+
+            if (deleteMirrorResult.IsFailure)
+            {
+                return Result.Failure<bool>(deleteMirrorResult.Error);
             }
         }
 
