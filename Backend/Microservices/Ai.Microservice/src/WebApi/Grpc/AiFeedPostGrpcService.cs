@@ -46,6 +46,32 @@ public sealed class AiFeedPostGrpcService : AiFeedPostService.AiFeedPostServiceB
         };
     }
 
+    public override async Task<DeleteMirrorPostResponse> DeleteMirrorPost(
+        DeleteMirrorPostRequest request,
+        ServerCallContext context)
+    {
+        if (!Guid.TryParse(request.UserId, out var userId) || userId == Guid.Empty)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid userId."));
+        }
+
+        if (!Guid.TryParse(request.PostId, out var postId) || postId == Guid.Empty)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid postId."));
+        }
+
+        var result = await _mediator.Send(new DeletePostCommand(postId, userId), context.CancellationToken);
+        if (result.IsFailure)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, result.Error.Description));
+        }
+
+        return new DeleteMirrorPostResponse
+        {
+            Deleted = result.Value
+        };
+    }
+
     private static PostContent? MapContent(AiFeedPostContent? content)
     {
         if (content is null)

@@ -6,6 +6,7 @@ package aifeed;
 
 service AiFeedPostService {
   rpc CreateMirrorPost (CreateMirrorPostRequest) returns (CreateMirrorPostResponse);
+  rpc DeleteMirrorPost (DeleteMirrorPostRequest) returns (DeleteMirrorPostResponse);
 }
 
 message AiFeedPostContent {
@@ -27,4 +28,13 @@ message CreateMirrorPostRequest {
 message CreateMirrorPostResponse {
   string post_id = 1;
   string created_at = 2;
+}
+
+message DeleteMirrorPostRequest {
+  string user_id = 1;
+  string post_id = 2;
+}
+
+message DeleteMirrorPostResponse {
+  bool deleted = 1;
 }

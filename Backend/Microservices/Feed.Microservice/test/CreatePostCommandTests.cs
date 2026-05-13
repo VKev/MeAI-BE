@@ -38,10 +38,11 @@ public sealed class CreatePostCommandTests
                     new UserResourcePresignResult(resourceId, "https://cdn.example.com/media.gif", "image/gif", "gif")
                 }));
 
+        var mirrorPostId = Guid.NewGuid();
         var aiFeedPostService = new Mock<IAiFeedPostService>();
         aiFeedPostService
             .Setup(service => service.CreateMirrorPostAsync(It.IsAny<CreateAiMirrorPostRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new AiFeedMirrorPostResult(Guid.NewGuid(), DateTime.UtcNow)));
+            .ReturnsAsync(Result.Success(new AiFeedMirrorPostResult(mirrorPostId, DateTime.UtcNow)));
 
         var feedNotificationService = new Mock<IFeedNotificationService>();
         feedNotificationService
@@ -74,6 +75,7 @@ public sealed class CreatePostCommandTests
         savedPost.Content.Should().Be("My another test post #8386");
         savedPost.MediaType.Should().Be("gif");
         savedPost.ResourceIds.Should().ContainSingle().Which.Should().Be(resourceId);
+        savedPost.AiPostId.Should().Be(mirrorPostId);
 
         var savedHashtag = await dbContext.Hashtags.SingleAsync();
         savedHashtag.Name.Should().Be("#8386");
