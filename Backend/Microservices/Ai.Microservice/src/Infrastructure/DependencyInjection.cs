@@ -126,6 +126,11 @@ namespace Infrastructure
                     out var waitSeconds)
                     ? waitSeconds
                     : 1800;
+                var s3PublicBaseUrl = configuration["Rag:S3PublicBaseUrl"]
+                                      ?? configuration["RAG_S3_PUBLIC_BASE_URL"]
+                                      ?? configuration["S3:PublicBaseUrl"]
+                                      ?? configuration["VIDEORAG_S3_PUBLIC_BASE_URL"]
+                                      ?? "https://static.vkev.me";
                 return new RagOptions
                 {
                     IngestQueue = ingest,
@@ -133,6 +138,7 @@ namespace Infrastructure
                     RpcTimeout = TimeSpan.FromSeconds(timeoutSeconds),
                     GrpcUrl = grpcUrl,
                     GrpcIngestTimeout = TimeSpan.FromSeconds(grpcIngestTimeoutSeconds),
+                    S3PublicBaseUrl = s3PublicBaseUrl,
                     WaitReadyTimeout = TimeSpan.FromSeconds(waitReadyTimeoutSeconds),
                 };
             });

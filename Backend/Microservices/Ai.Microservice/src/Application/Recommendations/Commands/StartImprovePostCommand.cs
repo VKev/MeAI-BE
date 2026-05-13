@@ -1,3 +1,4 @@
+using Application.Abstractions.SocialMedias;
 using Application.Posts;
 using Application.Recommendations.Models;
 using Domain.Entities;
@@ -25,6 +26,7 @@ public sealed record StartImprovePostCommand(
     bool ImproveCaption,
     bool ImproveImage,
     string? Style = null,
+    string? Platform = null,
     string? UserInstruction = null) : IRequest<Result<RecommendPostTaskResponse>>;
 
 public sealed class StartImprovePostCommandHandler
@@ -32,17 +34,20 @@ public sealed class StartImprovePostCommandHandler
 {
     private readonly IPostRepository _postRepository;
     private readonly IRecommendPostRepository _recommendPostRepository;
+    private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<StartImprovePostCommandHandler> _logger;
 
     public StartImprovePostCommandHandler(
         IPostRepository postRepository,
         IRecommendPostRepository recommendPostRepository,
+        IUserSocialMediaService userSocialMediaService,
         IPublishEndpoint publishEndpoint,
         ILogger<StartImprovePostCommandHandler> logger)
     {
         _postRepository = postRepository;
         _recommendPostRepository = recommendPostRepository;
+        _userSocialMediaService = userSocialMediaService;
         _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
@@ -83,12 +88,44 @@ public sealed class StartImprovePostCommandHandler
                     $"style '{request.Style}' is not supported. Allowed values: {string.Join(", ", DraftPostStyles.All)}. Omit to inherit from the original post."));
         }
 
+        var requestPlatform = NormalizePlatform(request.Platform);
+        if (!string.IsNullOrWhiteSpace(request.Platform) && requestPlatform is null)
+        {
+            return Result.Failure<RecommendPostTaskResponse>(
+                new Error(
+                    "ImprovePost.InvalidPlatform",
+                    "platform must be one of: facebook, instagram, tiktok, threads."));
+        }
+
         // The TryValidate fallback for null is "branded" — but we want to prefer
         // the post's existing style if the caller didn't specify, so override only
         // when the caller actually omitted style.
         var style = string.IsNullOrWhiteSpace(request.Style)
             ? DraftPostStyles.NormalizeOrDefault(post.Content?.PostType)
             : validatedStyle;
+        var postPlatform = NormalizePlatform(post.Platform);
+        var platform = postPlatform ?? requestPlatform;
+        if (post.SocialMediaId.HasValue && post.SocialMediaId.Value != Guid.Empty)
+        {
+            var socialMediaResult = await _userSocialMediaService.GetSocialMediasAsync(
+                request.UserId,
+                new[] { post.SocialMediaId.Value },
+                cancellationToken);
+
+            if (socialMediaResult.IsFailure)
+            {
+                return Result.Failure<RecommendPostTaskResponse>(socialMediaResult.Error);
+            }
+
+            var socialMedia = socialMediaResult.Value.FirstOrDefault();
+            if (socialMedia is null)
+            {
+                return Result.Failure<RecommendPostTaskResponse>(
+                    new Error("SocialMedia.NotFound", "Social media account not found."));
+            }
+
+            platform = NormalizePlatform(socialMedia.Type) ?? postPlatform ?? requestPlatform;
+        }
 
         // ── Replace-on-rerun: delete any prior RecommendPost for this post ──
         var existing = await _recommendPostRepository.GetByOriginalPostIdForUpdateAsync(
@@ -145,6 +182,7 @@ public sealed class StartImprovePostCommandHandler
                 ImproveCaption = request.ImproveCaption,
                 ImproveImage = request.ImproveImage,
                 Style = style,
+                Platform = platform,
                 UserInstruction = trimmedInstruction,
                 StartedAt = now,
             },
@@ -169,6 +207,7 @@ public sealed class StartImprovePostCommandHandler
                     improveCaption = entity.ImproveCaption,
                     improveImage = entity.ImproveImage,
                     style = entity.Style,
+                    platform = platform,
                     userInstruction = entity.UserInstruction,
                     resultCaption = entity.ResultCaption,
                     resultResourceId = entity.ResultResourceId,
@@ -183,13 +222,14 @@ public sealed class StartImprovePostCommandHandler
             cancellationToken);
 
         _logger.LogInformation(
-            "ImprovePost queued. CorrelationId={CorrelationId} UserId={UserId} PostId={PostId} ImproveCaption={Caption} ImproveImage={Image} Style={Style}",
+            "ImprovePost queued. CorrelationId={CorrelationId} UserId={UserId} PostId={PostId} ImproveCaption={Caption} ImproveImage={Image} Style={Style} Platform={Platform}",
             correlationId,
             request.UserId,
             post.Id,
             request.ImproveCaption,
             request.ImproveImage,
-            style);
+            style,
+            platform);
 
         return Result.Success(MapToResponse(entity));
     }
@@ -214,5 +254,22 @@ public sealed class StartImprovePostCommandHandler
             ErrorMessage: task.ErrorMessage,
             CreatedAt: task.CreatedAt,
             CompletedAt: task.CompletedAt);
+    }
+
+    private static string? NormalizePlatform(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "facebook" or "fb" => "facebook",
+            "instagram" or "ig" => "instagram",
+            "tiktok" or "tik tok" => "tiktok",
+            "threads" or "thread" => "threads",
+            _ => null,
+        };
     }
 }

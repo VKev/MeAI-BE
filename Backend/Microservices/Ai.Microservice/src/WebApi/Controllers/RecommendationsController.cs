@@ -179,6 +179,7 @@ public sealed class RecommendationsController : ApiController
                 ImproveCaption: request.ImproveCaption,
                 ImproveImage: request.ImproveImage,
                 Style: request.Style,
+                Platform: request.Platform,
                 UserInstruction: request.UserInstruction),
             cancellationToken);
 

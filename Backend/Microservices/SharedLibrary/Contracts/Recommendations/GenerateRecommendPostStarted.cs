@@ -20,6 +20,12 @@ public sealed class GenerateRecommendPostStarted
     /// <summary>"creative" | "branded" (default) | "marketing".</summary>
     public string Style { get; set; } = "branded";
 
+    /// <summary>
+    /// Optional normalized platform hint ("facebook", "instagram", "tiktok",
+    /// "threads"). Used for posts that are not bound to a social account.
+    /// </summary>
+    public string? Platform { get; set; }
+
     /// <summary>Optional free-form steering text from the user.</summary>
     public string? UserInstruction { get; set; }
 

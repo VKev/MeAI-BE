@@ -20,6 +20,13 @@ public sealed class RagOptions
     public TimeSpan GrpcIngestTimeout { get; init; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
+    /// Public CDN/base URL used for S3-backed RAG image assets. Older VideoRAG rows
+    /// may still store direct S3 frame URLs; query results rewrite those hosts to
+    /// this base so FE cards and downstream multimodal calls use the public CDN.
+    /// </summary>
+    public string? S3PublicBaseUrl { get; init; } = "https://static.vkev.me";
+
+    /// <summary>
     /// Timeout for the dedicated <c>WaitForRagReady</c> RPC. Cold-container
     /// knowledge bootstrap (LightRAG entity extraction across ~25-80 docs) can
     /// take 1-3 minutes; this gives generous headroom while still bounding any
