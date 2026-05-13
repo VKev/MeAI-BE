@@ -17,6 +17,10 @@ public sealed record AgenticRuntimeContentRequest(
     string? PlatformPreference,
     int? MaxContentLength,
     AgentWebSearchResponse Search,
+    Guid? UserId = null,
+    Guid? WorkspaceId = null,
+    Guid? OriginChatSessionId = null,
+    Guid? OriginChatId = null,
     Guid? GroundingSocialMediaId = null,
     string? GroundingPlatform = null,
     string? RecommendationQuery = null,
@@ -29,4 +33,5 @@ public sealed record AgenticRuntimePostDraft(
     string? Title,
     string Content,
     string? Hashtag,
-    string PostType);
+    string PostType,
+    IReadOnlyList<Guid>? ResourceIds = null);

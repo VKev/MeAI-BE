@@ -399,13 +399,19 @@ public sealed class PublishPostsCommandHandler
 
     private static IReadOnlyList<Guid> GetResourceIds(Post post)
     {
-        if (post.Content?.ResourceList is null || post.Content.ResourceList.Count == 0)
+        var rawIds = post.Content?.ResourceList is { Count: > 0 }
+            ? post.Content.ResourceList
+            : GeminiDraftPostHelper.ParseResourceIds(post.PostBuilder?.ResourceIds)
+                .Select(id => id.ToString())
+                .ToList();
+
+        if (rawIds is null || rawIds.Count == 0)
         {
             return Array.Empty<Guid>();
         }
 
-        var ids = new List<Guid>(post.Content.ResourceList.Count);
-        foreach (var value in post.Content.ResourceList)
+        var ids = new List<Guid>(rawIds.Count);
+        foreach (var value in rawIds)
         {
             if (Guid.TryParse(value, out var parsed) && parsed != Guid.Empty)
             {

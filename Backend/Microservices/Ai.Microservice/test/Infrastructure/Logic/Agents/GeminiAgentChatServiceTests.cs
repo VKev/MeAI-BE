@@ -5,6 +5,7 @@ using Application.PublishingSchedules.Models;
 using Application.Recommendations.Services;
 using FluentAssertions;
 using Infrastructure.Logic.Agents;
+using Infrastructure.Logic.Kie;
 using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,10 @@ public sealed class GeminiAgentChatServiceTests
         var configuration = new ConfigurationBuilder().Build();
 
         var credentialProvider = new Mock<IApiCredentialProvider>(MockBehavior.Strict);
+        var httpClientFactory = new Mock<IHttpClientFactory>(MockBehavior.Strict);
+        httpClientFactory
+            .Setup(factory => factory.CreateClient("KieChat"))
+            .Returns(new HttpClient());
         var userConfigService = new Mock<IUserConfigService>(MockBehavior.Strict);
         userConfigService
             .Setup(service => service.GetActiveConfigAsync(It.IsAny<CancellationToken>()))
@@ -89,10 +94,15 @@ public sealed class GeminiAgentChatServiceTests
                 DateTime.UtcNow)));
 
         var chatWebPostService = new Mock<IChatWebPostService>(MockBehavior.Strict);
+        var kieResponsesClient = new KieResponsesClient(
+            configuration,
+            httpClientFactory.Object,
+            credentialProvider.Object,
+            Mock.Of<ILogger<KieResponsesClient>>());
 
         var service = new GeminiAgentChatService(
             configuration,
-            credentialProvider.Object,
+            kieResponsesClient,
             userConfigService.Object,
             mediator.Object,
             chatWebPostService.Object,
@@ -105,6 +115,7 @@ public sealed class GeminiAgentChatServiceTests
                 sessionId,
                 workspaceId,
                 "Hãy đăng bài viết về đội tuyển chiến thắng World Cup năm nay",
+                null,
                 null,
                 new AgentScheduleOptions(
                     DateTime.UtcNow.AddHours(5),
@@ -123,6 +134,7 @@ public sealed class GeminiAgentChatServiceTests
         queryRewriter.VerifyAll();
         mediator.VerifyAll();
         chatWebPostService.VerifyNoOtherCalls();
+        httpClientFactory.VerifyAll();
         credentialProvider.VerifyNoOtherCalls();
     }
 }

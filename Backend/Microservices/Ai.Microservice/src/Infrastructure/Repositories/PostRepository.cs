@@ -41,12 +41,17 @@ public sealed class PostRepository : IPostRepository
 
     public async Task<Post?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
-        return await _dbSet.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+        return await _dbSet
+            .AsNoTracking()
+            .Include(post => post.PostBuilder)
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
     public async Task<Post?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken)
     {
-        return await _dbSet.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+        return await _dbSet
+            .Include(post => post.PostBuilder)
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
     }
 
     public async Task<IReadOnlyList<Post>> GetByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken)

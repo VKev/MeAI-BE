@@ -23,7 +23,9 @@ public sealed record PublishingScheduleResponse(
     string? ErrorCode,
     string? ErrorMessage,
     DateTime? CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    Guid? RuntimePostBuilderId = null,
+    IReadOnlyList<Guid>? RuntimePostIds = null);
 
 public sealed record PublishingScheduleItemResponse(
     Guid Id,

@@ -24,7 +24,8 @@ public sealed record CreateChatVideoCommand(
     string? AspectRatio,
     int? Seeds,
     bool? EnableTranslation,
-    string? Watermark) : IRequest<Result<ChatVideoResponse>>;
+    string? Watermark,
+    Guid? LinkedPostId = null) : IRequest<Result<ChatVideoResponse>>;
 
 public sealed record ChatVideoResponse(
     Guid ChatId,
@@ -167,7 +168,8 @@ public sealed class CreateChatVideoCommandHandler
             aspectRatio,
             request.Seeds,
             enableTranslation,
-            request.Watermark);
+            request.Watermark,
+            request.LinkedPostId == Guid.Empty ? null : request.LinkedPostId);
 
         var chat = new Chat
         {
@@ -253,7 +255,8 @@ public sealed class CreateChatVideoCommandHandler
         string AspectRatio,
         int? Seeds,
         bool EnableTranslation,
-        string? Watermark);
+        string? Watermark,
+        Guid? LinkedPostId);
 
     private static Error BuildQuotaError(StorageQuotaCheckResult quota, long estimatedBytes)
     {

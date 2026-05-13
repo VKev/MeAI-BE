@@ -13,4 +13,6 @@ public sealed record AgentChatResponse(
     Guid? CorrelationId = null,
     string? RetrievalMode = null,
     IReadOnlyList<string>? SourceUrls = null,
-    IReadOnlyList<Guid>? ImportedResourceIds = null);
+    IReadOnlyList<Guid>? ImportedResourceIds = null,
+    Guid? PostBuilderId = null,
+    IReadOnlyList<Guid>? PostIds = null);

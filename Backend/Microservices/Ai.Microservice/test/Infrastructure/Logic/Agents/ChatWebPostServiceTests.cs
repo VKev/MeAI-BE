@@ -111,6 +111,17 @@ public sealed class ChatWebPostServiceTests
                 [],
                 DateTime.UtcNow,
                 DateTime.UtcNow)));
+        mediator
+            .Setup(service => service.Send(
+                It.Is<AddPostBuilderResourcesCommand>(command =>
+                    command.PostBuilderId == postBuilderId &&
+                    command.UserId == userId &&
+                    command.ResourceIds.Count == 1 &&
+                    command.ResourceIds[0] == importedResourceId),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PostBuilderResourcesResponse(
+                postBuilderId,
+                [importedResourceId])));
 
         var service = new ChatWebPostService(
             agentWebSearchService.Object,
