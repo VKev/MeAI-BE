@@ -372,19 +372,25 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         CancellationToken cancellationToken)
     {
         var existingResources = NormalizeResourceList(existingResourceList);
-        if (existingResources.Count > 0)
+        var candidates = BuildMediaImportCandidates(platform, platformPost, postType);
+        if (candidates.Count == 0)
         {
             return existingResources;
         }
 
-        var candidates = BuildMediaImportCandidates(platform, platformPost, postType);
-        if (candidates.Count == 0)
+        var resources = new List<string>(existingResources);
+        var importStartIndex = Math.Min(existingResources.Count, candidates.Count);
+        var candidatesToImport = existingResources.Count > 0
+            ? candidates.Skip(importStartIndex).ToList()
+            : candidates;
+
+        if (candidatesToImport.Count == 0)
         {
-            return [];
+            return resources;
         }
 
         var errors = new List<string>();
-        foreach (var candidate in candidates)
+        foreach (var candidate in candidatesToImport)
         {
             var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
                 message.UserId,
@@ -399,9 +405,15 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
 
             if (uploadResult.IsSuccess && uploadResult.Value.Count > 0)
             {
-                return uploadResult.Value
-                    .Select(resource => resource.ResourceId.ToString())
-                    .ToList();
+                foreach (var resourceId in uploadResult.Value.Select(resource => resource.ResourceId.ToString()))
+                {
+                    if (!resources.Contains(resourceId, StringComparer.OrdinalIgnoreCase))
+                    {
+                        resources.Add(resourceId);
+                    }
+                }
+
+                continue;
             }
 
             var error = uploadResult.IsFailure
@@ -416,6 +428,11 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
                 platformPost.PlatformPostId,
                 candidate.ResourceType,
                 error);
+        }
+
+        if (resources.Count > 0)
+        {
+            return resources;
         }
 
         throw new InvalidOperationException(
@@ -453,6 +470,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         if (isVideo)
         {
             AddCandidate(candidates, platformPost.VideoDownloadUrl, "video", platformPost);
+            AddMediaItemCandidates(candidates, platformPost, "video");
 
             if (normalizedPlatform is "instagram" or "threads")
             {
@@ -463,16 +481,54 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
             return candidates;
         }
 
+        var mediaItemCandidateCount = candidates.Count;
+        AddMediaItemCandidates(candidates, platformPost, "image");
+
         if (string.Equals(normalizedPlatform, "facebook", StringComparison.Ordinal))
         {
+            if (candidates.Count > mediaItemCandidateCount)
+            {
+                return candidates;
+            }
+
             AddCandidate(candidates, platformPost.ThumbnailUrl, "image", platformPost);
-            AddCandidate(candidates, platformPost.MediaUrl, "image", platformPost);
             return candidates;
         }
 
         AddCandidate(candidates, platformPost.MediaUrl, "image", platformPost);
         AddCandidate(candidates, platformPost.ThumbnailUrl, "image", platformPost);
         return candidates;
+    }
+
+    private static void AddMediaItemCandidates(
+        List<MediaImportCandidate> candidates,
+        SocialPlatformPostSummaryResponse platformPost,
+        string fallbackResourceType)
+    {
+        if (platformPost.MediaItems is not { Count: > 0 })
+        {
+            return;
+        }
+
+        foreach (var media in platformPost.MediaItems)
+        {
+            AddCandidate(
+                candidates,
+                media.Url,
+                NormalizeResourceType(media.ResourceType, fallbackResourceType),
+                platformPost);
+        }
+    }
+
+    private static string NormalizeResourceType(string? value, string fallback)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "video" => "video",
+            "image" => "image",
+            _ => fallback
+        };
     }
 
     private static void AddCandidate(

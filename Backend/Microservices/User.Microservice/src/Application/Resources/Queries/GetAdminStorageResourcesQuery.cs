@@ -31,7 +31,8 @@ public sealed class GetAdminStorageResourcesQueryHandler
     [
         ResourceOriginKinds.UserUpload,
         ResourceOriginKinds.AiGenerated,
-        ResourceOriginKinds.AiImportedUrl
+        ResourceOriginKinds.AiImportedUrl,
+        ResourceOriginKinds.SocialMediaImported
     ];
     private readonly IRepository<Resource> _resourceRepository;
     private readonly IObjectStorageService _objectStorageService;

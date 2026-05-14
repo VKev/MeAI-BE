@@ -769,7 +769,88 @@ public sealed class FacebookContentService : IFacebookContentService
             ReactionBreakdown: reactionBreakdown,
             ReachCount: reachCount,
             ImpressionCount: impressionCount,
-            VideoSourceUrl: videoSourceUrl);
+            VideoSourceUrl: videoSourceUrl,
+            MediaItems: BuildMediaItems(post, mediaType, videoSourceUrl));
+    }
+
+    private static IReadOnlyList<FacebookPostMediaItem> BuildMediaItems(
+        FacebookPostDto post,
+        string? postMediaType,
+        string? videoSourceUrl)
+    {
+        var items = new List<FacebookPostMediaItem>();
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var isVideoPost = string.Equals(postMediaType, "video", StringComparison.Ordinal);
+
+        if (isVideoPost && IsHttpUrl(videoSourceUrl))
+        {
+            AddMediaItem(items, seenKeys, videoSourceUrl, "video");
+        }
+
+        foreach (var attachment in EnumerateAttachments(post))
+        {
+            var attachmentMediaType = NormalizeMediaType(attachment.MediaType ?? attachment.Type);
+            var imageUrl = attachment.Media?.Image?.Src;
+
+            if (!string.Equals(attachmentMediaType, "video", StringComparison.Ordinal) ||
+                !IsHttpUrl(videoSourceUrl))
+            {
+                AddMediaItem(items, seenKeys, imageUrl, "image", attachment.Target?.Id);
+            }
+        }
+
+        if (items.Count == 0)
+        {
+            AddMediaItem(items, seenKeys, post.FullPicture, "image");
+        }
+
+        return items;
+    }
+
+    private static IEnumerable<FacebookAttachmentDto> EnumerateAttachments(FacebookPostDto post)
+    {
+        foreach (var attachment in post.Attachments?.Data ?? Array.Empty<FacebookAttachmentDto>())
+        {
+            yield return attachment;
+
+            foreach (var nested in attachment.Subattachments?.Data ?? Array.Empty<FacebookAttachmentDto>())
+            {
+                yield return nested;
+            }
+        }
+    }
+
+    private static void AddMediaItem(
+        List<FacebookPostMediaItem> items,
+        HashSet<string> seenKeys,
+        string? url,
+        string resourceType,
+        string? sourceKey = null)
+    {
+        if (!IsHttpUrl(url))
+        {
+            return;
+        }
+
+        var dedupKey = BuildMediaDedupKey(url!, sourceKey);
+        if (!seenKeys.Add(dedupKey))
+        {
+            return;
+        }
+
+        items.Add(new FacebookPostMediaItem(url!.Trim(), resourceType));
+    }
+
+    private static string BuildMediaDedupKey(string url, string? sourceKey)
+    {
+        if (!string.IsNullOrWhiteSpace(sourceKey))
+        {
+            return sourceKey.Trim();
+        }
+
+        return Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)
+            ? $"{uri.Host}{uri.AbsolutePath}"
+            : url.Trim();
     }
 
     private static string? NormalizeMediaType(string? value)
