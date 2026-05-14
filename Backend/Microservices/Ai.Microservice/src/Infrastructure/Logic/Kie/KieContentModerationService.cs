@@ -77,7 +77,7 @@ public sealed class KieContentModerationService : IGeminiContentModerationServic
 
     private string ResolveModel(string? preferred)
     {
-        return string.IsNullOrWhiteSpace(preferred) ? _chatModel : preferred.Trim();
+        return KieResponsesClient.ResolveResponsesModel(preferred, _chatModel);
     }
 
     private static string BuildModerationPrompt(string text)

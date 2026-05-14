@@ -594,15 +594,9 @@ public sealed class GeminiAgentChatService : IAgentChatService
         var configuredModel = _configuration["Kie:ChatModel"]
                               ?? _configuration["Kie__ChatModel"];
 
-        if (activeConfigResult.IsSuccess &&
-            !string.IsNullOrWhiteSpace(activeConfigResult.Value?.ChatModel))
-        {
-            return activeConfigResult.Value.ChatModel.Trim();
-        }
-
-        return string.IsNullOrWhiteSpace(configuredModel)
-            ? KieResponsesClient.DefaultChatModel
-            : configuredModel.Trim();
+        return KieResponsesClient.ResolveResponsesModel(
+            activeConfigResult.IsSuccess ? activeConfigResult.Value?.ChatModel : null,
+            configuredModel);
     }
 
     private static string BuildAnalyzerPrompt()

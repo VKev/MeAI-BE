@@ -93,6 +93,11 @@ public sealed class KieResponsesClient
         try
         {
             var arguments = ExtractFunctionArguments(bodyResult.Value, tool.Name);
+            if (string.IsNullOrWhiteSpace(arguments))
+            {
+                arguments = TryExtractJsonTextFallback(bodyResult.Value);
+            }
+
             return string.IsNullOrWhiteSpace(arguments)
                 ? Result.Failure<string>(new Error(failureCode, $"Kie did not call the required tool: {tool.Name}."))
                 : Result.Success(arguments);
@@ -115,6 +120,33 @@ public sealed class KieResponsesClient
     {
         var payload = BuildRequest(model, input, tools, toolChoice, reasoningEffort);
         return await SendAsync(payload, failureCode, failureMessage, cancellationToken);
+    }
+
+    public static string ResolveResponsesModel(string? preferredModel, string? configuredModel = null)
+    {
+        if (IsSupportedResponsesModel(preferredModel))
+        {
+            return preferredModel!.Trim();
+        }
+
+        if (IsSupportedResponsesModel(configuredModel))
+        {
+            return configuredModel!.Trim();
+        }
+
+        return DefaultChatModel;
+    }
+
+    public static bool IsSupportedResponsesModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return false;
+        }
+
+        var normalized = model.Trim().ToLowerInvariant();
+        return normalized.StartsWith("gpt-5", StringComparison.Ordinal) ||
+               normalized.Contains("codex", StringComparison.Ordinal);
     }
 
     private static KieResponsesRequest BuildRequest(
@@ -322,28 +354,79 @@ public sealed class KieResponsesClient
 
     private static void TryAppendFunctionCall(List<KieResponsesFunctionCall> calls, JsonElement element)
     {
-        if (!element.TryGetProperty("type", out var typeProp) || typeProp.ValueKind != JsonValueKind.String)
+        if (TryBuildFunctionCall(element, out var directCall))
+        {
+            calls.Add(directCall);
+        }
+
+        if (!element.TryGetProperty("tool_calls", out var toolCalls) || toolCalls.ValueKind != JsonValueKind.Array)
         {
             return;
         }
 
-        var type = typeProp.GetString();
-        if (type is not ("function_call" or "tool_call"))
+        foreach (var toolCall in toolCalls.EnumerateArray())
         {
-            return;
+            if (TryBuildFunctionCall(toolCall, out var nestedCall))
+            {
+                calls.Add(nestedCall);
+            }
+        }
+    }
+
+    private static string? TryReadFunctionArguments(JsonElement element, string toolName)
+    {
+        if (TryBuildFunctionCall(element, out var directCall) &&
+            string.Equals(directCall.Name, toolName, StringComparison.Ordinal))
+        {
+            return directCall.Arguments;
+        }
+
+        if (!element.TryGetProperty("tool_calls", out var toolCalls) || toolCalls.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var toolCall in toolCalls.EnumerateArray())
+        {
+            if (TryBuildFunctionCall(toolCall, out var nestedCall) &&
+                string.Equals(nestedCall.Name, toolName, StringComparison.Ordinal))
+            {
+                return nestedCall.Arguments;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryBuildFunctionCall(JsonElement element, out KieResponsesFunctionCall functionCall)
+    {
+        functionCall = default!;
+
+        var type = element.TryGetProperty("type", out var typeProp) && typeProp.ValueKind == JsonValueKind.String
+            ? typeProp.GetString()
+            : null;
+        if (type is not null &&
+            type is not ("function_call" or "tool_call" or "function"))
+        {
+            return false;
         }
 
         var name = element.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String
             ? nameProp.GetString()
             : null;
-        var callId = element.TryGetProperty("call_id", out var callIdProp) && callIdProp.ValueKind == JsonValueKind.String
-            ? callIdProp.GetString()
-            : null;
+        var callId =
+            element.TryGetProperty("call_id", out var callIdProp) && callIdProp.ValueKind == JsonValueKind.String
+                ? callIdProp.GetString()
+                : element.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.String
+                    ? idProp.GetString()
+                    : null;
 
         string? arguments = null;
         if (element.TryGetProperty("arguments", out var argsProp))
         {
-            arguments = argsProp.ValueKind == JsonValueKind.String ? argsProp.GetString() : argsProp.GetRawText();
+            arguments = argsProp.ValueKind == JsonValueKind.String
+                ? argsProp.GetString()
+                : argsProp.GetRawText();
         }
         else if (element.TryGetProperty("function", out var functionProp))
         {
@@ -362,51 +445,75 @@ public sealed class KieResponsesClient
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(callId))
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(callId))
         {
-            calls.Add(new KieResponsesFunctionCall(
-                callId!,
-                name!,
-                arguments ?? "{}"));
+            return false;
+        }
+
+        functionCall = new KieResponsesFunctionCall(
+            callId!,
+            name!,
+            arguments ?? "{}");
+        return true;
+    }
+
+    private static string? TryExtractJsonTextFallback(string body)
+    {
+        var text = ExtractOutputText(body).Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var payload = text.StartsWith("```", StringComparison.Ordinal)
+            ? ExtractJsonFromCodeFence(text)
+            : text;
+
+        if (!LooksLikeJsonPayload(payload))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var _ = JsonDocument.Parse(payload);
+            return payload;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
-    private static string? TryReadFunctionArguments(JsonElement element, string toolName)
+    private static string ExtractJsonFromCodeFence(string text)
     {
-        if (!element.TryGetProperty("type", out var typeProp) || typeProp.ValueKind != JsonValueKind.String)
+        var firstBrace = text.IndexOf('{');
+        var lastBrace = text.LastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace)
         {
-            return null;
+            return text[firstBrace..(lastBrace + 1)];
         }
 
-        var type = typeProp.GetString();
-        if (type is not ("function_call" or "tool_call"))
+        var firstBracket = text.IndexOf('[');
+        var lastBracket = text.LastIndexOf(']');
+        if (firstBracket >= 0 && lastBracket > firstBracket)
         {
-            return null;
+            return text[firstBracket..(lastBracket + 1)];
         }
 
-        if (element.TryGetProperty("name", out var nameProp) &&
-            nameProp.ValueKind == JsonValueKind.String &&
-            !string.Equals(nameProp.GetString(), toolName, StringComparison.Ordinal))
+        return text.Trim('`').Trim();
+    }
+
+    private static bool LooksLikeJsonPayload(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
         {
-            return null;
+            return false;
         }
 
-        if (element.TryGetProperty("arguments", out var argsProp))
-        {
-            return argsProp.ValueKind == JsonValueKind.String
-                ? argsProp.GetString()
-                : argsProp.GetRawText();
-        }
-
-        if (element.TryGetProperty("function", out var functionProp) &&
-            functionProp.TryGetProperty("arguments", out var nestedArgsProp))
-        {
-            return nestedArgsProp.ValueKind == JsonValueKind.String
-                ? nestedArgsProp.GetString()
-                : nestedArgsProp.GetRawText();
-        }
-
-        return null;
+        var trimmed = text.Trim();
+        return (trimmed.StartsWith('{') && trimmed.EndsWith('}')) ||
+               (trimmed.StartsWith('[') && trimmed.EndsWith(']'));
     }
 
     private static string? TryReadKieErrorMessage(string payload)
