@@ -8,7 +8,9 @@ using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Context;
 using Infrastructure.Repositories;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SharedLibrary.Common.ResponseModel;
 
@@ -37,6 +39,7 @@ public sealed class CompleteFacebookOAuthCommandTests
         var facebookOAuthService = new Mock<IFacebookOAuthService>();
         var entitlementService = new Mock<IUserSubscriptionEntitlementService>();
         var profileService = new Mock<ISocialMediaProfileService>();
+        var publishEndpoint = new Mock<IPublishEndpoint>();
 
         var state = userId;
         facebookOAuthService
@@ -108,7 +111,9 @@ public sealed class CompleteFacebookOAuthCommandTests
             unitOfWork,
             facebookOAuthService.Object,
             entitlementService.Object,
-            profileService.Object);
+            profileService.Object,
+            publishEndpoint.Object,
+            NullLogger<CompleteFacebookOAuthCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new CompleteFacebookOAuthCommand("valid-code", "valid-state", null, null),

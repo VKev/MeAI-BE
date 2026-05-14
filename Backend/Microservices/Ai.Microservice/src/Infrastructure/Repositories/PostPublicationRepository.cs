@@ -61,9 +61,65 @@ public sealed class PostPublicationRepository : IPostPublicationRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PostPublication>> GetBySocialMediaIdForUpdateAsync(
+        Guid socialMediaId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbSet
+            .Where(publication =>
+                publication.SocialMediaId == socialMediaId &&
+                !publication.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PostPublication>> GetByPostIdsIncludingDeletedForUpdateAsync(
+        IReadOnlyList<Guid> postIds,
+        CancellationToken cancellationToken)
+    {
+        if (postIds.Count == 0)
+        {
+            return Array.Empty<PostPublication>();
+        }
+
+        return await _dbSet
+            .Where(publication => postIds.Contains(publication.PostId))
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<PostPublication?> GetBySocialMediaAndExternalContentForUpdateAsync(
+        Guid socialMediaId,
+        string externalContentId,
+        CancellationToken cancellationToken)
+    {
+        return _dbSet.FirstOrDefaultAsync(
+            publication =>
+                publication.SocialMediaId == socialMediaId &&
+                publication.ExternalContentId == externalContentId,
+            cancellationToken);
+    }
+
+    public Task<PostPublication?> GetByExternalContentKeyForUpdateAsync(
+        string socialMediaType,
+        string destinationOwnerId,
+        string externalContentId,
+        CancellationToken cancellationToken)
+    {
+        return _dbSet.FirstOrDefaultAsync(
+            publication =>
+                publication.SocialMediaType == socialMediaType &&
+                publication.DestinationOwnerId == destinationOwnerId &&
+                publication.ExternalContentId == externalContentId,
+            cancellationToken);
+    }
+
     public void Update(PostPublication entity)
     {
         _dbSet.Update(entity);
+    }
+
+    public void DeleteRange(IEnumerable<PostPublication> entities)
+    {
+        _dbSet.RemoveRange(entities);
     }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken)

@@ -78,6 +78,36 @@ public sealed class PostRepository : IPostRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<List<Post>> GetByUserIdAndSocialMediaIdForUpdateAsync(
+        Guid userId,
+        Guid socialMediaId,
+        CancellationToken cancellationToken)
+    {
+        return await _dbSet
+            .Where(post =>
+                post.UserId == userId &&
+                post.SocialMediaId == socialMediaId &&
+                post.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Post>> GetActiveByUserIdExcludingIdsAsync(
+        Guid userId,
+        IReadOnlyList<Guid> excludedPostIds,
+        CancellationToken cancellationToken)
+    {
+        var query = _dbSet
+            .AsNoTracking()
+            .Where(post => post.UserId == userId && post.DeletedAt == null);
+
+        if (excludedPostIds.Count > 0)
+        {
+            query = query.Where(post => !excludedPostIds.Contains(post.Id));
+        }
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<Post>> GetByUserIdAsync(
         Guid userId,
         DateTime? cursorCreatedAt,
@@ -294,6 +324,11 @@ public sealed class PostRepository : IPostRepository
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(post => post.Status, FailedStatus)
                 .SetProperty(post => post.UpdatedAt, now), cancellationToken);
+    }
+
+    public void DeleteRange(IEnumerable<Post> entities)
+    {
+        _dbSet.RemoveRange(entities);
     }
 
     private IQueryable<Guid> FailedRecommendationPostIds(Guid userId)

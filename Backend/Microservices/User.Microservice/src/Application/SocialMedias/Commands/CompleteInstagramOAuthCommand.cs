@@ -6,8 +6,10 @@ using Application.Abstractions.SocialMedia;
 using Application.Subscriptions.Services;
 using Application.SocialMedias.Models;
 using Domain.Entities;
+using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
@@ -27,21 +29,29 @@ public sealed class CompleteInstagramOAuthCommandHandler
 
     private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IRepository<User> _userRepository;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IInstagramOAuthService _instagramOAuthService;
     private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly ISocialMediaProfileService _profileService;
+    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<CompleteInstagramOAuthCommandHandler> _logger;
 
     public CompleteInstagramOAuthCommandHandler(
         IUnitOfWork unitOfWork,
         IInstagramOAuthService instagramOAuthService,
         IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
-        ISocialMediaProfileService profileService)
+        ISocialMediaProfileService profileService,
+        IPublishEndpoint publishEndpoint,
+        ILogger<CompleteInstagramOAuthCommandHandler> logger)
     {
+        _unitOfWork = unitOfWork;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _userRepository = unitOfWork.Repository<User>();
         _instagramOAuthService = instagramOAuthService;
         _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _profileService = profileService;
+        _publishEndpoint = publishEndpoint;
+        _logger = logger;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(
@@ -200,6 +210,14 @@ public sealed class CompleteInstagramOAuthCommandHandler
             };
             await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
         }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await SocialMediaPostSyncEventPublisher.PublishAsync(
+            _publishEndpoint,
+            _logger,
+            userId,
+            [socialMedia],
+            cancellationToken);
 
         var socialProfileResult = await _profileService.GetUserProfileAsync(
             socialMedia.Type,

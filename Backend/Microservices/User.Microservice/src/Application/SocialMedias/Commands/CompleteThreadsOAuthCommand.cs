@@ -5,6 +5,7 @@ using Application.Abstractions.Threads;
 using Application.Subscriptions.Services;
 using Application.SocialMedias.Models;
 using Domain.Entities;
+using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -25,8 +26,10 @@ public sealed class CompleteThreadsOAuthCommandHandler
 {
     private readonly IThreadsOAuthService _threadsOAuthService;
     private readonly IRepository<SocialMedia> _socialMediaRepository;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly ISocialMediaProfileService _profileService;
+    private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<CompleteThreadsOAuthCommandHandler> _logger;
 
     public CompleteThreadsOAuthCommandHandler(
@@ -34,12 +37,15 @@ public sealed class CompleteThreadsOAuthCommandHandler
         IUnitOfWork unitOfWork,
         IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
         ISocialMediaProfileService profileService,
+        IPublishEndpoint publishEndpoint,
         ILogger<CompleteThreadsOAuthCommandHandler> logger)
     {
         _threadsOAuthService = threadsOAuthService;
+        _unitOfWork = unitOfWork;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _profileService = profileService;
+        _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
 
@@ -166,6 +172,14 @@ public sealed class CompleteThreadsOAuthCommandHandler
             };
             await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
         }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await SocialMediaPostSyncEventPublisher.PublishAsync(
+            _publishEndpoint,
+            _logger,
+            userId,
+            [socialMedia],
+            cancellationToken);
 
         var socialProfile = profile != null
             ? new SocialMediaUserProfile(

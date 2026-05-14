@@ -258,6 +258,23 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
             }
         }
 
+        if (request.HardDelete)
+        {
+            var hardDeleteResult = await _mediator.Send(
+                new HardDeleteResourcesCommand(userId, resourceIds),
+                context.CancellationToken);
+
+            if (hardDeleteResult.IsFailure)
+            {
+                throw new RpcException(new Status(StatusCode.Internal, hardDeleteResult.Error.Description));
+            }
+
+            return new DeleteResourcesResponse
+            {
+                DeletedCount = hardDeleteResult.Value
+            };
+        }
+
         var deletedCount = 0;
         foreach (var resourceId in resourceIds)
         {

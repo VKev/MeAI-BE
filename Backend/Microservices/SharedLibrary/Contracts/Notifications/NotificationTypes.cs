@@ -40,4 +40,7 @@ public static class NotificationTypes
     public const string PostUpdateTargetCompleted = "post.update.target_completed";
     public const string PostUpdateTargetFailed = "post.update.target_failed";
     public const string PostUpdateBatchCompleted = "post.update.batch_completed";
+
+    public const string SocialMediaPostSyncCompleted = "social_media.post_sync.completed";
+    public const string SocialMediaPostSyncFailed = "social_media.post_sync.failed";
 }
