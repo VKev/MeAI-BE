@@ -21,7 +21,12 @@ public sealed record SocialPlatformPostSummaryResponse(
     int? DurationSeconds,
     DateTimeOffset? PublishedAt,
     SocialPlatformPostStatsResponse? Stats,
-    string? VideoDownloadUrl = null);
+    string? VideoDownloadUrl = null,
+    IReadOnlyList<SocialPlatformPostMediaResponse>? MediaItems = null);
+
+public sealed record SocialPlatformPostMediaResponse(
+    string Url,
+    string ResourceType);
 
 public sealed record SocialPlatformPostAnalyticsResponse(
     Guid SocialMediaId,

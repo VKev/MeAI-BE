@@ -71,7 +71,12 @@ public sealed record FacebookPostDetails(
     IReadOnlyDictionary<string, long>? ReactionBreakdown = null,
     long? ReachCount = null,
     long? ImpressionCount = null,
-    string? VideoSourceUrl = null);
+    string? VideoSourceUrl = null,
+    IReadOnlyList<FacebookPostMediaItem>? MediaItems = null);
+
+public sealed record FacebookPostMediaItem(
+    string Url,
+    string ResourceType);
 
 public sealed record FacebookPageInsights(
     string PageId,

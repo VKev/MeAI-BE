@@ -173,7 +173,8 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
                 DurationSeconds: null,
                 PublishedAt: ToDateTimeOffset(postDetails.CreatedTime),
                 Stats: stats,
-                VideoDownloadUrl: postDetails.VideoSourceUrl);
+                VideoDownloadUrl: postDetails.VideoSourceUrl,
+                MediaItems: MapFacebookMediaItems(postDetails.MediaItems));
 
             var response = new SocialPlatformPostAnalyticsResponse(
                 SocialMediaId: request.SocialMediaId,
@@ -593,6 +594,14 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
             LikeCount: item.LikeCount,
             ReplyCount: item.ReplyCount,
             Permalink: item.Permalink);
+    }
+
+    private static IReadOnlyList<SocialPlatformPostMediaResponse>? MapFacebookMediaItems(
+        IReadOnlyList<FacebookPostMediaItem>? mediaItems)
+    {
+        return mediaItems?
+            .Select(media => new SocialPlatformPostMediaResponse(media.Url, media.ResourceType))
+            .ToList();
     }
 
     private async Task UpsertMetricAsync(

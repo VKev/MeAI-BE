@@ -27,7 +27,8 @@ public sealed class GetWorkspaceResourcesQueryHandler
     [
         ResourceOriginKinds.UserUpload,
         ResourceOriginKinds.AiGenerated,
-        ResourceOriginKinds.AiImportedUrl
+        ResourceOriginKinds.AiImportedUrl,
+        ResourceOriginKinds.SocialMediaImported
     ];
     private readonly IRepository<Resource> _repository;
     private readonly IObjectStorageService _objectStorageService;

@@ -182,7 +182,8 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
                         ["comments"] = post.CommentCount ?? 0,
                         ["shares"] = post.ShareCount ?? 0
                     }),
-                VideoDownloadUrl: post.VideoSourceUrl))
+                VideoDownloadUrl: post.VideoSourceUrl,
+                MediaItems: MapFacebookMediaItems(post.MediaItems)))
             .ToList();
 
         var dashboardPosts = CreateDashboardPosts(posts);
@@ -693,6 +694,14 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
             .Select(post => new SocialPlatformDashboardPostResponse(
                 Post: post,
                 Analysis: post.Stats == null ? null : SocialPlatformPostAnalysisFactory.Create(post.Stats)))
+            .ToList();
+    }
+
+    private static IReadOnlyList<SocialPlatformPostMediaResponse>? MapFacebookMediaItems(
+        IReadOnlyList<FacebookPostMediaItem>? mediaItems)
+    {
+        return mediaItems?
+            .Select(media => new SocialPlatformPostMediaResponse(media.Url, media.ResourceType))
             .ToList();
     }
 
