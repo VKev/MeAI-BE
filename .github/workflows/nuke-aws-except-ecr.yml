@@ -12,6 +12,21 @@ on:
         description: "Type NUKE to confirm irreversible deletion (except ECR)"
         required: true
         default: ""
+      nuke_cloudflare:
+        description: "Also run Cloudflare account nuke. Leave false for backend AWS-only cleanup."
+        type: boolean
+        default: false
+        required: true
+      protected_cloudflare_worker_scripts:
+        description: "Comma/newline-separated Cloudflare Worker script names to preserve."
+        type: string
+        default: "meai-fe"
+        required: false
+      protected_cloudflare_worker_domains:
+        description: "Comma/newline-separated Worker custom domains whose services must be preserved."
+        type: string
+        default: "creator.meai.vkev.me"
+        required: false
 
 env:
   AWS_REGION: ""
@@ -207,7 +222,7 @@ jobs:
   cloudflare-nuke:
     name: cloudflare-nuke
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.confirm == 'NUKE' }}
+    if: ${{ github.event.inputs.confirm == 'NUKE' && inputs.nuke_cloudflare == true }}
     environment:
       name: ${{ inputs.environment }}
     steps:
@@ -303,13 +318,16 @@ jobs:
       - name: Build Cloudflare nuke config
         working-directory: Terraform
         env:
-          CF_DOMAIN_NAME: ${{ env.CF_DOMAIN_NAME }}
-          CF_ZONE_ID: ${{ env.CF_ZONE_ID }}
+          PROTECTED_CF_WORKER_SCRIPTS: ${{ inputs.protected_cloudflare_worker_scripts }}
+          PROTECTED_CF_WORKER_DOMAINS: ${{ inputs.protected_cloudflare_worker_domains }}
         run: |
           set -euo pipefail
           python3 -m pip install --user --quiet pyyaml
           python3 - <<'PY'
           import os
+          import json
+          import urllib.error
+          import urllib.request
           from pathlib import Path
 
           import yaml
@@ -337,6 +355,77 @@ jobs:
               rid_excludes.append({"resourceType": "zone", "id": zone_id})
           data["resource-ids"] = {"excludes": rid_excludes}
 
+          def split_list(value):
+              normalized = (value or "").replace("\r", "\n").replace(",", "\n")
+              return [item.strip() for item in normalized.split("\n") if item.strip()]
+
+          def add_resource_exclude(resource_type, resource_id):
+              if not resource_id:
+                  return
+              if not any(
+                  isinstance(item, dict)
+                  and item.get("resourceType") == resource_type
+                  and item.get("id") == resource_id
+                  for item in rid_excludes
+              ):
+                  rid_excludes.append({"resourceType": resource_type, "id": resource_id})
+
+          protected_scripts = set(split_list(os.environ.get("PROTECTED_CF_WORKER_SCRIPTS")))
+          protected_domains = split_list(os.environ.get("PROTECTED_CF_WORKER_DOMAINS"))
+
+          account_id = os.environ.get("CF_ACCOUNT_ID", "").strip()
+          api_key = os.environ.get("CF_GLOBAL_API_KEY", "").strip()
+          email = os.environ.get("CF_USER_EMAIL", "").strip()
+
+          def cf_get(path):
+              req = urllib.request.Request(
+                  f"https://api.cloudflare.com/client/v4{path}",
+                  headers={
+                      "X-Auth-Email": email,
+                      "X-Auth-Key": api_key,
+                      "Content-Type": "application/json",
+                  },
+              )
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  payload = json.loads(response.read().decode("utf-8"))
+              if not payload.get("success", False):
+                  errors = "; ".join(error.get("message", str(error)) for error in payload.get("errors", []))
+                  raise RuntimeError(f"Cloudflare API failed for {path}: {errors or payload}")
+              return payload
+
+          if protected_domains:
+              if not account_id or not api_key or not email:
+                  raise SystemExit("Protected Cloudflare worker domains were configured, but Cloudflare credentials are missing")
+
+              all_domains = []
+              page = 1
+              while True:
+                  payload = cf_get(f"/accounts/{account_id}/workers/domains?page={page}&per_page=100")
+                  all_domains.extend(payload.get("result") or [])
+                  total_pages = payload.get("result_info", {}).get("total_pages") or 1
+                  if page >= total_pages:
+                      break
+                  page += 1
+
+              domains_by_hostname = {
+                  item.get("hostname"): item
+                  for item in all_domains
+                  if item.get("hostname")
+              }
+              for hostname in protected_domains:
+                  domain = domains_by_hostname.get(hostname)
+                  service = domain.get("service") if isinstance(domain, dict) else None
+                  if service:
+                      protected_scripts.add(service)
+                      print(f"Protecting Worker script {service!r} because it serves {hostname!r}")
+                  else:
+                      print(f"::warning::Protected Worker domain {hostname!r} was not found in Cloudflare workers/domains")
+
+          for script in sorted(protected_scripts):
+              add_resource_exclude("WorkersScript", script)
+
+          data["resource-ids"] = {"excludes": rid_excludes}
+
           final.parent.mkdir(parents=True, exist_ok=True)
           with final.open("w", encoding="utf-8") as f:
               yaml.safe_dump(data, f, sort_keys=False)
@@ -362,10 +451,6 @@ jobs:
 
       - name: Run cf-nuke (DESTRUCTIVE)
         working-directory: Terraform
-        env:
-          CF_GLOBAL_API_KEY: ${{ env.CF_GLOBAL_API_KEY }}
-          CF_ACCOUNT_ID: ${{ env.CF_ACCOUNT_ID }}
-          CF_USER_EMAIL: ${{ env.CF_USER_EMAIL }}
         run: |
           set -euo pipefail
           if [ -z "${CF_ACCOUNT_ID:-}" ] || [ -z "${CF_GLOBAL_API_KEY:-}" ] || [ -z "${CF_USER_EMAIL:-}" ]; then

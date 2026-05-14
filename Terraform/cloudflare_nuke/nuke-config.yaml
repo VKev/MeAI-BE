@@ -9,4 +9,7 @@ resource-types:
     - AccountToken
 
 resource-ids:
-  excludes: []
+  excludes:
+    # Frontend Worker. Backend nuke must not break creator.meai.vkev.me.
+    - resourceType: WorkersScript
+      id: meai-fe
