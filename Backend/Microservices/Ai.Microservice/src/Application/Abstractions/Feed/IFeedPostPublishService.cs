@@ -12,6 +12,14 @@ public interface IFeedPostPublishService
         Guid postId,
         Guid userId,
         CancellationToken cancellationToken);
+
+    Task<Result<bool>> UnpublishAiPostFromFeedAsync(
+        FeedDirectUnpublishRequest request,
+        CancellationToken cancellationToken);
+
+    Task<Result<bool>> UpdateAiPostOnFeedAsync(
+        FeedDirectUpdateRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record FeedDirectPublishRequest(
@@ -29,3 +37,12 @@ public sealed record FeedDirectPublishResult(
 public sealed record FeedPostModerationContent(
     Guid PostId,
     string? Content);
+
+public sealed record FeedDirectUnpublishRequest(
+    Guid UserId,
+    Guid FeedPostId);
+
+public sealed record FeedDirectUpdateRequest(
+    Guid UserId,
+    Guid FeedPostId,
+    string Content);

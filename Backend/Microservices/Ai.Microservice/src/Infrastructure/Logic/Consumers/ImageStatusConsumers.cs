@@ -398,6 +398,78 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
         post.Content = content;
         post.Status = "draft";
         post.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        await TryAttachResultsToPostBuilderAsync(post.PostBuilderId, existing, cancellationToken);
+    }
+
+    private async Task TryAttachResultsToPostBuilderAsync(
+        Guid? postBuilderId,
+        IReadOnlyList<string> resourceIds,
+        CancellationToken cancellationToken)
+    {
+        if (!postBuilderId.HasValue || resourceIds.Count == 0)
+        {
+            return;
+        }
+
+        var builder = await _dbContext.PostBuilders
+            .FirstOrDefaultAsync(item => item.Id == postBuilderId.Value && !item.DeletedAt.HasValue, cancellationToken);
+        if (builder is null)
+        {
+            return;
+        }
+
+        var existing = ParseBuilderResourceIds(builder.ResourceIds).ToList();
+        foreach (var resourceId in resourceIds)
+        {
+            if (Guid.TryParse(resourceId, out var parsed) &&
+                parsed != Guid.Empty &&
+                !existing.Contains(parsed))
+            {
+                existing.Add(parsed);
+            }
+        }
+
+        builder.ResourceIds = SerializeBuilderResourceIds(existing);
+        builder.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+    }
+
+    private static IReadOnlyList<Guid> ParseBuilderResourceIds(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<Guid>();
+        }
+
+        try
+        {
+            var values = JsonSerializer.Deserialize<List<string>>(json);
+            if (values is not null)
+            {
+                return values
+                    .Select(value => Guid.TryParse(value, out var parsed) ? parsed : Guid.Empty)
+                    .Where(id => id != Guid.Empty)
+                    .Distinct()
+                    .ToList();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return Array.Empty<Guid>();
+    }
+
+    private static string? SerializeBuilderResourceIds(IReadOnlyList<Guid> resourceIds)
+    {
+        var normalized = resourceIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .Select(id => id.ToString())
+            .ToList();
+
+        return normalized.Count == 0
+            ? null
+            : JsonSerializer.Serialize(normalized);
     }
 
     private static Guid? TryExtractLinkedPostId(string? configJson)

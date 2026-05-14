@@ -36,6 +36,8 @@ public sealed record AgenticScheduleExecutionContext(
     PublishingScheduleSearchInput? Search = null,
     Guid? LastExecutionRunId = null,
     Guid? RuntimePostId = null,
+    Guid? RuntimePostBuilderId = null,
+    IReadOnlyList<Guid>? RuntimePostIds = null,
     string? LastQuery = null,
     Guid? GroundingSocialMediaId = null,
     string? LastRecommendationQuery = null,

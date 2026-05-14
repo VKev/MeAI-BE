@@ -162,6 +162,7 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
         chat.ResultResourceIds = JsonSerializer.Serialize(resourceIds);
         chat.Status = "Completed";
         chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        await TryAttachResultsToLinkedPostAsync(chat, resourceIds, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -184,6 +185,155 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
 
         return await _dbContext.Chats
             .FirstOrDefaultAsync(c => c.Id == matched.Id, cancellationToken);
+    }
+
+    private async Task TryAttachResultsToLinkedPostAsync(
+        Chat chat,
+        IReadOnlyList<string> resourceIds,
+        CancellationToken cancellationToken)
+    {
+        if (resourceIds.Count == 0)
+        {
+            return;
+        }
+
+        var linkedPostId = TryExtractLinkedPostId(chat.Config);
+        if (!linkedPostId.HasValue)
+        {
+            return;
+        }
+
+        var post = await _dbContext.Posts
+            .FirstOrDefaultAsync(p => p.Id == linkedPostId.Value && !p.DeletedAt.HasValue, cancellationToken);
+        if (post is null)
+        {
+            _logger.LogWarning(
+                "Linked draft post not found for video ChatId {ChatId}. LinkedPostId: {PostId}",
+                chat.Id,
+                linkedPostId.Value);
+            return;
+        }
+
+        var content = post.Content ?? new PostContent();
+        var existing = content.ResourceList?
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+
+        foreach (var resourceId in resourceIds)
+        {
+            if (!existing.Contains(resourceId, StringComparer.OrdinalIgnoreCase))
+            {
+                existing.Add(resourceId);
+            }
+        }
+
+        content.ResourceList = existing;
+        post.Content = content;
+        post.Status = "draft";
+        post.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        await TryAttachResultsToPostBuilderAsync(post.PostBuilderId, existing, cancellationToken);
+    }
+
+    private async Task TryAttachResultsToPostBuilderAsync(
+        Guid? postBuilderId,
+        IReadOnlyList<string> resourceIds,
+        CancellationToken cancellationToken)
+    {
+        if (!postBuilderId.HasValue || resourceIds.Count == 0)
+        {
+            return;
+        }
+
+        var builder = await _dbContext.PostBuilders
+            .FirstOrDefaultAsync(item => item.Id == postBuilderId.Value && !item.DeletedAt.HasValue, cancellationToken);
+        if (builder is null)
+        {
+            return;
+        }
+
+        var existing = ParseBuilderResourceIds(builder.ResourceIds).ToList();
+        foreach (var resourceId in resourceIds)
+        {
+            if (Guid.TryParse(resourceId, out var parsed) &&
+                parsed != Guid.Empty &&
+                !existing.Contains(parsed))
+            {
+                existing.Add(parsed);
+            }
+        }
+
+        builder.ResourceIds = SerializeBuilderResourceIds(existing);
+        builder.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+    }
+
+    private static IReadOnlyList<Guid> ParseBuilderResourceIds(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<Guid>();
+        }
+
+        try
+        {
+            var values = JsonSerializer.Deserialize<List<string>>(json);
+            if (values is not null)
+            {
+                return values
+                    .Select(value => Guid.TryParse(value, out var parsed) ? parsed : Guid.Empty)
+                    .Where(id => id != Guid.Empty)
+                    .Distinct()
+                    .ToList();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return Array.Empty<Guid>();
+    }
+
+    private static string? SerializeBuilderResourceIds(IReadOnlyList<Guid> resourceIds)
+    {
+        var normalized = resourceIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .Select(id => id.ToString())
+            .ToList();
+
+        return normalized.Count == 0
+            ? null
+            : JsonSerializer.Serialize(normalized);
+    }
+
+    private static Guid? TryExtractLinkedPostId(string? configJson)
+    {
+        if (string.IsNullOrWhiteSpace(configJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(configJson);
+            if (!doc.RootElement.TryGetProperty("linkedPostId", out var linkedPostIdElement))
+            {
+                return null;
+            }
+
+            if (linkedPostIdElement.ValueKind == JsonValueKind.String &&
+                Guid.TryParse(linkedPostIdElement.GetString(), out var parsedGuid) &&
+                parsedGuid != Guid.Empty)
+            {
+                return parsedGuid;
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
     }
 }
 
@@ -261,6 +411,7 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
                 videoTask.Id);
 
             await MarkChatAsFailedAsync(message.CorrelationId, message.ErrorMessage, context.CancellationToken);
+            await MarkLinkedPostAsFailedAsync(message.CorrelationId, context.CancellationToken);
 
             await context.Publish(
                 NotificationRequestedEventFactory.CreateForUser(
@@ -319,6 +470,71 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
         if (userId is null) return;
 
         await TryRefundChatAsync(chat, userId.Value, cancellationToken);
+    }
+
+    private async Task MarkLinkedPostAsFailedAsync(Guid correlationId, CancellationToken cancellationToken)
+    {
+        var correlationText = correlationId.ToString();
+        var candidates = await _dbContext.Chats
+            .AsNoTracking()
+            .Where(c => c.Config != null && !c.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        var matched = candidates.FirstOrDefault(c =>
+            c.Config != null &&
+            c.Config.Contains(correlationText, StringComparison.OrdinalIgnoreCase));
+
+        if (matched is null)
+        {
+            return;
+        }
+
+        var linkedPostId = TryExtractLinkedPostId(matched.Config);
+        if (!linkedPostId.HasValue)
+        {
+            return;
+        }
+
+        var post = await _dbContext.Posts
+            .FirstOrDefaultAsync(p => p.Id == linkedPostId.Value && !p.DeletedAt.HasValue, cancellationToken);
+        if (post is null)
+        {
+            return;
+        }
+
+        post.Status = "video_generation_failed";
+        post.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static Guid? TryExtractLinkedPostId(string? configJson)
+    {
+        if (string.IsNullOrWhiteSpace(configJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(configJson);
+            if (!doc.RootElement.TryGetProperty("linkedPostId", out var linkedPostIdElement))
+            {
+                return null;
+            }
+
+            if (linkedPostIdElement.ValueKind == JsonValueKind.String &&
+                Guid.TryParse(linkedPostIdElement.GetString(), out var parsedGuid) &&
+                parsedGuid != Guid.Empty)
+            {
+                return parsedGuid;
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private async Task TryRefundChatAsync(Chat chat, Guid userId, CancellationToken cancellationToken)

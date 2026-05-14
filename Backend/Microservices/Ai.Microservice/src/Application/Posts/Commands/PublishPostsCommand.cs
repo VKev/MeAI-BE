@@ -157,6 +157,22 @@ public sealed class PublishPostsCommandHandler
                     null,
                     "published",
                     MeAiFeedKey));
+
+                placeholders.Add(new PostPublication
+                {
+                    Id = Guid.CreateVersion7(),
+                    PostId = post.Id,
+                    WorkspaceId = post.WorkspaceId!.Value,
+                    SocialMediaId = Guid.Empty,
+                    SocialMediaType = MeAiFeedType,
+                    DestinationOwnerId = MeAiFeedKey,
+                    ExternalContentId = feedPublishResult.Value.FeedPostId.ToString(),
+                    ExternalContentIdType = "post_id",
+                    ContentType = postType,
+                    PublishStatus = "published",
+                    PublishedAt = feedPublishResult.Value.CreatedAt ?? now,
+                    CreatedAt = now
+                });
                 createdFeedTarget = true;
             }
 
@@ -399,13 +415,19 @@ public sealed class PublishPostsCommandHandler
 
     private static IReadOnlyList<Guid> GetResourceIds(Post post)
     {
-        if (post.Content?.ResourceList is null || post.Content.ResourceList.Count == 0)
+        var rawIds = post.Content?.ResourceList is { Count: > 0 }
+            ? post.Content.ResourceList
+            : GeminiDraftPostHelper.ParseResourceIds(post.PostBuilder?.ResourceIds)
+                .Select(id => id.ToString())
+                .ToList();
+
+        if (rawIds is null || rawIds.Count == 0)
         {
             return Array.Empty<Guid>();
         }
 
-        var ids = new List<Guid>(post.Content.ResourceList.Count);
-        foreach (var value in post.Content.ResourceList)
+        var ids = new List<Guid>(rawIds.Count);
+        foreach (var value in rawIds)
         {
             if (Guid.TryParse(value, out var parsed) && parsed != Guid.Empty)
             {

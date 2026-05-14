@@ -15,6 +15,7 @@ public sealed record SendAgentMessageCommand(
     Guid UserId,
     string? Message,
     AgentImageOptions? ImageOptions = null,
+    AgentVideoOptions? VideoOptions = null,
     AgentScheduleOptions? ScheduleOptions = null) : IRequest<Result<AgentChatResponse>>;
 
 public sealed class SendAgentMessageCommandHandler
@@ -82,6 +83,7 @@ public sealed class SendAgentMessageCommandHandler
                 session.WorkspaceId,
                 normalizedMessage,
                 request.ImageOptions,
+                request.VideoOptions,
                 request.ScheduleOptions,
                 assistantChatId),
             cancellationToken);
@@ -168,7 +170,9 @@ public sealed class SendAgentMessageCommandHandler
             completionResult.Value.CorrelationId,
             completionResult.Value.RetrievalMode,
             completionResult.Value.SourceUrls,
-            completionResult.Value.ImportedResourceIds));
+            completionResult.Value.ImportedResourceIds,
+            completionResult.Value.PostBuilderId,
+            completionResult.Value.PostIds));
     }
 
     private static string NormalizeMessage(string? message)

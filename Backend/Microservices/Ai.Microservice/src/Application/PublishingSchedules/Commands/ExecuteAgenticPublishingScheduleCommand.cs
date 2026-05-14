@@ -206,92 +206,152 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
         _publishingScheduleRepository.Update(schedule);
         await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
 
-        var contentDraftResult = await _runtimeContentService.GeneratePostDraftAsync(
-            new AgenticRuntimeContentRequest(
-                schedule.Id,
-                schedule.Name,
-                schedule.AgentPrompt,
-                schedule.PlatformPreference,
-                schedule.MaxContentLength,
-                enrichedSearch,
-                groundingTarget.SocialMediaId,
-                groundingTarget.Platform,
-                recommendationQuery,
-                recommendationSummary,
-                recommendationPageProfile,
-                recommendationWebSources,
-                ragFallbackReason),
-            cancellationToken);
-
-        if (contentDraftResult.IsFailure)
+        var targetGroups = GroupActiveTargetsByPlatform(schedule);
+        if (targetGroups.Count == 0)
         {
             schedule.Status = PublishingScheduleState.StatusFailed;
-            schedule.ErrorCode = contentDraftResult.Error.Code;
-            schedule.ErrorMessage = contentDraftResult.Error.Description;
+            schedule.ErrorCode = PublishingScheduleErrors.MissingTargets.Code;
+            schedule.ErrorMessage = PublishingScheduleErrors.MissingTargets.Description;
             schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
             _publishingScheduleRepository.Update(schedule);
             await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
-            return Result.Failure<bool>(contentDraftResult.Error);
+            return Result.Failure<bool>(PublishingScheduleErrors.MissingTargets);
         }
 
-        var importedResourceIds = enrichedSearch.ImportedResources?
-            .Select(item => item.ResourceId)
+        var createdPosts = new List<(PostResponse Post, RuntimeTargetGroup Group)>(targetGroups.Count);
+        Guid? postBuilderId = null;
+
+        foreach (var group in targetGroups)
+        {
+            var contentDraftResult = await _runtimeContentService.GeneratePostDraftAsync(
+                new AgenticRuntimeContentRequest(
+                    schedule.Id,
+                    schedule.Name,
+                    schedule.AgentPrompt,
+                    group.Platform,
+                    schedule.MaxContentLength,
+                    enrichedSearch,
+                    schedule.UserId,
+                    schedule.WorkspaceId,
+                    null,
+                    null,
+                    group.RepresentativeTarget.SocialMediaId,
+                    group.Platform,
+                    recommendationQuery,
+                    recommendationSummary,
+                    recommendationPageProfile,
+                    recommendationWebSources,
+                    ragFallbackReason),
+                cancellationToken);
+
+            if (contentDraftResult.IsFailure)
+            {
+                schedule.Status = PublishingScheduleState.StatusFailed;
+                schedule.ErrorCode = contentDraftResult.Error.Code;
+                schedule.ErrorMessage = contentDraftResult.Error.Description;
+                schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+                _publishingScheduleRepository.Update(schedule);
+                await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
+                return Result.Failure<bool>(contentDraftResult.Error);
+            }
+
+            var importedResourceIds = contentDraftResult.Value.ResourceIds?
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .Select(id => id.ToString())
+                .ToList() ?? [];
+
+            var createPostResult = await _mediator.Send(
+                new CreatePostCommand(
+                    schedule.UserId,
+                    schedule.WorkspaceId,
+                    null,
+                    group.RepresentativeTarget.SocialMediaId,
+                    contentDraftResult.Value.Title,
+                    new PostContent
+                    {
+                        Content = contentDraftResult.Value.Content,
+                        Hashtag = contentDraftResult.Value.Hashtag,
+                        PostType = contentDraftResult.Value.PostType,
+                        ResourceList = importedResourceIds
+                    },
+                    "draft",
+                    postBuilderId,
+                    group.Platform,
+                    PostBuilderOriginKinds.AiOther),
+                cancellationToken);
+
+            if (createPostResult.IsFailure)
+            {
+                schedule.Status = PublishingScheduleState.StatusFailed;
+                schedule.ErrorCode = createPostResult.Error.Code;
+                schedule.ErrorMessage = createPostResult.Error.Description;
+                schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+                _publishingScheduleRepository.Update(schedule);
+                await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
+                return Result.Failure<bool>(createPostResult.Error);
+            }
+
+            postBuilderId ??= createPostResult.Value.PostBuilderId;
+            createdPosts.Add((createPostResult.Value, group));
+        }
+
+        var builderResourceIds = createdPosts
+            .SelectMany(createdPost => createdPost.Post.Content?.ResourceList ?? [])
+            .Select(ParseGuid)
             .Where(id => id != Guid.Empty)
             .Distinct()
-            .Select(id => id.ToString())
-            .ToList() ?? [];
+            .ToList();
 
-        var createPostResult = await _mediator.Send(
-            new CreatePostCommand(
-                schedule.UserId,
-                schedule.WorkspaceId,
-                null,
-                null,
-                contentDraftResult.Value.Title,
-                new PostContent
-                {
-                    Content = contentDraftResult.Value.Content,
-                    Hashtag = contentDraftResult.Value.Hashtag,
-                    PostType = contentDraftResult.Value.PostType,
-                    ResourceList = importedResourceIds
-                },
-                "draft",
-                null,
-                schedule.PlatformPreference,
-                PostBuilderOriginKinds.AiOther),
-            cancellationToken);
-
-        if (createPostResult.IsFailure)
+        if (postBuilderId.HasValue && builderResourceIds.Count > 0)
         {
-            schedule.Status = PublishingScheduleState.StatusFailed;
-            schedule.ErrorCode = createPostResult.Error.Code;
-            schedule.ErrorMessage = createPostResult.Error.Description;
-            schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
-            _publishingScheduleRepository.Update(schedule);
-            await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
-            return Result.Failure<bool>(createPostResult.Error);
+            var addBuilderResourcesResult = await _mediator.Send(
+                new AddPostBuilderResourcesCommand(
+                    postBuilderId.Value,
+                    schedule.UserId,
+                    builderResourceIds),
+                cancellationToken);
+
+            if (addBuilderResourcesResult.IsFailure)
+            {
+                schedule.Status = PublishingScheduleState.StatusFailed;
+                schedule.ErrorCode = addBuilderResourcesResult.Error.Code;
+                schedule.ErrorMessage = addBuilderResourcesResult.Error.Description;
+                schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+                _publishingScheduleRepository.Update(schedule);
+                await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
+                return Result.Failure<bool>(addBuilderResourcesResult.Error);
+            }
         }
 
-        var runtimePostId = createPostResult.Value.Id;
-        var runtimeItem = new PublishingScheduleItem
+        var activeItemCount = schedule.Items.Count(item => !item.DeletedAt.HasValue);
+        var runtimeItems = new List<PublishingScheduleItem>(createdPosts.Count);
+        foreach (var createdPost in createdPosts)
         {
-            Id = Guid.CreateVersion7(),
-            ScheduleId = schedule.Id,
-            ItemType = PublishingScheduleState.ItemTypePost,
-            ItemId = runtimePostId,
-            SortOrder = schedule.Items.Count(item => !item.DeletedAt.HasValue) + 1,
-            ExecutionBehavior = PublishingScheduleState.ExecutionBehaviorPublishAll,
-            Status = PublishingScheduleState.ItemStatusPublishing,
-            LastExecutionAt = DateTimeExtensions.PostgreSqlUtcNow,
-            CreatedAt = DateTimeExtensions.PostgreSqlUtcNow,
-            UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow
-        };
-        schedule.Items.Add(runtimeItem);
+            var runtimeItem = new PublishingScheduleItem
+            {
+                Id = Guid.CreateVersion7(),
+                ScheduleId = schedule.Id,
+                ItemType = PublishingScheduleState.ItemTypePost,
+                ItemId = createdPost.Post.Id,
+                SortOrder = ++activeItemCount,
+                ExecutionBehavior = PublishingScheduleState.ExecutionBehaviorPublishAll,
+                Status = PublishingScheduleState.ItemStatusPublishing,
+                LastExecutionAt = DateTimeExtensions.PostgreSqlUtcNow,
+                CreatedAt = DateTimeExtensions.PostgreSqlUtcNow,
+                UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow
+            };
+            schedule.Items.Add(runtimeItem);
+            runtimeItems.Add(runtimeItem);
+        }
+
         schedule.Status = PublishingScheduleState.StatusPublishing;
         schedule.ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(context with
         {
             LastExecutionRunId = executionRunId,
-            RuntimePostId = runtimePostId,
+            RuntimePostId = createdPosts.FirstOrDefault().Post.Id,
+            RuntimePostBuilderId = postBuilderId,
+            RuntimePostIds = createdPosts.Select(item => item.Post.Id).ToList(),
             LastExecutionStartedAtUtc = now,
             LastQuery = enrichedSearch.Query,
             LastRetrievedAtUtc = enrichedSearch.RetrievedAtUtc,
@@ -308,20 +368,21 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
         var publishResult = await _mediator.Send(
             new PublishPostsCommand(
                 schedule.UserId,
-                [
-                    new PublishPostTargetInput(
-                        runtimePostId,
-                        schedule.Targets.Where(target => !target.DeletedAt.HasValue).Select(target => target.SocialMediaId).ToList(),
-                        schedule.IsPrivate,
-                        schedule.Id)
-                ]),
+                createdPosts.Select(createdPost => new PublishPostTargetInput(
+                    createdPost.Post.Id,
+                    createdPost.Group.Targets.Select(target => target.SocialMediaId).ToList(),
+                    schedule.IsPrivate,
+                    schedule.Id)).ToList()),
             cancellationToken);
 
         if (publishResult.IsFailure)
         {
-            runtimeItem.Status = PublishingScheduleState.ItemStatusFailed;
-            runtimeItem.ErrorMessage = publishResult.Error.Description;
-            runtimeItem.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            foreach (var runtimeItem in runtimeItems)
+            {
+                runtimeItem.Status = PublishingScheduleState.ItemStatusFailed;
+                runtimeItem.ErrorMessage = publishResult.Error.Description;
+                runtimeItem.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+            }
             schedule.Status = PublishingScheduleState.StatusFailed;
             schedule.ErrorCode = publishResult.Error.Code;
             schedule.ErrorMessage = publishResult.Error.Description;
@@ -332,6 +393,26 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
         }
 
         return Result.Success(true);
+    }
+
+    private static IReadOnlyList<RuntimeTargetGroup> GroupActiveTargetsByPlatform(PublishingSchedule schedule)
+    {
+        return schedule.Targets
+            .Where(target => !target.DeletedAt.HasValue && !string.IsNullOrWhiteSpace(target.Platform))
+            .GroupBy(target => target.Platform!.Trim().ToLowerInvariant(), StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var targets = group
+                    .OrderByDescending(target => target.IsPrimary)
+                    .ThenBy(target => target.CreatedAt ?? DateTime.MinValue)
+                    .ToList();
+
+                return new RuntimeTargetGroup(
+                    group.Key,
+                    targets[0],
+                    targets);
+            })
+            .ToList();
     }
 
     private static PublishingScheduleTarget? ResolveGroundingTarget(PublishingSchedule schedule)
@@ -360,6 +441,11 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
         return activeTargets
             .OrderByDescending(target => target.IsPrimary)
             .FirstOrDefault();
+    }
+
+    private static Guid ParseGuid(string value)
+    {
+        return Guid.TryParse(value, out var parsed) ? parsed : Guid.Empty;
     }
 
     private static string BuildRecommendationQuery(
@@ -399,4 +485,9 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
 
         return value[..max] + "...";
     }
+
+    private sealed record RuntimeTargetGroup(
+        string Platform,
+        PublishingScheduleTarget RepresentativeTarget,
+        IReadOnlyList<PublishingScheduleTarget> Targets);
 }

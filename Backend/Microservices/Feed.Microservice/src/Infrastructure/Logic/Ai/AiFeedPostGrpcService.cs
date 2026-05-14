@@ -51,4 +51,25 @@ public sealed class AiFeedPostGrpcService : IAiFeedPostService
                 new Error("AiFeed.GrpcError", ex.Status.Detail));
         }
     }
+
+    public async Task<Result<bool>> DeleteMirrorPostAsync(
+        DeleteAiMirrorPostRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _client.DeleteMirrorPostAsync(new DeleteMirrorPostRequest
+            {
+                UserId = request.UserId.ToString(),
+                PostId = request.PostId.ToString()
+            }, cancellationToken: cancellationToken);
+
+            return Result.Success(response.Deleted);
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<bool>(
+                new Error("AiFeed.GrpcError", ex.Status.Detail));
+        }
+    }
 }

@@ -17,6 +17,7 @@ public sealed record AgentChatRequest(
     Guid WorkspaceId,
     string Message,
     AgentImageOptions? ImageOptions = null,
+    AgentVideoOptions? VideoOptions = null,
     AgentScheduleOptions? ScheduleOptions = null,
     Guid? AssistantChatId = null);
 
@@ -26,6 +27,14 @@ public sealed record AgentImageOptions(
     string? Resolution = null,
     int? NumberOfVariances = null,
     IReadOnlyList<AgentSocialTarget>? SocialTargets = null);
+
+public sealed record AgentVideoOptions(
+    string? Model = null,
+    string? AspectRatio = null,
+    int? Seeds = null,
+    bool? EnableTranslation = null,
+    string? Watermark = null,
+    IReadOnlyList<Guid>? ResourceIds = null);
 
 public sealed record AgentSocialTarget(
     string Platform,
@@ -52,4 +61,6 @@ public sealed record AgentChatCompletionResult(
     Guid? CorrelationId = null,
     string? RetrievalMode = null,
     IReadOnlyList<string>? SourceUrls = null,
-    IReadOnlyList<Guid>? ImportedResourceIds = null);
+    IReadOnlyList<Guid>? ImportedResourceIds = null,
+    Guid? PostBuilderId = null,
+    IReadOnlyList<Guid>? PostIds = null);

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Application.Abstractions.Agents;
-using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Configs;
 using Application.Agents;
 using Application.Agents.Models;
@@ -11,9 +10,8 @@ using Application.PublishingSchedules.Models;
 using Application.Posts.Commands;
 using Application.Recommendations.Services;
 using Domain.Entities;
-using Google.GenAI;
+using Infrastructure.Logic.Kie;
 using MediatR;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
@@ -24,7 +22,6 @@ namespace Infrastructure.Logic.Agents;
 
 public sealed class GeminiAgentChatService : IAgentChatService
 {
-    private const string DefaultModel = "gemini-3.1-flash-lite-preview";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true
@@ -34,13 +31,13 @@ public sealed class GeminiAgentChatService : IAgentChatService
     private readonly IUserConfigService _userConfigService;
     private readonly IMediator _mediator;
     private readonly ILogger<GeminiAgentChatService> _logger;
-    private readonly IApiCredentialProvider _credentialProvider;
+    private readonly KieResponsesClient _kieResponsesClient;
     private readonly IChatWebPostService _chatWebPostService;
     private readonly IQueryRewriter _queryRewriter;
 
     public GeminiAgentChatService(
         IConfiguration configuration,
-        IApiCredentialProvider credentialProvider,
+        KieResponsesClient kieResponsesClient,
         IUserConfigService userConfigService,
         IMediator mediator,
         IChatWebPostService chatWebPostService,
@@ -48,7 +45,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
         ILogger<GeminiAgentChatService> logger)
     {
         _configuration = configuration;
-        _credentialProvider = credentialProvider;
+        _kieResponsesClient = kieResponsesClient;
         _userConfigService = userConfigService;
         _mediator = mediator;
         _chatWebPostService = chatWebPostService;
@@ -92,6 +89,8 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 analysis.RevisedPrompt)),
 
             AgentActions.ImageCreated => await CreateImageAndPostAsync(request, model, analysis, cancellationToken),
+
+            AgentActions.VideoCreated => await CreateVideoAndPostAsync(request, model, analysis, cancellationToken),
 
             AgentActions.PostCreated => await CreateDraftPostAsync(request, model, analysis, cancellationToken),
 
@@ -151,6 +150,16 @@ public sealed class GeminiAgentChatService : IAgentChatService
         {
             return Result.Success(new AgentChatCompletionResult(
                 "Flow nay chi ho tro schedule AI tao bai dang tuong lai, khong ho tro tao anh truoc luc schedule.",
+                model,
+                [],
+                [],
+                AgentActions.Unsupported));
+        }
+
+        if (string.Equals(analysis.Action, AgentActions.VideoCreated, StringComparison.Ordinal))
+        {
+            return Result.Success(new AgentChatCompletionResult(
+                "Flow nay chi ho tro schedule AI tao bai dang tuong lai, khong ho tro tao video truoc luc schedule.",
                 model,
                 [],
                 [],
@@ -312,6 +321,8 @@ public sealed class GeminiAgentChatService : IAgentChatService
             null,
             analysis.RevisedPrompt,
             PostId: postResult.Value.Id,
+            PostBuilderId: postResult.Value.PostBuilderId,
+            PostIds: [postResult.Value.Id],
             ChatId: imageResult.Value.ChatId,
             CorrelationId: imageResult.Value.CorrelationId));
     }
@@ -367,7 +378,9 @@ public sealed class GeminiAgentChatService : IAgentChatService
             AgentActions.PostCreated,
             null,
             analysis.RevisedPrompt,
-            postResult.Value.Id));
+            PostId: postResult.Value.Id,
+            PostBuilderId: postResult.Value.PostBuilderId,
+            PostIds: [postResult.Value.Id]));
     }
 
     private async Task<Result<AgentChatCompletionResult>> CreateWebDraftPostAsync(
@@ -438,7 +451,94 @@ public sealed class GeminiAgentChatService : IAgentChatService
             PostId: webPostResult.Value.PostId,
             RetrievalMode: webPostResult.Value.RetrievalMode,
             SourceUrls: webPostResult.Value.SourceUrls,
-            ImportedResourceIds: webPostResult.Value.ImportedResourceIds));
+            ImportedResourceIds: webPostResult.Value.ImportedResourceIds,
+            PostBuilderId: webPostResult.Value.PostBuilderId,
+            PostIds: [webPostResult.Value.PostId]));
+    }
+
+    private async Task<Result<AgentChatCompletionResult>> CreateVideoAndPostAsync(
+        AgentChatRequest request,
+        string model,
+        AgentPromptAnalysis analysis,
+        CancellationToken cancellationToken)
+    {
+        var finalPrompt = string.IsNullOrWhiteSpace(analysis.FinalPrompt)
+            ? request.Message
+            : analysis.FinalPrompt.Trim();
+
+        var postResult = await _mediator.Send(
+            new CreatePostCommand(
+                request.UserId,
+                request.WorkspaceId,
+                request.SessionId,
+                null,
+                BuildTitle(finalPrompt, analysis.Title),
+                new PostContent
+                {
+                    Content = finalPrompt,
+                    PostType = "reels"
+                },
+                "waiting_for_video_generation",
+                null,
+                null,
+                PostBuilderOriginKinds.AiOther),
+            cancellationToken);
+
+        if (postResult.IsFailure)
+        {
+            return Result.Failure<AgentChatCompletionResult>(postResult.Error);
+        }
+
+        var videoResult = await _mediator.Send(
+            new CreateChatVideoCommand(
+                request.UserId,
+                request.SessionId,
+                finalPrompt,
+                request.VideoOptions?.ResourceIds ?? [],
+                request.VideoOptions?.Model,
+                request.VideoOptions?.AspectRatio,
+                request.VideoOptions?.Seeds,
+                request.VideoOptions?.EnableTranslation,
+                request.VideoOptions?.Watermark,
+                postResult.Value.Id),
+            cancellationToken);
+
+        if (videoResult.IsFailure)
+        {
+            return Result.Failure<AgentChatCompletionResult>(videoResult.Error);
+        }
+
+        return Result.Success(new AgentChatCompletionResult(
+            analysis.AssistantMessage ?? "Video generation started and a draft post was created for later scheduling.",
+            model,
+            ["create_post", "create_chat_video"],
+            [
+                new AgentActionResponse(
+                    "post_create",
+                    "create_post",
+                    "completed",
+                    "post",
+                    postResult.Value.Id,
+                    postResult.Value.Title,
+                    "Draft post created and will be updated with generated video after callback.",
+                    DateTime.UtcNow),
+                new AgentActionResponse(
+                    "video_create",
+                    "create_chat_video",
+                    "completed",
+                    "chat",
+                    videoResult.Value.ChatId,
+                    Summary: "Video generation started for the current workflow.",
+                    OccurredAt: DateTime.UtcNow)
+            ],
+            AgentActions.VideoAndPostCreated,
+            null,
+            analysis.RevisedPrompt,
+            PostId: postResult.Value.Id,
+            PostBuilderId: postResult.Value.PostBuilderId,
+            PostIds: [postResult.Value.Id],
+            ChatId: videoResult.Value.ChatId,
+            CorrelationId: videoResult.Value.CorrelationId));
     }
 
     private async Task<Result<AgentPromptAnalysis>> AnalyzePromptAsync(
@@ -446,20 +546,22 @@ public sealed class GeminiAgentChatService : IAgentChatService
         string model,
         CancellationToken cancellationToken)
     {
-        var chatClient = CreateClient().AsIChatClient(model);
-        var messages = new List<ChatMessage>
-        {
-            new(ChatRole.System, BuildAnalyzerPrompt()),
-            new(ChatRole.User, message)
-        };
-
         try
         {
-            var response = await chatClient.GetResponseAsync(messages, cancellationToken: cancellationToken);
-            var content = response.Messages
-                .LastOrDefault(item => item.Role == ChatRole.Assistant && !string.IsNullOrWhiteSpace(item.Text))
-                ?.Text?.Trim();
+            var response = await _kieResponsesClient.GetFunctionArgumentsAsync(
+                model,
+                [KieResponsesClient.UserText($"{BuildAnalyzerPrompt()}\n\nUser message:\n{message}")],
+                BuildAnalyzeScheduleRequestTool(),
+                "Agent.RequestFailed",
+                "Kie agent request failed.",
+                cancellationToken);
 
+            if (response.IsFailure)
+            {
+                return Result.Failure<AgentPromptAnalysis>(response.Error);
+            }
+
+            var content = response.Value.Trim();
             if (string.IsNullOrWhiteSpace(content))
             {
                 return Result.Failure<AgentPromptAnalysis>(AgentErrors.EmptyResponse);
@@ -480,38 +582,27 @@ public sealed class GeminiAgentChatService : IAgentChatService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Gemini agent analysis failed for SessionId {SessionId}", message);
+            _logger.LogError(ex, "Kie agent analysis failed for message {Message}", message);
             return Result.Failure<AgentPromptAnalysis>(
-                new Error("Agent.RequestFailed", $"Gemini agent request failed: {ex.Message}"));
+                new Error("Agent.RequestFailed", $"Kie agent request failed: {ex.Message}"));
         }
     }
 
     private async Task<string> ResolveModelAsync(CancellationToken cancellationToken)
     {
         var activeConfigResult = await _userConfigService.GetActiveConfigAsync(cancellationToken);
-        var configuredModel = _configuration["Gemini:ChatModel"]
-                              ?? _configuration["Gemini__ChatModel"]
-                              ?? _configuration["Gemini:Model"]
-                              ?? _configuration["Gemini__Model"];
+        var configuredModel = _configuration["Kie:ChatModel"]
+                              ?? _configuration["Kie__ChatModel"];
 
         if (activeConfigResult.IsSuccess &&
-            !string.IsNullOrWhiteSpace(activeConfigResult.Value?.ChatModel) &&
-            activeConfigResult.Value.ChatModel.Trim().StartsWith("gemini", StringComparison.OrdinalIgnoreCase))
+            !string.IsNullOrWhiteSpace(activeConfigResult.Value?.ChatModel))
         {
             return activeConfigResult.Value.ChatModel.Trim();
         }
 
         return string.IsNullOrWhiteSpace(configuredModel)
-            ? DefaultModel
+            ? KieResponsesClient.DefaultChatModel
             : configuredModel.Trim();
-    }
-
-    private Client CreateClient()
-    {
-        var apiKey = _credentialProvider.GetOptionalValue("Gemini", "ApiKey");
-        return string.IsNullOrWhiteSpace(apiKey)
-            ? new Client()
-            : new Client(apiKey: apiKey);
     }
 
     private static string BuildAnalyzerPrompt()
@@ -526,8 +617,9 @@ public sealed class GeminiAgentChatService : IAgentChatService
             - Do not plan schedules, choose schedule time, or act like a general-purpose assistant.
             - Your only job is to decide whether the latest message is clear enough for:
               1. image generation for future scheduling content, or
-              2. draft-post creation for future scheduling content, or
-              3. creating a draft post from a URL or web search result.
+              2. video generation for future scheduling content, or
+              3. draft-post creation for future scheduling content, or
+              4. creating a draft post from a URL or web search result.
 
             Rules:
             - If the request is ambiguous or contains unresolved personal references such as "doi bong toi yeu", "nguoi toi thich", "thuong hieu cua toi", return action "validation_failed".
@@ -539,6 +631,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
               - validationError: one short sentence
               - revisedPrompt: a corrected prompt using placeholders like {{ten doi bong}}
             - If the request is a clear image-generation request, return action "image_created".
+            - If the request is a clear video-generation request, return action "video_created".
             - If the request is a clear request to create post/caption/content for later scheduling, return action "post_created".
             - If the request clearly asks to create a post from one or more URLs, a webpage, an article, news, or web search results, return action "web_post_created".
             - If the request is outside this narrow scheduling-content scope, return action "unsupported".
@@ -548,19 +641,79 @@ public sealed class GeminiAgentChatService : IAgentChatService
             - postType should be "posts" or "reels" only when action is "post_created" or "web_post_created".
 
             Output:
-            Return JSON only. No markdown fences.
-
-            Schema:
-            {
-              "action": "validation_failed" | "image_created" | "post_created" | "web_post_created" | "unsupported",
-              "assistantMessage": "string",
-              "validationError": "string or null",
-              "revisedPrompt": "string or null",
-              "finalPrompt": "string or null",
-              "title": "string or null",
-              "postType": "posts" | "reels" | null
-            }
+            Call the analyze_schedule_request tool with your decision. Do not answer in text.
             """;
+    }
+
+    private static KieResponsesFunctionTool BuildAnalyzeScheduleRequestTool()
+    {
+        return new KieResponsesFunctionTool
+        {
+            Name = "analyze_schedule_request",
+            Description = "Classify and normalize a user request for MeAI's restricted scheduling assistant.",
+            Parameters = new
+            {
+                type = "object",
+                additionalProperties = false,
+                required = new[]
+                {
+                    "action",
+                    "assistantMessage",
+                    "validationError",
+                    "revisedPrompt",
+                    "finalPrompt",
+                    "title",
+                    "postType"
+                },
+                properties = new
+                {
+                    action = new
+                    {
+                        type = "string",
+                        @enum = new[]
+                        {
+                            "validation_failed",
+                            "image_created",
+                            "video_created",
+                            "post_created",
+                            "web_post_created",
+                            "unsupported"
+                        }
+                    },
+                    assistantMessage = new
+                    {
+                        type = new[] { "string", "null" },
+                        description = "Concise practical message to show the user."
+                    },
+                    validationError = new
+                    {
+                        type = new[] { "string", "null" },
+                        description = "Reason when action is validation_failed, otherwise null."
+                    },
+                    revisedPrompt = new
+                    {
+                        type = new[] { "string", "null" },
+                        description = "Corrected prompt when available."
+                    },
+                    finalPrompt = new
+                    {
+                        type = new[] { "string", "null" },
+                        description = "Clean prompt to use for image generation or draft creation."
+                    },
+                    title = new
+                    {
+                        type = new[] { "string", "null" },
+                        description = "Short optional title."
+                    },
+                    postType = new
+                    {
+                        type = new[] { "string", "null" },
+                        @enum = new object?[] { "posts", "reels", null },
+                        description = "posts or reels only when action creates content, otherwise null."
+                    }
+                }
+            }
+        };
     }
 
     private static AgentChatCompletionResult? TryBuildObviousValidation(string message)
@@ -639,6 +792,8 @@ public sealed class GeminiAgentChatService : IAgentChatService
             "validation_failed" => AgentActions.ValidationFailed,
             "image_request" => AgentActions.ImageCreated,
             "image_created" => AgentActions.ImageCreated,
+            "video_request" => AgentActions.VideoCreated,
+            "video_created" => AgentActions.VideoCreated,
             "draft_post" => AgentActions.PostCreated,
             "post_created" => AgentActions.PostCreated,
             "web_post" => AgentActions.WebPostCreated,
@@ -801,6 +956,8 @@ public sealed class GeminiAgentChatService : IAgentChatService
         public const string ValidationFailed = "validation_failed";
         public const string ImageCreated = "image_created";
         public const string ImageAndPostCreated = "image_and_post_created";
+        public const string VideoCreated = "video_created";
+        public const string VideoAndPostCreated = "video_and_post_created";
         public const string PostCreated = "post_created";
         public const string WebPostCreated = "web_post_created";
         public const string FutureAiScheduleCreated = "future_ai_schedule_created";

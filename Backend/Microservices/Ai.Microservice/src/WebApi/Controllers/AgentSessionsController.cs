@@ -88,6 +88,18 @@ public sealed class AgentSessionsController : ApiController
                                 target.Type!.Trim(),
                                 target.Ratio!.Trim()))
                             .ToList()),
+                request.VideoOptions is null
+                    ? null
+                    : new AgentVideoOptions(
+                        request.VideoOptions.Model,
+                        request.VideoOptions.AspectRatio,
+                        request.VideoOptions.Seeds,
+                        request.VideoOptions.EnableTranslation,
+                        request.VideoOptions.Watermark,
+                        request.VideoOptions.ResourceIds?
+                            .Where(id => id != Guid.Empty)
+                            .Distinct()
+                            .ToList()),
                 request.ScheduleOptions is null
                     ? null
                     : new AgentScheduleOptions(
@@ -137,6 +149,7 @@ public sealed class AgentSessionsController : ApiController
 public sealed record AgentMessageRequest(
     string? Message,
     AgentImageOptionsRequest? ImageOptions = null,
+    AgentVideoOptionsRequest? VideoOptions = null,
     AgentScheduleOptionsRequest? ScheduleOptions = null);
 
 public sealed record AgentImageOptionsRequest(
@@ -150,6 +163,14 @@ public sealed record AgentSocialTargetRequest(
     string? Platform,
     string? Type,
     string? Ratio);
+
+public sealed record AgentVideoOptionsRequest(
+    string? Model,
+    string? AspectRatio,
+    int? Seeds,
+    bool? EnableTranslation,
+    string? Watermark,
+    List<Guid>? ResourceIds = null);
 
 public sealed record AgentScheduleOptionsRequest(
     DateTime ExecuteAtUtc,

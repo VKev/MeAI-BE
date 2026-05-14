@@ -67,6 +67,7 @@ namespace Infrastructure
             services.AddSingleton<IAiFallbackTemplateService, AiFallbackTemplateService>();
             services.AddHttpClient("Gemini");
             services.AddHttpClient("KieChat");
+            services.AddScoped<Infrastructure.Logic.Kie.KieResponsesClient>();
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");
             services.AddHttpClient("TikTok");
@@ -87,7 +88,7 @@ namespace Infrastructure
             services.AddScoped<IWebSearchEnrichmentService, WebSearchEnrichmentService>();
             services.AddScoped<IAgenticRuntimeContentService, AgenticRuntimeContentService>();
             services.AddScoped<IFacebookContentService, FacebookContentService>();
-            services.AddScoped<IGeminiContentModerationService, GeminiContentModerationService>();
+            services.AddScoped<IGeminiContentModerationService, Infrastructure.Logic.Kie.KieContentModerationService>();
             services.AddScoped<IAgentChatService, GeminiAgentChatService>();
             services.AddScoped<IChatWebPostService, ChatWebPostService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();

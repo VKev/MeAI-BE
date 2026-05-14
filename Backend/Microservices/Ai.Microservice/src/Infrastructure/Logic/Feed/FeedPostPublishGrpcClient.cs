@@ -67,6 +67,47 @@ public sealed class FeedPostPublishGrpcClient : IFeedPostPublishService
         }
     }
 
+    public async Task<Result<bool>> UnpublishAiPostFromFeedAsync(
+        FeedDirectUnpublishRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _client.UnpublishAiPostFromFeedAsync(new UnpublishAiPostFromFeedRequest
+            {
+                UserId = request.UserId.ToString(),
+                FeedPostId = request.FeedPostId.ToString()
+            }, cancellationToken: cancellationToken);
+
+            return Result.Success(response.Unpublished);
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<bool>(new Error(MapErrorCode(ex.StatusCode), ex.Status.Detail));
+        }
+    }
+
+    public async Task<Result<bool>> UpdateAiPostOnFeedAsync(
+        FeedDirectUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _client.UpdateAiPostOnFeedAsync(new UpdateAiPostOnFeedRequest
+            {
+                UserId = request.UserId.ToString(),
+                FeedPostId = request.FeedPostId.ToString(),
+                Content = request.Content
+            }, cancellationToken: cancellationToken);
+
+            return Result.Success(response.Updated);
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<bool>(new Error(MapErrorCode(ex.StatusCode), ex.Status.Detail));
+        }
+    }
+
     private static string MapErrorCode(StatusCode statusCode)
     {
         return statusCode switch
