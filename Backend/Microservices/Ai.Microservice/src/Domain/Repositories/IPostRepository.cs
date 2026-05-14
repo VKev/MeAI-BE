@@ -11,6 +11,14 @@ public interface IPostRepository
     Task<Post?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<Post>> GetByIdsAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
     Task<List<Post>> GetByIdsForUpdateAsync(IReadOnlyList<Guid> ids, CancellationToken cancellationToken);
+    Task<List<Post>> GetByUserIdAndSocialMediaIdForUpdateAsync(
+        Guid userId,
+        Guid socialMediaId,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyList<Post>> GetActiveByUserIdExcludingIdsAsync(
+        Guid userId,
+        IReadOnlyList<Guid> excludedPostIds,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<Post>> GetByUserIdAsync(
         Guid userId,
         DateTime? cursorCreatedAt,
@@ -49,4 +57,5 @@ public interface IPostRepository
         int limit,
         CancellationToken cancellationToken);
     Task MarkScheduledDispatchFailedAsync(Guid postId, CancellationToken cancellationToken);
+    void DeleteRange(IEnumerable<Post> entities);
 }

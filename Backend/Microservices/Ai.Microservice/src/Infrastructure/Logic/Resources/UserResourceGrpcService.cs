@@ -149,6 +149,41 @@ public sealed class UserResourceGrpcService : IUserResourceService
         }
     }
 
+    public async Task<Result<int>> DeleteResourcesAsync(
+        Guid userId,
+        IReadOnlyCollection<Guid> resourceIds,
+        bool hardDelete,
+        CancellationToken cancellationToken)
+    {
+        var normalizedResourceIds = resourceIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (normalizedResourceIds.Count == 0)
+        {
+            return Result.Success(0);
+        }
+
+        var request = new DeleteResourcesRequest
+        {
+            UserId = userId.ToString(),
+            HardDelete = hardDelete
+        };
+        request.ResourceIds.AddRange(normalizedResourceIds.Select(id => id.ToString()));
+
+        try
+        {
+            var response = await _client.DeleteResourcesAsync(request, cancellationToken: cancellationToken);
+            return Result.Success(response.DeletedCount);
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<int>(
+                new Error("UserResources.GrpcError", ex.Status.Detail));
+        }
+    }
+
     public async Task<Result<int>> BackfillResourceProvenanceAsync(
         IReadOnlyList<ResourceProvenanceBackfillRequest> items,
         CancellationToken cancellationToken)

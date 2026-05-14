@@ -19,6 +19,10 @@ public interface IRecommendPostRepository
         IReadOnlyList<Guid> originalPostIds,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<RecommendPost>> GetByOriginalPostIdsForUpdateAsync(
+        IReadOnlyList<Guid> originalPostIds,
+        CancellationToken cancellationToken);
+
     /// <summary>Tracked variant — the start command uses this to fetch the existing
     /// row before hard-deleting it under replace-on-rerun semantics.</summary>
     Task<RecommendPost?> GetByOriginalPostIdForUpdateAsync(Guid originalPostId, CancellationToken cancellationToken);
@@ -26,6 +30,8 @@ public interface IRecommendPostRepository
     void Update(RecommendPost entity);
 
     void Remove(RecommendPost entity);
+
+    void RemoveRange(IEnumerable<RecommendPost> entities);
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

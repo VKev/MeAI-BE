@@ -422,6 +422,8 @@ namespace Infrastructure
                 x.AddConsumer<PublishToTargetConsumer>();
                 x.AddConsumer<UnpublishFromTargetConsumer>();
                 x.AddConsumer<UpdatePublishedTargetConsumer>();
+                x.AddConsumer<SyncSocialMediaPostsConsumer>();
+                x.AddConsumer<SocialMediaUnlinkedConsumer>();
 
                 // Async draft-post generation: index → RAG query → caption → image → S3 → PostBuilder → notify
                 x.AddConsumer<DraftPostGenerationConsumer>();

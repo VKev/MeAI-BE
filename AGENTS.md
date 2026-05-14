@@ -858,6 +858,20 @@ the matching GH secret.
 - `acm-certificate.yml` — ACM cert via Cloudflare DNS.
 - Destructive: `nuke-aws-except-ecr.yml`, `erase-ecr.yml` (explicit confirmations required).
 
+### 20.1.1 Local compose domains
+
+`Backend/Compose/docker-compose-production.yml` is the local prod-like stack, not the
+Terraform production source of truth. Keep its public browser-facing values aligned to:
+
+- Backend/API gateway: `https://meai-be.vkev.me` (local gateway still binds host port `2406`).
+- Frontend: `https://meai-fe.vkev.me`.
+
+OAuth redirect URIs in this compose file must point to the FE callback routes on
+`meai-fe.vkev.me`, while backend callbacks such as Kie should point to
+`meai-be.vkev.me`. Terraform/GitHub production can intentionally use different domains;
+do not copy these local compose domains into Terraform unless the production domain plan
+also changes.
+
 ### 20.2 Deploy rules
 
 - **Image tagging**: every build pushes both a `latest` tag and a SHA-pinned tag. Production

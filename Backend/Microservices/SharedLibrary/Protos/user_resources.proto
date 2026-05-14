@@ -106,6 +106,7 @@ message CreateResourcesFromUrlsResponse {
 message DeleteResourcesRequest {
   string user_id = 1;
   repeated string resource_ids = 2;
+  bool hard_delete = 3;
 }
 
 message DeleteResourcesResponse {
