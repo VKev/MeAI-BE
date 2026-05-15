@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Application.Abstractions.Agents;
 using Application.Abstractions.Configs;
+using Application.Abstractions.SocialMedias;
 using Application.Agents;
 using Application.Agents.Models;
 using Application.Chats.Commands;
@@ -29,6 +30,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
 
     private readonly IConfiguration _configuration;
     private readonly IUserConfigService _userConfigService;
+    private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly IMediator _mediator;
     private readonly ILogger<GeminiAgentChatService> _logger;
     private readonly KieResponsesClient _kieResponsesClient;
@@ -39,6 +41,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
         IConfiguration configuration,
         KieResponsesClient kieResponsesClient,
         IUserConfigService userConfigService,
+        IUserSocialMediaService userSocialMediaService,
         IMediator mediator,
         IChatWebPostService chatWebPostService,
         IQueryRewriter queryRewriter,
@@ -47,6 +50,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
         _configuration = configuration;
         _kieResponsesClient = kieResponsesClient;
         _userConfigService = userConfigService;
+        _userSocialMediaService = userSocialMediaService;
         _mediator = mediator;
         _chatWebPostService = chatWebPostService;
         _queryRewriter = queryRewriter;
@@ -57,16 +61,18 @@ public sealed class GeminiAgentChatService : IAgentChatService
         AgentChatRequest request,
         CancellationToken cancellationToken)
     {
-        var obviousValidation = TryBuildObviousValidation(request.Message);
-        if (obviousValidation is not null)
-        {
-            return Result.Success(obviousValidation);
-        }
+        _logger.LogInformation(
+            "Agent chat request received. UserId={UserId} WorkspaceId={WorkspaceId} SessionId={SessionId} AssistantChatId={AssistantChatId} HasScheduleOptions={HasScheduleOptions} MessagePreview={MessagePreview}",
+            request.UserId,
+            request.WorkspaceId,
+            request.SessionId,
+            request.AssistantChatId,
+            request.ScheduleOptions is not null,
+            Preview(request.Message));
 
         if (request.ScheduleOptions is not null)
         {
-            var inferredFutureEventIntent = TryBuildFutureEventScheduleInference(request.Message);
-            return await CreateFutureAiScheduleAsync(request, inferredFutureEventIntent, cancellationToken);
+            return await CreateFutureAiScheduleAsync(request, null, cancellationToken);
         }
 
         var model = await ResolveModelAsync(cancellationToken);
@@ -134,6 +140,14 @@ public sealed class GeminiAgentChatService : IAgentChatService
             analysis = analysisResult.Value;
         }
 
+        _logger.LogInformation(
+            "Future AI schedule analysis resolved. Action={Action} ValidationError={ValidationError} FinalPromptPreview={FinalPromptPreview} Title={Title} PostType={PostType}",
+            analysis.Action,
+            analysis.ValidationError ?? "<none>",
+            Preview(analysis.FinalPrompt),
+            analysis.Title ?? "<none>",
+            analysis.PostType ?? "<none>");
+
         if (string.Equals(analysis.Action, AgentActions.ValidationFailed, StringComparison.Ordinal))
         {
             return Result.Success(new AgentChatCompletionResult(
@@ -179,7 +193,18 @@ public sealed class GeminiAgentChatService : IAgentChatService
         var finalPrompt = string.IsNullOrWhiteSpace(analysis.FinalPrompt)
             ? request.Message
             : analysis.FinalPrompt.Trim();
-        var platformPreference = ResolvePlatformPreference(scheduleOptions.Targets);
+        var targetPlatformsResult = await ResolveScheduleTargetPlatformsAsync(
+            request.UserId,
+            scheduleOptions.Targets,
+            cancellationToken);
+        if (targetPlatformsResult.IsFailure)
+        {
+            return Result.Failure<AgentChatCompletionResult>(targetPlatformsResult.Error);
+        }
+
+        var targetPlatforms = targetPlatformsResult.Value;
+        var platformPreference = ResolvePlatformPreference(targetPlatforms);
+        var desiredPostType = ResolveDesiredSchedulePostType(targetPlatforms, analysis.PostType);
         var rewriteResult = await _queryRewriter.RewriteAsync(
             new QueryRewriteRequest(
                 finalPrompt,
@@ -198,6 +223,14 @@ public sealed class GeminiAgentChatService : IAgentChatService
             string.IsNullOrWhiteSpace(rewriteResult.Value.Language) ? null : rewriteResult.Value.Language,
             "pd");
 
+        _logger.LogInformation(
+            "Future AI schedule query rewrite completed. PlatformPreference={PlatformPreference} PrimaryQuery={PrimaryQuery} Language={Language} Intent={Intent} KeyTerms={KeyTerms}",
+            platformPreference ?? "<none>",
+            rewriteResult.Value.PrimaryQuery,
+            rewriteResult.Value.Language ?? "<none>",
+            rewriteResult.Value.Intent,
+            string.Join(", ", rewriteResult.Value.KeyTerms));
+
         var scheduleResult = await _mediator.Send(
             new CreateAgenticPublishingScheduleCommand(
                 request.UserId,
@@ -211,13 +244,21 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 finalPrompt,
                 scheduleOptions.MaxContentLength,
                 normalizedSearch,
-                scheduleOptions.Targets),
+                scheduleOptions.Targets,
+                desiredPostType),
             cancellationToken);
 
         if (scheduleResult.IsFailure)
         {
             return Result.Failure<AgentChatCompletionResult>(scheduleResult.Error);
         }
+
+        _logger.LogInformation(
+            "Future AI schedule created. ScheduleId={ScheduleId} Name={ScheduleName} ExecuteAtUtc={ExecuteAtUtc} Timezone={Timezone}",
+            scheduleResult.Value.Id,
+            scheduleResult.Value.Name,
+            scheduleResult.Value.ExecuteAtUtc,
+            scheduleResult.Value.Timezone);
 
         return Result.Success(new AgentChatCompletionResult(
             analysis.AssistantMessage ?? "Future AI schedule created. Content will be generated at runtime from fresh web search and RAG grounding.",
@@ -548,9 +589,17 @@ public sealed class GeminiAgentChatService : IAgentChatService
     {
         try
         {
+            _logger.LogInformation(
+                "Calling Kie schedule analyzer. Model={Model} MessagePreview={MessagePreview}",
+                model,
+                Preview(message));
+
             var response = await _kieResponsesClient.GetFunctionArgumentsAsync(
                 model,
-                [KieResponsesClient.UserText($"{BuildAnalyzerPrompt()}\n\nUser message:\n{message}")],
+                [
+                    KieResponsesClient.DeveloperText(BuildAnalyzerPrompt()),
+                    KieResponsesClient.UserText(message)
+                ],
                 BuildAnalyzeScheduleRequestTool(),
                 "Agent.RequestFailed",
                 "Kie agent request failed.",
@@ -558,7 +607,32 @@ public sealed class GeminiAgentChatService : IAgentChatService
 
             if (response.IsFailure)
             {
-                return Result.Failure<AgentPromptAnalysis>(response.Error);
+                _logger.LogWarning(
+                    "Kie schedule analyzer function-call mode failed. Model={Model} ErrorCode={ErrorCode} ErrorDescription={ErrorDescription}. Falling back to JSON-only mode.",
+                    model,
+                    response.Error.Code,
+                    response.Error.Description);
+
+                response = await _kieResponsesClient.GetTextResponseAsync(
+                    model,
+                    [
+                        KieResponsesClient.DeveloperText(BuildAnalyzerJsonFallbackPrompt()),
+                        KieResponsesClient.UserText(message)
+                    ],
+                    "Agent.RequestFailed",
+                    "Kie agent request failed.",
+                    cancellationToken);
+
+                if (response.IsFailure)
+                {
+                    _logger.LogWarning(
+                        "Kie schedule analyzer JSON-only fallback also failed. Model={Model} ErrorCode={ErrorCode} ErrorDescription={ErrorDescription}",
+                        model,
+                        response.Error.Code,
+                        response.Error.Description);
+
+                    return Result.Failure<AgentPromptAnalysis>(response.Error);
+                }
             }
 
             var content = response.Value.Trim();
@@ -568,16 +642,36 @@ public sealed class GeminiAgentChatService : IAgentChatService
             }
 
             var payload = ExtractJsonPayload(content);
+            _logger.LogInformation(
+                "Kie schedule analyzer returned payload. Model={Model} PayloadPreview={PayloadPreview}",
+                model,
+                Preview(payload));
+
             var analysis = JsonSerializer.Deserialize<AgentPromptAnalysis>(payload, JsonOptions);
             if (analysis is null || string.IsNullOrWhiteSpace(analysis.Action))
             {
+                _logger.LogWarning(
+                    "Kie schedule analyzer returned invalid payload. Model={Model} PayloadPreview={PayloadPreview}",
+                    model,
+                    Preview(payload));
+
                 return Result.Failure<AgentPromptAnalysis>(
                     new Error("Agent.InvalidModelResponse", "Agent analyzer did not return a valid JSON decision."));
             }
 
+            var normalizedAction = NormalizeAction(analysis.Action);
+            _logger.LogInformation(
+                "Kie schedule analyzer parsed successfully. Model={Model} Action={Action} ValidationError={ValidationError} FinalPromptPreview={FinalPromptPreview} Title={Title} PostType={PostType}",
+                model,
+                normalizedAction,
+                analysis.ValidationError ?? "<none>",
+                Preview(analysis.FinalPrompt),
+                analysis.Title ?? "<none>",
+                analysis.PostType ?? "<none>");
+
             return Result.Success(analysis with
             {
-                Action = NormalizeAction(analysis.Action)
+                Action = normalizedAction
             });
         }
         catch (Exception ex)
@@ -593,10 +687,19 @@ public sealed class GeminiAgentChatService : IAgentChatService
         var activeConfigResult = await _userConfigService.GetActiveConfigAsync(cancellationToken);
         var configuredModel = _configuration["Kie:ChatModel"]
                               ?? _configuration["Kie__ChatModel"];
-
-        return KieResponsesClient.ResolveResponsesModel(
-            activeConfigResult.IsSuccess ? activeConfigResult.Value?.ChatModel : null,
+        var preferredModel = activeConfigResult.IsSuccess ? activeConfigResult.Value?.ChatModel : null;
+        var resolvedModel = KieResponsesClient.ResolveResponsesModel(
+            preferredModel,
             configuredModel);
+
+        _logger.LogInformation(
+            "Resolved Kie model for agent chat. PreferredModel={PreferredModel} ConfiguredModel={ConfiguredModel} ResolvedModel={ResolvedModel} ConfigLookupSucceeded={ConfigLookupSucceeded}",
+            preferredModel ?? "<none>",
+            configuredModel ?? "<none>",
+            resolvedModel,
+            activeConfigResult.IsSuccess);
+
+        return resolvedModel;
     }
 
     private static string BuildAnalyzerPrompt()
@@ -619,8 +722,11 @@ public sealed class GeminiAgentChatService : IAgentChatService
             - If the request is ambiguous or contains unresolved personal references such as "doi bong toi yeu", "nguoi toi thich", "thuong hieu cua toi", return action "validation_failed".
             - Prefer making reasonable assumptions when the user intent is already clear enough for future scheduling content.
             - If the missing detail is a future result that will only be known at runtime, do NOT fail validation. Rewrite the prompt so it refers to the real-world outcome that will be fetched later.
+            - Requests that ask to monitor, track, follow, search, or summarize fresh news, trends, or developments at execution time are VALID future scheduling content.
+            - Example: "theo doi cac dien bien AI noi bat trong 24 gio qua va viet 1 post" should return action "post_created", not "unsupported". Rewrite it so the 24-hour window is relative to execution time.
             - Example: "dang bai ve doi tuyen chien thang world cup nam nay" is valid for future scheduling. Rewrite it into a prompt about "doi tuyen vo dich World Cup nam nay" and continue.
             - Only return "validation_failed" when the missing detail is truly blocking and cannot be inferred safely, such as a personal reference ("doi bong toi yeu") or a missing event/topic.
+            - Do NOT return "unsupported" just because the prompt depends on fresh external information that will be fetched at runtime.
             - When action is "validation_failed", provide both:
               - validationError: one short sentence
               - revisedPrompt: a corrected prompt using placeholders like {{ten doi bong}}
@@ -636,6 +742,59 @@ public sealed class GeminiAgentChatService : IAgentChatService
 
             Output:
             Call the analyze_schedule_request tool with your decision. Do not answer in text.
+            """;
+    }
+
+    private static string BuildAnalyzerJsonFallbackPrompt()
+    {
+        return
+            """
+            You are MeAI's restricted scheduling assistant.
+
+            Scope:
+            - Read exactly one user message.
+            - Do not assume any prior chat history exists.
+            - Do not plan schedules, choose schedule time, or act like a general-purpose assistant.
+            - Your only job is to decide whether the latest message is clear enough for:
+              1. image generation for future scheduling content, or
+              2. video generation for future scheduling content, or
+              3. draft-post creation for future scheduling content, or
+              4. creating a draft post from a URL or web search result.
+
+            Rules:
+            - If the request is ambiguous or contains unresolved personal references such as "doi bong toi yeu", "nguoi toi thich", "thuong hieu cua toi", return action "validation_failed".
+            - Prefer making reasonable assumptions when the user intent is already clear enough for future scheduling content.
+            - If the missing detail is a future result that will only be known at runtime, do NOT fail validation. Rewrite the prompt so it refers to the real-world outcome that will be fetched later.
+            - Requests that ask to monitor, track, follow, search, or summarize fresh news, trends, or developments at execution time are VALID future scheduling content.
+            - Example: "theo doi cac dien bien AI noi bat trong 24 gio qua va viet 1 post" should return action "post_created", not "unsupported". Rewrite it so the 24-hour window is relative to execution time.
+            - Example: "dang bai ve doi tuyen chien thang world cup nam nay" is valid for future scheduling. Rewrite it into a prompt about "doi tuyen vo dich World Cup nam nay" and continue.
+            - Only return "validation_failed" when the missing detail is truly blocking and cannot be inferred safely, such as a personal reference ("doi bong toi yeu") or a missing event/topic.
+            - Do NOT return "unsupported" just because the prompt depends on fresh external information that will be fetched at runtime.
+            - When action is "validation_failed", provide both:
+              - validationError: one short sentence
+              - revisedPrompt: a corrected prompt using placeholders like {{ten doi bong}}
+            - If the request is a clear image-generation request, return action "image_created".
+            - If the request is a clear video-generation request, return action "video_created".
+            - If the request is a clear request to create post/caption/content for later scheduling, return action "post_created".
+            - If the request clearly asks to create a post from one or more URLs, a webpage, an article, news, or web search results, return action "web_post_created".
+            - If the request is outside this narrow scheduling-content scope, return action "unsupported".
+            - assistantMessage must be concise and practical.
+            - finalPrompt should contain the cleaned prompt to use for image generation or draft-post creation.
+            - title should be short and optional.
+            - postType should be "posts" or "reels" only when action is "post_created" or "web_post_created".
+
+            Output:
+            Return JSON only. Do not use markdown fences. Do not add explanation text.
+            Required JSON object shape:
+            {
+              "action": "validation_failed | image_created | video_created | post_created | web_post_created | unsupported",
+              "assistantMessage": "string or null",
+              "validationError": "string or null",
+              "revisedPrompt": "string or null",
+              "finalPrompt": "string or null",
+              "title": "string or null",
+              "postType": "posts | reels | null"
+            }
             """;
     }
 
@@ -708,57 +867,6 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 }
             }
         };
-    }
-
-    private static AgentChatCompletionResult? TryBuildObviousValidation(string message)
-    {
-        var normalized = message.Trim();
-        if (normalized.Contains("doi bong toi yeu", StringComparison.OrdinalIgnoreCase))
-        {
-            return new AgentChatCompletionResult(
-                "Yeu cau chua ro doi bong nao. Hay thay phan mo ho bang ten doi bong cu the.",
-                null,
-                [],
-                [],
-                AgentActions.ValidationFailed,
-                "Yeu cau chua xac dinh doi bong nao.",
-                normalized.Replace(
-                    "doi bong toi yeu",
-                    "doi bong {{ten doi bong}}",
-                    StringComparison.OrdinalIgnoreCase));
-        }
-
-        return null;
-    }
-
-    private static AgentPromptAnalysis? TryBuildFutureEventScheduleInference(string message)
-    {
-        var normalized = NormalizeForInference(message);
-        if (!ContainsAny(normalized, "world cup", "worldcup"))
-        {
-            return null;
-        }
-
-        if (!ContainsAny(
-                normalized,
-                "chien thang",
-                "vo dich",
-                "thang cuoc",
-                "winner",
-                "champion"))
-        {
-            return null;
-        }
-
-        var rewrittenPrompt = RewriteWorldCupWinnerPrompt(message);
-        return new AgentPromptAnalysis(
-            AgentActions.PostCreated,
-            "Tôi sẽ hiểu đây là một bài đăng runtime về đội tuyển vô địch World Cup khi đến thời điểm chạy.",
-            null,
-            rewrittenPrompt,
-            rewrittenPrompt,
-            "Bài đăng đội tuyển vô địch World Cup",
-            "posts");
     }
 
     private static string ExtractJsonPayload(string content)
@@ -904,45 +1012,93 @@ public sealed class GeminiAgentChatService : IAgentChatService
         };
     }
 
-    private static string? ResolvePlatformPreference(IReadOnlyList<PublishingScheduleTargetInput>? targets)
+    private async Task<Result<IReadOnlyList<string>>> ResolveScheduleTargetPlatformsAsync(
+        Guid userId,
+        IReadOnlyList<PublishingScheduleTargetInput>? targets,
+        CancellationToken cancellationToken)
     {
-        return null;
-    }
-
-    private static string RewriteWorldCupWinnerPrompt(string message)
-    {
-        var rewritten = message;
-        rewritten = rewritten.Replace("chiến thắng", "vô địch", StringComparison.OrdinalIgnoreCase);
-        rewritten = rewritten.Replace("chien thang", "vo dich", StringComparison.OrdinalIgnoreCase);
-        rewritten = rewritten.Replace("thắng cuộc", "vô địch", StringComparison.OrdinalIgnoreCase);
-        rewritten = rewritten.Replace("thang cuoc", "vo dich", StringComparison.OrdinalIgnoreCase);
-        rewritten = rewritten.Replace("winner", "champion", StringComparison.OrdinalIgnoreCase);
-
-        if (rewritten.IndexOf("đội tuyển", StringComparison.OrdinalIgnoreCase) >= 0 &&
-            rewritten.IndexOf("vô địch", StringComparison.OrdinalIgnoreCase) < 0 &&
-            rewritten.IndexOf("vo dich", StringComparison.OrdinalIgnoreCase) < 0)
+        if (targets is null || targets.Count == 0)
         {
-            rewritten = rewritten.Replace("đội tuyển", "đội tuyển vô địch", StringComparison.OrdinalIgnoreCase);
-            rewritten = rewritten.Replace("doi tuyen", "doi tuyen vo dich", StringComparison.OrdinalIgnoreCase);
+            return Result.Success<IReadOnlyList<string>>(Array.Empty<string>());
         }
 
-        if (!rewritten.Contains("thời điểm chạy", StringComparison.OrdinalIgnoreCase) &&
-            !rewritten.Contains("runtime", StringComparison.OrdinalIgnoreCase))
+        var socialMediaIds = targets
+            .Select(target => target.SocialMediaId)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (socialMediaIds.Count == 0)
         {
-            rewritten = $"{rewritten.Trim().TrimEnd('.')} dựa trên kết quả thực tế tại thời điểm chạy.";
+            return Result.Success<IReadOnlyList<string>>(Array.Empty<string>());
         }
 
-        return rewritten;
+        var socialMediasResult = await _userSocialMediaService.GetSocialMediasAsync(
+            userId,
+            socialMediaIds,
+            cancellationToken);
+        if (socialMediasResult.IsFailure)
+        {
+            return Result.Failure<IReadOnlyList<string>>(socialMediasResult.Error);
+        }
+
+        var socialMediaById = socialMediasResult.Value.ToDictionary(item => item.SocialMediaId);
+        var platforms = new List<string>(targets.Count);
+        foreach (var target in targets)
+        {
+            if (!socialMediaById.TryGetValue(target.SocialMediaId, out var socialMedia))
+            {
+                return Result.Failure<IReadOnlyList<string>>(
+                    new Error("SocialMedia.NotFound", "Social media account not found."));
+            }
+
+            platforms.Add(NormalizePlatform(socialMedia.Type));
+        }
+
+        return Result.Success<IReadOnlyList<string>>(platforms);
     }
 
-    private static string NormalizeForInference(string value)
+    private static string? ResolvePlatformPreference(IReadOnlyList<string> targetPlatforms)
     {
-        return value.Trim().ToLowerInvariant();
+        return targetPlatforms
+            .FirstOrDefault(platform => !string.IsNullOrWhiteSpace(platform));
     }
 
-    private static bool ContainsAny(string text, params string[] candidates)
+    private static string ResolveDesiredSchedulePostType(
+        IReadOnlyList<string> targetPlatforms,
+        string? analyzedPostType)
     {
-        return candidates.Any(candidate => text.Contains(candidate, StringComparison.OrdinalIgnoreCase));
+        if (targetPlatforms.Any(platform => string.Equals(platform, "tiktok", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "reels";
+        }
+
+        if (targetPlatforms.Any(platform => string.Equals(platform, "threads", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "posts";
+        }
+
+        return NormalizePostType(analyzedPostType);
+    }
+
+    private static string NormalizePlatform(string? platform)
+    {
+        return (platform ?? string.Empty).Trim().ToLowerInvariant();
+    }
+
+    private static string Preview(string? value, int maxLength = 1200)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "<empty>";
+        }
+
+        var normalized = value
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+
+        return normalized.Length <= maxLength
+            ? normalized
+            : $"{normalized[..maxLength]}...(truncated,total={normalized.Length})";
     }
 
     private static class AgentActions

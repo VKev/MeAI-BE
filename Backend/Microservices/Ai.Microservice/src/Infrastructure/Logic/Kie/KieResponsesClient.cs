@@ -49,6 +49,14 @@ public sealed class KieResponsesClient
         string? toolChoice = null,
         string? reasoningEffort = null)
     {
+        _logger.LogInformation(
+            "Kie Responses text request. Model={Model} Tools={Tools} ToolChoice={ToolChoice} ReasoningEffort={ReasoningEffort} InputPreview={InputPreview}",
+            model,
+            SummarizeTools(tools),
+            SummarizeToolChoice(toolChoice),
+            reasoningEffort ?? "<none>",
+            SummarizeInput(input));
+
         var payload = BuildRequest(model, input, tools, toolChoice, reasoningEffort);
         var bodyResult = await SendAsync(payload, failureCode, failureMessage, cancellationToken);
         if (bodyResult.IsFailure)
@@ -58,7 +66,13 @@ public sealed class KieResponsesClient
 
         try
         {
-            var text = ExtractOutputText(bodyResult.Value);
+            var text = ExtractText(bodyResult.Value) ?? string.Empty;
+            _logger.LogInformation(
+                "Kie Responses text parsed. Model={Model} TextLength={TextLength} TextPreview={TextPreview}",
+                model,
+                text.Length,
+                Preview(text));
+
             return string.IsNullOrWhiteSpace(text)
                 ? Result.Failure<string>(new Error(failureCode, "Kie returned an empty response."))
                 : Result.Success(text.Trim());
@@ -78,11 +92,18 @@ public sealed class KieResponsesClient
         CancellationToken cancellationToken,
         string? reasoningEffort = null)
     {
+        _logger.LogInformation(
+            "Kie Responses function request. Model={Model} Tool={Tool} ReasoningEffort={ReasoningEffort} InputPreview={InputPreview}",
+            model,
+            tool.Name,
+            reasoningEffort ?? "<none>",
+            SummarizeInput(input));
+
         var payload = BuildRequest(
             model,
             input,
             [tool],
-            new KieResponsesFunctionToolChoice { Name = tool.Name },
+            "auto",
             reasoningEffort);
         var bodyResult = await SendAsync(payload, failureCode, failureMessage, cancellationToken);
         if (bodyResult.IsFailure)
@@ -92,10 +113,37 @@ public sealed class KieResponsesClient
 
         try
         {
-            var arguments = ExtractFunctionArguments(bodyResult.Value, tool.Name);
+            var functionCalls = ExtractFunctionCalls(bodyResult.Value);
+            var parseSource = "missing";
+            var arguments = ExtractFunctionArguments(bodyResult.Value, tool.Name, out parseSource);
             if (string.IsNullOrWhiteSpace(arguments))
             {
+                _logger.LogWarning(
+                    "Kie Responses required tool missing from structured output. Tool={Tool} ParseSource={ParseSource} AvailableCalls={AvailableCalls} ResponsePreview={ResponsePreview}",
+                    tool.Name,
+                    parseSource,
+                    SummarizeFunctionCalls(functionCalls),
+                    Preview(bodyResult.Value, 4000));
+
                 arguments = TryExtractJsonTextFallback(bodyResult.Value);
+                if (!string.IsNullOrWhiteSpace(arguments))
+                {
+                    parseSource = "json_text_fallback";
+                    _logger.LogWarning(
+                        "Kie Responses function request fell back to JSON text. Tool={Tool} ParseSource={ParseSource} ArgumentsPreview={ArgumentsPreview}",
+                        tool.Name,
+                        parseSource,
+                        Preview(arguments));
+                }
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Kie Responses function parsed structured call. Tool={Tool} ParseSource={ParseSource} AvailableCalls={AvailableCalls} ArgumentsPreview={ArgumentsPreview}",
+                    tool.Name,
+                    parseSource,
+                    SummarizeFunctionCalls(functionCalls),
+                    Preview(arguments));
             }
 
             return string.IsNullOrWhiteSpace(arguments)
@@ -161,7 +209,7 @@ public sealed class KieResponsesClient
             Model = string.IsNullOrWhiteSpace(model) ? DefaultChatModel : model.Trim(),
             Stream = false,
             Input = input.ToList(),
-            Tools = tools?.ToList(),
+            Tools = tools?.Cast<object>().ToList(),
             ToolChoice = toolChoice,
             Reasoning = string.IsNullOrWhiteSpace(reasoningEffort)
                 ? null
@@ -176,6 +224,11 @@ public sealed class KieResponsesClient
         CancellationToken cancellationToken)
     {
         var json = JsonSerializer.Serialize(payload, JsonOptions);
+        _logger.LogInformation(
+            "Sending Kie Responses request. Url={Url} PayloadPreview={PayloadPreview}",
+            $"{_baseUrl}{ResponsesPath}",
+            Preview(json, 4000));
+
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}{ResponsesPath}")
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
@@ -196,6 +249,26 @@ public sealed class KieResponsesClient
         }
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        _logger.LogInformation(
+            "Received Kie Responses response. StatusCode={StatusCode} BodyPreview={BodyPreview}",
+            (int)response.StatusCode,
+            Preview(body, 4000));
+
+        if (TryReadWrappedKieError(body, out var wrappedErrorMessage, out var wrappedErrorCode))
+        {
+            _logger.LogWarning(
+                "Kie Responses returned an application-level error envelope. StatusCode={StatusCode} ErrorCode={ErrorCode} ErrorMessage={ErrorMessage}",
+                (int)response.StatusCode,
+                wrappedErrorCode?.ToString() ?? "<none>",
+                wrappedErrorMessage);
+
+            return Result.Failure<string>(new Error(
+                failureCode,
+                wrappedErrorCode is null
+                    ? wrappedErrorMessage ?? failureMessage
+                    : $"Kie returned error code {wrappedErrorCode}: {wrappedErrorMessage}"));
+        }
+
         if (!response.IsSuccessStatusCode)
         {
             var errorMessage = TryReadKieErrorMessage(body) ?? failureMessage;
@@ -207,9 +280,24 @@ public sealed class KieResponsesClient
 
     public static KieResponsesInputItem UserText(string text)
     {
+        return Message("user", text);
+    }
+
+    public static KieResponsesInputItem DeveloperText(string text)
+    {
+        return Message("developer", text);
+    }
+
+    public static KieResponsesInputItem SystemText(string text)
+    {
+        return Message("system", text);
+    }
+
+    private static KieResponsesInputItem Message(string role, string text)
+    {
         return new KieResponsesInputItem
         {
-            Role = "user",
+            Role = role,
             Content = [new KieResponsesContentPart { Type = "input_text", Text = text }]
         };
     }
@@ -284,13 +372,52 @@ public sealed class KieResponsesClient
         return buffer.ToString();
     }
 
-    private static string? ExtractFunctionArguments(string body, string toolName)
+    private static string? ExtractFunctionArguments(string body, string toolName, out string parseSource)
+    {
+        parseSource = "missing";
+        using var document = JsonDocument.Parse(body);
+        if (TryReadFunctionArgumentsFromOutput(document.RootElement, toolName, out var outputArguments))
+        {
+            parseSource = "output";
+            return outputArguments;
+        }
+
+        if (TryReadFunctionArgumentsFromChoices(document.RootElement, toolName, out var choiceArguments))
+        {
+            parseSource = "choices";
+            return choiceArguments;
+        }
+
+        return null;
+    }
+
+    public static IReadOnlyList<KieResponsesFunctionCall> ExtractFunctionCalls(string body)
     {
         using var document = JsonDocument.Parse(body);
-        if (!document.RootElement.TryGetProperty("output", out var output) ||
+        var calls = new List<KieResponsesFunctionCall>();
+        TryAppendFunctionCallsFromOutput(calls, document.RootElement);
+        TryAppendFunctionCallsFromChoices(calls, document.RootElement);
+        return calls;
+    }
+
+    public static string? ExtractText(string body)
+    {
+        using var document = JsonDocument.Parse(body);
+        return TryExtractTextFromOutput(document.RootElement) ??
+               TryExtractTextFromChoices(document.RootElement) ??
+               string.Empty;
+    }
+
+    private static bool TryReadFunctionArgumentsFromOutput(
+        JsonElement root,
+        string toolName,
+        out string? arguments)
+    {
+        arguments = null;
+        if (!root.TryGetProperty("output", out var output) ||
             output.ValueKind != JsonValueKind.Array)
         {
-            return null;
+            return false;
         }
 
         foreach (var item in output.EnumerateArray())
@@ -298,7 +425,8 @@ public sealed class KieResponsesClient
             var direct = TryReadFunctionArguments(item, toolName);
             if (!string.IsNullOrWhiteSpace(direct))
             {
-                return direct;
+                arguments = direct;
+                return true;
             }
 
             if (!item.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
@@ -311,24 +439,53 @@ public sealed class KieResponsesClient
                 var nested = TryReadFunctionArguments(part, toolName);
                 if (!string.IsNullOrWhiteSpace(nested))
                 {
-                    return nested;
+                    arguments = nested;
+                    return true;
                 }
             }
         }
 
-        return null;
+        return false;
     }
 
-    public static IReadOnlyList<KieResponsesFunctionCall> ExtractFunctionCalls(string body)
+    private static bool TryReadFunctionArgumentsFromChoices(
+        JsonElement root,
+        string toolName,
+        out string? arguments)
     {
-        using var document = JsonDocument.Parse(body);
-        if (!document.RootElement.TryGetProperty("output", out var output) ||
-            output.ValueKind != JsonValueKind.Array)
+        arguments = null;
+        if (!root.TryGetProperty("choices", out var choices) ||
+            choices.ValueKind != JsonValueKind.Array)
         {
-            return [];
+            return false;
         }
 
-        var calls = new List<KieResponsesFunctionCall>();
+        foreach (var choice in choices.EnumerateArray())
+        {
+            if (!choice.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var direct = TryReadFunctionArguments(message, toolName);
+            if (!string.IsNullOrWhiteSpace(direct))
+            {
+                arguments = direct;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void TryAppendFunctionCallsFromOutput(List<KieResponsesFunctionCall> calls, JsonElement root)
+    {
+        if (!root.TryGetProperty("output", out var output) ||
+            output.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
         foreach (var item in output.EnumerateArray())
         {
             TryAppendFunctionCall(calls, item);
@@ -343,13 +500,112 @@ public sealed class KieResponsesClient
                 TryAppendFunctionCall(calls, part);
             }
         }
-
-        return calls;
     }
 
-    public static string? ExtractText(string body)
+    private static void TryAppendFunctionCallsFromChoices(List<KieResponsesFunctionCall> calls, JsonElement root)
     {
-        return ExtractOutputText(body);
+        if (!root.TryGetProperty("choices", out var choices) ||
+            choices.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var choice in choices.EnumerateArray())
+        {
+            if (!choice.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            TryAppendFunctionCall(calls, message);
+        }
+    }
+
+    private static string? TryExtractTextFromOutput(JsonElement root)
+    {
+        if (!root.TryGetProperty("output", out var output) ||
+            output.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var buffer = new StringBuilder();
+        foreach (var item in output.EnumerateArray())
+        {
+            if (!item.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var part in content.EnumerateArray())
+            {
+                if (!part.TryGetProperty("type", out var typeProp) || typeProp.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                var type = typeProp.GetString();
+                if (type is not ("output_text" or "text"))
+                {
+                    continue;
+                }
+
+                if (part.TryGetProperty("text", out var textProp) && textProp.ValueKind == JsonValueKind.String)
+                {
+                    buffer.Append(textProp.GetString());
+                }
+            }
+        }
+
+        return buffer.ToString();
+    }
+
+    private static string? TryExtractTextFromChoices(JsonElement root)
+    {
+        if (!root.TryGetProperty("choices", out var choices) ||
+            choices.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var buffer = new StringBuilder();
+        foreach (var choice in choices.EnumerateArray())
+        {
+            if (!choice.TryGetProperty("message", out var message) || message.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            if (message.TryGetProperty("content", out var contentProp))
+            {
+                switch (contentProp.ValueKind)
+                {
+                    case JsonValueKind.String:
+                        buffer.Append(contentProp.GetString());
+                        break;
+                    case JsonValueKind.Array:
+                        foreach (var part in contentProp.EnumerateArray())
+                        {
+                            if (part.ValueKind == JsonValueKind.String)
+                            {
+                                buffer.Append(part.GetString());
+                                continue;
+                            }
+
+                            if (part.ValueKind == JsonValueKind.Object &&
+                                part.TryGetProperty("text", out var textProp) &&
+                                textProp.ValueKind == JsonValueKind.String)
+                            {
+                                buffer.Append(textProp.GetString());
+                            }
+                        }
+
+                        break;
+                }
+            }
+        }
+
+        return buffer.ToString();
     }
 
     private static void TryAppendFunctionCall(List<KieResponsesFunctionCall> calls, JsonElement element)
@@ -459,7 +715,7 @@ public sealed class KieResponsesClient
 
     private static string? TryExtractJsonTextFallback(string body)
     {
-        var text = ExtractOutputText(body).Trim();
+        var text = (ExtractText(body) ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(text))
         {
             return null;
@@ -554,6 +810,128 @@ public sealed class KieResponsesClient
         return null;
     }
 
+    private static bool TryReadWrappedKieError(
+        string payload,
+        out string? message,
+        out int? code)
+    {
+        message = null;
+        code = null;
+
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            var hasOutput = root.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Array;
+            var hasChoices = root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array;
+            if (hasOutput || hasChoices)
+            {
+                return false;
+            }
+
+            if (root.TryGetProperty("code", out var codeProp) &&
+                codeProp.ValueKind == JsonValueKind.Number &&
+                codeProp.TryGetInt32(out var parsedCode))
+            {
+                code = parsedCode;
+            }
+
+            if (root.TryGetProperty("msg", out var msgProp) &&
+                msgProp.ValueKind == JsonValueKind.String)
+            {
+                message = msgProp.GetString();
+            }
+            else if (root.TryGetProperty("message", out var messageProp) &&
+                     messageProp.ValueKind == JsonValueKind.String)
+            {
+                message = messageProp.GetString();
+            }
+
+            return !string.IsNullOrWhiteSpace(message) && code is not null and >= 400;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string SummarizeInput(IReadOnlyList<KieResponsesInputItem> input)
+    {
+        var parts = input.Select((item, index) =>
+        {
+            var contentPreview = item.Content is null
+                ? null
+                : string.Join(" | ", item.Content.Select(part =>
+                    $"{part.Type}:{Preview(part.Text ?? part.ImageUrl, 240)}"));
+
+            return $"#{index}:type={item.Type ?? "<message>"},role={item.Role ?? "<none>"},name={item.Name ?? "<none>"},callId={item.CallId ?? "<none>"},content={contentPreview ?? "<none>"}";
+        });
+
+        return string.Join(" || ", parts);
+    }
+
+    private static string SummarizeTools(IReadOnlyList<KieResponsesTool>? tools)
+    {
+        if (tools is null || tools.Count == 0)
+        {
+            return "<none>";
+        }
+
+        return string.Join(", ", tools.Select(tool => tool switch
+        {
+            KieResponsesFunctionTool functionTool => $"{functionTool.Type}:{functionTool.Name}",
+            _ => tool.Type
+        }));
+    }
+
+    private static string SummarizeToolChoice(object? toolChoice)
+    {
+        return toolChoice switch
+        {
+            null => "<none>",
+            string text => text,
+            _ => Preview(JsonSerializer.Serialize(toolChoice, JsonOptions))
+        };
+    }
+
+    private static string SummarizeFunctionCalls(IReadOnlyList<KieResponsesFunctionCall> calls)
+    {
+        if (calls.Count == 0)
+        {
+            return "<none>";
+        }
+
+        return string.Join(", ", calls.Select(call =>
+            $"{call.Name}(callId={call.CallId},args={Preview(call.Arguments, 240)})"));
+    }
+
+    private static string Preview(string? value, int maxLength = 1200)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "<empty>";
+        }
+
+        var normalized = value
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+
+        return normalized.Length <= maxLength
+            ? normalized
+            : $"{normalized[..maxLength]}...(truncated,total={normalized.Length})";
+    }
+
     private sealed class KieResponsesRequest
     {
         [JsonPropertyName("model")]
@@ -566,7 +944,7 @@ public sealed class KieResponsesClient
         public List<KieResponsesInputItem> Input { get; set; } = new();
 
         [JsonPropertyName("tools")]
-        public List<KieResponsesTool>? Tools { get; set; }
+        public List<object>? Tools { get; set; }
 
         [JsonPropertyName("tool_choice")]
         public object? ToolChoice { get; set; }
@@ -635,16 +1013,8 @@ public sealed class KieResponsesFunctionTool : KieResponsesTool
     public object Parameters { get; set; } = new();
 
     [JsonPropertyName("strict")]
-    public bool Strict { get; set; } = true;
-}
-
-public sealed class KieResponsesFunctionToolChoice
-{
-    [JsonPropertyName("type")]
-    public string Type { get; set; } = "function";
-
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = string.Empty;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Strict { get; set; }
 }
 
 public sealed class KieResponsesReasoning

@@ -5,6 +5,7 @@ namespace Domain.Repositories;
 public interface IPublishingScheduleRepository
 {
     Task AddAsync(PublishingSchedule entity, CancellationToken cancellationToken);
+    void AddItem(PublishingScheduleItem entity);
     void Update(PublishingSchedule entity);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
     Task<PublishingSchedule?> GetByIdAsync(Guid id, CancellationToken cancellationToken);

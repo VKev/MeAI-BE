@@ -27,11 +27,21 @@ public sealed record AgenticRuntimeContentRequest(
     string? RecommendationSummary = null,
     string? RecommendationPageProfile = null,
     IReadOnlyList<WebSource>? RecommendationWebSources = null,
-    string? RagFallbackReason = null);
+    string? RagFallbackReason = null,
+    string? DesiredPostType = null,
+    bool? RequiresVideoMedia = null,
+    bool? RequiresSingleMedia = null,
+    bool? AllowTextOnly = null,
+    string? TargetInstructionSummary = null);
 
 public sealed record AgenticRuntimePostDraft(
     string? Title,
     string Content,
     string? Hashtag,
     string PostType,
-    IReadOnlyList<Guid>? ResourceIds = null);
+    IReadOnlyList<Guid>? ResourceIds = null,
+    IReadOnlyList<AgenticRuntimeDraftResource>? Resources = null);
+
+public sealed record AgenticRuntimeDraftResource(
+    Guid ResourceId,
+    string? ResourceType);

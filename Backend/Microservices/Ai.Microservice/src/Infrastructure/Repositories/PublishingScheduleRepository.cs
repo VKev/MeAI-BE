@@ -26,8 +26,24 @@ public sealed class PublishingScheduleRepository : IPublishingScheduleRepository
         return _dbSet.AddAsync(entity, cancellationToken).AsTask();
     }
 
+    public void AddItem(PublishingScheduleItem entity)
+    {
+        _dbContext.Set<PublishingScheduleItem>().Add(entity);
+    }
+
     public void Update(PublishingSchedule entity)
     {
+        var entry = _dbContext.Entry(entity);
+        if (entry.State != EntityState.Detached)
+        {
+            if (entry.State == EntityState.Unchanged)
+            {
+                entry.State = EntityState.Modified;
+            }
+
+            return;
+        }
+
         _dbSet.Update(entity);
     }
 
@@ -168,6 +184,7 @@ public sealed class PublishingScheduleRepository : IPublishingScheduleRepository
     private static IQueryable<PublishingSchedule> BaseQuery(IQueryable<PublishingSchedule> query)
     {
         return query
+            .AsSplitQuery()
             .Include(schedule => schedule.Items)
             .Include(schedule => schedule.Targets);
     }

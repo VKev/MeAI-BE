@@ -223,6 +223,7 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
 
         foreach (var group in targetGroups)
         {
+            var publishingConstraint = BuildPublishingConstraint(group.Platform, context.DesiredPostType);
             var contentDraftResult = await _runtimeContentService.GeneratePostDraftAsync(
                 new AgenticRuntimeContentRequest(
                     schedule.Id,
@@ -241,7 +242,12 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
                     recommendationSummary,
                     recommendationPageProfile,
                     recommendationWebSources,
-                    ragFallbackReason),
+                    ragFallbackReason,
+                    publishingConstraint.PostType,
+                    publishingConstraint.RequiresVideoMedia,
+                    publishingConstraint.RequiresSingleMedia,
+                    publishingConstraint.AllowTextOnly,
+                    publishingConstraint.InstructionSummary),
                 cancellationToken);
 
             if (contentDraftResult.IsFailure)
@@ -255,7 +261,20 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
                 return Result.Failure<bool>(contentDraftResult.Error);
             }
 
-            var importedResourceIds = contentDraftResult.Value.ResourceIds?
+            var validatedDraftResult = ValidateRuntimeDraft(group.Platform, publishingConstraint, contentDraftResult.Value);
+            if (validatedDraftResult.IsFailure)
+            {
+                schedule.Status = PublishingScheduleState.StatusFailed;
+                schedule.ErrorCode = validatedDraftResult.Error.Code;
+                schedule.ErrorMessage = validatedDraftResult.Error.Description;
+                schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+                _publishingScheduleRepository.Update(schedule);
+                await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
+                return Result.Failure<bool>(validatedDraftResult.Error);
+            }
+
+            var validatedDraft = validatedDraftResult.Value;
+            var importedResourceIds = validatedDraft.ResourceIds?
                 .Where(id => id != Guid.Empty)
                 .Distinct()
                 .Select(id => id.ToString())
@@ -267,12 +286,12 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
                     schedule.WorkspaceId,
                     null,
                     group.RepresentativeTarget.SocialMediaId,
-                    contentDraftResult.Value.Title,
+                    validatedDraft.Title,
                     new PostContent
                     {
-                        Content = contentDraftResult.Value.Content,
-                        Hashtag = contentDraftResult.Value.Hashtag,
-                        PostType = contentDraftResult.Value.PostType,
+                        Content = validatedDraft.Content,
+                        Hashtag = validatedDraft.Hashtag,
+                        PostType = validatedDraft.PostType,
                         ResourceList = importedResourceIds
                     },
                     "draft",
@@ -342,6 +361,7 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
                 UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow
             };
             schedule.Items.Add(runtimeItem);
+            _publishingScheduleRepository.AddItem(runtimeItem);
             runtimeItems.Add(runtimeItem);
         }
 
@@ -486,8 +506,168 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
         return value[..max] + "...";
     }
 
+    private static RuntimePublishingConstraint BuildPublishingConstraint(
+        string platform,
+        string? desiredPostType)
+    {
+        var normalizedPlatform = NormalizePlatform(platform);
+        var normalizedPostType = NormalizePostType(desiredPostType);
+
+        return normalizedPlatform switch
+        {
+            "tiktok" => new RuntimePublishingConstraint(
+                normalizedPlatform,
+                "reels",
+                true,
+                true,
+                false,
+                "TikTok targets require exactly one video and must publish as reels."),
+            "facebook" when normalizedPostType == "reels" => new RuntimePublishingConstraint(
+                normalizedPlatform,
+                "reels",
+                true,
+                true,
+                false,
+                "Facebook reels require exactly one video."),
+            "instagram" when normalizedPostType == "reels" => new RuntimePublishingConstraint(
+                normalizedPlatform,
+                "reels",
+                true,
+                true,
+                false,
+                "Instagram reels require exactly one video."),
+            "instagram" => new RuntimePublishingConstraint(
+                normalizedPlatform,
+                "posts",
+                false,
+                true,
+                false,
+                "Instagram posts currently require exactly one image or video."),
+            "threads" => new RuntimePublishingConstraint(
+                normalizedPlatform,
+                "posts",
+                false,
+                true,
+                true,
+                "Threads supports text-only posts or a single attached media item."),
+            _ => new RuntimePublishingConstraint(
+                normalizedPlatform,
+                normalizedPostType,
+                false,
+                false,
+                true,
+                "Facebook posts support text-only or compatible media attachments.")
+        };
+    }
+
+    private static Result<AgenticRuntimePostDraft> ValidateRuntimeDraft(
+        string platform,
+        RuntimePublishingConstraint constraint,
+        AgenticRuntimePostDraft draft)
+    {
+        var normalizedPlatform = NormalizePlatform(platform);
+        var normalizedPostType = NormalizePostType(draft.PostType);
+        if (!string.Equals(normalizedPostType, constraint.PostType, StringComparison.Ordinal))
+        {
+            return Result.Failure<AgenticRuntimePostDraft>(
+                new Error(
+                    "PublishingSchedule.PlatformPostTypeMismatch",
+                    $"The AI draft for {normalizedPlatform} must use postType '{constraint.PostType}', but got '{normalizedPostType}'."));
+        }
+
+        var resources = draft.Resources?
+            .Where(resource => resource.ResourceId != Guid.Empty)
+            .GroupBy(resource => resource.ResourceId)
+            .Select(group => group.First())
+            .ToList() ?? [];
+        var videoCount = resources.Count(resource => IsVideoResource(resource.ResourceType));
+        var imageCount = resources.Count(resource => IsImageResource(resource.ResourceType));
+        var mediaCount = resources.Count;
+
+        if (!constraint.AllowTextOnly && mediaCount == 0)
+        {
+            return Result.Failure<AgenticRuntimePostDraft>(
+                new Error(
+                    "PublishingSchedule.RequiredMediaMissing",
+                    $"The AI draft for {normalizedPlatform} must include media that matches the target publish type."));
+        }
+
+        if (constraint.RequiresVideoMedia)
+        {
+            if (mediaCount != 1 || videoCount != 1)
+            {
+                return Result.Failure<AgenticRuntimePostDraft>(
+                    new Error(
+                        "PublishingSchedule.RequiredVideoMissing",
+                        $"{normalizedPlatform} {constraint.PostType} publishing requires exactly one video resource."));
+            }
+        }
+        else if (constraint.RequiresSingleMedia && mediaCount > 1)
+        {
+            return Result.Failure<AgenticRuntimePostDraft>(
+                new Error(
+                    "PublishingSchedule.SingleMediaRequired",
+                    $"{normalizedPlatform} publishing currently supports only one attached media item for this target."));
+        }
+
+        if (string.Equals(normalizedPlatform, "facebook", StringComparison.Ordinal))
+        {
+            if (normalizedPostType == "posts")
+            {
+                if (videoCount > 1)
+                {
+                    return Result.Failure<AgenticRuntimePostDraft>(
+                        new Error("PublishingSchedule.MultiVideoUnsupported", "Facebook posts support only one video."));
+                }
+
+                if (videoCount > 0 && imageCount > 0)
+                {
+                    return Result.Failure<AgenticRuntimePostDraft>(
+                        new Error("PublishingSchedule.MixedMediaUnsupported", "Facebook posts cannot mix images and videos."));
+                }
+            }
+        }
+
+        return Result.Success(draft with
+        {
+            PostType = constraint.PostType
+        });
+    }
+
+    private static bool IsVideoResource(string? resourceType)
+    {
+        return !string.IsNullOrWhiteSpace(resourceType) &&
+               resourceType.StartsWith("video", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsImageResource(string? resourceType)
+    {
+        return !string.IsNullOrWhiteSpace(resourceType) &&
+               resourceType.StartsWith("image", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePostType(string? postType)
+    {
+        return string.Equals((postType ?? string.Empty).Trim(), "reels", StringComparison.OrdinalIgnoreCase)
+            ? "reels"
+            : "posts";
+    }
+
+    private static string NormalizePlatform(string? platform)
+    {
+        return (platform ?? string.Empty).Trim().ToLowerInvariant();
+    }
+
     private sealed record RuntimeTargetGroup(
         string Platform,
         PublishingScheduleTarget RepresentativeTarget,
         IReadOnlyList<PublishingScheduleTarget> Targets);
+
+    private sealed record RuntimePublishingConstraint(
+        string Platform,
+        string PostType,
+        bool RequiresVideoMedia,
+        bool RequiresSingleMedia,
+        bool AllowTextOnly,
+        string InstructionSummary);
 }

@@ -116,6 +116,7 @@ public sealed class UpdateAgenticPublishingScheduleCommandHandler
             });
         }
 
+        var existingContext = AgenticScheduleExecutionContextSerializer.Parse(schedule.ExecutionContextJson);
         var executionContext = new AgenticScheduleExecutionContext(
             Search: new PublishingScheduleSearchInput(
                 validated.Value.Search!.QueryTemplate,
@@ -123,6 +124,7 @@ public sealed class UpdateAgenticPublishingScheduleCommandHandler
                 validated.Value.Search.Country,
                 validated.Value.Search.SearchLanguage,
                 validated.Value.Search.Freshness),
+            DesiredPostType: existingContext.DesiredPostType,
             RegisteredAtUtc: now);
 
         schedule.WorkspaceId = request.WorkspaceId;

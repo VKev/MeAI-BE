@@ -107,6 +107,114 @@ public sealed class KieResponsesClientTests
         result.Value.Should().Contain("\"is_sensitive\":false");
     }
 
+    [Fact]
+    public async Task GetFunctionArgumentsAsync_ShouldReadChatCompletionsStyleToolCalls()
+    {
+        var responseBody =
+            """
+            {
+              "choices": [
+                {
+                  "message": {
+                    "role": "assistant",
+                    "tool_calls": [
+                      {
+                        "id": "call_456",
+                        "type": "function",
+                        "function": {
+                          "name": "analyze_schedule_request",
+                          "arguments": "{\"action\":\"post_created\",\"finalPrompt\":\"future-safe\"}"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+            """;
+
+        var client = CreateClient(responseBody);
+        var result = await client.GetFunctionArgumentsAsync(
+            "gpt-5-4",
+            [KieResponsesClient.UserText("analyze this")],
+            new KieResponsesFunctionTool
+            {
+                Name = "analyze_schedule_request",
+                Description = "Analyze a request",
+                Parameters = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        action = new { type = "string" },
+                        finalPrompt = new { type = "string" }
+                    }
+                }
+            },
+            "Agent.RequestFailed",
+            "Kie agent request failed.",
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Contain("\"action\":\"post_created\"");
+    }
+
+    [Fact]
+    public async Task GetFunctionArgumentsAsync_ShouldSendAutoToolChoice_ForFunctionTools()
+    {
+        const string responseBody =
+            """
+            {
+              "output": [
+                {
+                  "type": "message",
+                  "role": "assistant",
+                  "tool_calls": [
+                    {
+                      "id": "call_123",
+                      "type": "function",
+                      "function": {
+                        "name": "analyze_schedule_request",
+                        "arguments": "{\"action\":\"post_created\"}"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var handler = new StubHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
+        });
+        var client = CreateClient(handler);
+
+        var result = await client.GetFunctionArgumentsAsync(
+            "gpt-5-4",
+            [KieResponsesClient.UserText("analyze this")],
+            new KieResponsesFunctionTool
+            {
+                Name = "analyze_schedule_request",
+                Description = "Analyze a request",
+                Parameters = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        action = new { type = "string" }
+                    }
+                }
+            },
+            "Agent.RequestFailed",
+            "Kie agent request failed.",
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        handler.LastRequestBody.Should().NotBeNull();
+        handler.LastRequestBody.Should().Contain("\"tool_choice\":\"auto\"");
+    }
+
     [Theory]
     [InlineData("gpt-5-4", null, "gpt-5-4")]
     [InlineData("gpt-5.3-codex", null, "gpt-5.3-codex")]
@@ -128,6 +236,12 @@ public sealed class KieResponsesClientTests
         {
             Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
         });
+
+        return CreateClient(handler);
+    }
+
+    private static KieResponsesClient CreateClient(StubHttpMessageHandler handler)
+    {
 
         var httpClientFactory = new Mock<IHttpClientFactory>();
         httpClientFactory
@@ -157,6 +271,7 @@ public sealed class KieResponsesClientTests
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
         private readonly HttpResponseMessage _response;
+        public string? LastRequestBody { get; private set; }
 
         public StubHttpMessageHandler(HttpResponseMessage response)
         {
@@ -167,6 +282,9 @@ public sealed class KieResponsesClientTests
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            LastRequestBody = request.Content is null
+                ? null
+                : request.Content.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
             return Task.FromResult(_response);
         }
     }
