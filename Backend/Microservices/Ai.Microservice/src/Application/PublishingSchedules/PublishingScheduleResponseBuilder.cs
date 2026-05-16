@@ -75,7 +75,9 @@ public sealed class PublishingScheduleResponseBuilder
             schedule.ErrorCode,
             schedule.ErrorMessage,
             schedule.CreatedAt,
-            schedule.UpdatedAt);
+            schedule.UpdatedAt,
+            executionContext.RuntimePostBuilderId,
+            executionContext.RuntimePostIds);
     }
 
     public async Task<IReadOnlyList<PublishingScheduleResponse>> BuildManyAsync(

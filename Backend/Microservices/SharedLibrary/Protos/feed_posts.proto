@@ -6,6 +6,9 @@ package feedposts;
 
 service FeedPostPublishService {
   rpc PublishAiPostToFeed (PublishAiPostToFeedRequest) returns (PublishAiPostToFeedResponse);
+  rpc UnpublishAiPostFromFeed (UnpublishAiPostFromFeedRequest) returns (UnpublishAiPostFromFeedResponse);
+  rpc UpdateAiPostOnFeed (UpdateAiPostOnFeedRequest) returns (UpdateAiPostOnFeedResponse);
+  rpc GetFeedPostForModeration (GetFeedPostForModerationRequest) returns (GetFeedPostForModerationResponse);
 }
 
 message PublishAiPostToFeedRequest {
@@ -20,4 +23,33 @@ message PublishAiPostToFeedRequest {
 message PublishAiPostToFeedResponse {
   string feed_post_id = 1;
   string created_at = 2;
+}
+
+message UnpublishAiPostFromFeedRequest {
+  string user_id = 1;
+  string feed_post_id = 2;
+}
+
+message UnpublishAiPostFromFeedResponse {
+  bool unpublished = 1;
+}
+
+message UpdateAiPostOnFeedRequest {
+  string user_id = 1;
+  string feed_post_id = 2;
+  string content = 3;
+}
+
+message UpdateAiPostOnFeedResponse {
+  bool updated = 1;
+}
+
+message GetFeedPostForModerationRequest {
+  string post_id = 1;
+  string user_id = 2;
+}
+
+message GetFeedPostForModerationResponse {
+  string post_id = 1;
+  string content = 2;
 }

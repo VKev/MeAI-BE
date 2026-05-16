@@ -13,6 +13,11 @@ public interface IUserResourceService
         IReadOnlyCollection<Guid> resourceIds,
         CancellationToken cancellationToken);
 
+    Task<Result<int>> DeleteResourcesAsync(
+        Guid userId,
+        IReadOnlyCollection<Guid> resourceIds,
+        CancellationToken cancellationToken);
+
     Task<Result<PublicUserProfileResult>> GetPublicUserProfileByUsernameAsync(
         string username,
         CancellationToken cancellationToken);

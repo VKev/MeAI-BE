@@ -12,15 +12,18 @@ public sealed class PostResponseBuilder
     private readonly IUserResourceService _userResourceService;
     private readonly IPostPublicationRepository _postPublicationRepository;
     private readonly IDraftPostTaskRepository? _draftPostTaskRepository;
+    private readonly IRecommendPostRepository? _recommendPostRepository;
 
     public PostResponseBuilder(
         IUserResourceService userResourceService,
         IPostPublicationRepository postPublicationRepository,
-        IDraftPostTaskRepository? draftPostTaskRepository = null)
+        IDraftPostTaskRepository? draftPostTaskRepository = null,
+        IRecommendPostRepository? recommendPostRepository = null)
     {
         _userResourceService = userResourceService;
         _postPublicationRepository = postPublicationRepository;
         _draftPostTaskRepository = draftPostTaskRepository;
+        _recommendPostRepository = recommendPostRepository;
     }
 
     public async Task<IReadOnlyList<PostResponse>> BuildManyAsync(
@@ -77,9 +80,10 @@ public sealed class PostResponseBuilder
             .ToDictionary(group => group.Key, group => (IReadOnlyList<PostPublication>)group.ToList());
 
         var recommendationTasksByPostId = await BuildRecommendationTasksByPostIdAsync(posts, cancellationToken);
+        var improveTasksByPostId = await BuildImproveTasksByPostIdAsync(posts, cancellationToken);
 
         return posts
-            .Select(post => Build(post, resourcesById, publicationsByPostId, authorsById, recommendationTasksByPostId))
+            .Select(post => Build(post, resourcesById, publicationsByPostId, authorsById, recommendationTasksByPostId, improveTasksByPostId))
             .ToList();
     }
 
@@ -94,7 +98,8 @@ public sealed class PostResponseBuilder
         IReadOnlyDictionary<Guid, UserResourcePresignResult> resourcesById,
         IReadOnlyDictionary<Guid, IReadOnlyList<PostPublication>> publicationsByPostId,
         IReadOnlyDictionary<Guid, PublicUserProfileResult> authorsById,
-        IReadOnlyDictionary<Guid, DraftPostTask> recommendationTasksByPostId)
+        IReadOnlyDictionary<Guid, DraftPostTask> recommendationTasksByPostId,
+        IReadOnlyDictionary<Guid, RecommendPost> improveTasksByPostId)
     {
         var media = GetResourceIds(post)
             .Where(resourcesById.ContainsKey)
@@ -142,6 +147,14 @@ public sealed class PostResponseBuilder
             post.Id,
             out var recommendationTask);
         var recommendationStatus = recommendationTask?.Status;
+        improveTasksByPostId.TryGetValue(post.Id, out var improveTask);
+        var improveStatus = improveTask?.Status;
+        var responseStatus = string.Equals(
+            recommendationStatus,
+            DraftPostTaskStatuses.Failed,
+            StringComparison.OrdinalIgnoreCase)
+                ? "failed"
+                : post.Status;
 
         return new PostResponse(
             Id: post.Id,
@@ -152,9 +165,10 @@ public sealed class PostResponseBuilder
             PostBuilderId: post.PostBuilderId,
             ChatSessionId: post.ChatSessionId,
             SocialMediaId: post.SocialMediaId,
+            Platform: post.Platform,
             Title: post.Title,
             Content: post.Content,
-            Status: post.Status,
+            Status: responseStatus,
             Schedule: schedule,
             IsPublished: publications.Any(publication =>
                 string.Equals(publication.PublishStatus, "published", StringComparison.OrdinalIgnoreCase)),
@@ -168,7 +182,15 @@ public sealed class PostResponseBuilder
             IsAiRecommendationDone: IsTerminalRecommendationStatus(recommendationStatus),
             AiRecommendationCompletedAt: recommendationTask?.CompletedAt,
             AiRecommendationErrorCode: recommendationTask?.ErrorCode,
-            AiRecommendationErrorMessage: recommendationTask?.ErrorMessage);
+            AiRecommendationErrorMessage: recommendationTask?.ErrorMessage,
+            AiImproveRecommendPostId: improveTask?.Id,
+            AiImproveCorrelationId: improveTask?.CorrelationId,
+            AiImproveStatus: improveStatus,
+            IsAiImproving: IsRunningImproveStatus(improveStatus),
+            IsAiImproveDone: IsTerminalImproveStatus(improveStatus),
+            AiImproveCompletedAt: improveTask?.CompletedAt,
+            AiImproveErrorCode: improveTask?.ErrorCode,
+            AiImproveErrorMessage: improveTask?.ErrorMessage);
     }
 
     private static PublicUserProfileResult CreateFallbackAuthor(Guid userId)
@@ -207,10 +229,52 @@ public sealed class PostResponseBuilder
                     .First());
     }
 
+    private async Task<IReadOnlyDictionary<Guid, RecommendPost>> BuildImproveTasksByPostIdAsync(
+        IReadOnlyList<Post> posts,
+        CancellationToken cancellationToken)
+    {
+        if (_recommendPostRepository is null)
+        {
+            return new Dictionary<Guid, RecommendPost>();
+        }
+
+        var postIds = posts
+            .Select(post => post.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (postIds.Count == 0)
+        {
+            return new Dictionary<Guid, RecommendPost>();
+        }
+
+        var tasks = await _recommendPostRepository.GetByOriginalPostIdsAsync(postIds, cancellationToken);
+        return tasks
+            .GroupBy(task => task.OriginalPostId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(task => task.CreatedAt)
+                    .ThenByDescending(task => task.CorrelationId)
+                    .First());
+    }
+
     private static bool IsTerminalRecommendationStatus(string? status)
     {
         return string.Equals(status, DraftPostTaskStatuses.Completed, StringComparison.OrdinalIgnoreCase) ||
                string.Equals(status, DraftPostTaskStatuses.Failed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRunningImproveStatus(string? status)
+    {
+        return string.Equals(status, RecommendPostStatuses.Submitted, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(status, RecommendPostStatuses.Processing, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTerminalImproveStatus(string? status)
+    {
+        return string.Equals(status, RecommendPostStatuses.Completed, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(status, RecommendPostStatuses.Failed, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyList<Guid> GetResourceIds(Post post)

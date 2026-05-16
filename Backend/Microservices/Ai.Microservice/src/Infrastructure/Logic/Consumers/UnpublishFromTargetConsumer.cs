@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Application.Abstractions.Feed;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Instagram;
 using Application.Abstractions.SocialMedias;
@@ -19,6 +20,7 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
     private const string InstagramType = "instagram";
     private const string TikTokType = "tiktok";
     private const string ThreadsType = "threads";
+    private const string MeAiFeedType = "meai_feed";
     private const string UnpublishingStatus = "unpublishing";
     private const string DraftStatus = "draft";
     private const string FailedStatus = "failed";
@@ -27,6 +29,7 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
     private readonly IPostRepository _postRepository;
     private readonly IPostPublicationRepository _postPublicationRepository;
     private readonly IUserSocialMediaService _userSocialMediaService;
+    private readonly IFeedPostPublishService _feedPostPublishService;
     private readonly IFacebookPublishService _facebookPublishService;
     private readonly IInstagramPublishService _instagramPublishService;
     private readonly IThreadsPublishService _threadsPublishService;
@@ -36,6 +39,7 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
         IPostRepository postRepository,
         IPostPublicationRepository postPublicationRepository,
         IUserSocialMediaService userSocialMediaService,
+        IFeedPostPublishService feedPostPublishService,
         IFacebookPublishService facebookPublishService,
         IInstagramPublishService instagramPublishService,
         IThreadsPublishService threadsPublishService,
@@ -44,6 +48,7 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
         _postRepository = postRepository;
         _postPublicationRepository = postPublicationRepository;
         _userSocialMediaService = userSocialMediaService;
+        _feedPostPublishService = feedPostPublishService;
         _facebookPublishService = facebookPublishService;
         _instagramPublishService = instagramPublishService;
         _threadsPublishService = threadsPublishService;
@@ -63,6 +68,13 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
         if (publication is null || publication.DeletedAt.HasValue)
         {
             _logger.LogWarning("Publication not found or already deleted. Id: {Id}", message.PublicationId);
+            return;
+        }
+
+        if (string.Equals(message.SocialMediaType, MeAiFeedType, StringComparison.OrdinalIgnoreCase))
+        {
+            await UnpublishFeedAsync(context, message, publication, ct);
+            await FinalizeIfDoneAsync(context, message, ct);
             return;
         }
 
@@ -200,6 +212,51 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
         }
 
         return Result.Failure<bool>(new Error("Unpublish.UnsupportedPlatform", $"Unsupported platform: {type}"));
+    }
+
+    private async Task UnpublishFeedAsync(
+        ConsumeContext<UnpublishFromTargetRequested> context,
+        UnpublishFromTargetRequested message,
+        Domain.Entities.PostPublication publication,
+        CancellationToken ct)
+    {
+        if (!Guid.TryParse(message.ExternalContentId, out var feedPostId) || feedPostId == Guid.Empty)
+        {
+            await FailAsync(context, message, publication, "Feed.InvalidPostId", "Invalid Feed post id.", ct);
+            return;
+        }
+
+        var result = await _feedPostPublishService.UnpublishAiPostFromFeedAsync(
+            new FeedDirectUnpublishRequest(message.UserId, feedPostId),
+            ct);
+
+        if (result.IsFailure)
+        {
+            await FailAsync(context, message, publication, result.Error.Code, result.Error.Description, ct);
+            return;
+        }
+
+        publication.DeletedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        publication.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        _postPublicationRepository.Update(publication);
+        await _postPublicationRepository.SaveChangesAsync(ct);
+
+        await context.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                message.UserId,
+                NotificationTypes.PostUnpublishTargetCompleted,
+                "Post unpublished",
+                "Removed from MeAI Feed.",
+                new
+                {
+                    message.CorrelationId,
+                    message.PostId,
+                    message.SocialMediaId,
+                    message.SocialMediaType,
+                    message.PublicationId
+                },
+                source: NotificationSourceConstants.Creator),
+            ct);
     }
 
     private async Task FailAsync(

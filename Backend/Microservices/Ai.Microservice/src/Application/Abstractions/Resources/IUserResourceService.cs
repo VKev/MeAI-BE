@@ -27,6 +27,12 @@ public interface IUserResourceService
         Guid? workspaceId = null,
         ResourceProvenanceMetadata? provenance = null);
 
+    Task<Result<int>> DeleteResourcesAsync(
+        Guid userId,
+        IReadOnlyCollection<Guid> resourceIds,
+        bool hardDelete,
+        CancellationToken cancellationToken);
+
     Task<Result<int>> BackfillResourceProvenanceAsync(
         IReadOnlyList<ResourceProvenanceBackfillRequest> items,
         CancellationToken cancellationToken);

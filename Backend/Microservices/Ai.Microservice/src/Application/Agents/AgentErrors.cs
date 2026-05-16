@@ -10,7 +10,7 @@ public static class AgentErrors
 
     public static readonly Error EmptyResponse = new(
         "Agent.EmptyResponse",
-        "Gemini did not return a response.");
+        "AI provider did not return a response.");
 
     public static readonly Error DuplicateMessageInProgress = new(
         "Agent.DuplicateMessageInProgress",

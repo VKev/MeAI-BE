@@ -11,8 +11,10 @@ using Domain.Entities;
 using FluentAssertions;
 using Infrastructure.Context;
 using Infrastructure.Repositories;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SharedLibrary.Common.ResponseModel;
 
@@ -69,6 +71,7 @@ public sealed class SocialOAuthLimitEnforcementTests
         using var unitOfWork = new UnitOfWork(dbContext);
         var facebookOAuthService = new Mock<IFacebookOAuthService>();
         var profileService = new Mock<ISocialMediaProfileService>();
+        var publishEndpoint = new Mock<IPublishEndpoint>();
         var stateService = new UserSubscriptionStateService(unitOfWork);
         var entitlementService = new UserSubscriptionEntitlementService(unitOfWork, stateService);
 
@@ -104,7 +107,9 @@ public sealed class SocialOAuthLimitEnforcementTests
             unitOfWork,
             facebookOAuthService.Object,
             entitlementService,
-            profileService.Object);
+            profileService.Object,
+            publishEndpoint.Object,
+            NullLogger<CompleteFacebookOAuthCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new CompleteFacebookOAuthCommand("valid-code", "valid-state", null, null),

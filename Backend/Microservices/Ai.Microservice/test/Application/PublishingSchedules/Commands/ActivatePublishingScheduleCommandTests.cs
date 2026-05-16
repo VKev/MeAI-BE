@@ -93,27 +93,12 @@ public sealed class ActivatePublishingScheduleCommandTests
                 new UserSocialMediaResult(socialMediaId, "facebook", "{}")
             ]));
 
-        var n8nClient = new Mock<IN8nWorkflowClient>(MockBehavior.Strict);
-        n8nClient
-            .Setup(client => client.RegisterScheduledAgentJobAsync(
-                It.Is<N8nScheduledAgentJobRequest>(request =>
-                    request.ScheduleId == scheduleId &&
-                    request.UserId == userId &&
-                    request.WorkspaceId == workspaceId &&
-                    request.Search.QueryTemplate == "tin nóng AI hôm nay" &&
-                    request.Search.Count == 5),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new N8nScheduledAgentJobAck(
-                "n8n-execution-reactivated",
-                DateTime.UtcNow)));
-
         var handler = new ActivatePublishingScheduleCommandHandler(
             scheduleRepository.Object,
             postRepository.Object,
             workspaceRepository.Object,
             postPublicationRepository.Object,
-            userSocialMediaService.Object,
-            n8nClient.Object);
+            userSocialMediaService.Object);
 
         var result = await handler.Handle(
             new ActivatePublishingScheduleCommand(scheduleId, userId),
@@ -128,15 +113,13 @@ public sealed class ActivatePublishingScheduleCommandTests
         var executionContext = AgenticScheduleExecutionContextSerializer.Parse(schedule.ExecutionContextJson);
         executionContext.Search.Should().NotBeNull();
         executionContext.Search!.QueryTemplate.Should().Be("tin nóng AI hôm nay");
-        executionContext.N8nJobId.Should().NotBeNull();
-        executionContext.N8nExecutionId.Should().Be("n8n-execution-reactivated");
+        executionContext.RegisteredAtUtc.Should().NotBeNull();
 
         scheduleRepository.VerifyAll();
         postRepository.VerifyAll();
         workspaceRepository.VerifyAll();
         postPublicationRepository.VerifyAll();
         userSocialMediaService.VerifyAll();
-        n8nClient.VerifyAll();
     }
 
     [Fact]
@@ -194,15 +177,12 @@ public sealed class ActivatePublishingScheduleCommandTests
 
         var userSocialMediaService = new Mock<IUserSocialMediaService>(MockBehavior.Strict);
 
-        var n8nClient = new Mock<IN8nWorkflowClient>(MockBehavior.Strict);
-
         var handler = new ActivatePublishingScheduleCommandHandler(
             scheduleRepository.Object,
             postRepository.Object,
             workspaceRepository.Object,
             postPublicationRepository.Object,
-            userSocialMediaService.Object,
-            n8nClient.Object);
+            userSocialMediaService.Object);
 
         var result = await handler.Handle(
             new ActivatePublishingScheduleCommand(scheduleId, userId),
@@ -216,6 +196,5 @@ public sealed class ActivatePublishingScheduleCommandTests
         workspaceRepository.VerifyAll();
         postPublicationRepository.VerifyNoOtherCalls();
         userSocialMediaService.VerifyAll();
-        n8nClient.VerifyNoOtherCalls();
     }
 }

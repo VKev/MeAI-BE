@@ -26,7 +26,8 @@ public sealed class GetResourcesQueryHandler
     [
         ResourceOriginKinds.UserUpload,
         ResourceOriginKinds.AiGenerated,
-        ResourceOriginKinds.AiImportedUrl
+        ResourceOriginKinds.AiImportedUrl,
+        ResourceOriginKinds.SocialMediaImported
     ];
     private readonly IRepository<Resource> _repository;
     private readonly IObjectStorageService _objectStorageService;

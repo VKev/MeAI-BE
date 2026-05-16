@@ -70,6 +70,40 @@ public sealed class UserResourceGrpcService : IUserResourceService
         }
     }
 
+    public async Task<Result<int>> DeleteResourcesAsync(
+        Guid userId,
+        IReadOnlyCollection<Guid> resourceIds,
+        CancellationToken cancellationToken)
+    {
+        var normalizedResourceIds = resourceIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (normalizedResourceIds.Count == 0)
+        {
+            return Result.Success(0);
+        }
+
+        try
+        {
+            var response = await _client.DeleteResourcesAsync(new DeleteResourcesRequest
+            {
+                UserId = userId.ToString(),
+                ResourceIds = { normalizedResourceIds.Select(id => id.ToString()) }
+            }, cancellationToken: cancellationToken);
+
+            return Result.Success(response.DeletedCount);
+        }
+        catch (RpcException ex)
+        {
+            return Result.Failure<int>(
+                new Error(
+                    ex.StatusCode == StatusCode.NotFound ? "UserResources.NotFound" : "UserResources.GrpcError",
+                    ex.Status.Detail));
+        }
+    }
+
     public async Task<Result<PublicUserProfileResult>> GetPublicUserProfileByUsernameAsync(
         string username,
         CancellationToken cancellationToken)

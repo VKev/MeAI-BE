@@ -135,7 +135,9 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
                             ["likes"] = post.ReactionCount ?? 0,
                             ["comments"] = post.CommentCount ?? 0,
                             ["shares"] = post.ShareCount ?? 0
-                        })))
+                        }),
+                    VideoDownloadUrl: post.VideoSourceUrl,
+                    MediaItems: MapFacebookMediaItems(post.MediaItems)))
                 .ToList();
 
             return Result.Success(new SocialPlatformPostsResponse(
@@ -495,6 +497,14 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
             cancellationToken);
 
         return postResult.IsSuccess ? postResult.Value : post;
+    }
+
+    private static IReadOnlyList<SocialPlatformPostMediaResponse>? MapFacebookMediaItems(
+        IReadOnlyList<FacebookPostMediaItem>? mediaItems)
+    {
+        return mediaItems?
+            .Select(media => new SocialPlatformPostMediaResponse(media.Url, media.ResourceType))
+            .ToList();
     }
 
     private static SocialPlatformPostStatsResponse? MergeStats(

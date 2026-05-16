@@ -16,7 +16,11 @@ namespace Application.Recommendations.Commands;
 public sealed record IndexSocialAccountPostsCommand(
     Guid UserId,
     Guid SocialMediaId,
-    int? MaxPosts = null) : IRequest<Result<IndexSocialAccountPostsResponse>>;
+    int? MaxPosts = null,
+    Func<IndexSocialAccountIngestFailureBatch, CancellationToken, Task>? OnIngestFailures = null,
+    Func<IndexSocialAccountReadBatch, CancellationToken, Task>? OnReadBatch = null,
+    bool StopOnProviderCreditFailure = false)
+    : IRequest<Result<IndexSocialAccountPostsResponse>>;
 
 public sealed class IndexSocialAccountPostsCommandHandler
     : IRequestHandler<IndexSocialAccountPostsCommand, Result<IndexSocialAccountPostsResponse>>
@@ -24,6 +28,7 @@ public sealed class IndexSocialAccountPostsCommandHandler
     private const int PageSize = 25;
     private const int DefaultMaxPosts = 200;
     private const int HardCapPosts = 2000;
+    private const int RagIngestBatchSize = 3;
 
     private const string ImageDescribePrompt =
         "Describe this social media post image so it can be retrieved by semantic search and used " +
@@ -116,6 +121,8 @@ public sealed class IndexSocialAccountPostsCommandHandler
         var queuedImage = 0;
         var queuedVideo = 0;
         var queuedProfile = 0;
+        var failedIngestDocuments = new List<IndexSocialAccountIngestFailure>();
+        var readItemsByDocumentId = new Dictionary<string, IndexSocialAccountPostReadItem>(StringComparer.Ordinal);
 
         // Page profile (the "Giới thiệu" / About section + category + website + location).
         // Ingested as a single text doc per account so the recommendation/draft LLM can
@@ -135,6 +142,7 @@ public sealed class IndexSocialAccountPostsCommandHandler
                     Fingerprint = profileDoc.Value.Fingerprint,
                     Content = profileDoc.Value.Content,
                 });
+                readItemsByDocumentId[profileDocId] = BuildProfileReadItem();
                 queuedProfile++;
             }
         }
@@ -166,6 +174,7 @@ public sealed class IndexSocialAccountPostsCommandHandler
                     Fingerprint = textFingerprint,
                     Content = textContent,
                 });
+                readItemsByDocumentId[textDocId] = BuildPostReadItem(post, "text");
                 queuedText++;
             }
 
@@ -190,6 +199,7 @@ public sealed class IndexSocialAccountPostsCommandHandler
                         Caption = caption,
                         DescribePrompt = ImageDescribePrompt,
                     });
+                    readItemsByDocumentId[imageDocId] = BuildPostReadItem(post, "image description");
                     queuedImage++;
                 }
 
@@ -213,18 +223,25 @@ public sealed class IndexSocialAccountPostsCommandHandler
                         Scope = prefix,
                         PostId = post.PlatformPostId,
                     });
+                    readItemsByDocumentId[visualDocId] = BuildPostReadItem(post, "image embedding");
                     queuedImage++;
                 }
             }
 
             // Path 3: VideoRAG — only fires when the post is a video. Heavier
             // than image_native (download + ffmpeg + multi-frame Gemini calls)
-            // so we gate strictly on MediaType + a fetchable MediaUrl.
+            // so we gate strictly on MediaType + a fetchable video URL.
             var videoUrl = SelectVideoUrl(post);
             if (videoUrl is not null)
             {
                 var videoDocId = $"{prefix}{post.PlatformPostId}:vid:0";
-                var videoFingerprint = ComputeFingerprint(videoUrl);
+                var videoFingerprint = ComputeFingerprint(
+                    string.Concat(
+                        post.PlatformPostId,
+                        "|",
+                        post.MediaType,
+                        "|",
+                        post.PublishedAt?.ToUnixTimeSeconds()));
                 var videoStatus = Classify(existing, videoDocId, videoFingerprint);
 
                 if (videoStatus != DocStatus.Unchanged)
@@ -240,6 +257,7 @@ public sealed class IndexSocialAccountPostsCommandHandler
                         PostId = post.PlatformPostId,
                         Scope = prefix,
                     });
+                    readItemsByDocumentId[videoDocId] = BuildPostReadItem(post, "video");
                     queuedVideo++;
                 }
             }
@@ -262,21 +280,62 @@ public sealed class IndexSocialAccountPostsCommandHandler
                 queuedVideo,
                 queuedProfile);
 
-            var ingestResults = await _ragClient.IngestBatchSyncAsync(docsToQueue, cancellationToken);
-
             var ingested = 0; var unchanged = 0; var failed = 0;
-            foreach (var r in ingestResults)
+            foreach (var batch in docsToQueue.Chunk(RagIngestBatchSize))
             {
-                switch ((r.Status ?? string.Empty).ToLowerInvariant())
+                if (request.OnReadBatch is not null)
                 {
-                    case "ingested":
-                    case "updated":  ingested++; break;
-                    case "unchanged": unchanged++; break;
-                    case "failed":
-                        failed++;
-                        _logger.LogWarning(
-                            "RAG ingest failed for {DocId}: {Error}", r.DocumentId, r.Error);
-                        break;
+                    var postsInBatch = BuildReadBatchItems(batch, readItemsByDocumentId);
+                    if (postsInBatch.Count > 0)
+                    {
+                        await request.OnReadBatch(
+                            new IndexSocialAccountReadBatch(
+                                request.SocialMediaId,
+                                platform,
+                                prefix,
+                                postsInBatch),
+                            cancellationToken);
+                    }
+                }
+
+                var ingestResults = await _ragClient.IngestBatchSyncAsync(batch, cancellationToken);
+                var batchFailures = new List<IndexSocialAccountIngestFailure>();
+
+                foreach (var r in ingestResults)
+                {
+                    switch ((r.Status ?? string.Empty).ToLowerInvariant())
+                    {
+                        case "ingested":
+                        case "updated":  ingested++; break;
+                        case "unchanged": unchanged++; break;
+                        case "failed":
+                            failed++;
+                            var failure = new IndexSocialAccountIngestFailure(r.DocumentId, r.Error);
+                            failedIngestDocuments.Add(failure);
+                            batchFailures.Add(failure);
+                            _logger.LogWarning(
+                                "RAG ingest failed for {DocId}: {Error}", r.DocumentId, r.Error);
+                            break;
+                    }
+                }
+
+                if (batchFailures.Count > 0 && request.OnIngestFailures is not null)
+                {
+                    await request.OnIngestFailures(
+                        new IndexSocialAccountIngestFailureBatch(
+                            request.SocialMediaId,
+                            platform,
+                            prefix,
+                            batchFailures),
+                        cancellationToken);
+                }
+
+                if (request.StopOnProviderCreditFailure && batchFailures.Any(item => LooksLikeProviderCreditFailure(item.Error)))
+                {
+                    _logger.LogWarning(
+                        "Stopping RAG ingest early for socialMediaId={SocialMediaId} because the provider reported insufficient credits.",
+                        request.SocialMediaId);
+                    break;
                 }
             }
             _logger.LogInformation(
@@ -302,7 +361,8 @@ public sealed class IndexSocialAccountPostsCommandHandler
             QueuedTextDocuments: queuedText,
             QueuedImageDocuments: queuedImage,
             QueuedVideoDocuments: queuedVideo,
-            QueuedProfileDocuments: queuedProfile));
+            QueuedProfileDocuments: queuedProfile,
+            FailedIngestDocuments: failedIngestDocuments));
     }
 
     /// <summary>
@@ -403,14 +463,107 @@ public sealed class IndexSocialAccountPostsCommandHandler
             return null;
         }
 
-        // The rag-microservice resolves the URL via yt-dlp, which handles both
-        // direct CDN mp4s AND viewer pages (facebook.com/reel/..., /watch/, /videos/),
-        // including DASH split-track muxing. So any http(s) URL is acceptable here.
-        if (!Uri.TryCreate(post.MediaUrl, UriKind.Absolute, out var uri))
+        // Prefer direct platform API video sources for Page-owned Facebook reels/videos.
+        // Viewer URLs stay as a fallback for platforms where only the public URL exists.
+        var videoUrl = FirstNonEmpty(post.VideoDownloadUrl, post.MediaUrl);
+        if (!Uri.TryCreate(videoUrl, UriKind.Absolute, out var uri))
         {
             return null;
         }
-        return uri.Scheme is "http" or "https" ? post.MediaUrl : null;
+        return uri.Scheme is "http" or "https" ? videoUrl : null;
+    }
+
+    private static IndexSocialAccountPostReadItem BuildProfileReadItem()
+    {
+        return new IndexSocialAccountPostReadItem(
+            PlatformPostId: "profile",
+            Title: "Page profile",
+            TextPreview: "About, category, website, contact, and location context.",
+            MediaType: "profile",
+            Permalink: null,
+            PublishedAt: null,
+            DocumentKinds: new[] { "profile" });
+    }
+
+    private static IndexSocialAccountPostReadItem BuildPostReadItem(
+        SocialPlatformPostSummaryResponse post,
+        string documentKind)
+    {
+        var title = FirstNonEmpty(post.Title, PreviewText(post.Text, 90), $"Post {post.PlatformPostId}");
+        var preview = FirstNonEmpty(PreviewText(post.Text), PreviewText(post.Description));
+
+        return new IndexSocialAccountPostReadItem(
+            PlatformPostId: post.PlatformPostId,
+            Title: title,
+            TextPreview: preview,
+            MediaType: post.MediaType,
+            Permalink: FirstNonEmpty(post.Permalink, post.ShareUrl),
+            PublishedAt: post.PublishedAt,
+            DocumentKinds: new[] { documentKind });
+    }
+
+    private static IReadOnlyList<IndexSocialAccountPostReadItem> BuildReadBatchItems(
+        IEnumerable<RagIngestMessage> batch,
+        IReadOnlyDictionary<string, IndexSocialAccountPostReadItem> readItemsByDocumentId)
+    {
+        var posts = new Dictionary<string, IndexSocialAccountPostReadItem>(StringComparer.Ordinal);
+
+        foreach (var doc in batch)
+        {
+            if (!readItemsByDocumentId.TryGetValue(doc.DocumentId, out var item))
+            {
+                continue;
+            }
+
+            if (posts.TryGetValue(item.PlatformPostId, out var existing))
+            {
+                var documentKinds = existing.DocumentKinds
+                    .Concat(item.DocumentKinds)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                posts[item.PlatformPostId] = existing with { DocumentKinds = documentKinds };
+                continue;
+            }
+
+            posts[item.PlatformPostId] = item;
+        }
+
+        return posts.Values.ToArray();
+    }
+
+    private static string? PreviewText(string? value, int max = 220)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var compact = string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return compact.Length <= max ? compact : compact[..max] + "...";
+    }
+
+    private static string FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static bool LooksLikeProviderCreditFailure(string? error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            return false;
+        }
+
+        return error.Contains("HTTP 402", StringComparison.OrdinalIgnoreCase)
+               || error.Contains("Insufficient credits", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildPrefix(string platform, Guid socialMediaId)

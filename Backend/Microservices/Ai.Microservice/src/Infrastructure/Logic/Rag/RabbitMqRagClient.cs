@@ -239,7 +239,7 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
                     Score: hit.TryGetProperty("score", out var sc) && sc.ValueKind == JsonValueKind.Number
                         ? sc.GetDouble()
                         : 0d,
-                    MirroredImageUrl: ReadString(hit, "mirroredImageUrl")));
+                    MirroredImageUrl: NormalizeS3PublicUrl(ReadString(hit, "mirroredImageUrl"))));
             }
         }
 
@@ -264,7 +264,7 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
                         : (hit.TryGetProperty("score", out var sc) && sc.ValueKind == JsonValueKind.Number ? sc.GetDouble() : 0d),
                     // Frame-level fields — populated when the segment store has per-frame
                     // vectors (frame_url is the S3 URL of the highest-scoring sampled frame).
-                    FrameUrl: ReadString(hit, "frameUrl") ?? ReadString(hit, "frame_url"),
+                    FrameUrl: NormalizeS3PublicUrl(ReadString(hit, "frameUrl") ?? ReadString(hit, "frame_url")),
                     FrameIndex: hit.TryGetProperty("frameIndex", out var fi) && fi.ValueKind == JsonValueKind.Number
                         ? fi.GetInt32()
                         : (hit.TryGetProperty("frame_index", out var fi2) && fi2.ValueKind == JsonValueKind.Number ? fi2.GetInt32() : (int?)null)));
@@ -293,6 +293,43 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
             return value.GetString();
         }
         return null;
+    }
+
+    private string? NormalizeS3PublicUrl(string? rawUrl)
+    {
+        if (string.IsNullOrWhiteSpace(rawUrl) ||
+            string.IsNullOrWhiteSpace(_options.S3PublicBaseUrl) ||
+            !Uri.TryCreate(rawUrl, UriKind.Absolute, out var source) ||
+            !IsS3Host(source.Host) ||
+            !Uri.TryCreate(_options.S3PublicBaseUrl, UriKind.Absolute, out var publicBase))
+        {
+            return rawUrl;
+        }
+
+        var builder = new UriBuilder(source)
+        {
+            Scheme = publicBase.Scheme,
+            Host = publicBase.Host,
+            Port = publicBase.IsDefaultPort ? -1 : publicBase.Port,
+        };
+
+        var basePath = publicBase.AbsolutePath.Trim('/');
+        if (!string.IsNullOrWhiteSpace(basePath))
+        {
+            builder.Path = $"{basePath}/{source.AbsolutePath.TrimStart('/')}";
+        }
+
+        return builder.Uri.ToString();
+    }
+
+    private static bool IsS3Host(string host)
+    {
+        return host.Equals("s3.amazonaws.com", StringComparison.OrdinalIgnoreCase) ||
+               (host.StartsWith("s3.", StringComparison.OrdinalIgnoreCase) &&
+                host.EndsWith(".amazonaws.com", StringComparison.OrdinalIgnoreCase)) ||
+               host.EndsWith(".s3.amazonaws.com", StringComparison.OrdinalIgnoreCase) ||
+               (host.Contains(".s3.", StringComparison.OrdinalIgnoreCase) &&
+                host.EndsWith(".amazonaws.com", StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task WaitForRagReadyAsync(CancellationToken cancellationToken)

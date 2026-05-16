@@ -30,6 +30,10 @@ public sealed record StartImprovePostRequest(
     /// improve flow inherits the original post's stored style (falling back to
     /// "branded").</summary>
     string? Style = null,
+    /// <summary>Optional platform hint ("facebook" | "instagram" | "tiktok" |
+    /// "threads"). Used when the original post is not bound to a SocialMediaId.
+    /// Connected posts still use their linked social account as the source of truth.</summary>
+    string? Platform = null,
     /// <summary>Optional free-form steering text from the user (e.g.
     /// "make the caption more playful", "use a cooler color palette in the image").
     /// Forwarded into both the caption and image-brief prompts when present.</summary>

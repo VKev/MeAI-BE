@@ -218,6 +218,7 @@ class IngestService:
         }
 
         any_success = False
+        failure_reasons: list[str] = []
         try:
             image_vec = await self._embedder.embed_image(embed_url, caption)
             await self._visual.upsert_point(
@@ -228,10 +229,13 @@ class IngestService:
                 payload=common_payload,
             )
             any_success = True
-        except Exception:
+        except Exception as ex:
+            reason = str(ex)
+            failure_reasons.append(f"image embedding: {reason[:500]}")
             logger.warning(
-                "Image embedding failed for %s; will be retried on next /index",
+                "Image embedding failed for %s (%s); will be retried on next /index",
                 document_id,
+                reason[:240],
             )
 
         if caption:
@@ -245,15 +249,21 @@ class IngestService:
                     payload=common_payload,
                 )
                 any_success = True
-            except Exception:
+            except Exception as ex:
+                reason = str(ex)
+                failure_reasons.append(f"caption embedding: {reason[:500]}")
                 logger.warning(
-                    "Caption embedding failed for %s; will be retried on next /index",
+                    "Caption embedding failed for %s (%s); will be retried on next /index",
                     document_id,
+                    reason[:240],
                 )
 
         if not any_success:
             # Don't record fingerprint — next index attempt re-tries.
-            raise RuntimeError(f"All multimodal embeddings failed for {document_id}")
+            joined_reasons = "; ".join(failure_reasons) or "unknown provider error"
+            raise RuntimeError(
+                f"All multimodal embeddings failed for {document_id}: {joined_reasons[:900]}"
+            )
 
         await self._fingerprints.record(document_id, fingerprint)
         return {

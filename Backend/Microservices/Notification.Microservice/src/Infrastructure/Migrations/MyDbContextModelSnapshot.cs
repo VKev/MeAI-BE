@@ -72,6 +72,9 @@ namespace Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("notifications_pkey");
 
+                    b.HasIndex(new[] { "Source", "Type", "CreatedAt" }, "ix_notifications_source_type_created_at")
+                        .IsDescending(false, false, true);
+
                     b.HasIndex(new[] { "Type", "CreatedAt" }, "ix_notifications_type_created_at")
                         .IsDescending(false, true);
 
@@ -115,6 +118,9 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("user_notifications_pkey");
+
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "ix_user_notifications_user_created_at")
+                        .IsDescending(false, true);
 
                     b.HasIndex(new[] { "UserId", "WasOnlineWhenCreated" }, "ix_user_notifications_user_online_snapshot");
 

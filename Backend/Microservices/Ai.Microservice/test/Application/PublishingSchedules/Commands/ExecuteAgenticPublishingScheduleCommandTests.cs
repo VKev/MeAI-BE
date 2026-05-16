@@ -17,18 +17,21 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace AiMicroservice.Tests.Application.PublishingSchedules.Commands;
 
-public sealed class HandleAgentScheduleRuntimeResultCommandTests
+public sealed class ExecuteAgenticPublishingScheduleCommandTests
 {
     [Fact]
-    public async Task Handle_ShouldCreateRuntimePostAndPublishIt()
+    public async Task Handle_ShouldCreateOneRuntimePostPerPlatformAndPublishEachGroup()
     {
         var scheduleId = Guid.NewGuid();
         var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
         var primarySocialMediaId = Guid.NewGuid();
         var socialMediaId = Guid.NewGuid();
-        var runtimePostId = Guid.NewGuid();
-        var callbackJobId = Guid.NewGuid();
+        var runtimeTikTokPostId = Guid.NewGuid();
+        var runtimeFacebookPostId = Guid.NewGuid();
+        var runtimePostBuilderId = Guid.NewGuid();
+        var sharedResourceId = Guid.NewGuid();
+        var facebookOnlyResourceId = Guid.NewGuid();
 
         var schedule = new PublishingSchedule
         {
@@ -45,13 +48,13 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
             MaxContentLength = 280,
             ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(
                 new AgenticScheduleExecutionContext(
+                    DesiredPostType: "posts",
                     Search: new PublishingScheduleSearchInput(
                         "kết quả xổ số miền bắc hôm nay",
                         5,
                         "VN",
                         "vi",
-                        "pd"),
-                    N8nJobId: callbackJobId)),
+                        "pd"))),
             Targets =
             [
                 new PublishingScheduleTarget
@@ -78,51 +81,76 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
             .Setup(repository => repository.GetByIdForUpdateAsync(scheduleId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(schedule);
         scheduleRepository
+            .Setup(repository => repository.AddItem(It.IsAny<PublishingScheduleItem>()));
+        scheduleRepository
             .Setup(repository => repository.Update(schedule));
         scheduleRepository
             .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
         var runtimeContentService = new Mock<IAgenticRuntimeContentService>(MockBehavior.Strict);
-        var webSearchEnrichmentService = new Mock<IWebSearchEnrichmentService>(MockBehavior.Strict);
-        webSearchEnrichmentService
-            .Setup(service => service.EnrichAsync(
-                It.Is<N8nWebSearchResponse>(search =>
+        var agentWebSearchService = new Mock<IAgentWebSearchService>(MockBehavior.Strict);
+        agentWebSearchService
+            .Setup(service => service.SearchAsync(
+                It.Is<AgentWebSearchRequest>(search =>
                     search.Query == "kết quả xổ số miền bắc hôm nay" &&
-                    search.Results.Count == 1),
-                userId,
-                workspaceId,
-                null,
-                null,
+                    search.Count == 5 &&
+                    search.UserId == userId &&
+                    search.WorkspaceId == workspaceId),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new N8nWebSearchResponse(
+            .ReturnsAsync(Result.Success(new AgentWebSearchResponse(
                 "kết quả xổ số miền bắc hôm nay",
                 DateTime.UtcNow,
                 [
-                    new N8nWebSearchResultItem(
+                    new AgentWebSearchResultItem(
                         "KQXS",
                         "https://example.com",
                         "Mô tả",
-                        "example.com",
+                        "search",
                         "KQXS Mien Bac",
                         "Chi tiet noi dung trang",
                         ["https://example.com/image.jpg"])
                 ],
                 "context",
                 [
-                    new N8nImportedResourceItem(
+                    new ImportedResourceItem(
                         Guid.NewGuid(),
                         "https://cdn.example.com/image.jpg",
                         "image/jpeg",
                         "image",
                         "https://example.com/image.jpg",
                         "https://example.com")
-                ]));
+                ])));
+        runtimeContentService
+            .Setup(service => service.GeneratePostDraftAsync(
+                It.Is<AgenticRuntimeContentRequest>(request =>
+                    request.ScheduleId == scheduleId &&
+                    request.PlatformPreference == "tiktok" &&
+                    request.DesiredPostType == "reels" &&
+                    request.RequiresVideoMedia == true &&
+                    request.RequiresSingleMedia == true &&
+                    request.AllowTextOnly == false &&
+                    request.MaxContentLength == 280 &&
+                    request.GroundingSocialMediaId == primarySocialMediaId &&
+                    request.GroundingPlatform == "tiktok" &&
+                    request.Search.Query == "kết quả xổ số miền bắc hôm nay" &&
+                    request.RecommendationSummary == "Đăng kết quả xổ số theo giọng điệu ngắn gọn, rõ số và CTA theo dõi page."),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new AgenticRuntimePostDraft(
+                "KQXS Miền Bắc TikTok",
+                "Kết quả xổ số miền Bắc hôm nay: 12345",
+                "#xoso #mienbac #tiktok",
+                "reels",
+                [sharedResourceId],
+                [new AgenticRuntimeDraftResource(sharedResourceId, "video")])));
         runtimeContentService
             .Setup(service => service.GeneratePostDraftAsync(
                 It.Is<AgenticRuntimeContentRequest>(request =>
                     request.ScheduleId == scheduleId &&
                     request.PlatformPreference == "facebook" &&
+                    request.DesiredPostType == "posts" &&
+                    request.RequiresVideoMedia == false &&
+                    request.AllowTextOnly == true &&
                     request.MaxContentLength == 280 &&
                     request.GroundingSocialMediaId == socialMediaId &&
                     request.GroundingPlatform == "facebook" &&
@@ -130,10 +158,15 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                     request.RecommendationSummary == "Đăng kết quả xổ số theo giọng điệu ngắn gọn, rõ số và CTA theo dõi page."),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new AgenticRuntimePostDraft(
-                "KQXS Miền Bắc",
+                "KQXS Miền Bắc Facebook",
                 "Kết quả xổ số miền Bắc hôm nay: 12345",
                 "#xoso #mienbac",
-                "posts")));
+                "posts",
+                [sharedResourceId, facebookOnlyResourceId],
+                [
+                    new AgenticRuntimeDraftResource(sharedResourceId, "image"),
+                    new AgenticRuntimeDraftResource(facebookOnlyResourceId, "image")
+                ])));
 
         var ragClient = new Mock<IRagClient>(MockBehavior.Strict);
         ragClient
@@ -179,29 +212,32 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 It.Is<CreatePostCommand>(command =>
                     command.UserId == userId &&
                     command.WorkspaceId == workspaceId &&
-                    command.Platform == "facebook" &&
+                    command.Platform == "tiktok" &&
+                    command.PostBuilderId == null &&
                     command.NewPostBuilderOrigin == PostBuilderOriginKinds.AiOther &&
                     command.Content != null &&
-                    command.Content.PostType == "posts" &&
+                    command.Content.PostType == "reels" &&
                     command.Content.ResourceList != null &&
-                    command.Content.ResourceList.Count == 1),
+                    command.Content.ResourceList.Count == 1 &&
+                    command.Content.ResourceList.Contains(sharedResourceId.ToString())),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new PostResponse(
-                runtimePostId,
+                runtimeTikTokPostId,
                 userId,
                 "user",
                 null,
                 workspaceId,
-                Guid.NewGuid(),
+                runtimePostBuilderId,
                 null,
-                null,
-                "KQXS Miền Bắc",
+                primarySocialMediaId,
+                "tiktok",
+                "KQXS Miền Bắc TikTok",
                 new PostContent
                 {
                     Content = "Kết quả xổ số miền Bắc hôm nay: 12345",
-                    Hashtag = "#xoso #mienbac",
-                    PostType = "posts",
-                    ResourceList = []
+                    Hashtag = "#xoso #mienbac #tiktok",
+                    PostType = "reels",
+                    ResourceList = [sharedResourceId.ToString()]
                 },
                 "draft",
                 null,
@@ -212,19 +248,76 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 DateTime.UtcNow)));
         mediator
             .Setup(m => m.Send(
+                It.Is<CreatePostCommand>(command =>
+                    command.UserId == userId &&
+                    command.WorkspaceId == workspaceId &&
+                    command.Platform == "facebook" &&
+                    command.PostBuilderId == runtimePostBuilderId &&
+                    command.NewPostBuilderOrigin == PostBuilderOriginKinds.AiOther &&
+                    command.Content != null &&
+                    command.Content.PostType == "posts" &&
+                    command.Content.ResourceList != null &&
+                    command.Content.ResourceList.Count == 2 &&
+                    command.Content.ResourceList.Contains(sharedResourceId.ToString()) &&
+                    command.Content.ResourceList.Contains(facebookOnlyResourceId.ToString())),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PostResponse(
+                runtimeFacebookPostId,
+                userId,
+                "user",
+                null,
+                workspaceId,
+                runtimePostBuilderId,
+                null,
+                socialMediaId,
+                "facebook",
+                "KQXS Miền Bắc Facebook",
+                new PostContent
+                {
+                    Content = "Kết quả xổ số miền Bắc hôm nay: 12345",
+                    Hashtag = "#xoso #mienbac",
+                    PostType = "posts",
+                    ResourceList = [sharedResourceId.ToString(), facebookOnlyResourceId.ToString()]
+                },
+                "draft",
+                null,
+                false,
+                [],
+                [],
+                DateTime.UtcNow,
+                DateTime.UtcNow)));
+        mediator
+            .Setup(m => m.Send(
+                It.Is<AddPostBuilderResourcesCommand>(command =>
+                    command.PostBuilderId == runtimePostBuilderId &&
+                    command.UserId == userId &&
+                    command.ResourceIds.Count == 2 &&
+                    command.ResourceIds.Contains(sharedResourceId) &&
+                    command.ResourceIds.Contains(facebookOnlyResourceId)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PostBuilderResourcesResponse(
+                runtimePostBuilderId,
+                [sharedResourceId, facebookOnlyResourceId])));
+        mediator
+            .Setup(m => m.Send(
                 It.Is<PublishPostsCommand>(command =>
                     command.UserId == userId &&
-                    command.Targets.Count == 1 &&
-                    command.Targets[0].PostId == runtimePostId &&
-                    command.Targets[0].PublishingScheduleId == scheduleId &&
-                    command.Targets[0].SocialMediaIds.Count == 2 &&
-                    command.Targets[0].SocialMediaIds.Contains(primarySocialMediaId) &&
-                    command.Targets[0].SocialMediaIds.Contains(socialMediaId)),
+                    command.Targets.Count == 2 &&
+                    command.Targets.Any(target =>
+                        target.PostId == runtimeTikTokPostId &&
+                        target.PublishingScheduleId == scheduleId &&
+                        target.SocialMediaIds.Count == 1 &&
+                        target.SocialMediaIds.Contains(primarySocialMediaId)) &&
+                    command.Targets.Any(target =>
+                        target.PostId == runtimeFacebookPostId &&
+                        target.PublishingScheduleId == scheduleId &&
+                        target.SocialMediaIds.Count == 1 &&
+                        target.SocialMediaIds.Contains(socialMediaId))),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new PublishPostsResponse(
             [
                 new PublishPostResponse(
-                    runtimePostId,
+                    runtimeTikTokPostId,
                     "processing",
                     [
                         new PublishPostDestinationResult(
@@ -234,6 +327,11 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                             string.Empty,
                             Guid.NewGuid(),
                             "processing"),
+                    ]),
+                new PublishPostResponse(
+                    runtimeFacebookPostId,
+                    "processing",
+                    [
                         new PublishPostDestinationResult(
                             socialMediaId,
                             "facebook",
@@ -244,49 +342,43 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                     ])
             ])));
 
-        var handler = new HandleAgentScheduleRuntimeResultCommandHandler(
+        var handler = new ExecuteAgenticPublishingScheduleCommandHandler(
             scheduleRepository.Object,
             runtimeContentService.Object,
-            webSearchEnrichmentService.Object,
+            agentWebSearchService.Object,
             mediator.Object,
             ragClient.Object);
 
         var result = await handler.Handle(
-            new HandleAgentScheduleRuntimeResultCommand(
-                scheduleId,
-                callbackJobId,
-                new N8nWebSearchResponse(
-                    "kết quả xổ số miền bắc hôm nay",
-                    DateTime.UtcNow,
-                    [
-                        new N8nWebSearchResultItem(
-                            "KQXS",
-                            "https://example.com",
-                            "Mô tả",
-                            "example.com")
-                    ],
-                    "context")),
+            new ExecuteAgenticPublishingScheduleCommand(scheduleId),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeTrue();
 
         schedule.Status.Should().Be(PublishingScheduleState.StatusPublishing);
-        schedule.Items.Should().ContainSingle(item =>
-            item.ItemId == runtimePostId &&
+        schedule.Items.Should().HaveCount(2);
+        schedule.Items.Should().Contain(item =>
+            item.ItemId == runtimeTikTokPostId &&
+            item.ItemType == PublishingScheduleState.ItemTypePost &&
+            item.Status == PublishingScheduleState.ItemStatusPublishing);
+        schedule.Items.Should().Contain(item =>
+            item.ItemId == runtimeFacebookPostId &&
             item.ItemType == PublishingScheduleState.ItemTypePost &&
             item.Status == PublishingScheduleState.ItemStatusPublishing);
 
         var updatedContext = AgenticScheduleExecutionContextSerializer.Parse(schedule.ExecutionContextJson);
-        updatedContext.LastProcessedCallbackJobId.Should().Be(callbackJobId);
-        updatedContext.RuntimePostId.Should().Be(runtimePostId);
+        updatedContext.LastExecutionRunId.Should().NotBeNull();
+        updatedContext.RuntimePostId.Should().Be(runtimeTikTokPostId);
+        updatedContext.RuntimePostBuilderId.Should().Be(runtimePostBuilderId);
+        updatedContext.RuntimePostIds.Should().BeEquivalentTo([runtimeTikTokPostId, runtimeFacebookPostId]);
         updatedContext.LastQuery.Should().Be("kết quả xổ số miền bắc hôm nay");
         updatedContext.GroundingSocialMediaId.Should().Be(socialMediaId);
         updatedContext.LastRecommendationQuery.Should().NotBeNull();
         updatedContext.LastRecommendationSummary.Should().Contain("xổ số");
 
         scheduleRepository.VerifyAll();
-        webSearchEnrichmentService.VerifyAll();
+        agentWebSearchService.VerifyAll();
         runtimeContentService.VerifyAll();
         ragClient.VerifyAll();
         mediator.VerifyAll();
@@ -300,7 +392,8 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
         var workspaceId = Guid.NewGuid();
         var socialMediaId = Guid.NewGuid();
         var runtimePostId = Guid.NewGuid();
-        var callbackJobId = Guid.NewGuid();
+        var runtimePostBuilderId = Guid.NewGuid();
+        var sharedResourceId = Guid.NewGuid();
 
         var schedule = new PublishingSchedule
         {
@@ -316,7 +409,8 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
             AgentPrompt = "Đăng tin nóng lên Facebook.",
             MaxContentLength = 220,
             ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(
-                new AgenticScheduleExecutionContext(N8nJobId: callbackJobId)),
+                new AgenticScheduleExecutionContext(
+                    Search: new PublishingScheduleSearchInput("tin nóng AI", 5, null, null, "pd"))),
             Targets =
             [
                 new PublishingScheduleTarget
@@ -333,6 +427,8 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
         scheduleRepository
             .Setup(repository => repository.GetByIdForUpdateAsync(scheduleId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(schedule);
+        scheduleRepository
+            .Setup(repository => repository.AddItem(It.IsAny<PublishingScheduleItem>()));
         scheduleRepository
             .Setup(repository => repository.Update(schedule));
         scheduleRepository
@@ -352,24 +448,21 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 "Fallback post",
                 "Fallback content from search results",
                 null,
-                "posts")));
+                "posts",
+                [sharedResourceId])));
 
-        var webSearchEnrichmentService = new Mock<IWebSearchEnrichmentService>(MockBehavior.Strict);
-        webSearchEnrichmentService
-            .Setup(service => service.EnrichAsync(
-                It.IsAny<N8nWebSearchResponse>(),
-                userId,
-                workspaceId,
-                null,
-                null,
+        var agentWebSearchService = new Mock<IAgentWebSearchService>(MockBehavior.Strict);
+        agentWebSearchService
+            .Setup(service => service.SearchAsync(
+                It.IsAny<AgentWebSearchRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new N8nWebSearchResponse(
+            .ReturnsAsync(Result.Success(new AgentWebSearchResponse(
                 "tin nóng AI",
                 DateTime.UtcNow,
                 [
-                    new N8nWebSearchResultItem("Tin nóng", "https://example.com", "Mô tả", "example.com")
+                    new AgentWebSearchResultItem("Tin nóng", "https://example.com", "Mô tả", "search")
                 ],
-                "context"));
+                "context")));
 
         var ragClient = new Mock<IRagClient>(MockBehavior.Strict);
         ragClient
@@ -393,15 +486,16 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 "user",
                 null,
                 workspaceId,
-                Guid.NewGuid(),
+                runtimePostBuilderId,
                 null,
                 null,
+                "facebook",
                 "Fallback post",
                 new PostContent
                 {
                     Content = "Fallback content from search results",
                     PostType = "posts",
-                    ResourceList = []
+                    ResourceList = [sharedResourceId.ToString()]
                 },
                 "draft",
                 null,
@@ -410,6 +504,17 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                 [],
                 DateTime.UtcNow,
                 DateTime.UtcNow)));
+        mediator
+            .Setup(m => m.Send(
+                It.Is<AddPostBuilderResourcesCommand>(command =>
+                    command.PostBuilderId == runtimePostBuilderId &&
+                    command.UserId == userId &&
+                    command.ResourceIds.Count == 1 &&
+                    command.ResourceIds[0] == sharedResourceId),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new PostBuilderResourcesResponse(
+                runtimePostBuilderId,
+                [sharedResourceId])));
         mediator
             .Setup(m => m.Send(
                 It.IsAny<PublishPostsCommand>(),
@@ -430,22 +535,15 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
                     ])
             ])));
 
-        var handler = new HandleAgentScheduleRuntimeResultCommandHandler(
+        var handler = new ExecuteAgenticPublishingScheduleCommandHandler(
             scheduleRepository.Object,
             runtimeContentService.Object,
-            webSearchEnrichmentService.Object,
+            agentWebSearchService.Object,
             mediator.Object,
             ragClient.Object);
 
         var result = await handler.Handle(
-            new HandleAgentScheduleRuntimeResultCommand(
-                scheduleId,
-                callbackJobId,
-                new N8nWebSearchResponse(
-                    "tin nóng AI",
-                    DateTime.UtcNow,
-                    [new N8nWebSearchResultItem("Tin nóng", "https://example.com", "Mô tả", "example.com")],
-                    "context")),
+            new ExecuteAgenticPublishingScheduleCommand(scheduleId),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -456,7 +554,137 @@ public sealed class HandleAgentScheduleRuntimeResultCommandTests
 
         scheduleRepository.VerifyAll();
         runtimeContentService.VerifyAll();
-        webSearchEnrichmentService.VerifyAll();
+        agentWebSearchService.VerifyAll();
+        ragClient.VerifyAll();
+        mediator.VerifyAll();
+    }
+
+    [Fact]
+    public async Task Handle_ShouldFail_WhenTikTokRuntimeDraftDoesNotContainSingleVideo()
+    {
+        var scheduleId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var workspaceId = Guid.NewGuid();
+        var socialMediaId = Guid.NewGuid();
+        var imageResourceId = Guid.NewGuid();
+
+        var schedule = new PublishingSchedule
+        {
+            Id = scheduleId,
+            UserId = userId,
+            WorkspaceId = workspaceId,
+            Name = "TikTok invalid draft",
+            Mode = PublishingScheduleState.AgenticMode,
+            Status = PublishingScheduleState.StatusWaitingForExecution,
+            Timezone = "UTC",
+            ExecuteAtUtc = DateTime.UtcNow.AddHours(1),
+            PlatformPreference = "tiktok",
+            AgentPrompt = "Đăng tin nóng lên TikTok.",
+            MaxContentLength = 180,
+            ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(
+                new AgenticScheduleExecutionContext(
+                    DesiredPostType: "reels",
+                    Search: new PublishingScheduleSearchInput("tin nóng AI", 5, null, null, "pd"))),
+            Targets =
+            [
+                new PublishingScheduleTarget
+                {
+                    Id = Guid.NewGuid(),
+                    SocialMediaId = socialMediaId,
+                    Platform = "tiktok",
+                    IsPrimary = true
+                }
+            ]
+        };
+
+        var scheduleRepository = new Mock<IPublishingScheduleRepository>(MockBehavior.Strict);
+        scheduleRepository
+            .Setup(repository => repository.GetByIdForUpdateAsync(scheduleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(schedule);
+        scheduleRepository
+            .Setup(repository => repository.Update(schedule));
+        scheduleRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var runtimeContentService = new Mock<IAgenticRuntimeContentService>(MockBehavior.Strict);
+        runtimeContentService
+            .Setup(service => service.GeneratePostDraftAsync(
+                It.Is<AgenticRuntimeContentRequest>(request =>
+                    request.PlatformPreference == "tiktok" &&
+                    request.DesiredPostType == "reels" &&
+                    request.RequiresVideoMedia == true),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new AgenticRuntimePostDraft(
+                "Invalid TikTok draft",
+                "Text only",
+                null,
+                "reels",
+                [imageResourceId],
+                [new AgenticRuntimeDraftResource(imageResourceId, "image")])));
+
+        var agentWebSearchService = new Mock<IAgentWebSearchService>(MockBehavior.Strict);
+        agentWebSearchService
+            .Setup(service => service.SearchAsync(
+                It.IsAny<AgentWebSearchRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new AgentWebSearchResponse(
+                "tin nóng AI",
+                DateTime.UtcNow,
+                [new AgentWebSearchResultItem("Tin nóng", "https://example.com", "Mô tả", "search")],
+                "context")));
+
+        var ragClient = new Mock<IRagClient>(MockBehavior.Strict);
+        ragClient
+            .Setup(client => client.WaitForRagReadyAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var mediator = new Mock<IMediator>(MockBehavior.Strict);
+        mediator
+            .Setup(m => m.Send(
+                It.IsAny<IndexSocialAccountPostsCommand>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new IndexSocialAccountPostsResponse(
+                socialMediaId,
+                "tiktok",
+                $"tiktok:{socialMediaId:N}:",
+                10,
+                1,
+                0,
+                9,
+                1,
+                1,
+                0,
+                1)));
+        mediator
+            .Setup(m => m.Send(
+                It.IsAny<QueryAccountRecommendationsQuery>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new AccountRecommendationsAnswer(
+                "Use short energetic hooks.",
+                $"tiktok:{socialMediaId:N}:",
+                Array.Empty<RecommendationReference>(),
+                null,
+                "TikTok profile")));
+
+        var handler = new ExecuteAgenticPublishingScheduleCommandHandler(
+            scheduleRepository.Object,
+            runtimeContentService.Object,
+            agentWebSearchService.Object,
+            mediator.Object,
+            ragClient.Object);
+
+        var result = await handler.Handle(
+            new ExecuteAgenticPublishingScheduleCommand(scheduleId),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("PublishingSchedule.RequiredVideoMissing");
+        schedule.Status.Should().Be(PublishingScheduleState.StatusFailed);
+
+        scheduleRepository.VerifyAll();
+        runtimeContentService.VerifyAll();
+        agentWebSearchService.VerifyAll();
         ragClient.VerifyAll();
         mediator.VerifyAll();
     }

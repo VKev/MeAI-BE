@@ -67,10 +67,10 @@ namespace Infrastructure
             services.AddSingleton<IAiFallbackTemplateService, AiFallbackTemplateService>();
             services.AddHttpClient("Gemini");
             services.AddHttpClient("KieChat");
+            services.AddScoped<Infrastructure.Logic.Kie.KieResponsesClient>();
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");
             services.AddHttpClient("TikTok");
-            services.AddHttpClient("n8n");
             services.AddHttpClient("WebSearchContent", client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(12);
@@ -84,11 +84,11 @@ namespace Infrastructure
             services.AddScoped<GeminiCaptionService>();
             services.AddScoped<IFormulaTemplateRenderer, FormulaTemplateRenderer>();
             services.AddScoped<IFormulaGenerationService, FormulaGenerationService>();
-            services.AddScoped<IN8nWorkflowClient, N8nWorkflowClient>();
+            services.AddScoped<IAgentWebSearchService, AgentWebSearchService>();
             services.AddScoped<IWebSearchEnrichmentService, WebSearchEnrichmentService>();
             services.AddScoped<IAgenticRuntimeContentService, AgenticRuntimeContentService>();
             services.AddScoped<IFacebookContentService, FacebookContentService>();
-            services.AddScoped<IGeminiContentModerationService, GeminiContentModerationService>();
+            services.AddScoped<IGeminiContentModerationService, Infrastructure.Logic.Kie.KieContentModerationService>();
             services.AddScoped<IAgentChatService, GeminiAgentChatService>();
             services.AddScoped<IChatWebPostService, ChatWebPostService>();
             services.AddScoped<IFacebookPublishService, FacebookPublishService>();
@@ -127,6 +127,11 @@ namespace Infrastructure
                     out var waitSeconds)
                     ? waitSeconds
                     : 1800;
+                var s3PublicBaseUrl = configuration["Rag:S3PublicBaseUrl"]
+                                      ?? configuration["RAG_S3_PUBLIC_BASE_URL"]
+                                      ?? configuration["S3:PublicBaseUrl"]
+                                      ?? configuration["VIDEORAG_S3_PUBLIC_BASE_URL"]
+                                      ?? "https://static.vkev.me";
                 return new RagOptions
                 {
                     IngestQueue = ingest,
@@ -134,6 +139,7 @@ namespace Infrastructure
                     RpcTimeout = TimeSpan.FromSeconds(timeoutSeconds),
                     GrpcUrl = grpcUrl,
                     GrpcIngestTimeout = TimeSpan.FromSeconds(grpcIngestTimeoutSeconds),
+                    S3PublicBaseUrl = s3PublicBaseUrl,
                     WaitReadyTimeout = TimeSpan.FromSeconds(waitReadyTimeoutSeconds),
                 };
             });
@@ -376,9 +382,11 @@ namespace Infrastructure
             services.AddScoped<PostResponseBuilder>();
             services.AddScoped<PublishingScheduleResponseBuilder>();
             services.AddScoped<ScheduledPostDispatchService>();
+            services.AddScoped<AgenticPublishingScheduleDispatchService>();
             services.AddScoped<ResourceProvenanceBackfillService>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddHostedService<ScheduledPostPublishingWorker>();
+            services.AddHostedService<AgenticPublishingScheduleWorker>();
 
             services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Application.AssemblyReference).Assembly));
 
@@ -414,6 +422,8 @@ namespace Infrastructure
                 x.AddConsumer<PublishToTargetConsumer>();
                 x.AddConsumer<UnpublishFromTargetConsumer>();
                 x.AddConsumer<UpdatePublishedTargetConsumer>();
+                x.AddConsumer<SyncSocialMediaPostsConsumer>();
+                x.AddConsumer<SocialMediaUnlinkedConsumer>();
 
                 // Async draft-post generation: index → RAG query → caption → image → S3 → PostBuilder → notify
                 x.AddConsumer<DraftPostGenerationConsumer>();

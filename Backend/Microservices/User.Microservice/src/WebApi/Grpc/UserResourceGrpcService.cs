@@ -235,6 +235,67 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
         return response;
     }
 
+    public override async Task<DeleteResourcesResponse> DeleteResources(
+        DeleteResourcesRequest request,
+        ServerCallContext context)
+    {
+        if (!Guid.TryParse(request.UserId, out var userId))
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid userId."));
+        }
+
+        var resourceIds = new List<Guid>();
+        foreach (var resourceId in request.ResourceIds)
+        {
+            if (!Guid.TryParse(resourceId, out var parsedId) || parsedId == Guid.Empty)
+            {
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "Invalid resourceId."));
+            }
+
+            if (!resourceIds.Contains(parsedId))
+            {
+                resourceIds.Add(parsedId);
+            }
+        }
+
+        if (request.HardDelete)
+        {
+            var hardDeleteResult = await _mediator.Send(
+                new HardDeleteResourcesCommand(userId, resourceIds),
+                context.CancellationToken);
+
+            if (hardDeleteResult.IsFailure)
+            {
+                throw new RpcException(new Status(StatusCode.Internal, hardDeleteResult.Error.Description));
+            }
+
+            return new DeleteResourcesResponse
+            {
+                DeletedCount = hardDeleteResult.Value
+            };
+        }
+
+        var deletedCount = 0;
+        foreach (var resourceId in resourceIds)
+        {
+            var result = await _mediator.Send(
+                new DeleteResourceCommand(resourceId, userId),
+                context.CancellationToken);
+
+            if (result.IsFailure)
+            {
+                throw new RpcException(new Status(StatusCode.NotFound, result.Error.Description));
+            }
+
+            deletedCount++;
+        }
+
+        return new DeleteResourcesResponse
+        {
+            DeletedCount = deletedCount
+        };
+    }
+
     public override async Task<CheckStorageQuotaResponse> CheckStorageQuota(
         CheckStorageQuotaRequest request,
         ServerCallContext context)

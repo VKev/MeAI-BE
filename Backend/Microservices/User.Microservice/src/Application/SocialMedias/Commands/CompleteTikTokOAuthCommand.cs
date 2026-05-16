@@ -5,9 +5,11 @@ using Application.Abstractions.TikTok;
 using Application.Subscriptions.Services;
 using Application.SocialMedias.Models;
 using Domain.Entities;
+using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
@@ -25,22 +27,30 @@ public sealed class CompleteTikTokOAuthCommandHandler
 {
     private readonly ITikTokOAuthService _tikTokOAuthService;
     private readonly IRepository<SocialMedia> _socialMediaRepository;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IMemoryCache _memoryCache;
     private readonly IUserSubscriptionEntitlementService _userSubscriptionEntitlementService;
     private readonly ISocialMediaProfileService _profileService;
+    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<CompleteTikTokOAuthCommandHandler> _logger;
 
     public CompleteTikTokOAuthCommandHandler(
         ITikTokOAuthService tikTokOAuthService,
         IUnitOfWork unitOfWork,
         IMemoryCache memoryCache,
         IUserSubscriptionEntitlementService userSubscriptionEntitlementService,
-        ISocialMediaProfileService profileService)
+        ISocialMediaProfileService profileService,
+        IPublishEndpoint publishEndpoint,
+        ILogger<CompleteTikTokOAuthCommandHandler> logger)
     {
         _tikTokOAuthService = tikTokOAuthService;
+        _unitOfWork = unitOfWork;
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _memoryCache = memoryCache;
         _userSubscriptionEntitlementService = userSubscriptionEntitlementService;
         _profileService = profileService;
+        _publishEndpoint = publishEndpoint;
+        _logger = logger;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(
@@ -163,6 +173,14 @@ public sealed class CompleteTikTokOAuthCommandHandler
             };
             await _socialMediaRepository.AddAsync(socialMedia, cancellationToken);
         }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await SocialMediaPostSyncEventPublisher.PublishAsync(
+            _publishEndpoint,
+            _logger,
+            userId,
+            [socialMedia],
+            cancellationToken);
 
         var socialProfile = profile != null
             ? new SocialMediaUserProfile(

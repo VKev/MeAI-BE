@@ -34,10 +34,11 @@ public static class AgenticScheduleExecutionContextSerializer
 
 public sealed record AgenticScheduleExecutionContext(
     PublishingScheduleSearchInput? Search = null,
-    Guid? N8nJobId = null,
-    string? N8nExecutionId = null,
-    Guid? LastProcessedCallbackJobId = null,
+    string? DesiredPostType = null,
+    Guid? LastExecutionRunId = null,
     Guid? RuntimePostId = null,
+    Guid? RuntimePostBuilderId = null,
+    IReadOnlyList<Guid>? RuntimePostIds = null,
     string? LastQuery = null,
     Guid? GroundingSocialMediaId = null,
     string? LastRecommendationQuery = null,
@@ -45,5 +46,5 @@ public sealed record AgenticScheduleExecutionContext(
     string? LastRagFallbackReason = null,
     DateTime? LastRetrievedAtUtc = null,
     DateTime? RegisteredAtUtc = null,
-    DateTime? LastCallbackReceivedAtUtc = null,
-    N8nWebSearchResponse? LastSearchPayload = null);
+    DateTime? LastExecutionStartedAtUtc = null,
+    AgentWebSearchResponse? LastSearchPayload = null);

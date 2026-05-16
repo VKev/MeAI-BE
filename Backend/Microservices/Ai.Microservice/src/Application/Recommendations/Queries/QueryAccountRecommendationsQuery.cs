@@ -34,7 +34,12 @@ public sealed record AccountRecommendationsAnswer(
     /// quote contact info EXACTLY rather than paraphrasing it from the recommendation
     /// summary (paraphrasing was causing them to hallucinate canonical-looking URLs).
     /// </summary>
-    string? PageProfileText = null);
+    string? PageProfileText = null,
+    IReadOnlyList<RagRetrievalError>? RetrievalErrors = null);
+
+public sealed record RagRetrievalError(
+    string Source,
+    string Error);
 
 public sealed record RecommendationReference(
     string DocumentId,
@@ -112,9 +117,17 @@ public sealed class QueryAccountRecommendationsQueryHandler
         "discussions). In auto-discovery mode web search is REQUIRED — auto-discovery cannot rely on " +
         "cached context alone, since the goal is timely content,\n" +
         "      (c) picking ONE specific, concrete topic that is BOTH on-brand for this page AND " +
-        "timely. Do NOT pick a generic topic, do NOT pick something outside the page's niche, do " +
-        "NOT duplicate a topic the page recently covered. State the chosen topic explicitly at the " +
-        "top of your answer (in the page's language).\n\n" +
+        "timely. Do NOT pick a generic topic, do NOT pick something outside the page's niche.\n" +
+        "      (d) IMPORTANT NOVELTY RULE: treat recent past posts as an exclusion list for the " +
+        "specific subject and angle, not as a menu of topics to repeat. The new topic may stay " +
+        "inside the same broad content pillar or product/service category, but it must NOT reuse " +
+        "the same specific item, model, offer, event, claim, audience problem, use case, or hook " +
+        "that the account already published recently. If a current trend overlaps with a prior " +
+        "post, choose a meaningfully distinct adjacent angle: a new subtopic, new feature/benefit, " +
+        "comparison, seasonal/current development, audience segment, objection, or practical use " +
+        "case. Balance freshness with brand fit; never force novelty by drifting off-niche. State " +
+        "the chosen topic explicitly at the top of your answer (in the page's language) and, when " +
+        "possible, briefly note how it differs from recent posts.\n\n" +
         "Inputs you receive: (a) the page profile — name, introduction (About / Giới thiệu), " +
         "category, website, email, phone, location, " +
         "(b) a text context block describing the user's past posts and engagement, " +
@@ -372,8 +385,10 @@ public sealed class QueryAccountRecommendationsQueryHandler
                 request.SocialMediaId, Truncate(rag.Text!.Context, 1500));
         }
 
+        var retrievalErrors = new List<RagRetrievalError>();
         if (rag.VisualError != null)
         {
+            retrievalErrors.Add(new RagRetrievalError("visual", rag.VisualError));
             _logger.LogWarning(
                 "Visual retrieval failed for socialMediaId={SocialMediaId}: {Error}",
                 request.SocialMediaId,
@@ -381,6 +396,7 @@ public sealed class QueryAccountRecommendationsQueryHandler
         }
         if (rag.VideoError != null)
         {
+            retrievalErrors.Add(new RagRetrievalError("video", rag.VideoError));
             _logger.LogWarning(
                 "Video retrieval failed for socialMediaId={SocialMediaId}: {Error}",
                 request.SocialMediaId,
@@ -514,7 +530,8 @@ public sealed class QueryAccountRecommendationsQueryHandler
             DocumentIdPrefix: prefix,
             References: fusedReferences,
             WebSources: llmResult.Sources.Count > 0 ? llmResult.Sources : null,
-            PageProfileText: pageProfile?.Answer));
+            PageProfileText: pageProfile?.Answer,
+            RetrievalErrors: retrievalErrors));
     }
 
     /// <summary>

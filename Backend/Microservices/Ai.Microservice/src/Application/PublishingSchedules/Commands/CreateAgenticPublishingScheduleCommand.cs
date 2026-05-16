@@ -20,7 +20,8 @@ public sealed record CreateAgenticPublishingScheduleCommand(
     string? AgentPrompt,
     int? MaxContentLength,
     PublishingScheduleSearchInput? Search,
-    IReadOnlyList<PublishingScheduleTargetInput>? Targets) : IRequest<Result<PublishingScheduleResponse>>;
+    IReadOnlyList<PublishingScheduleTargetInput>? Targets,
+    string? DesiredPostType = null) : IRequest<Result<PublishingScheduleResponse>>;
 
 public sealed class CreateAgenticPublishingScheduleCommandHandler
     : IRequestHandler<CreateAgenticPublishingScheduleCommand, Result<PublishingScheduleResponse>>
@@ -28,7 +29,6 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
     private readonly IPublishingScheduleRepository _publishingScheduleRepository;
     private readonly PublishingScheduleCommandSupport _support;
     private readonly PublishingScheduleResponseBuilder _responseBuilder;
-    private readonly IN8nWorkflowClient _n8nWorkflowClient;
 
     public CreateAgenticPublishingScheduleCommandHandler(
         IPublishingScheduleRepository publishingScheduleRepository,
@@ -36,8 +36,7 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
         IPostRepository postRepository,
         IPostPublicationRepository postPublicationRepository,
         Application.Abstractions.SocialMedias.IUserSocialMediaService userSocialMediaService,
-        PublishingScheduleResponseBuilder responseBuilder,
-        IN8nWorkflowClient n8nWorkflowClient)
+        PublishingScheduleResponseBuilder responseBuilder)
     {
         _publishingScheduleRepository = publishingScheduleRepository;
         _support = new PublishingScheduleCommandSupport(
@@ -46,7 +45,6 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
             postPublicationRepository,
             userSocialMediaService);
         _responseBuilder = responseBuilder;
-        _n8nWorkflowClient = n8nWorkflowClient;
     }
 
     public async Task<Result<PublishingScheduleResponse>> Handle(
@@ -81,7 +79,6 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
         }
 
         var now = DateTimeExtensions.PostgreSqlUtcNow;
-        var jobId = Guid.CreateVersion7();
         var executionContext = new AgenticScheduleExecutionContext(
             Search: new PublishingScheduleSearchInput(
                 validated.Value.Search!.QueryTemplate,
@@ -89,7 +86,7 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
                 validated.Value.Search.Country,
                 validated.Value.Search.SearchLanguage,
                 validated.Value.Search.Freshness),
-            N8nJobId: jobId,
+            DesiredPostType: NormalizePostType(request.DesiredPostType),
             RegisteredAtUtc: now);
 
         var schedule = new PublishingSchedule
@@ -99,7 +96,7 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
             WorkspaceId = request.WorkspaceId,
             Name = validated.Value.Name,
             Mode = validated.Value.Mode,
-            Status = "draft",
+            Status = PublishingScheduleState.StatusWaitingForExecution,
             Timezone = validated.Value.Timezone,
             ExecuteAtUtc = validated.Value.ExecuteAtUtc,
             IsPrivate = validated.Value.IsPrivate,
@@ -126,50 +123,17 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
         await _publishingScheduleRepository.AddAsync(schedule, cancellationToken);
         await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
 
-        var registerResult = await _n8nWorkflowClient.RegisterScheduledAgentJobAsync(
-            new N8nScheduledAgentJobRequest(
-                jobId,
-                schedule.Id,
-                schedule.UserId,
-                schedule.WorkspaceId,
-                schedule.ExecuteAtUtc,
-                schedule.Timezone ?? "UTC",
-                new N8nWebSearchRequest(
-                    validated.Value.Search.QueryTemplate,
-                    validated.Value.Search.Count,
-                    validated.Value.Search.Country,
-                    validated.Value.Search.SearchLanguage,
-                    validated.Value.Search.Freshness,
-                    schedule.Timezone,
-                    schedule.ExecuteAtUtc)),
-            cancellationToken);
-
-        if (registerResult.IsFailure)
-        {
-            schedule.Status = PublishingScheduleState.StatusFailed;
-            schedule.ErrorCode = registerResult.Error.Code;
-            schedule.ErrorMessage = registerResult.Error.Description;
-            schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
-            _publishingScheduleRepository.Update(schedule);
-            await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
-            return Result.Failure<PublishingScheduleResponse>(registerResult.Error);
-        }
-
-        executionContext = executionContext with
-        {
-            N8nExecutionId = registerResult.Value.ExecutionId,
-            RegisteredAtUtc = registerResult.Value.AcceptedAtUtc
-        };
-
-        schedule.Status = PublishingScheduleState.StatusWaitingForExecution;
-        schedule.ExecutionContextJson = AgenticScheduleExecutionContextSerializer.Serialize(executionContext);
-        schedule.ErrorCode = null;
-        schedule.ErrorMessage = null;
-        schedule.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
-        _publishingScheduleRepository.Update(schedule);
-        await _publishingScheduleRepository.SaveChangesAsync(cancellationToken);
-
         var response = await _responseBuilder.BuildAsync(schedule, cancellationToken);
         return Result.Success(response);
+    }
+
+    private static string? NormalizePostType(string? postType)
+    {
+        return (postType ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "reel" or "reels" or "video" => "reels",
+            "post" or "posts" => "posts",
+            _ => null
+        };
     }
 }

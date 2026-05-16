@@ -14,12 +14,11 @@ namespace AiMicroservice.Tests.Application.PublishingSchedules.Commands;
 public sealed class CreateAgenticPublishingScheduleCommandTests
 {
     [Fact]
-    public async Task Handle_ShouldCreateAgenticScheduleAndRegisterN8nJob()
+    public async Task Handle_ShouldCreateAgenticScheduleForLocalExecution()
     {
         var userId = Guid.NewGuid();
         var workspaceId = Guid.NewGuid();
         var socialMediaId = Guid.NewGuid();
-        var executionId = "n8n-execution-123";
 
         var scheduleRepository = new Mock<IPublishingScheduleRepository>(MockBehavior.Strict);
         PublishingSchedule? storedSchedule = null;
@@ -63,27 +62,13 @@ public sealed class CreateAgenticPublishingScheduleCommandTests
                 new UserSocialMediaResult(socialMediaId, "facebook", "{}")
             ]));
 
-        var n8nClient = new Mock<IN8nWorkflowClient>(MockBehavior.Strict);
-        n8nClient
-            .Setup(client => client.RegisterScheduledAgentJobAsync(
-                It.Is<N8nScheduledAgentJobRequest>(request =>
-                    request.UserId == userId &&
-                    request.WorkspaceId == workspaceId &&
-                    request.Search.QueryTemplate == "kết quả xổ số miền bắc hôm nay" &&
-                    request.Search.Count == 5),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new N8nScheduledAgentJobAck(
-                executionId,
-                DateTime.UtcNow)));
-
         var handler = new CreateAgenticPublishingScheduleCommandHandler(
             scheduleRepository.Object,
             workspaceRepository.Object,
             postRepository.Object,
             postPublicationRepository.Object,
             userSocialMediaService.Object,
-            new PublishingScheduleResponseBuilder(postRepository.Object),
-            n8nClient.Object);
+            new PublishingScheduleResponseBuilder(postRepository.Object));
 
         var executeAtUtc = DateTime.UtcNow.AddHours(2);
         var result = await handler.Handle(
@@ -120,8 +105,7 @@ public sealed class CreateAgenticPublishingScheduleCommandTests
         var executionContext = AgenticScheduleExecutionContextSerializer.Parse(storedSchedule.ExecutionContextJson);
         executionContext.Search.Should().NotBeNull();
         executionContext.Search!.QueryTemplate.Should().Be("kết quả xổ số miền bắc hôm nay");
-        executionContext.N8nJobId.Should().NotBeNull();
-        executionContext.N8nExecutionId.Should().Be(executionId);
+        executionContext.RegisteredAtUtc.Should().NotBeNull();
 
         result.Value.Mode.Should().Be(PublishingScheduleState.AgenticMode);
         result.Value.Status.Should().Be(PublishingScheduleState.StatusWaitingForExecution);
@@ -136,6 +120,5 @@ public sealed class CreateAgenticPublishingScheduleCommandTests
         workspaceRepository.VerifyAll();
         postPublicationRepository.VerifyAll();
         userSocialMediaService.VerifyAll();
-        n8nClient.VerifyAll();
     }
 }

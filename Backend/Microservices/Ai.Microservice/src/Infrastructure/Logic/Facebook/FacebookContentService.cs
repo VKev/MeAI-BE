@@ -425,10 +425,9 @@ public sealed class FacebookContentService : IFacebookContentService
             return Result.Failure<FacebookPostPageResult>(response.Error);
         }
 
-        // Note: we used to enrich video posts with `?fields=source` here so MediaUrl
-        // pointed at the direct mp4. That was abandoned because FB serves reels as
-        // DASH (video-only stream); the rag-microservice now uses yt-dlp on the
-        // viewer URL (`facebook.com/reel/...`) which resolves DASH + audio properly.
+        // Keep the list call lean. The hydrator below asks Graph for the direct
+        // video source per post when the Page token can access it; VideoRAG falls
+        // back to the viewer URL when Graph does not return a source.
         var posts = (response.Value.Data ?? Array.Empty<FacebookPostDto>())
             .Where(item => !string.IsNullOrWhiteSpace(item.Id))
             .Select(item => MapPost(pageId, item))
@@ -466,11 +465,13 @@ public sealed class FacebookContentService : IFacebookContentService
 
         var optionalMetricsTask = TryGetOptionalPostMetricsAsync(response.Value.Id, pageAccessToken, cancellationToken);
         var videoViewCountTask = TryGetVideoViewCountAsync(response.Value, pageAccessToken, cancellationToken);
+        var videoSourceUrlTask = TryGetVideoSourceUrlAsync(response.Value, pageAccessToken, cancellationToken);
 
-        await Task.WhenAll(optionalMetricsTask, videoViewCountTask);
+        await Task.WhenAll(optionalMetricsTask, videoViewCountTask, videoSourceUrlTask);
 
         var optionalMetrics = await optionalMetricsTask;
         var viewCount = await videoViewCountTask;
+        var videoSourceUrl = await videoSourceUrlTask;
 
         return Result.Success(MapPost(
             pageId,
@@ -481,7 +482,8 @@ public sealed class FacebookContentService : IFacebookContentService
             response.Value.Shares?.Count ?? optionalMetrics.ShareCount,
             optionalMetrics.ReactionBreakdown,
             optionalMetrics.ReachCount,
-            optionalMetrics.ImpressionCount));
+            optionalMetrics.ImpressionCount,
+            videoSourceUrl));
     }
 
     private async Task<FacebookOptionalMetrics> TryGetOptionalPostMetricsAsync(
@@ -618,6 +620,47 @@ public sealed class FacebookContentService : IFacebookContentService
         return TryReadInsightMetricValue(response.Value, "total_video_views");
     }
 
+    private async Task<string?> TryGetVideoSourceUrlAsync(
+        FacebookPostDto post,
+        string pageAccessToken,
+        CancellationToken cancellationToken)
+    {
+        var attachment = post.Attachments?.Data?.FirstOrDefault();
+        var nestedAttachment = attachment?.Subattachments?.Data?.FirstOrDefault();
+        var effectiveAttachment = nestedAttachment ?? attachment;
+
+        var mediaType = NormalizeMediaType(
+            effectiveAttachment?.MediaType
+            ?? attachment?.MediaType
+            ?? effectiveAttachment?.Type
+            ?? attachment?.Type);
+
+        if (!string.Equals(mediaType, "video", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var videoId = TryGetVideoId(post);
+        if (string.IsNullOrWhiteSpace(videoId) || string.IsNullOrWhiteSpace(pageAccessToken))
+        {
+            return null;
+        }
+
+        var fields = "source,permalink_url,picture,title,description";
+        var url =
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(videoId)}" +
+            $"?fields={Uri.EscapeDataString(fields)}" +
+            $"&access_token={Uri.EscapeDataString(pageAccessToken)}";
+
+        var response = await SendGetAsync<FacebookVideoSourceResponse>(url, cancellationToken);
+        if (response.IsFailure)
+        {
+            return null;
+        }
+
+        return IsHttpUrl(response.Value.Source) ? response.Value.Source : null;
+    }
+
     private async Task<Result<TResponse>> SendGetAsync<TResponse>(
         string url,
         CancellationToken cancellationToken,
@@ -683,7 +726,8 @@ public sealed class FacebookContentService : IFacebookContentService
         long? shareCount = null,
         IReadOnlyDictionary<string, long>? reactionBreakdown = null,
         long? reachCount = null,
-        long? impressionCount = null)
+        long? impressionCount = null,
+        string? videoSourceUrl = null)
     {
         var attachment = post.Attachments?.Data?.FirstOrDefault();
         var nestedAttachment = attachment?.Subattachments?.Data?.FirstOrDefault();
@@ -724,7 +768,89 @@ public sealed class FacebookContentService : IFacebookContentService
             ShareCount: shareCount ?? post.Shares?.Count ?? 0,
             ReactionBreakdown: reactionBreakdown,
             ReachCount: reachCount,
-            ImpressionCount: impressionCount);
+            ImpressionCount: impressionCount,
+            VideoSourceUrl: videoSourceUrl,
+            MediaItems: BuildMediaItems(post, mediaType, videoSourceUrl));
+    }
+
+    private static IReadOnlyList<FacebookPostMediaItem> BuildMediaItems(
+        FacebookPostDto post,
+        string? postMediaType,
+        string? videoSourceUrl)
+    {
+        var items = new List<FacebookPostMediaItem>();
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var isVideoPost = string.Equals(postMediaType, "video", StringComparison.Ordinal);
+
+        if (isVideoPost && IsHttpUrl(videoSourceUrl))
+        {
+            AddMediaItem(items, seenKeys, videoSourceUrl, "video");
+        }
+
+        foreach (var attachment in EnumerateAttachments(post))
+        {
+            var attachmentMediaType = NormalizeMediaType(attachment.MediaType ?? attachment.Type);
+            var imageUrl = attachment.Media?.Image?.Src;
+
+            if (!string.Equals(attachmentMediaType, "video", StringComparison.Ordinal) ||
+                !IsHttpUrl(videoSourceUrl))
+            {
+                AddMediaItem(items, seenKeys, imageUrl, "image", attachment.Target?.Id);
+            }
+        }
+
+        if (items.Count == 0)
+        {
+            AddMediaItem(items, seenKeys, post.FullPicture, "image");
+        }
+
+        return items;
+    }
+
+    private static IEnumerable<FacebookAttachmentDto> EnumerateAttachments(FacebookPostDto post)
+    {
+        foreach (var attachment in post.Attachments?.Data ?? Array.Empty<FacebookAttachmentDto>())
+        {
+            yield return attachment;
+
+            foreach (var nested in attachment.Subattachments?.Data ?? Array.Empty<FacebookAttachmentDto>())
+            {
+                yield return nested;
+            }
+        }
+    }
+
+    private static void AddMediaItem(
+        List<FacebookPostMediaItem> items,
+        HashSet<string> seenKeys,
+        string? url,
+        string resourceType,
+        string? sourceKey = null)
+    {
+        if (!IsHttpUrl(url))
+        {
+            return;
+        }
+
+        var dedupKey = BuildMediaDedupKey(url!, sourceKey);
+        if (!seenKeys.Add(dedupKey))
+        {
+            return;
+        }
+
+        items.Add(new FacebookPostMediaItem(url!.Trim(), resourceType));
+    }
+
+    private static string BuildMediaDedupKey(string url, string? sourceKey)
+    {
+        if (!string.IsNullOrWhiteSpace(sourceKey))
+        {
+            return sourceKey.Trim();
+        }
+
+        return Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)
+            ? $"{uri.Host}{uri.AbsolutePath}"
+            : url.Trim();
     }
 
     private static string? NormalizeMediaType(string? value)
@@ -830,8 +956,119 @@ public sealed class FacebookContentService : IFacebookContentService
         var attachment = post.Attachments?.Data?.FirstOrDefault();
         var nestedAttachment = attachment?.Subattachments?.Data?.FirstOrDefault();
 
-        return nestedAttachment?.Target?.Id
-               ?? attachment?.Target?.Id;
+        var targetId = nestedAttachment?.Target?.Id
+                       ?? attachment?.Target?.Id;
+        if (!string.IsNullOrWhiteSpace(targetId))
+        {
+            return targetId;
+        }
+
+        return TryGetVideoIdFromUrl(
+            nestedAttachment?.Url,
+            attachment?.Url,
+            post.PermalinkUrl);
+    }
+
+    private static string? TryGetVideoIdFromUrl(params string?[] urls)
+    {
+        foreach (var rawUrl in urls)
+        {
+            if (string.IsNullOrWhiteSpace(rawUrl) ||
+                !Uri.TryCreate(rawUrl, UriKind.Absolute, out var uri))
+            {
+                continue;
+            }
+
+            var queryVideoId = FirstNonEmpty(
+                TryGetQueryValue(uri.Query, "v"),
+                TryGetQueryValue(uri.Query, "video_id"),
+                TryGetQueryValue(uri.Query, "story_fbid"));
+            if (LooksLikeFacebookNumericId(queryVideoId))
+            {
+                return queryVideoId;
+            }
+
+            var segments = uri.AbsolutePath
+                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            for (var i = 0; i < segments.Length; i++)
+            {
+                if (segments[i].Equals("reel", StringComparison.OrdinalIgnoreCase) ||
+                    segments[i].Equals("videos", StringComparison.OrdinalIgnoreCase) ||
+                    segments[i].Equals("watch", StringComparison.OrdinalIgnoreCase))
+                {
+                    var next = i + 1 < segments.Length ? segments[i + 1] : null;
+                    if (LooksLikeFacebookNumericId(next))
+                    {
+                        return next;
+                    }
+                }
+            }
+
+            foreach (var segment in segments)
+            {
+                if (LooksLikeFacebookNumericId(segment))
+                {
+                    return segment;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? TryGetQueryValue(string query, string key)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return null;
+        }
+
+        var entries = query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var entry in entries)
+        {
+            var parts = entry.Split('=', 2);
+            if (parts.Length != 2)
+            {
+                continue;
+            }
+
+            var candidateKey = Uri.UnescapeDataString(parts[0].Replace("+", " "));
+            if (!candidateKey.Equals(key, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return Uri.UnescapeDataString(parts[1].Replace("+", " "));
+        }
+
+        return null;
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static bool LooksLikeFacebookNumericId(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+               && value.Length >= 8
+               && value.All(char.IsDigit);
+    }
+
+    private static bool IsHttpUrl(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+               && Uri.TryCreate(value, UriKind.Absolute, out var uri)
+               && uri.Scheme is "http" or "https";
     }
 
     private static long? TryReadInsightMetricValue(FacebookVideoInsightsResponse response, string metricName)
@@ -1198,6 +1435,12 @@ public sealed class FacebookContentService : IFacebookContentService
     {
         [JsonPropertyName("data")]
         public FacebookVideoInsightDto[]? Data { get; set; }
+    }
+
+    private sealed class FacebookVideoSourceResponse
+    {
+        [JsonPropertyName("source")]
+        public string? Source { get; set; }
     }
 
     private sealed class FacebookVideoInsightDto

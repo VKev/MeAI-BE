@@ -1,3 +1,4 @@
+using Application.Abstractions.Feed;
 using Application.Abstractions.Gemini;
 using Application.Posts;
 using Domain.Repositories;
@@ -21,13 +22,16 @@ public sealed class CheckPostSensitiveContentCommandHandler
     : IRequestHandler<CheckPostSensitiveContentCommand, Result<CheckSensitiveContentResponse>>
 {
     private readonly IPostRepository _postRepository;
+    private readonly IFeedPostPublishService _feedPostPublishService;
     private readonly IGeminiContentModerationService _contentModerationService;
 
     public CheckPostSensitiveContentCommandHandler(
         IPostRepository postRepository,
+        IFeedPostPublishService feedPostPublishService,
         IGeminiContentModerationService contentModerationService)
     {
         _postRepository = postRepository;
+        _feedPostPublishService = feedPostPublishService;
         _contentModerationService = contentModerationService;
     }
 
@@ -36,23 +40,38 @@ public sealed class CheckPostSensitiveContentCommandHandler
         CancellationToken cancellationToken)
     {
         var post = await _postRepository.GetByIdAsync(request.PostId, cancellationToken);
+        var moderatedPostId = request.PostId;
+        string text;
 
-        if (post == null || post.DeletedAt.HasValue)
+        if (post is not null && !post.DeletedAt.HasValue)
         {
-            return Result.Failure<CheckSensitiveContentResponse>(PostErrors.NotFound);
-        }
+            if (post.UserId != request.UserId)
+            {
+                return Result.Failure<CheckSensitiveContentResponse>(PostErrors.Unauthorized);
+            }
 
-        if (post.UserId != request.UserId)
+            text = post.Content?.Content?.Trim() ?? string.Empty;
+        }
+        else
         {
-            return Result.Failure<CheckSensitiveContentResponse>(PostErrors.Unauthorized);
-        }
+            var feedPostResult = await _feedPostPublishService.GetFeedPostForModerationAsync(
+                request.PostId,
+                request.UserId,
+                cancellationToken);
 
-        var text = post.Content?.Content?.Trim() ?? string.Empty;
+            if (feedPostResult.IsFailure)
+            {
+                return Result.Failure<CheckSensitiveContentResponse>(MapFeedPostError(feedPostResult.Error));
+            }
+
+            moderatedPostId = feedPostResult.Value.PostId;
+            text = feedPostResult.Value.Content?.Trim() ?? string.Empty;
+        }
 
         if (string.IsNullOrWhiteSpace(text))
         {
             return Result.Success(new CheckSensitiveContentResponse(
-                post.Id,
+                moderatedPostId,
                 IsSensitive: false,
                 Category: null,
                 Reason: "Post has no text content to analyze.",
@@ -70,10 +89,20 @@ public sealed class CheckPostSensitiveContentCommandHandler
 
         var result = moderationResult.Value;
         return Result.Success(new CheckSensitiveContentResponse(
-            post.Id,
+            moderatedPostId,
             result.IsSensitive,
             result.Category,
             result.Reason,
             result.ConfidenceScore));
+    }
+
+    private static Error MapFeedPostError(Error error)
+    {
+        return error.Code switch
+        {
+            "Feed.Post.NotFound" => PostErrors.NotFound,
+            "Feed.Post.Unauthorized" => PostErrors.Unauthorized,
+            _ => error
+        };
     }
 }

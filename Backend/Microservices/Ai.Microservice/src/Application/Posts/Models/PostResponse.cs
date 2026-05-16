@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Domain.Entities;
 
 namespace Application.Posts.Models;
@@ -11,6 +12,8 @@ public sealed record PostResponse(
     Guid? PostBuilderId,
     Guid? ChatSessionId,
     Guid? SocialMediaId,
+    [property: Description("Draft target platform for the post, for example facebook, instagram, tiktok, or threads.")]
+    string? Platform,
     string? Title,
     PostContent? Content,
     string? Status,
@@ -26,7 +29,15 @@ public sealed record PostResponse(
     bool IsAiRecommendationDone = false,
     DateTime? AiRecommendationCompletedAt = null,
     string? AiRecommendationErrorCode = null,
-    string? AiRecommendationErrorMessage = null);
+    string? AiRecommendationErrorMessage = null,
+    Guid? AiImproveRecommendPostId = null,
+    Guid? AiImproveCorrelationId = null,
+    string? AiImproveStatus = null,
+    bool IsAiImproving = false,
+    bool IsAiImproveDone = false,
+    DateTime? AiImproveCompletedAt = null,
+    string? AiImproveErrorCode = null,
+    string? AiImproveErrorMessage = null);
 
 public sealed record PostScheduleInput(
     Guid? ScheduleGroupId,

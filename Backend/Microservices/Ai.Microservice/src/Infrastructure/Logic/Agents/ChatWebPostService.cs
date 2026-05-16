@@ -14,18 +14,18 @@ public sealed partial class ChatWebPostService : IChatWebPostService
     private const int MaxUrlsPerPrompt = 3;
     private const int SearchResultCount = 5;
 
-    private readonly IN8nWorkflowClient _n8nWorkflowClient;
+    private readonly IAgentWebSearchService _agentWebSearchService;
     private readonly IWebSearchEnrichmentService _webSearchEnrichmentService;
     private readonly IAgenticRuntimeContentService _runtimeContentService;
     private readonly IMediator _mediator;
 
     public ChatWebPostService(
-        IN8nWorkflowClient n8nWorkflowClient,
+        IAgentWebSearchService agentWebSearchService,
         IWebSearchEnrichmentService webSearchEnrichmentService,
         IAgenticRuntimeContentService runtimeContentService,
         IMediator mediator)
     {
-        _n8nWorkflowClient = n8nWorkflowClient;
+        _agentWebSearchService = agentWebSearchService;
         _webSearchEnrichmentService = webSearchEnrichmentService;
         _runtimeContentService = runtimeContentService;
         _mediator = mediator;
@@ -36,7 +36,7 @@ public sealed partial class ChatWebPostService : IChatWebPostService
         CancellationToken cancellationToken)
     {
         var urls = ExtractUrls(request.Prompt);
-        Result<N8nWebSearchResponse> contentResult;
+        Result<AgentWebSearchResponse> contentResult;
         var retrievalMode = urls.Count > 0 ? "direct_url" : "web_search";
 
         if (urls.Count > 0)
@@ -54,12 +54,10 @@ public sealed partial class ChatWebPostService : IChatWebPostService
         }
         else
         {
-            contentResult = await _n8nWorkflowClient.WebSearchAsync(
-                new N8nWebSearchRequest(
-                    QueryTemplate: request.Prompt,
+            contentResult = await _agentWebSearchService.SearchAsync(
+                new AgentWebSearchRequest(
+                    Query: request.Prompt,
                     Count: SearchResultCount,
-                    Country: null,
-                    SearchLanguage: null,
                     Freshness: "pd",
                     UserId: request.UserId,
                     WorkspaceId: request.WorkspaceId,
@@ -94,7 +92,11 @@ public sealed partial class ChatWebPostService : IChatWebPostService
                 request.Prompt,
                 null,
                 null,
-                content with { Results = usableSources.Count > 0 ? usableSources : content.Results }),
+                content with { Results = usableSources.Count > 0 ? usableSources : content.Results },
+                request.UserId,
+                request.WorkspaceId,
+                request.SessionId,
+                request.OriginChatId),
             cancellationToken);
 
         if (draftResult.IsFailure)
@@ -102,8 +104,7 @@ public sealed partial class ChatWebPostService : IChatWebPostService
             return Result.Failure<ChatWebPostResult>(draftResult.Error);
         }
 
-        var importedResourceIds = content.ImportedResources?
-            .Select(resource => resource.ResourceId)
+        var importedResourceIds = draftResult.Value.ResourceIds?
             .Where(id => id != Guid.Empty)
             .Distinct()
             .ToList() ?? [];
@@ -133,6 +134,22 @@ public sealed partial class ChatWebPostService : IChatWebPostService
             return Result.Failure<ChatWebPostResult>(postResult.Error);
         }
 
+        var postBuilderId = postResult.Value.PostBuilderId;
+        if (postBuilderId.HasValue && importedResourceIds.Count > 0)
+        {
+            var addResourcesResult = await _mediator.Send(
+                new AddPostBuilderResourcesCommand(
+                    postBuilderId.Value,
+                    request.UserId,
+                    importedResourceIds),
+                cancellationToken);
+
+            if (addResourcesResult.IsFailure)
+            {
+                return Result.Failure<ChatWebPostResult>(addResourcesResult.Error);
+            }
+        }
+
         var sourceUrls = usableSources
             .Select(result => result.Url)
             .Where(url => !string.IsNullOrWhiteSpace(url))
@@ -142,7 +159,7 @@ public sealed partial class ChatWebPostService : IChatWebPostService
 
         return Result.Success(new ChatWebPostResult(
             postResult.Value.Id,
-            postResult.Value.PostBuilderId ?? Guid.Empty,
+            postBuilderId ?? Guid.Empty,
             postResult.Value.Title,
             retrievalMode,
             sourceUrls,

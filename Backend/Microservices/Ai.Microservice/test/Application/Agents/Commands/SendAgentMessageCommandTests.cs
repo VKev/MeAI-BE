@@ -75,6 +75,8 @@ public sealed class SendAgentMessageCommandTests
     public async Task Handle_ShouldReturnTransientMessages_WhenReplySucceeds()
     {
         var userId = Guid.NewGuid();
+        var postId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var postBuilderId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
         var session = new ChatSession
         {
             Id = Guid.NewGuid(),
@@ -115,14 +117,16 @@ public sealed class SendAgentMessageCommandTests
                         "create_post",
                         "completed",
                         "post",
-                        Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                        postId,
                         "Draft",
                         "Created draft post.")
                 ],
                 "post_created",
                 null,
                 null,
-                PostId: Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))));
+                PostId: postId,
+                PostBuilderId: postBuilderId,
+                PostIds: [postId])));
 
         var handler = new SendAgentMessageCommandHandler(
             chatSessionRepository.Object,
@@ -136,7 +140,9 @@ public sealed class SendAgentMessageCommandTests
         result.IsSuccess.Should().BeTrue();
         result.Value.SessionId.Should().Be(session.Id);
         result.Value.Action.Should().Be("post_created");
-        result.Value.PostId.Should().Be(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
+        result.Value.PostId.Should().Be(postId);
+        result.Value.PostBuilderId.Should().Be(postBuilderId);
+        result.Value.PostIds.Should().BeEquivalentTo([postId]);
         result.Value.ValidationError.Should().BeNull();
         result.Value.UserMessage.Role.Should().Be("user");
         result.Value.UserMessage.Content.Should().Be("Schedule a post for 5pm");
@@ -306,6 +312,7 @@ public sealed class SendAgentMessageCommandTests
                 session.Id,
                 userId,
                 "Dang bai tong hop xu huong AI toi 6h toi nay",
+                null,
                 null,
                 scheduleOptions),
             CancellationToken.None);
