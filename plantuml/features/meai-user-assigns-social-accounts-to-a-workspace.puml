@@ -1,0 +1,144 @@
+@startuml
+title User Assigns Connected Social Accounts To A Workspace
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Workspace Settings Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Workspace Account Picker" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Assignment Confirmation Dialog" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "Workspace Social Media Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Workspace Assignment Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Subscription Guard" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "User Social Media Store" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Workspace Assignment Store" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title User Assigns Connected Social Accounts To A Workspace
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+
+User -> Screen : open workspace settings
+Screen -> Hook : load account inventories for the workspace
+Hook -> Gateway : GET /api/User/social-medias and GET /api/User/workspaces/{workspaceId}/social-medias
+Gateway -> PrimaryService : list connected accounts and workspace assignments
+PrimaryService -> DomainLayer : read user-owned accounts and assigned rows
+DomainLayer --> PrimaryService : full account inventory plus assigned subset
+PrimaryService --> Gateway : workspace settings payload
+Gateway --> Hook : list responses
+Hook -> Store : cache user accounts and assigned ids
+Store --> Screen : render connected accounts with assign or remove actions
+opt User connects a new platform from inside workspace settings
+  Screen -> Hook : request platform OAuth authorization url
+  Hook -> Gateway : GET platform auth-url endpoint
+  Gateway -> SupportingService : build callback url for the current workspace route
+  SupportingService --> Gateway : authorization url
+  Gateway --> Hook : redirect target
+  Hook --> Screen : browser leaves for platform OAuth and later returns to this route
+  Screen -> Hook : refetch user and workspace account queries
+  Hook -> Store : merge the newly connected account into the visible inventory
+end
+group Assign a connected account to the workspace
+  User -> Screen : choose one connected account and confirm assignment
+  Screen -> Hook : call assign mutation
+  Hook -> Gateway : POST /api/User/workspaces/{workspaceId}/social-medias
+  Gateway -> PrimaryService : assign account to workspace
+  PrimaryService -> SupportingService : validate subscription and ownership rules
+  alt subscription or ownership rule fails
+    SupportingService --> PrimaryService : business failure
+    PrimaryService --> Gateway : problem details
+    Gateway --> Hook : failure
+    Hook --> Screen : show precise error and keep current state
+  else assignment accepted
+    SupportingService --> PrimaryService : assignment allowed
+    PrimaryService -> DomainLayer : persist workspace-social-media row
+    DomainLayer --> PrimaryService : updated assignment saved
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : mutation success
+    Hook -> Store : invalidate workspace assignment query
+    Store --> Screen : refresh badges and assigned lists
+  end
+end
+group Remove an assigned account from the workspace
+  User -> Screen : confirm remove on one assigned account
+  Screen -> Hook : call remove mutation
+  Hook -> Gateway : DELETE /api/User/workspaces/{workspaceId}/social-medias/{socialMediaId}
+  Gateway -> PrimaryService : remove assignment
+  PrimaryService -> SupportingService : recheck subscription and workspace ownership
+  SupportingService --> PrimaryService : removal allowed
+  PrimaryService -> DomainLayer : delete workspace-social-media row
+  DomainLayer --> PrimaryService : assignment removed
+  PrimaryService --> Gateway : success
+  Gateway --> Hook : mutation success
+  Hook -> Store : invalidate workspace assignment query
+  Store --> Screen : render the account as connected but no longer assigned
+end
+@enduml

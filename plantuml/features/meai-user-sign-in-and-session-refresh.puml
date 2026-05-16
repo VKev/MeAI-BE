@@ -1,5 +1,5 @@
 @startuml
-title User Signs In And Frontend Keeps The Session Fresh
+title User Signs In, Signs Out And Frontend Keeps The Session Fresh
 skinparam shadowing false
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
@@ -69,7 +69,7 @@ INT1 --> INT2
 @enduml
 
 @startuml
-title User Signs In And Frontend Keeps The Session Fresh
+title User Signs In, Signs Out And Frontend Keeps The Session Fresh
 autonumber
 skinparam shadowing false
 skinparam sequenceMessageAlign center
@@ -104,6 +104,16 @@ else credentials valid
   Hook -> Store : cache current user and role
   Store --> Screen : render authenticated shell
 end
+opt User signs in with Google instead of a password
+  User -> Screen : choose Google sign-in
+  Screen -> Hook : submit Google identity token
+  Hook -> Gateway : POST /api/User/auth/login/google through /auth/login-with-google
+  Gateway -> SupportingService : exchange Google token for a platform session
+  SupportingService --> Gateway : authenticated response
+  Gateway --> Hook : cookies and user payload
+  Hook -> Store : create FE session and redirect
+  Store --> Screen : enter the authenticated shell
+end
 opt Later API call receives expired access token
   Hook -> Gateway : call protected API
   Gateway --> Hook : 401 unauthorized
@@ -124,5 +134,15 @@ opt Later API call receives expired access token
     Gateway --> Hook : final payload
     Hook --> Screen : continue user action seamlessly
   end
+end
+opt User explicitly signs out
+  User -> Screen : trigger logout
+  Screen -> Hook : POST /auth/logout or /api/logout
+  Hook -> Gateway : POST /api/User/auth/logout when the full logout flow is used
+  Gateway -> SupportingService : revoke backend refresh session
+  SupportingService --> Gateway : backend cookies cleared
+  Gateway --> Hook : logout acknowledged
+  Hook -> Store : destroy FE session cookie
+  Store --> Screen : redirect to the public landing page
 end
 @enduml

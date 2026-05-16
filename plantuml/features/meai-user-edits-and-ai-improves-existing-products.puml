@@ -1,0 +1,168 @@
+@startuml
+title User Edits An Existing Product And Applies AI Improvements
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Product Edit Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Media Picker And Publish Dialog" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "AI Improvement Review Panel" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "AI Post Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "AI Recommendation Improve Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Workspace Social Media Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "AI Post Database" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Resource Library Store" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Recommendation Runtime" as INT3 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+BE2 --> INT3
+INT1 --> INT2
+INT2 --> INT3
+@enduml
+
+@startuml
+title User Edits An Existing Product And Applies AI Improvements
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+box "AI Runtime" #E8F5E9
+participant "Recommendation Runtime" as Runtime
+end box
+
+User -> Screen : open one editable product
+Screen -> Hook : load post details, workspace accounts and resource library
+Hook -> Gateway : GET /api/Ai/posts/{postId}
+Gateway -> PrimaryService : load post details
+PrimaryService -> DomainLayer : read post content, media and status
+DomainLayer --> PrimaryService : post snapshot
+PrimaryService --> Gateway : post response
+Gateway --> Hook : post data
+Hook -> Gateway : GET workspace social accounts and resource pages
+Gateway -> SupportingService : load publish accounts and resource inventory
+SupportingService --> Gateway : accounts and library slices
+Gateway --> Hook : auxiliary data
+Hook -> Store : cache post, accounts and resources
+Store --> Screen : render content editor, media picker and publish actions
+group User saves manual edits
+  User -> Screen : change caption, hashtags or selected media
+  Screen -> Hook : submit update
+  Hook -> Gateway : PUT /api/Ai/posts/{postId}
+  Gateway -> PrimaryService : update draft or scheduled post
+  PrimaryService -> DomainLayer : validate ownership and persist content changes
+  DomainLayer --> PrimaryService : updated post
+  PrimaryService --> Gateway : success
+  Gateway --> Hook : mutation success
+  Hook -> Store : invalidate post and resource queries
+  Store --> Screen : render the latest saved version
+end
+group User asks AI to improve the existing product
+  User -> Screen : submit improve instruction and style options
+  Screen -> Hook : start improvement request
+  Hook -> Gateway : POST /api/Ai/recommendations/posts/{postId}/improve
+  Gateway -> PrimaryService : create AI improve job
+  PrimaryService -> Runtime : enqueue or start recommendation-improve workflow
+  Runtime --> PrimaryService : submitted
+  PrimaryService --> Gateway : accepted response
+  Gateway --> Hook : submitted
+  Hook -> Store : mark AI improvement as processing
+  Store --> Screen : show AI progress state
+  Screen -> Hook : later poll improvement status
+  Hook -> Gateway : GET /api/Ai/recommendations/posts/{postId}/improve
+  Gateway -> PrimaryService : read improvement status and suggestion
+  PrimaryService -> Runtime : return generated suggestion if completed
+  Runtime --> PrimaryService : suggestion payload
+  PrimaryService --> Gateway : status response
+  Gateway --> Hook : improvement result
+  Hook -> Store : cache suggestion
+  Store --> Screen : show approve and reject actions
+  alt user approves the suggestion
+    User -> Screen : approve AI output
+    Screen -> Hook : POST approve
+    Hook -> Gateway : POST /api/Ai/recommendations/posts/{postId}/improve/approve
+    Gateway -> PrimaryService : apply suggested content to the post
+    PrimaryService -> DomainLayer : persist approved improvement
+    DomainLayer --> PrimaryService : post updated
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : mutation success
+    Hook -> Store : invalidate product and list queries
+    Store --> Screen : show the improved post as the new source of truth
+  else user rejects the suggestion
+    User -> Screen : reject AI output
+    Screen -> Hook : POST reject
+    Hook -> Gateway : POST /api/Ai/recommendations/posts/{postId}/improve/reject
+    Gateway -> PrimaryService : discard the suggestion
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : mutation success
+    Hook -> Store : clear cached AI improvement query
+    Store --> Screen : keep the manual draft unchanged
+  end
+end
+@enduml

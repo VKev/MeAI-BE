@@ -1,5 +1,5 @@
 @startuml
-title Community User Browses The Feed And Toggles Likes With Optimistic UI
+title Community User Browses The Feed, Creates Posts, Manages Their Own Posts And Toggles Likes
 skinparam shadowing false
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
@@ -69,7 +69,7 @@ INT1 --> INT2
 @enduml
 
 @startuml
-title Community User Browses The Feed And Toggles Likes With Optimistic UI
+title Community User Browses The Feed, Creates Posts, Manages Their Own Posts And Toggles Likes
 autonumber
 skinparam shadowing false
 skinparam sequenceMessageAlign center
@@ -104,6 +104,31 @@ opt User scrolls further
   Gateway --> Hook : append page
   Hook -> Store : extend cached feed pages
   Store --> Screen : continue the scroll without resetting prior items
+end
+group User creates, edits or deletes their own post
+  alt create a new post
+    User -> Screen : open the create-post dialog and submit text or media
+    Screen -> Hook : upload referenced media and create the post
+    Hook -> Gateway : POST feed post creation endpoints
+    Gateway -> PrimaryService : validate author, media and content
+    PrimaryService -> DomainLayer : persist the new feed post
+    DomainLayer --> PrimaryService : created post
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : created post payload
+    Hook -> Store : invalidate home feed and profile-post queries
+    Store --> Screen : show the new post in the current list
+  else edit or delete an owned post
+    User -> Screen : open post menu and confirm edit or delete
+    Screen -> Hook : submit update or delete mutation
+    Hook -> Gateway : PUT or DELETE feed post endpoint
+    Gateway -> PrimaryService : validate ownership and requested change
+    PrimaryService -> DomainLayer : persist the edit or remove the post
+    DomainLayer --> PrimaryService : mutation result
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : final response
+    Hook -> Store : invalidate feed, profile and post-detail queries
+    Store --> Screen : render the edited post or remove it from the list
+  end
 end
 group User toggles a post like
   User -> Screen : tap like or unlike

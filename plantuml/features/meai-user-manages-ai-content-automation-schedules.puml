@@ -1,0 +1,170 @@
+@startuml
+title User Creates, Reviews And Toggles AI Auto Publishing Schedules
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "AI Auto Publishing Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Schedule Composer" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Schedule Overview Board" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "AI Schedule Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "AI Agent Session Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Schedule Runtime Flow" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Schedule Database" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Workspace Social Media Store" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Agent Runtime And Notifications" as INT3 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE1 --> INT1
+BE2 --> INT2
+BE3 --> INT3
+INT1 --> INT2
+INT2 --> INT3
+@enduml
+
+@startuml
+title User Creates, Reviews And Toggles AI Auto Publishing Schedules
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+box "Async Agent Runtime" #E8F5E9
+participant "Agent Runtime" as AgentRuntime
+participant "Notification Service" as NotificationService
+end box
+
+User -> Screen : open AI auto-publishing for one workspace
+Screen -> Hook : request schedules and linked publish accounts
+Hook -> Gateway : GET /api/Ai/schedules?workspaceId={workspaceId}
+Gateway -> PrimaryService : list schedules for the workspace
+PrimaryService -> DomainLayer : read schedule rows and current statuses
+DomainLayer --> PrimaryService : schedules
+PrimaryService --> Gateway : schedule list
+Gateway --> Hook : schedules payload
+Hook -> Gateway : GET workspace linked social medias
+Gateway -> SupportingService : list workspace publish accounts
+SupportingService --> Gateway : available targets
+Gateway --> Hook : account list
+Hook -> Store : cache schedules and target accounts
+Store --> Screen : render dashboard cards, schedule rows and create flow
+group User creates a new agentic schedule
+  User -> Screen : enter automation name, prompt, time, timezone and targets
+  Screen -> Hook : validate local schedule form
+  Hook -> Gateway : POST /api/Ai/chat-sessions
+  Gateway -> PrimaryService : create or reuse AI chat session
+  PrimaryService -> DomainLayer : persist session metadata
+  DomainLayer --> PrimaryService : session id
+  PrimaryService --> Gateway : session response
+  Gateway --> Hook : current session id
+  Hook -> Gateway : POST /api/Ai/agent/sessions/{sessionId}/messages
+  Gateway -> SupportingService : pass user intent plus scheduleOptions to the agent runtime
+  SupportingService -> AgentRuntime : validate intent and build future schedule
+  alt intent is too vague
+    AgentRuntime --> SupportingService : validation_failed with guidance
+    SupportingService --> Gateway : validation response
+    Gateway --> Hook : failure payload
+    Hook --> Screen : show why the instruction needs more detail
+  else future schedule created
+    AgentRuntime -> DomainLayer : persist schedule and initial runtime state
+    DomainLayer --> SupportingService : schedule created
+    SupportingService --> Gateway : future_ai_schedule_created
+    Gateway --> Hook : success payload
+    Hook -> Store : refetch schedules
+    Store --> Screen : reset create form and show the new schedule card
+  end
+end
+group User reviews or toggles existing schedules
+  alt cancel one active schedule
+    User -> Screen : confirm cancel
+    Screen -> Hook : call cancel mutation
+    Hook -> Gateway : POST /api/Ai/schedules/{id}/cancel
+    Gateway -> PrimaryService : cancel schedule
+    PrimaryService -> DomainLayer : persist cancelled status
+    DomainLayer --> PrimaryService : schedule updated
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : mutation success
+    Hook -> Store : update cached status or refetch list
+    Store --> Screen : show cancelled badge
+  else reactivate one cancelled schedule
+    User -> Screen : confirm activate
+    Screen -> Hook : call activate mutation
+    Hook -> Gateway : POST /api/Ai/schedules/{id}/activate
+    Gateway -> PrimaryService : reactivate schedule
+    PrimaryService -> DomainLayer : persist active status
+    DomainLayer --> PrimaryService : schedule updated
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : mutation success
+    Hook -> Store : update cached status or refetch list
+    Store --> Screen : show active badge again
+  end
+end
+opt Runtime later publishes or fails in the background
+  AgentRuntime -> NotificationService : emit schedule progress or publish result
+  NotificationService --> Screen : later user-visible status through the broader notification system
+end
+@enduml

@@ -1,0 +1,150 @@
+@startuml
+title User Manages Payment Cards And Stripe Setup
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+package "Frontend" {
+class "Payment Cards Screen" as FE1 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Stripe Add Card Screen" as FE2 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+class "Card Action Menu And Dialogs" as FE3 <<Frontend>> {
+  +runMainAction()
+  +refreshVisibleState()
+  -localState
+  -validationState
+}
+}
+package "Backend Services" {
+class "Billing Cards Controller" as BE1 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "Stripe Billing Flow" as BE2 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+class "User Billing Store" as BE3 <<Backend>> {
+  +handleRequest()
+  +coordinateFlow()
+  -domainRules
+  -integrationPorts
+}
+}
+package "External Systems And Storage" {
+class "Stripe" as INT1 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+class "Payment Method Database" as INT2 <<Integration>> {
+  +sendOrReceive()
+  +returnResult()
+  -transportConfig
+  -retryRules
+}
+}
+FE1 --> FE2
+FE2 --> FE3
+FE1 --> BE1
+BE1 --> BE2
+BE2 --> BE3
+BE2 --> INT1
+BE3 --> INT2
+INT1 --> INT2
+@enduml
+
+@startuml
+title User Manages Payment Cards And Stripe Setup
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+actor User
+box "Frontend" #E8F0FE
+participant "Visible Screen" as Screen
+participant "Route Action Or Hook" as Hook
+participant "Frontend Store And Query Cache" as Store
+participant "Stripe.js" as StripeJs
+end box
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Primary Service" as PrimaryService
+participant "Supporting Service" as SupportingService
+participant "Persistence And Domain Rules" as DomainLayer
+end box
+box "Payments" #E8F5E9
+participant "Stripe API" as StripeApi
+end box
+
+User -> Screen : open payment cards
+Screen -> Hook : load saved payment methods
+Hook -> Gateway : GET /api/User/billing/cards
+Gateway -> PrimaryService : list cards for the current user
+PrimaryService -> DomainLayer : read stored payment methods and default flag
+DomainLayer --> PrimaryService : masked card inventory
+PrimaryService --> Gateway : cards response
+Gateway --> Hook : query result
+Hook -> Store : cache cards
+Store --> Screen : render saved cards, default card and actions
+opt User adds a new card
+  User -> Screen : navigate to add card
+  Screen -> Hook : request setup intent
+  Hook -> Gateway : POST /api/User/billing/cards
+  Gateway -> PrimaryService : create Stripe setup session
+  PrimaryService -> SupportingService : prepare setup intent for the user
+  SupportingService -> StripeApi : create setup intent and ephemeral client secret
+  StripeApi --> SupportingService : client secret and Stripe customer id
+  SupportingService --> PrimaryService : setup payload
+  PrimaryService --> Gateway : setup response
+  Gateway --> Hook : setup data
+  Hook -> StripeJs : confirm card setup with Stripe Elements
+  StripeJs -> StripeApi : tokenize and confirm payment method
+  StripeApi --> StripeJs : payment method attached
+  StripeJs --> Hook : local success
+  Hook --> Screen : navigate back to /user/card
+  Screen -> Hook : refetch payment cards
+  Hook -> Store : refresh cards cache with the newly attached card
+end
+group User updates a saved card
+  alt set one card as default
+    User -> Screen : choose Set Default
+    Screen -> Hook : call default-card mutation
+    Hook -> Gateway : POST /api/User/billing/cards/{paymentMethodId}/default
+    Gateway -> PrimaryService : switch default payment method
+    PrimaryService -> DomainLayer : persist new default flag
+    DomainLayer --> PrimaryService : default card updated
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : mutation success
+    Hook -> Store : refetch cards
+    Store --> Screen : show new default badge
+  else delete a non-last card
+    User -> Screen : confirm delete
+    Screen -> Hook : call delete mutation
+    Hook -> Gateway : DELETE /api/User/billing/cards/{paymentMethodId}
+    Gateway -> PrimaryService : remove saved payment method
+    PrimaryService -> SupportingService : detach payment method from Stripe if required
+    SupportingService -> StripeApi : detach payment method
+    StripeApi --> SupportingService : detach confirmed
+    SupportingService -> DomainLayer : remove local linkage
+    DomainLayer --> PrimaryService : card removed
+    PrimaryService --> Gateway : success
+    Gateway --> Hook : mutation success
+    Hook -> Store : refetch cards
+    Store --> Screen : render the shorter card list
+  end
+end
+@enduml
