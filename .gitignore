@@ -12,6 +12,7 @@
 # .NET build artifacts
 # ====================================================================
 **/Build/
+*.csproj.lscache
 artifacts/
 Tools/DesignAnalyzer/bin
 Tools/DesignAnalyzer/obj
