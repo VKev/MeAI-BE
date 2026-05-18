@@ -27,6 +27,7 @@ public sealed class GeminiAgentChatServiceTests
         var workspaceId = Guid.NewGuid();
         var socialMediaId = Guid.NewGuid();
         var scheduleId = Guid.NewGuid();
+        const string automationName = "World Cup Watch";
 
         var configuration = new ConfigurationBuilder().Build();
 
@@ -104,6 +105,7 @@ public sealed class GeminiAgentChatServiceTests
                 It.Is<global::Application.PublishingSchedules.Commands.CreateAgenticPublishingScheduleCommand>(command =>
                     command.UserId == userId &&
                     command.WorkspaceId == workspaceId &&
+                    command.Name == automationName &&
                     command.MaxContentLength == 280 &&
                     command.AgentPrompt != null &&
                     command.AgentPrompt.Contains("vô địch", StringComparison.OrdinalIgnoreCase) &&
@@ -165,7 +167,8 @@ public sealed class GeminiAgentChatServiceTests
                     DateTime.UtcNow.AddHours(5),
                     "Asia/Ho_Chi_Minh",
                     280,
-                    [new PublishingScheduleTargetInput(socialMediaId, true)])),
+                    [new PublishingScheduleTargetInput(socialMediaId, true)],
+                    automationName)),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();

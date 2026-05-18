@@ -45,7 +45,8 @@ public sealed record AgentScheduleOptions(
     DateTime ExecuteAtUtc,
     string? Timezone,
     int? MaxContentLength,
-    IReadOnlyList<PublishingScheduleTargetInput>? Targets);
+    IReadOnlyList<PublishingScheduleTargetInput>? Targets,
+    string? Name = null);
 
 public sealed record AgentChatCompletionResult(
     string Content,

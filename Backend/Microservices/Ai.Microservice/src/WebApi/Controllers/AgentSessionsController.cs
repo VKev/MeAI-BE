@@ -111,7 +111,10 @@ public sealed class AgentSessionsController : ApiController
                             .Select(target => new PublishingScheduleTargetInput(
                                 target.SocialMediaId,
                                 target.IsPrimary))
-                            .ToList())),
+                            .ToList(),
+                        string.IsNullOrWhiteSpace(request.ScheduleOptions.Name)
+                            ? request.Name
+                            : request.ScheduleOptions.Name)),
             cancellationToken);
 
         if (result.IsFailure)
@@ -150,7 +153,8 @@ public sealed record AgentMessageRequest(
     string? Message,
     AgentImageOptionsRequest? ImageOptions = null,
     AgentVideoOptionsRequest? VideoOptions = null,
-    AgentScheduleOptionsRequest? ScheduleOptions = null);
+    AgentScheduleOptionsRequest? ScheduleOptions = null,
+    string? Name = null);
 
 public sealed record AgentImageOptionsRequest(
     string? Model,
@@ -176,7 +180,8 @@ public sealed record AgentScheduleOptionsRequest(
     DateTime ExecuteAtUtc,
     string? Timezone,
     int? MaxContentLength,
-    List<PublishingScheduleTargetInputRequest>? Targets = null);
+    List<PublishingScheduleTargetInputRequest>? Targets = null,
+    string? Name = null);
 
 public sealed record PublishingScheduleTargetInputRequest(
     Guid SocialMediaId,

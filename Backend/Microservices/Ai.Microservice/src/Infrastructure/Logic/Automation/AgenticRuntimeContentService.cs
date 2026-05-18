@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Application.Abstractions.Automation;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Resources;
@@ -14,6 +15,13 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
 {
     private const int MaxToolTurns = 12;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly Regex MarkdownImageRegex = new(@"!\[([^\]]*)\]\(([^)]+)\)", RegexOptions.Compiled);
+    private static readonly Regex MarkdownLinkRegex = new(@"\[([^\]]+)\]\(([^)]+)\)", RegexOptions.Compiled);
+    private static readonly Regex MarkdownHeadingRegex = new(@"^\s{0,3}#{1,6}\s+", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex MarkdownQuoteRegex = new(@"^\s{0,3}>\s?", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex MarkdownListRegex = new(@"^\s{0,3}(?:[-*+]|\d+\.)\s+", RegexOptions.Compiled | RegexOptions.Multiline);
+    private static readonly Regex MarkdownInlineRegex = new(@"(?<!\w)(?:\*\*|__|\*|_|~~|`)+|(?:\*\*|__|\*|_|~~|`)+(?!\w)", RegexOptions.Compiled);
+    private static readonly Regex ExcessBlankLinesRegex = new(@"\n{3,}", RegexOptions.Compiled);
 
     private readonly IConfiguration _configuration;
     private readonly IUserConfigService _userConfigService;
@@ -48,13 +56,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         try
         {
             var model = await ResolveModelAsync(cancellationToken);
-            var importedResourceTypes = new Dictionary<Guid, string?>();
-            var initialResourceIds = request.Search.ImportedResources?
-                .Select(item => item.ResourceId)
-                .Where(id => id != Guid.Empty)
-                .Distinct()
-                .ToList() ?? [];
-            MergeImportedResourceTypes(importedResourceTypes, request.Search.ImportedResources);
+            var availableResources = BuildResourceCatalog(request.Search.ImportedResources);
             var input = new List<KieResponsesInputItem>
             {
                 KieResponsesClient.UserText(
@@ -66,11 +68,14 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                     - import_media: import image/video URLs into the MeAI resource system.
                     - create_runtime_post_draft: finalize the draft output.
                     Always finish by calling create_runtime_post_draft. Do not answer in plain text.
-                    content must be plain text suitable for a social post.
+                    content must be plain text suitable for a social post. Do not use markdown headings, bullet lists, markdown links, bold, italics, code fences, or blockquotes.
                     Respect maxContentLength as a hard character cap when it is provided.
                     If the payload includes recommendationSummary or recommendationPageProfile, use them to match the account's voice, positioning, and contact details.
                     Keep the post grounded in fresh search results when they are present.
                     Use import_media when web images/videos should be attached to the resulting post.
+                    Media is opt-in: only attach media by listing the exact resourceIds you want in create_runtime_post_draft.
+                    Never attach duplicate, broken, off-topic, logo-only, or low-information images.
+                    Default to zero or one attached media item unless the target explicitly requires something else.
 
                     """ + BuildPrompt(request))
             };
@@ -79,8 +84,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 request,
                 model,
                 input,
-                initialResourceIds,
-                importedResourceTypes,
+                availableResources,
                 cancellationToken);
             if (runtimeDraft is not null && !string.IsNullOrWhiteSpace(runtimeDraft.Content))
             {
@@ -140,12 +144,14 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             "Create one plain-text social post for immediate scheduled publishing from this payload. " +
             "If recommendationSummary is present, treat it as the primary brand-voice and page-profile grounding. " +
             "Use the web search payload for freshness and facts. " +
+            "Do not format the caption as markdown. " +
+            "If you attach media, include only the chosen resourceIds in create_runtime_post_draft; unlisted media will be ignored. " +
             $"The final postType must be \"{NormalizePostType(request.DesiredPostType)}\". " +
             (request.RequiresVideoMedia == true
-                ? "You must import exactly one VIDEO resource and align the draft for short-form video publishing. "
+                ? "You must select exactly one VIDEO resource and align the draft for short-form video publishing. "
                 : string.Empty) +
             (request.RequiresSingleMedia == true && request.RequiresVideoMedia != true
-                ? "You must attach exactly one media resource. "
+                ? "You must select exactly one media resource. "
                 : string.Empty) +
             (request.AllowTextOnly == false && request.RequiresVideoMedia != true
                 ? "Do not finalize the draft without required media. "
@@ -158,8 +164,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         AgenticRuntimeContentRequest request,
         string model,
         List<KieResponsesInputItem> input,
-        List<Guid> importedResourceIds,
-        Dictionary<Guid, string?> importedResourceTypes,
+        Dictionary<Guid, ImportedResourceItem> availableResources,
         CancellationToken cancellationToken)
     {
         var tools = new KieResponsesTool[]
@@ -200,25 +205,24 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                         return null;
                     }
 
-                    var resourceIds = importedResourceIds.Distinct().ToList();
+                    var resourceIds = ResolveFinalResourceIds(parsed.ResourceIds, request, availableResources);
                     var resources = resourceIds
                         .Select(resourceId => new AgenticRuntimeDraftResource(
                             resourceId,
-                            importedResourceTypes.GetValueOrDefault(resourceId)))
+                            availableResources.GetValueOrDefault(resourceId)?.ResourceType))
                         .ToList();
 
                     return parsed with
                     {
-                        ResourceIds = resourceIds,
-                        Resources = resources
+                        ResourceIds = resourceIds.Count > 0 ? resourceIds : null,
+                        Resources = resources.Count > 0 ? resources : null
                     };
                 }
 
                 var toolOutput = await ExecuteToolCallAsync(
                     request,
                     call,
-                    importedResourceIds,
-                    importedResourceTypes,
+                    availableResources,
                     cancellationToken);
 
                 input.Add(KieResponsesClient.FunctionCall(call.CallId, call.Name, call.Arguments));
@@ -234,15 +238,14 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
     private async Task<object> ExecuteToolCallAsync(
         AgenticRuntimeContentRequest request,
         KieResponsesFunctionCall call,
-        List<Guid> importedResourceIds,
-        Dictionary<Guid, string?> importedResourceTypes,
+        Dictionary<Guid, ImportedResourceItem> availableResources,
         CancellationToken cancellationToken)
     {
         return call.Name switch
         {
-            "web_search" => await ExecuteWebSearchAsync(request, call.Arguments, importedResourceIds, importedResourceTypes, cancellationToken),
-            "fetch_url" => await ExecuteFetchUrlAsync(request, call.Arguments, importedResourceIds, importedResourceTypes, cancellationToken),
-            "import_media" => await ExecuteImportMediaAsync(request, call.Arguments, importedResourceIds, importedResourceTypes, cancellationToken),
+            "web_search" => await ExecuteWebSearchAsync(request, call.Arguments, availableResources, cancellationToken),
+            "fetch_url" => await ExecuteFetchUrlAsync(request, call.Arguments, availableResources, cancellationToken),
+            "import_media" => await ExecuteImportMediaAsync(request, call.Arguments, availableResources, cancellationToken),
             _ => new { error = $"Unsupported tool: {call.Name}" }
         };
     }
@@ -250,8 +253,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
     private async Task<object> ExecuteWebSearchAsync(
         AgenticRuntimeContentRequest request,
         string arguments,
-        List<Guid> importedResourceIds,
-        Dictionary<Guid, string?> importedResourceTypes,
+        Dictionary<Guid, ImportedResourceItem> availableResources,
         CancellationToken cancellationToken)
     {
         var payload = JsonSerializer.Deserialize<WebSearchToolArguments>(arguments, JsonOptions);
@@ -278,16 +280,14 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             return new { error = result.Error.Description };
         }
 
-        MergeImportedResourceIds(importedResourceIds, result.Value.ImportedResources);
-        MergeImportedResourceTypes(importedResourceTypes, result.Value.ImportedResources);
+        MergeImportedResources(availableResources, result.Value.ImportedResources);
         return BuildSearchToolOutput(result.Value);
     }
 
     private async Task<object> ExecuteFetchUrlAsync(
         AgenticRuntimeContentRequest request,
         string arguments,
-        List<Guid> importedResourceIds,
-        Dictionary<Guid, string?> importedResourceTypes,
+        Dictionary<Guid, ImportedResourceItem> availableResources,
         CancellationToken cancellationToken)
     {
         var payload = JsonSerializer.Deserialize<FetchUrlToolArguments>(arguments, JsonOptions);
@@ -312,16 +312,14 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             request.OriginChatId,
             cancellationToken);
 
-        MergeImportedResourceIds(importedResourceIds, result.ImportedResources);
-        MergeImportedResourceTypes(importedResourceTypes, result.ImportedResources);
+        MergeImportedResources(availableResources, result.ImportedResources);
         return BuildSearchToolOutput(result);
     }
 
     private async Task<object> ExecuteImportMediaAsync(
         AgenticRuntimeContentRequest request,
         string arguments,
-        List<Guid> importedResourceIds,
-        Dictionary<Guid, string?> importedResourceTypes,
+        Dictionary<Guid, ImportedResourceItem> availableResources,
         CancellationToken cancellationToken)
     {
         var payload = JsonSerializer.Deserialize<ImportMediaToolArguments>(arguments, JsonOptions);
@@ -338,6 +336,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         }
 
         var imported = new List<object>();
+        var createdResourceIds = new List<Guid>();
         foreach (var group in urls
                      .Select(url => new { Url = url, ResourceType = ClassifyMediaType(url) })
                      .Where(item => item.ResourceType is not null)
@@ -365,8 +364,14 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             {
                 if (resource.ResourceId != Guid.Empty)
                 {
-                    importedResourceIds.Add(resource.ResourceId);
-                    importedResourceTypes[resource.ResourceId] = resource.ResourceType;
+                    availableResources[resource.ResourceId] = new ImportedResourceItem(
+                        resource.ResourceId,
+                        resource.PresignedUrl,
+                        resource.ContentType,
+                        resource.ResourceType,
+                        resource.OriginSourceUrl ?? group.First().Url,
+                        null);
+                    createdResourceIds.Add(resource.ResourceId);
                 }
 
                 imported.Add(new
@@ -382,7 +387,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         return new
         {
             importedResources = imported,
-            resourceIds = importedResourceIds.Distinct().ToList()
+            resourceIds = createdResourceIds.Distinct().ToList()
         };
     }
 
@@ -415,25 +420,8 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         };
     }
 
-    private static void MergeImportedResourceIds(
-        List<Guid> importedResourceIds,
-        IReadOnlyList<ImportedResourceItem>? importedResources)
-    {
-        if (importedResources is null)
-        {
-            return;
-        }
-
-        foreach (var resourceId in importedResources
-                     .Select(item => item.ResourceId)
-                     .Where(id => id != Guid.Empty))
-        {
-            importedResourceIds.Add(resourceId);
-        }
-    }
-
-    private static void MergeImportedResourceTypes(
-        Dictionary<Guid, string?> importedResourceTypes,
+    private static void MergeImportedResources(
+        Dictionary<Guid, ImportedResourceItem> availableResources,
         IReadOnlyList<ImportedResourceItem>? importedResources)
     {
         if (importedResources is null)
@@ -443,7 +431,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
 
         foreach (var item in importedResources.Where(item => item.ResourceId != Guid.Empty))
         {
-            importedResourceTypes[item.ResourceId] = item.ResourceType;
+            availableResources[item.ResourceId] = item;
         }
     }
 
@@ -550,6 +538,12 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                         type = "string",
                         @enum = new[] { "posts", "reels" },
                         description = "Runtime schedule post type."
+                    },
+                    resourceIds = new
+                    {
+                        type = new[] { "array", "null" },
+                        description = "Optional explicit list of imported resourceIds to attach. Only list the exact resources that should be published.",
+                        items = new { type = "string", format = "uuid" }
                     }
                 }
             }
@@ -580,7 +574,8 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 parsed.Title?.Trim(),
                 parsed.Content.Trim(),
                 string.IsNullOrWhiteSpace(parsed.Hashtag) ? null : parsed.Hashtag.Trim(),
-                string.IsNullOrWhiteSpace(parsed.PostType) ? "posts" : parsed.PostType.Trim());
+                string.IsNullOrWhiteSpace(parsed.PostType) ? "posts" : parsed.PostType.Trim(),
+                parsed.ResourceIds?.Where(id => id != Guid.Empty).Distinct().ToList());
         }
         catch (JsonException)
         {
@@ -602,26 +597,27 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 topResult?.Description,
                 topResult?.Url
             }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        var availableResources = BuildResourceCatalog(request.Search.ImportedResources);
+        var resourceIds = ResolveFinalResourceIds(null, request, availableResources);
+        var resources = resourceIds
+            .Select(resourceId => new AgenticRuntimeDraftResource(
+                resourceId,
+                availableResources.GetValueOrDefault(resourceId)?.ResourceType))
+            .ToList();
 
         return new AgenticRuntimePostDraft(
             title,
             string.IsNullOrWhiteSpace(content) ? request.Search.Query : content,
             null,
             NormalizePostType(request.DesiredPostType),
-            request.Search.ImportedResources?
-                .Select(item => item.ResourceId)
-                .Where(id => id != Guid.Empty)
-                .Distinct()
-                .ToList(),
-            request.Search.ImportedResources?
-                .Where(item => item.ResourceId != Guid.Empty)
-                .Select(item => new AgenticRuntimeDraftResource(item.ResourceId, item.ResourceType))
-                .Distinct()
-                .ToList());
+            resourceIds.Count > 0 ? resourceIds : null,
+            resources.Count > 0 ? resources : null);
     }
 
     private static AgenticRuntimePostDraft ApplyContentLimit(AgenticRuntimePostDraft draft, int? maxContentLength)
     {
+        draft = SanitizePlainTextDraft(draft);
+
         if (!maxContentLength.HasValue || maxContentLength.Value < 1)
         {
             return draft;
@@ -656,6 +652,103 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             : "posts";
     }
 
+    private static AgenticRuntimePostDraft SanitizePlainTextDraft(AgenticRuntimePostDraft draft)
+    {
+        return draft with
+        {
+            Title = SanitizePlainText(draft.Title),
+            Content = SanitizePlainText(draft.Content) ?? string.Empty
+        };
+    }
+
+    private static string? SanitizePlainText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return value?.Trim();
+        }
+
+        var normalized = value
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
+
+        normalized = MarkdownImageRegex.Replace(normalized, "$1");
+        normalized = MarkdownLinkRegex.Replace(normalized, "$1");
+        normalized = MarkdownHeadingRegex.Replace(normalized, string.Empty);
+        normalized = MarkdownQuoteRegex.Replace(normalized, string.Empty);
+        normalized = MarkdownListRegex.Replace(normalized, string.Empty);
+        normalized = MarkdownInlineRegex.Replace(normalized, string.Empty);
+        normalized = ExcessBlankLinesRegex.Replace(normalized, "\n\n");
+
+        var cleanedLines = normalized
+            .Split('\n')
+            .Select(line => line.TrimEnd());
+
+        return string.Join('\n', cleanedLines).Trim();
+    }
+
+    private static Dictionary<Guid, ImportedResourceItem> BuildResourceCatalog(
+        IReadOnlyList<ImportedResourceItem>? importedResources)
+    {
+        var availableResources = new Dictionary<Guid, ImportedResourceItem>();
+        MergeImportedResources(availableResources, importedResources);
+        return availableResources;
+    }
+
+    private static List<Guid> ResolveFinalResourceIds(
+        IReadOnlyList<Guid>? explicitResourceIds,
+        AgenticRuntimeContentRequest request,
+        IReadOnlyDictionary<Guid, ImportedResourceItem> availableResources)
+    {
+        var explicitSelection = explicitResourceIds?
+            .Where(id => id != Guid.Empty && availableResources.ContainsKey(id))
+            .Distinct()
+            .ToList() ?? [];
+
+        if (explicitSelection.Count > 0)
+        {
+            return explicitSelection;
+        }
+
+        if (request.RequiresVideoMedia != true &&
+            request.RequiresSingleMedia != true &&
+            request.AllowTextOnly != false)
+        {
+            return [];
+        }
+
+        var compatible = availableResources.Values
+            .Where(item => item.ResourceId != Guid.Empty && IsCompatibleResource(item.ResourceType, request))
+            .Select(item => item.ResourceId)
+            .Distinct()
+            .ToList();
+
+        return compatible.Count == 1 ? compatible : [];
+    }
+
+    private static bool IsCompatibleResource(
+        string? resourceType,
+        AgenticRuntimeContentRequest request)
+    {
+        if (request.RequiresVideoMedia == true)
+        {
+            return IsVideoResource(resourceType);
+        }
+
+        if (request.RequiresSingleMedia == true || request.AllowTextOnly == false)
+        {
+            return IsImageResource(resourceType) || IsVideoResource(resourceType);
+        }
+
+        return false;
+    }
+
+    private static bool IsImageResource(string? resourceType)
+        => string.Equals(resourceType, "image", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsVideoResource(string? resourceType)
+        => string.Equals(resourceType, "video", StringComparison.OrdinalIgnoreCase);
+
     private sealed class AgenticRuntimePostDraftPayload
     {
         public string? Title { get; set; }
@@ -665,6 +758,8 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         public string? Hashtag { get; set; }
 
         public string? PostType { get; set; }
+
+        public List<Guid>? ResourceIds { get; set; }
     }
 
     private sealed class WebSearchToolArguments

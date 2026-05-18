@@ -235,7 +235,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
             new CreateAgenticPublishingScheduleCommand(
                 request.UserId,
                 request.WorkspaceId,
-                BuildTitle(finalPrompt, analysis.Title),
+                BuildTitle(finalPrompt, analysis.Title, scheduleOptions.Name),
                 "agentic",
                 NormalizeScheduleExecutionTime(scheduleOptions.ExecuteAtUtc),
                 scheduleOptions.Timezone,
@@ -946,11 +946,16 @@ public sealed class GeminiAgentChatService : IAgentChatService
             .ToList();
     }
 
-    private static string BuildTitle(string finalPrompt, string? suggestedTitle)
+    private static string BuildTitle(string finalPrompt, string? suggestedTitle, string? explicitName = null)
     {
-        if (!string.IsNullOrWhiteSpace(suggestedTitle))
+        var preferredTitle = string.IsNullOrWhiteSpace(explicitName)
+            ? suggestedTitle
+            : explicitName;
+
+        if (!string.IsNullOrWhiteSpace(preferredTitle))
         {
-            return suggestedTitle.Trim();
+            var trimmed = preferredTitle.Trim();
+            return trimmed.Length <= 80 ? trimmed : trimmed[..80].TrimEnd();
         }
 
         var compact = string.Join(' ', finalPrompt
