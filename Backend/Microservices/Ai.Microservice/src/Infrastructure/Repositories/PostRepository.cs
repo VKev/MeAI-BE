@@ -126,6 +126,7 @@ public sealed class PostRepository : IPostRepository
                 (p.DeletedAt == null ||
                  (includeFailedRecommendationPosts && failedRecommendationPostIds.Contains(p.Id))));
 
+        query = ExcludeUneditedPostBuilderDrafts(query);
         query = ApplyFilters(query, status, socialMediaId, platform, failedRecommendationPostIds);
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
@@ -172,6 +173,7 @@ public sealed class PostRepository : IPostRepository
                         (p.DeletedAt == null ||
                          (includeFailedRecommendationPosts && failedRecommendationPostIds.Contains(p.Id))));
 
+        query = ExcludeUneditedPostBuilderDrafts(query);
         query = ApplyFilters(query, status, socialMediaId, platform, failedRecommendationPostIds);
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
@@ -209,6 +211,7 @@ public sealed class PostRepository : IPostRepository
                         (p.DeletedAt == null ||
                          (includeFailedRecommendationPosts && failedRecommendationPostIds.Contains(p.Id))));
 
+        query = ExcludeUneditedPostBuilderDrafts(query);
         query = ApplyFilters(query, status, socialMediaId, platform, failedRecommendationPostIds);
 
         if (cursorCreatedAt.HasValue && cursorId.HasValue)
@@ -345,6 +348,16 @@ public sealed class PostRepository : IPostRepository
     private static bool IsFailedStatusFilter(string? status)
     {
         return string.Equals(status?.Trim(), FailedStatus, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IQueryable<Post> ExcludeUneditedPostBuilderDrafts(IQueryable<Post> query)
+    {
+        return query.Where(post =>
+            post.PostBuilderId == null ||
+            post.SocialMediaId != null ||
+            post.UpdatedAt != null ||
+            post.Title != null ||
+            (post.Status != null && post.Status.ToLower() != "draft"));
     }
 
     private static IQueryable<Post> ApplyFilters(
