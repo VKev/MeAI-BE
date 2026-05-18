@@ -34,6 +34,7 @@ public static class AgenticScheduleExecutionContextSerializer
 
 public sealed record AgenticScheduleExecutionContext(
     PublishingScheduleSearchInput? Search = null,
+    string? DesiredPostType = null,
     Guid? LastExecutionRunId = null,
     Guid? RuntimePostId = null,
     Guid? RuntimePostBuilderId = null,

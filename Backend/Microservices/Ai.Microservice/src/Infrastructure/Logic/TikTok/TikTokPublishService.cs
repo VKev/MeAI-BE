@@ -11,6 +11,7 @@ public sealed class TikTokPublishService : ITikTokPublishService
 {
     private const string CreatorInfoEndpoint = "https://open.tiktokapis.com/v2/post/publish/creator_info/query/";
     private const string VideoPublishInitEndpoint = "https://open.tiktokapis.com/v2/post/publish/video/init/";
+    private const string PrivatePrivacyLevel = "SELF_ONLY";
     private readonly HttpClient _httpClient;
     private readonly ILogger<TikTokPublishService> _logger;
 
@@ -167,30 +168,32 @@ public sealed class TikTokPublishService : ITikTokPublishService
     {
         try
         {
-            string privacyLevel;
-            if (isPrivate == false)
+            if (!creatorInfo.PrivacyLevelOptions.Contains(PrivatePrivacyLevel, StringComparer.Ordinal))
             {
-                var publicOptions = new[] { "PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR" };
-                privacyLevel = publicOptions.FirstOrDefault(opt => creatorInfo.PrivacyLevelOptions.Contains(opt))
-                    ?? creatorInfo.PrivacyLevelOptions.FirstOrDefault()
-                    ?? "SELF_ONLY";
-            }
-            else
-            {
-                privacyLevel = creatorInfo.PrivacyLevelOptions.Contains("SELF_ONLY")
-                    ? "SELF_ONLY"
-                    : creatorInfo.PrivacyLevelOptions.FirstOrDefault() ?? "SELF_ONLY";
+                _logger.LogWarning(
+                    "[TikTok] Refusing publish because creator does not allow {PrivacyLevel}. requested_isPrivate={IsPrivate}, available_options=[{Options}]",
+                    PrivatePrivacyLevel,
+                    isPrivate,
+                    string.Join(", ", creatorInfo.PrivacyLevelOptions));
+
+                return Result.Failure<string>(
+                    new Error(
+                        "TikTok.PrivateNotSupported",
+                        "TikTok creator account does not allow private publishing (SELF_ONLY)."));
             }
 
-            _logger.LogInformation("[TikTok] Publishing video with privacy_level={PrivacyLevel}, isPrivate={IsPrivate}, available_options=[{Options}]",
-                privacyLevel, isPrivate, string.Join(", ", creatorInfo.PrivacyLevelOptions));
+            _logger.LogInformation(
+                "[TikTok] Publishing video with forced privacy_level={PrivacyLevel}, requested_isPrivate={IsPrivate}, available_options=[{Options}]",
+                PrivatePrivacyLevel,
+                isPrivate,
+                string.Join(", ", creatorInfo.PrivacyLevelOptions));
 
             var requestBody = new TikTokVideoPublishRequest
             {
                 PostInfo = new TikTokApiPostInfo
                 {
                     Title = caption,
-                    PrivacyLevel = privacyLevel,
+                    PrivacyLevel = PrivatePrivacyLevel,
                     DisableDuet = creatorInfo.DuetDisabled,
                     DisableComment = creatorInfo.CommentDisabled,
                     DisableStitch = creatorInfo.StitchDisabled,
@@ -344,7 +347,7 @@ public sealed class TikTokPublishService : ITikTokPublishService
         public string Title { get; set; } = string.Empty;
 
         [JsonPropertyName("privacy_level")]
-        public string PrivacyLevel { get; set; } = "SELF_ONLY";
+        public string PrivacyLevel { get; set; } = PrivatePrivacyLevel;
 
         [JsonPropertyName("disable_duet")]
         public bool DisableDuet { get; set; }
@@ -406,4 +409,3 @@ public sealed class TikTokPublishService : ITikTokPublishService
 
     #endregion
 }
-

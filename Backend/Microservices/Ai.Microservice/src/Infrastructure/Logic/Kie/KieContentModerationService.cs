@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Abstractions.Gemini;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
 
 namespace Infrastructure.Logic.Kie;
@@ -10,6 +11,7 @@ public sealed class KieContentModerationService : IGeminiContentModerationServic
 {
     private readonly string _chatModel;
     private readonly KieResponsesClient _responsesClient;
+    private readonly ILogger<KieContentModerationService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,10 +21,12 @@ public sealed class KieContentModerationService : IGeminiContentModerationServic
 
     public KieContentModerationService(
         IConfiguration configuration,
-        KieResponsesClient responsesClient)
+        KieResponsesClient responsesClient,
+        ILogger<KieContentModerationService> logger)
     {
         _chatModel = configuration["Kie:ChatModel"] ?? configuration["Kie__ChatModel"] ?? KieResponsesClient.DefaultChatModel;
         _responsesClient = responsesClient;
+        _logger = logger;
     }
 
     public async Task<Result<ContentModerationResult>> CheckSensitiveContentAsync(
@@ -35,26 +39,16 @@ public sealed class KieContentModerationService : IGeminiContentModerationServic
                 new Error("ContentModeration.MissingText", "Text content is required for moderation."));
         }
 
-        var contentParts = new List<KieResponsesContentPart>
-        {
-            new() { Type = "input_text", Text = BuildModerationPrompt(request.Text) }
-        };
-
-        if (request.MediaResources is { Count: > 0 })
-        {
-            foreach (var resource in request.MediaResources)
-            {
-                contentParts.Add(new KieResponsesContentPart
-                {
-                    Type = "input_image",
-                    ImageUrl = resource.FileUri
-                });
-            }
-        }
+        var model = ResolveModel(request.PreferredModel);
+        _logger.LogInformation(
+            "Calling Kie content moderation. Model={Model} HasMedia={HasMedia} TextPreview={TextPreview}",
+            model,
+            request.MediaResources is { Count: > 0 },
+            Preview(request.Text));
 
         var argumentsResult = await _responsesClient.GetFunctionArgumentsAsync(
-            ResolveModel(request.PreferredModel),
-            [KieResponsesClient.UserParts(contentParts)],
+            model,
+            BuildModerationFunctionInput(request),
             BuildModerationTool(),
             "ContentModeration.RequestFailed",
             "Kie content moderation request failed.",
@@ -62,7 +56,29 @@ public sealed class KieContentModerationService : IGeminiContentModerationServic
 
         if (argumentsResult.IsFailure)
         {
-            return Result.Failure<ContentModerationResult>(argumentsResult.Error);
+            _logger.LogWarning(
+                "Kie content moderation function-call mode failed. Model={Model} ErrorCode={ErrorCode} ErrorDescription={ErrorDescription}. Falling back to JSON-only mode.",
+                model,
+                argumentsResult.Error.Code,
+                argumentsResult.Error.Description);
+
+            argumentsResult = await _responsesClient.GetTextResponseAsync(
+                model,
+                BuildModerationJsonFallbackInput(request),
+                "ContentModeration.RequestFailed",
+                "Kie content moderation request failed.",
+                cancellationToken);
+
+            if (argumentsResult.IsFailure)
+            {
+                _logger.LogWarning(
+                    "Kie content moderation JSON-only fallback also failed. Model={Model} ErrorCode={ErrorCode} ErrorDescription={ErrorDescription}",
+                    model,
+                    argumentsResult.Error.Code,
+                    argumentsResult.Error.Description);
+
+                return Result.Failure<ContentModerationResult>(argumentsResult.Error);
+            }
         }
 
         var moderationResult = ParseModerationResult(argumentsResult.Value);
@@ -86,6 +102,75 @@ public sealed class KieContentModerationService : IGeminiContentModerationServic
             "You are a content moderation AI. Analyze the following social media post text for sensitive content. " +
             "Call the report_sensitive_content tool with your moderation decision. Do not answer in text.\n\n" +
             $"Post content:\n{text}";
+    }
+
+    private static string BuildModerationJsonFallbackPrompt()
+    {
+        return
+            """
+            You are a content moderation AI.
+
+            Task:
+            - Analyze the provided social media post text and any attached images for sensitive content.
+            - Return JSON only.
+            - Do not use markdown fences.
+            - Do not add explanation text outside the JSON.
+
+            Required JSON object shape:
+            {
+              "is_sensitive": true | false,
+              "category": "violence | sexual | hate_speech | spam | self_harm | null",
+              "reason": "string or null",
+              "confidence_score": 0.0
+            }
+            """;
+    }
+
+    private static IReadOnlyList<KieResponsesInputItem> BuildModerationFunctionInput(ContentModerationRequest request)
+    {
+        return
+        [
+            KieResponsesClient.UserParts(BuildModerationUserParts(
+                BuildModerationPrompt(request.Text),
+                request.MediaResources))
+        ];
+    }
+
+    private static IReadOnlyList<KieResponsesInputItem> BuildModerationJsonFallbackInput(ContentModerationRequest request)
+    {
+        return
+        [
+            KieResponsesClient.DeveloperText(BuildModerationJsonFallbackPrompt()),
+            KieResponsesClient.UserParts(BuildModerationUserParts(
+                $"Post content:\n{request.Text}",
+                request.MediaResources))
+        ];
+    }
+
+    private static List<KieResponsesContentPart> BuildModerationUserParts(
+        string text,
+        IReadOnlyList<ContentModerationResource>? mediaResources)
+    {
+        var contentParts = new List<KieResponsesContentPart>
+        {
+            new() { Type = "input_text", Text = text }
+        };
+
+        if (mediaResources is not { Count: > 0 })
+        {
+            return contentParts;
+        }
+
+        foreach (var resource in mediaResources)
+        {
+            contentParts.Add(new KieResponsesContentPart
+            {
+                Type = "input_image",
+                ImageUrl = resource.FileUri
+            });
+        }
+
+        return contentParts;
     }
 
     private static KieResponsesFunctionTool BuildModerationTool()
@@ -175,6 +260,22 @@ public sealed class KieContentModerationService : IGeminiContentModerationServic
 
         [JsonPropertyName("confidence_score")]
         public double ConfidenceScore { get; set; }
+    }
+
+    private static string Preview(string? value, int maxLength = 400)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "<empty>";
+        }
+
+        var normalized = value
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+
+        return normalized.Length <= maxLength
+            ? normalized
+            : $"{normalized[..maxLength]}...(truncated,total={normalized.Length})";
     }
 
 }

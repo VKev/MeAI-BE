@@ -48,11 +48,13 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         try
         {
             var model = await ResolveModelAsync(cancellationToken);
+            var importedResourceTypes = new Dictionary<Guid, string?>();
             var initialResourceIds = request.Search.ImportedResources?
                 .Select(item => item.ResourceId)
                 .Where(id => id != Guid.Empty)
                 .Distinct()
                 .ToList() ?? [];
+            MergeImportedResourceTypes(importedResourceTypes, request.Search.ImportedResources);
             var input = new List<KieResponsesInputItem>
             {
                 KieResponsesClient.UserText(
@@ -64,7 +66,6 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                     - import_media: import image/video URLs into the MeAI resource system.
                     - create_runtime_post_draft: finalize the draft output.
                     Always finish by calling create_runtime_post_draft. Do not answer in plain text.
-                    The final postType must be "posts".
                     content must be plain text suitable for a social post.
                     Respect maxContentLength as a hard character cap when it is provided.
                     If the payload includes recommendationSummary or recommendationPageProfile, use them to match the account's voice, positioning, and contact details.
@@ -79,6 +80,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 model,
                 input,
                 initialResourceIds,
+                importedResourceTypes,
                 cancellationToken);
             if (runtimeDraft is not null && !string.IsNullOrWhiteSpace(runtimeDraft.Content))
             {
@@ -123,13 +125,32 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 recommendationWebSources = request.RecommendationWebSources,
                 ragFallbackReason = request.RagFallbackReason
             },
+            publishingConstraints = new
+            {
+                desiredPostType = request.DesiredPostType,
+                requiresVideoMedia = request.RequiresVideoMedia,
+                requiresSingleMedia = request.RequiresSingleMedia,
+                allowTextOnly = request.AllowTextOnly,
+                targetInstructionSummary = request.TargetInstructionSummary
+            },
             search = request.Search
         }, JsonOptions);
 
         return
             "Create one plain-text social post for immediate scheduled publishing from this payload. " +
             "If recommendationSummary is present, treat it as the primary brand-voice and page-profile grounding. " +
-            "Use the web search payload for freshness and facts. If maxContentLength is set, keep content within that hard limit. Return one publishable post only.\n\n" +
+            "Use the web search payload for freshness and facts. " +
+            $"The final postType must be \"{NormalizePostType(request.DesiredPostType)}\". " +
+            (request.RequiresVideoMedia == true
+                ? "You must import exactly one VIDEO resource and align the draft for short-form video publishing. "
+                : string.Empty) +
+            (request.RequiresSingleMedia == true && request.RequiresVideoMedia != true
+                ? "You must attach exactly one media resource. "
+                : string.Empty) +
+            (request.AllowTextOnly == false && request.RequiresVideoMedia != true
+                ? "Do not finalize the draft without required media. "
+                : string.Empty) +
+            "If maxContentLength is set, keep content within that hard limit. Return one publishable post only.\n\n" +
             payload;
     }
 
@@ -138,6 +159,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         string model,
         List<KieResponsesInputItem> input,
         List<Guid> importedResourceIds,
+        Dictionary<Guid, string?> importedResourceTypes,
         CancellationToken cancellationToken)
     {
         var tools = new KieResponsesTool[]
@@ -178,13 +200,25 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                         return null;
                     }
 
-                    return parsed with { ResourceIds = importedResourceIds.Distinct().ToList() };
+                    var resourceIds = importedResourceIds.Distinct().ToList();
+                    var resources = resourceIds
+                        .Select(resourceId => new AgenticRuntimeDraftResource(
+                            resourceId,
+                            importedResourceTypes.GetValueOrDefault(resourceId)))
+                        .ToList();
+
+                    return parsed with
+                    {
+                        ResourceIds = resourceIds,
+                        Resources = resources
+                    };
                 }
 
                 var toolOutput = await ExecuteToolCallAsync(
                     request,
                     call,
                     importedResourceIds,
+                    importedResourceTypes,
                     cancellationToken);
 
                 input.Add(KieResponsesClient.FunctionCall(call.CallId, call.Name, call.Arguments));
@@ -201,13 +235,14 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         AgenticRuntimeContentRequest request,
         KieResponsesFunctionCall call,
         List<Guid> importedResourceIds,
+        Dictionary<Guid, string?> importedResourceTypes,
         CancellationToken cancellationToken)
     {
         return call.Name switch
         {
-            "web_search" => await ExecuteWebSearchAsync(request, call.Arguments, importedResourceIds, cancellationToken),
-            "fetch_url" => await ExecuteFetchUrlAsync(request, call.Arguments, importedResourceIds, cancellationToken),
-            "import_media" => await ExecuteImportMediaAsync(request, call.Arguments, importedResourceIds, cancellationToken),
+            "web_search" => await ExecuteWebSearchAsync(request, call.Arguments, importedResourceIds, importedResourceTypes, cancellationToken),
+            "fetch_url" => await ExecuteFetchUrlAsync(request, call.Arguments, importedResourceIds, importedResourceTypes, cancellationToken),
+            "import_media" => await ExecuteImportMediaAsync(request, call.Arguments, importedResourceIds, importedResourceTypes, cancellationToken),
             _ => new { error = $"Unsupported tool: {call.Name}" }
         };
     }
@@ -216,6 +251,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         AgenticRuntimeContentRequest request,
         string arguments,
         List<Guid> importedResourceIds,
+        Dictionary<Guid, string?> importedResourceTypes,
         CancellationToken cancellationToken)
     {
         var payload = JsonSerializer.Deserialize<WebSearchToolArguments>(arguments, JsonOptions);
@@ -243,6 +279,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         }
 
         MergeImportedResourceIds(importedResourceIds, result.Value.ImportedResources);
+        MergeImportedResourceTypes(importedResourceTypes, result.Value.ImportedResources);
         return BuildSearchToolOutput(result.Value);
     }
 
@@ -250,6 +287,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         AgenticRuntimeContentRequest request,
         string arguments,
         List<Guid> importedResourceIds,
+        Dictionary<Guid, string?> importedResourceTypes,
         CancellationToken cancellationToken)
     {
         var payload = JsonSerializer.Deserialize<FetchUrlToolArguments>(arguments, JsonOptions);
@@ -275,6 +313,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             cancellationToken);
 
         MergeImportedResourceIds(importedResourceIds, result.ImportedResources);
+        MergeImportedResourceTypes(importedResourceTypes, result.ImportedResources);
         return BuildSearchToolOutput(result);
     }
 
@@ -282,6 +321,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         AgenticRuntimeContentRequest request,
         string arguments,
         List<Guid> importedResourceIds,
+        Dictionary<Guid, string?> importedResourceTypes,
         CancellationToken cancellationToken)
     {
         var payload = JsonSerializer.Deserialize<ImportMediaToolArguments>(arguments, JsonOptions);
@@ -326,6 +366,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 if (resource.ResourceId != Guid.Empty)
                 {
                     importedResourceIds.Add(resource.ResourceId);
+                    importedResourceTypes[resource.ResourceId] = resource.ResourceType;
                 }
 
                 imported.Add(new
@@ -388,6 +429,21 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                      .Where(id => id != Guid.Empty))
         {
             importedResourceIds.Add(resourceId);
+        }
+    }
+
+    private static void MergeImportedResourceTypes(
+        Dictionary<Guid, string?> importedResourceTypes,
+        IReadOnlyList<ImportedResourceItem>? importedResources)
+    {
+        if (importedResources is null)
+        {
+            return;
+        }
+
+        foreach (var item in importedResources.Where(item => item.ResourceId != Guid.Empty))
+        {
+            importedResourceTypes[item.ResourceId] = item.ResourceType;
         }
     }
 
@@ -492,7 +548,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                     postType = new
                     {
                         type = "string",
-                        @enum = new[] { "posts" },
+                        @enum = new[] { "posts", "reels" },
                         description = "Runtime schedule post type."
                     }
                 }
@@ -551,10 +607,15 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
             title,
             string.IsNullOrWhiteSpace(content) ? request.Search.Query : content,
             null,
-            "posts",
+            NormalizePostType(request.DesiredPostType),
             request.Search.ImportedResources?
                 .Select(item => item.ResourceId)
                 .Where(id => id != Guid.Empty)
+                .Distinct()
+                .ToList(),
+            request.Search.ImportedResources?
+                .Where(item => item.ResourceId != Guid.Empty)
+                .Select(item => new AgenticRuntimeDraftResource(item.ResourceId, item.ResourceType))
                 .Distinct()
                 .ToList());
     }
@@ -586,6 +647,13 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
         }
 
         return value[..maxLength].TrimEnd();
+    }
+
+    private static string NormalizePostType(string? postType)
+    {
+        return string.Equals((postType ?? string.Empty).Trim(), "reels", StringComparison.OrdinalIgnoreCase)
+            ? "reels"
+            : "posts";
     }
 
     private sealed class AgenticRuntimePostDraftPayload

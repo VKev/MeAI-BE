@@ -20,7 +20,8 @@ public sealed record CreateAgenticPublishingScheduleCommand(
     string? AgentPrompt,
     int? MaxContentLength,
     PublishingScheduleSearchInput? Search,
-    IReadOnlyList<PublishingScheduleTargetInput>? Targets) : IRequest<Result<PublishingScheduleResponse>>;
+    IReadOnlyList<PublishingScheduleTargetInput>? Targets,
+    string? DesiredPostType = null) : IRequest<Result<PublishingScheduleResponse>>;
 
 public sealed class CreateAgenticPublishingScheduleCommandHandler
     : IRequestHandler<CreateAgenticPublishingScheduleCommand, Result<PublishingScheduleResponse>>
@@ -85,6 +86,7 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
                 validated.Value.Search.Country,
                 validated.Value.Search.SearchLanguage,
                 validated.Value.Search.Freshness),
+            DesiredPostType: NormalizePostType(request.DesiredPostType),
             RegisteredAtUtc: now);
 
         var schedule = new PublishingSchedule
@@ -123,5 +125,15 @@ public sealed class CreateAgenticPublishingScheduleCommandHandler
 
         var response = await _responseBuilder.BuildAsync(schedule, cancellationToken);
         return Result.Success(response);
+    }
+
+    private static string? NormalizePostType(string? postType)
+    {
+        return (postType ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "reel" or "reels" or "video" => "reels",
+            "post" or "posts" => "posts",
+            _ => null
+        };
     }
 }
