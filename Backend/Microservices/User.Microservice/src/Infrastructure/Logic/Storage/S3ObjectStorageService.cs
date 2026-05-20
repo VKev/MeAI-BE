@@ -295,6 +295,91 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         }
     }
 
+    public Result<PresignedUploadUrlResult> GetPresignedUploadUrl(string key, string contentType, TimeSpan? expiresIn = null)
+    {
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<PresignedUploadUrlResult>(
+                new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
+        try
+        {
+            var keyWithNamespace = NormalizeKey(key, applyNamespace: true);
+            if (string.IsNullOrWhiteSpace(keyWithNamespace))
+            {
+                return Result.Failure<PresignedUploadUrlResult>(
+                    new Error("S3.InvalidKey", "Storage key is missing"));
+            }
+
+            var ttl = NormalizePresignTtl(expiresIn);
+            var request = new GetPreSignedUrlRequest
+            {
+                BucketName = _bucket,
+                Key = keyWithNamespace,
+                Verb = HttpVerb.PUT,
+                ContentType = contentType,
+                Expires = DateTime.UtcNow.Add(ttl)
+            };
+
+            var url = BuildPublicPresignedUrl(_client.GetPreSignedURL(request));
+            return Result.Success(new PresignedUploadUrlResult(keyWithNamespace, url, _bucket, _region, _namespace));
+        }
+        catch (AmazonS3Exception ex)
+        {
+            return Result.Failure<PresignedUploadUrlResult>(new Error("S3.PresignFailed", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<PresignedUploadUrlResult>(new Error("S3.PresignFailed", ex.Message));
+        }
+    }
+
+    public async Task<Result<StorageObjectInfo>> GetObjectInfoAsync(string keyOrUrl, CancellationToken cancellationToken)
+    {
+        if (TryGetSeedMediaUrl(keyOrUrl, out _))
+        {
+            return Result.Failure<StorageObjectInfo>(
+                new Error("S3.SeedMedia", "Seed media metadata is not supported via S3."));
+        }
+
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<StorageObjectInfo>(
+                new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
+        try
+        {
+            var key = NormalizeKey(keyOrUrl, applyNamespace: false);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return Result.Failure<StorageObjectInfo>(
+                    new Error("S3.InvalidKey", "Storage key is missing"));
+            }
+
+            var metadata = await _client.GetObjectMetadataAsync(new GetObjectMetadataRequest
+            {
+                BucketName = _bucket,
+                Key = key
+            }, cancellationToken);
+
+            return Result.Success(new StorageObjectInfo(key, metadata.Headers.ContentLength, metadata.LastModified));
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return Result.Failure<StorageObjectInfo>(new Error("S3.ObjectNotFound", "Object not found in storage."));
+        }
+        catch (AmazonS3Exception ex)
+        {
+            return Result.Failure<StorageObjectInfo>(new Error("S3.HeadFailed", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<StorageObjectInfo>(new Error("S3.HeadFailed", ex.Message));
+        }
+    }
+
     private string? TryGetCachedUrl(string cacheKey)
     {
         if (_cache is null)

@@ -46,7 +46,7 @@ public sealed class GetResourcesQueryHandler
 
         var query = _repository.GetAll()
             .AsNoTracking()
-            .Where(resource => resource.UserId == request.UserId && !resource.IsDeleted);
+            .Where(resource => resource.UserId == request.UserId && !resource.IsDeleted && resource.Status != "PendingUpload");
 
         if (selectedOriginKinds.Count > 0)
         {

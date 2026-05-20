@@ -16,6 +16,10 @@ public interface IObjectStorageService
     Task<Result<bool>> ExistsAsync(string keyOrUrl, CancellationToken cancellationToken);
 
     Task<Result<IReadOnlyList<StorageObjectInfo>>> ListAsync(string? prefix, CancellationToken cancellationToken);
+
+    Result<PresignedUploadUrlResult> GetPresignedUploadUrl(string key, string contentType, TimeSpan? expiresIn = null);
+
+    Task<Result<StorageObjectInfo>> GetObjectInfoAsync(string keyOrUrl, CancellationToken cancellationToken);
 }
 
 public sealed record StorageUploadRequest(
@@ -29,6 +33,13 @@ public sealed record StorageUploadResult(
     string Url,
     string? Bucket = null,
     string? Region = null,
+    string? Namespace = null);
+
+public sealed record PresignedUploadUrlResult(
+    string Key,
+    string Url,
+    string Bucket,
+    string Region,
     string? Namespace = null);
 
 public sealed record StorageObjectInfo(
