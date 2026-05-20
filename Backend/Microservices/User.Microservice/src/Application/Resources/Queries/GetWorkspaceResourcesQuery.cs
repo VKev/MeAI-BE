@@ -57,7 +57,8 @@ public sealed class GetWorkspaceResourcesQueryHandler
             .Where(resource =>
                 resource.UserId == request.UserId &&
                 resource.WorkspaceId == request.WorkspaceId &&
-                !resource.IsDeleted);
+                !resource.IsDeleted &&
+                resource.Status != "PendingUpload");
 
         if (selectedOriginKinds.Count > 0)
         {
