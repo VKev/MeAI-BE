@@ -388,7 +388,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
         packages.Select(item => item.Name).Should().ContainInOrder(
             "Plus Coins",
             "Pro Coins",
-            "Pro Max Coins");
+            "Pro Max");
         packages.Select(item => item.CoinAmount).Should().ContainInOrder(10000m, 15000m, 20000m);
         packages.Select(item => item.Price).Should().ContainInOrder(100000m, 150000m, 200000m);
         packages.Should().OnlyContain(item => item.Currency == "vnd");
@@ -499,7 +499,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
     }
 
     [Fact]
-    public async Task PurchaseCoinPackageCommand_WithUseDefaultCard_FailsWhenNoDefaultCardFound()
+    public async Task PurchaseCoinPackageCommand_WithUseDefaultCard_FallsBackWhenNoDefaultCardFound()
     {
         await using var dbContext = CreateDbContext();
         var user = CreateUser(Guid.NewGuid(), "buyer-nocard", "buyer-nocard@example.com");
@@ -523,6 +523,26 @@ public sealed class FixedCoinPackagesTests : IDisposable
                 null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(string.Empty); // No default card found
+        stripePaymentService
+            .Setup(service => service.CreateCoinPackagePaymentIntentAsync(
+                "cus_coin_package",
+                user.Email,
+                user.FullName,
+                package.Price,
+                package.Currency,
+                package.Name,
+                It.Is<IDictionary<string, string>>(metadata =>
+                    metadata["flow_type"] == "coin_package" &&
+                    metadata["user_id"] == user.Id.ToString() &&
+                    metadata["coin_package_id"] == package.Id.ToString()),
+                null, // Falls back to null
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StripeOneTimePaymentResult(
+                "pi_coin_package",
+                "secret_coin_package",
+                "requires_payment_method",
+                "vnd",
+                49900m));
 
         var stripeCustomerResolver = new StripeCustomerResolver(unitOfWork, stripePaymentService.Object);
         var handler = new PurchaseCoinPackageCommandHandler(
@@ -536,8 +556,10 @@ public sealed class FixedCoinPackagesTests : IDisposable
             new PurchaseCoinPackageCommand(package.Id, user.Id, UseDefaultCard: true),
             CancellationToken.None);
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Code.Should().Be("Stripe.DefaultPaymentMethodNotFound");
+        result.IsSuccess.Should().BeTrue();
+        result.Value.PaymentIntentId.Should().Be("pi_coin_package");
+        result.Value.ClientSecret.Should().Be("secret_coin_package");
+        result.Value.Status.Should().Be("requires_payment_method");
     }
 
     private MyDbContext CreateDbContext()
