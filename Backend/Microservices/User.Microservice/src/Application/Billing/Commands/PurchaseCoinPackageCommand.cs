@@ -85,14 +85,13 @@ public sealed class PurchaseCoinPackageCommandHandler
         string? defaultPaymentMethodId = null;
         if (request.UseDefaultCard)
         {
-            defaultPaymentMethodId = await _stripePaymentService.GetCustomerDefaultPaymentMethodIdAsync(
+            var pmId = await _stripePaymentService.GetCustomerDefaultPaymentMethodIdAsync(
                 customerResult.Value.StripeCustomerId,
                 cancellationToken: cancellationToken);
 
-            if (string.IsNullOrWhiteSpace(defaultPaymentMethodId))
+            if (!string.IsNullOrWhiteSpace(pmId))
             {
-                return Result.Failure<CoinPackageCheckoutResponse>(
-                    new Error("Stripe.DefaultPaymentMethodNotFound", "Default payment method was not found."));
+                defaultPaymentMethodId = pmId;
             }
         }
 
