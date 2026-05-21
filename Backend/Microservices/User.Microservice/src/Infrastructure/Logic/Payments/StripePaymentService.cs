@@ -598,12 +598,63 @@ public sealed class StripePaymentService : IStripePaymentService
                 return subscription.DefaultPaymentMethodId;
             }
         }
+        else
+        {
+            try
+            {
+                var subscriptions = await CreateSubscriptionService().ListAsync(
+                    new SubscriptionListOptions
+                    {
+                        Customer = stripeCustomerId,
+                        Status = "all"
+                    },
+                    cancellationToken: cancellationToken);
+
+                var activeOrTrialingSub = subscriptions.Data
+                    .FirstOrDefault(s => (s.Status == "active" || s.Status == "trialing") && !string.IsNullOrWhiteSpace(s.DefaultPaymentMethodId));
+
+                if (activeOrTrialingSub != null)
+                {
+                    return activeOrTrialingSub.DefaultPaymentMethodId;
+                }
+            }
+            catch (Exception)
+            {
+                // Degrade gracefully if subscription listing fails
+            }
+        }
 
         var customer = await CreateCustomerService().GetAsync(
             stripeCustomerId,
             cancellationToken: cancellationToken);
 
-        return customer.InvoiceSettings?.DefaultPaymentMethodId;
+        if (!string.IsNullOrWhiteSpace(customer.InvoiceSettings?.DefaultPaymentMethodId))
+        {
+            return customer.InvoiceSettings.DefaultPaymentMethodId;
+        }
+
+        try
+        {
+            var paymentMethods = await CreatePaymentMethodService().ListAsync(
+                new PaymentMethodListOptions
+                {
+                    Customer = stripeCustomerId,
+                    Type = "card"
+                },
+                cancellationToken: cancellationToken);
+
+            var firstCard = paymentMethods.Data.FirstOrDefault();
+            if (firstCard != null)
+            {
+                return firstCard.Id;
+            }
+        }
+        catch (Exception)
+        {
+            // Degrade gracefully if payment methods listing fails
+        }
+
+        return null;
     }
 
     private StripeRecurringSubscriptionResult ToRecurringResult(Stripe.Subscription subscription)
