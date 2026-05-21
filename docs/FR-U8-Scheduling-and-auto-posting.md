@@ -221,7 +221,7 @@ Provider/model/runtime hiện tại:
 
 - AI provider cho runtime lane: **Kie**
 - Endpoint: `/codex/v1/responses`
-- Default model: `gpt-5-4`
+- Default model: `gpt-4o-mini`
 - Structured output được lấy qua **function calling**, không ép model trả text JSON rồi parse.
 
 Search query template phải được derive và persist ngay lúc create schedule, không để runtime mới tự nghĩ lại từ đầu.

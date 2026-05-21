@@ -25,7 +25,7 @@ public sealed class EnhanceExistingPostCommandHandler
 {
     private const int DefaultSuggestionCount = 3;
     private const int MaxSuggestionCount = 6;
-    private const string DefaultCaptionModel = "gpt-5-4";
+    private const string DefaultCaptionModel = "gpt-4o-mini";
 
     private readonly IPostRepository _postRepository;
     private readonly IUserResourceService _userResourceService;

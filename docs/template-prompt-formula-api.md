@@ -67,7 +67,7 @@ Quy tắc:
     "formulaKey": "launch-caption",
     "outputType": "caption",
     "renderedPrompt": "...",
-    "model": "gpt-5-4",
+    "model": "gpt-4o-mini",
     "outputs": [
       "variant 1",
       "variant 2",

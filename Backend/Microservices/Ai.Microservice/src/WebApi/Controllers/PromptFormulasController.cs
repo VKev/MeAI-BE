@@ -20,7 +20,7 @@ namespace WebApi.Controllers;
 [Route("api/Ai")]
 public sealed class PromptFormulasController : ApiController
 {
-    private const string DefaultModel = "gpt-5-4";
+    private const string DefaultModel = "gpt-4o-mini";
 
     private static readonly JsonSerializerOptions VariableJsonOptions = new()
     {

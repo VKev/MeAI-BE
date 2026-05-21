@@ -11,7 +11,7 @@ namespace Infrastructure.Logic.Kie;
 
 public sealed class KieResponsesClient
 {
-    public const string DefaultChatModel = "gpt-5-4";
+    public const string DefaultChatModel = "gpt-4o-mini";
 
     private const string DefaultBaseUrl = "https://api.kie.ai";
     private const string ResponsesPath = "/codex/v1/responses";
@@ -193,7 +193,9 @@ public sealed class KieResponsesClient
         }
 
         var normalized = model.Trim().ToLowerInvariant();
-        return normalized.StartsWith("gpt-5", StringComparison.Ordinal) ||
+        return normalized.StartsWith("gpt-4", StringComparison.Ordinal) ||
+               normalized.StartsWith("openai/gpt-4", StringComparison.Ordinal) ||
+               normalized.StartsWith("gpt-5", StringComparison.Ordinal) ||
                normalized.Contains("codex", StringComparison.Ordinal);
     }
 
