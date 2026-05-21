@@ -79,6 +79,20 @@ class LightRagFacade(Protocol):
         ids: list[str] | None = None,
     ) -> str: ...
 
+    async def query_with_references(
+        self,
+        query: str,
+        *,
+        mode: str = "hybrid",
+        top_k: int = 10,
+        only_need_context: bool = False,
+        ids: list[str] | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def get_full_documents(
+        self, document_ids: list[str]
+    ) -> dict[str, dict[str, Any]]: ...
+
 
 @runtime_checkable
 class MultimodalEmbedderPort(Protocol):

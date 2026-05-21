@@ -8,6 +8,7 @@ Replaces `RagEngine.query` / `multimodal_query` / `list_fingerprints`.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from ..ports import (
@@ -19,6 +20,11 @@ from ..ports import (
 )
 
 logger = logging.getLogger("rag-service.query")
+
+_CAPTION_RE = re.compile(
+    r"(?:^|\n)Caption:\s*(?P<caption>.*?)(?=\n[A-Za-z][A-Za-z0-9 ]{0,40}:|\Z)",
+    re.DOTALL,
+)
 
 
 class QueryService:
@@ -80,26 +86,53 @@ class QueryService:
     ) -> dict[str, Any]:
         matched_ids: list[str] | None = None
         text_context = ""
+        reference_docs: list[dict[str, Any]] = []
         if document_id_prefix:
             matched_ids = self._fingerprints.matching_ids(document_id_prefix)
 
         if matched_ids is None or matched_ids:
             try:
-                text_context = await self._light_rag.query(
+                text_result = await self._light_rag.query_with_references(
                     query_text,
                     mode="hybrid",
                     top_k=top_k,
                     only_need_context=True,
                     ids=matched_ids,
                 )
+                text_context = str(text_result.get("content") or "")
+                reference_ids = _reference_document_ids(
+                    text_result.get("references"),
+                    text_result.get("raw_data"),
+                    matched_ids or [],
+                    document_id_prefix,
+                    top_k,
+                )
+                reference_docs = await self._build_text_references(reference_ids)
             except Exception as ex:
                 logger.exception("LightRAG context query failed")
                 text_context = f"(context retrieval failed: {ex})"
 
         return {
             "context": text_context,
-            "matchedDocumentIds": matched_ids or [],
+            "matchedDocumentIds": [doc["documentId"] for doc in reference_docs],
+            "references": reference_docs,
         }
+
+    async def _build_text_references(
+        self, document_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        docs = await self._light_rag.get_full_documents(document_ids)
+        references: list[dict[str, Any]] = []
+        for doc_id in document_ids:
+            doc = docs.get(doc_id) or {}
+            content = str(doc.get("content") or "").strip()
+            references.append({
+                "documentId": doc_id,
+                "postId": _post_id_from_document_id(doc_id),
+                "content": content or None,
+                "caption": _extract_caption(content),
+            })
+        return references
 
     async def _visual_leg(
         self,
@@ -207,3 +240,109 @@ class QueryService:
         )
         matches = self._fingerprints.list_with_prefix(prefix)
         return {"fingerprints": matches, "count": len(matches)}
+
+
+_REFERENCE_ID_KEYS = {
+    "documentId",
+    "document_id",
+    "doc_id",
+    "full_doc_id",
+    "file_path",
+    "source_id",
+    "id",
+}
+
+
+def _reference_document_ids(
+    references: Any,
+    raw_data: Any,
+    fallback_ids: list[str],
+    prefix: str,
+    top_k: int,
+) -> list[str]:
+    candidates: list[str] = []
+    _collect_reference_ids(references, prefix, candidates)
+    _collect_reference_ids(raw_data, prefix, candidates)
+    if not candidates:
+        candidates.extend(fallback_ids)
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for doc_id in candidates:
+        if doc_id in seen or not _is_primary_post_document(doc_id, prefix):
+            continue
+        seen.add(doc_id)
+        ordered.append(doc_id)
+        if len(ordered) >= top_k:
+            break
+    return ordered
+
+
+def _collect_reference_ids(value: Any, prefix: str, candidates: list[str]) -> None:
+    if value is None:
+        return
+
+    if isinstance(value, str):
+        doc_id = _normalise_reference_id(value, prefix)
+        if doc_id:
+            candidates.append(doc_id)
+        return
+
+    if isinstance(value, dict):
+        for key in _REFERENCE_ID_KEYS:
+            if key in value:
+                _collect_reference_ids(value.get(key), prefix, candidates)
+        for child in value.values():
+            _collect_reference_ids(child, prefix, candidates)
+        return
+
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            _collect_reference_ids(item, prefix, candidates)
+
+
+def _normalise_reference_id(value: str, prefix: str) -> str | None:
+    value = value.strip().strip("\"'`[](){}<>.,;")
+    if not value:
+        return None
+
+    if prefix:
+        start = value.find(prefix)
+        if start < 0:
+            return None
+        value = value[start:]
+
+    for sep in (" ", "\t", "\r", "\n"):
+        idx = value.find(sep)
+        if idx > 0:
+            value = value[:idx]
+    return value.strip().strip("\"'`[](){}<>.,;") or None
+
+
+def _is_primary_post_document(doc_id: str, prefix: str) -> bool:
+    if prefix and not doc_id.startswith(prefix):
+        return False
+    tail = doc_id[len(prefix):] if prefix else doc_id
+    if not tail or tail == "profile":
+        return False
+    return ":" not in tail
+
+
+def _post_id_from_document_id(doc_id: str) -> str | None:
+    parts = doc_id.split(":", 2)
+    if len(parts) < 3:
+        return None
+    post_id = parts[2].split(":", 1)[0]
+    if not post_id or post_id == "profile":
+        return None
+    return post_id
+
+
+def _extract_caption(content: str) -> str | None:
+    if not content:
+        return None
+    match = _CAPTION_RE.search(content)
+    if match:
+        caption = match.group("caption").strip()
+        return caption or None
+    return None

@@ -32,7 +32,7 @@ class S3ImageMirror:
         region: str = "ap-southeast-1",
         key_prefix: str = "local-vinhdo/videorag-frames/images/",
         ttl_seconds: int = 604800,
-        public_base_url: str | None = "https://static.vkev.me",
+        public_base_url: str | None = None,
     ) -> None:
         self._bucket = bucket
         self._region = region

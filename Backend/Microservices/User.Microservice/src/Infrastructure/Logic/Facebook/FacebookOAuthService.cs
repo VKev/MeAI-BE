@@ -201,7 +201,19 @@ public sealed class FacebookOAuthService : IFacebookOAuthService
                     page.AccessToken,
                     page.FanCount,
                     page.FollowersCount,
-                    page.Posts?.Summary?.TotalCount))
+                    page.Posts?.Summary?.TotalCount,
+                    page.Username,
+                    page.About,
+                    page.Description,
+                    page.Category,
+                    page.Bio,
+                    page.Website,
+                    page.Emails is { Length: > 0 }
+                        ? string.Join(", ", page.Emails.Where(e => !string.IsNullOrWhiteSpace(e)))
+                        : null,
+                    page.Phone,
+                    page.SingleLineAddress ?? FormatLocation(page.Location),
+                    page.Picture?.Data?.Url))
                 .ToList();
 
             var selectedPage = SelectPage(pages, preferredPageId);

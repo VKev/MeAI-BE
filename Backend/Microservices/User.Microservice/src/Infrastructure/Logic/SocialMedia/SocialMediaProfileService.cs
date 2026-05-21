@@ -51,7 +51,7 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
 
         return type.ToLowerInvariant() switch
         {
-            "tiktok" => await GetTikTokProfileAsync(accessToken, cancellationToken),
+            "tiktok" => await GetTikTokProfileAsync(metadata, accessToken, cancellationToken),
             "threads" => await GetThreadsProfileAsync(metadata, accessToken, cancellationToken),
             "facebook" => await GetFacebookProfileAsync(metadata, accessToken, cancellationToken),
             "instagram" => await GetInstagramProfileAsync(metadata, accessToken, cancellationToken),
@@ -61,6 +61,7 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
     }
 
     private async Task<Result<SocialMediaUserProfile>> GetTikTokProfileAsync(
+        JsonDocument metadata,
         string accessToken,
         CancellationToken cancellationToken)
     {
@@ -68,7 +69,7 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
 
         if (result.IsFailure)
         {
-            return Result.Failure<SocialMediaUserProfile>(result.Error);
+            return GetTikTokProfileFromMetadata(metadata);
         }
 
         var profile = result.Value;
@@ -81,7 +82,10 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             FollowerCount: profile.FollowerCount,
             FollowingCount: profile.FollowingCount,
             PostCount: null,
-            PageLikeCount: null));
+            PageLikeCount: null,
+            Email: GetContactEmail(metadata),
+            Phone: GetContactPhone(metadata),
+            Website: GetContactWebsite(metadata)));
     }
 
     private async Task<Result<SocialMediaUserProfile>> GetThreadsProfileAsync(
@@ -137,7 +141,10 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             FollowerCount: profile.FollowersCount ?? metadataProfile?.FollowerCount,
             FollowingCount: profile.FollowsCount ?? metadataProfile?.FollowingCount,
             PostCount: profile.MediaCount ?? metadataProfile?.PostCount,
-            PageLikeCount: null));
+            PageLikeCount: null,
+            Email: GetContactEmail(metadata),
+            Phone: GetContactPhone(metadata),
+            Website: GetContactWebsite(metadata)));
     }
 
     private async Task<Result<SocialMediaUserProfile>> GetFacebookProfileAsync(
@@ -181,7 +188,10 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             PageLikeCount: profile.PageLikeCount,
             PageId: profile.PageId,
             PageName: profile.PageName,
-            PageProfilePictureUrl: pageProfilePictureUrl));
+            PageProfilePictureUrl: pageProfilePictureUrl,
+            Email: FirstNonEmpty(profile.PageEmail, GetContactEmail(metadata)),
+            Phone: FirstNonEmpty(profile.PagePhone, GetContactPhone(metadata)),
+            Website: FirstNonEmpty(profile.PageWebsite, GetContactWebsite(metadata))));
     }
 
     private async Task<Result<SocialMediaUserProfile>> GetInstagramProfileAsync(
@@ -223,7 +233,10 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             FollowerCount: profile.Profile.FollowersCount,
             FollowingCount: profile.Profile.FollowsCount,
             PostCount: profile.Profile.MediaCount,
-            PageLikeCount: null));
+            PageLikeCount: null,
+            Email: GetContactEmail(metadata),
+            Phone: GetContactPhone(metadata),
+            Website: GetContactWebsite(metadata)));
     }
 
     private static Result<SocialMediaUserProfile> GetInstagramProfileFromMetadata(JsonDocument metadata)
@@ -253,7 +266,10 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             FollowerCount: followerCount,
             FollowingCount: followingCount,
             PostCount: postCount,
-            PageLikeCount: null));
+            PageLikeCount: null,
+            Email: GetContactEmail(metadata),
+            Phone: GetContactPhone(metadata),
+            Website: GetContactWebsite(metadata)));
     }
 
     private static Result<SocialMediaUserProfile> GetFacebookProfileFromMetadata(JsonDocument metadata)
@@ -267,17 +283,23 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
 
         return Result.Success(new SocialMediaUserProfile(
             UserId: GetString(root, "id"),
-            Username: null,
-            DisplayName: GetString(root, "name"),
-            ProfilePictureUrl: GetString(root, "profile_picture_url"),
-            Bio: null,
+            Username: GetString(root, "page_username"),
+            DisplayName: GetString(root, "page_name") ?? GetString(root, "name"),
+            ProfilePictureUrl: GetString(root, "page_profile_picture_url") ?? GetString(root, "profile_picture_url"),
+            Bio: FirstNonEmpty(
+                GetString(root, "page_description"),
+                GetString(root, "page_about"),
+                GetString(root, "page_bio")),
             FollowerCount: TryGetIntValue(root, "page_followers_count"),
             FollowingCount: null,
             PostCount: TryGetIntValue(root, "page_post_count"),
             PageLikeCount: TryGetIntValue(root, "page_fan_count"),
             PageId: pageId,
             PageName: GetString(root, "page_name"),
-            PageProfilePictureUrl: pageProfilePictureUrl));
+            PageProfilePictureUrl: GetString(root, "page_profile_picture_url") ?? pageProfilePictureUrl,
+            Email: GetContactEmail(metadata),
+            Phone: GetContactPhone(metadata),
+            Website: GetContactWebsite(metadata)));
     }
 
     private static Result<SocialMediaUserProfile> GetThreadsProfileFromMetadata(JsonDocument metadata)
@@ -293,7 +315,63 @@ public sealed class SocialMediaProfileService : ISocialMediaProfileService
             FollowerCount: TryGetIntValue(root, "followers_count"),
             FollowingCount: TryGetIntValue(root, "follows_count"),
             PostCount: TryGetIntValue(root, "media_count"),
-            PageLikeCount: null));
+            PageLikeCount: null,
+            Email: GetContactEmail(metadata),
+            Phone: GetContactPhone(metadata),
+            Website: GetContactWebsite(metadata)));
+    }
+
+    private static Result<SocialMediaUserProfile> GetTikTokProfileFromMetadata(JsonDocument metadata)
+    {
+        var root = metadata.RootElement;
+
+        return Result.Success(new SocialMediaUserProfile(
+            UserId: GetString(root, "open_id") ?? GetString(root, "user_id") ?? GetString(root, "id"),
+            Username: GetString(root, "username") ?? GetString(root, "union_id"),
+            DisplayName: GetString(root, "display_name") ?? GetString(root, "name"),
+            ProfilePictureUrl: GetString(root, "avatar_url") ?? GetString(root, "profile_picture_url"),
+            Bio: GetString(root, "bio_description") ?? GetString(root, "biography"),
+            FollowerCount: TryGetIntValue(root, "follower_count"),
+            FollowingCount: TryGetIntValue(root, "following_count"),
+            PostCount: TryGetIntValue(root, "video_count"),
+            PageLikeCount: null,
+            Email: GetContactEmail(metadata),
+            Phone: GetContactPhone(metadata),
+            Website: GetContactWebsite(metadata)));
+    }
+
+    private static string? GetContactEmail(JsonDocument metadata)
+    {
+        var root = metadata.RootElement;
+
+        return FirstNonEmpty(
+            GetString(root, "page_email"),
+            GetString(root, "contact_email"),
+            GetString(root, "business_email"),
+            GetString(root, "email"));
+    }
+
+    private static string? GetContactPhone(JsonDocument metadata)
+    {
+        var root = metadata.RootElement;
+
+        return FirstNonEmpty(
+            GetString(root, "page_phone"),
+            GetString(root, "contact_phone"),
+            GetString(root, "business_phone"),
+            GetString(root, "phone"),
+            GetString(root, "phone_number"));
+    }
+
+    private static string? GetContactWebsite(JsonDocument metadata)
+    {
+        var root = metadata.RootElement;
+
+        return FirstNonEmpty(
+            GetString(root, "page_website"),
+            GetString(root, "contact_website"),
+            GetString(root, "business_website"),
+            GetString(root, "website"));
     }
 
     private static string? GetString(JsonElement root, string propertyName)

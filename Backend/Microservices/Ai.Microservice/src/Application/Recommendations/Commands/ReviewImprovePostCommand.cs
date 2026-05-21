@@ -55,7 +55,8 @@ public sealed class ApproveImprovePostCommandHandler
             return Result.Failure<PostResponse>(ImprovePostReviewErrors.MissingResultCaption);
         }
 
-        if (suggestion.ImproveImage && !suggestion.ResultResourceId.HasValue)
+        var resultResourceIds = StartImprovePostCommandHandler.ParseResultResourceIds(suggestion);
+        if (suggestion.ImproveImage && resultResourceIds.Count == 0)
         {
             return Result.Failure<PostResponse>(ImprovePostReviewErrors.MissingResultResource);
         }
@@ -69,7 +70,7 @@ public sealed class ApproveImprovePostCommandHandler
             Hashtag = existingContent?.Hashtag,
             PostType = existingContent?.PostType,
             ResourceList = suggestion.ImproveImage
-                ? new List<string> { suggestion.ResultResourceId!.Value.ToString() }
+                ? resultResourceIds.Select(id => id.ToString()).ToList()
                 : existingContent?.ResourceList is null
                     ? null
                     : new List<string>(existingContent.ResourceList)

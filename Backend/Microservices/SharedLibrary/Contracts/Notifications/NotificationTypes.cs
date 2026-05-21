@@ -18,6 +18,7 @@ public static class NotificationTypes
     public const string AiDraftPostGenerationFailed = "ai.draft_post_generation.failed";
 
     public const string AiPostImproveSubmitted = "ai.post_improve.submitted";
+    public const string AiPostImproveThinking = "ai.post_improve.thinking";
     public const string AiPostImproveProcessing = "ai.post_improve.processing";
     public const string AiPostImproveCompleted = "ai.post_improve.completed";
     public const string AiPostImproveFailed = "ai.post_improve.failed";

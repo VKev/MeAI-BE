@@ -341,6 +341,16 @@ public sealed class CompleteFacebookOAuthCommandHandler
             ["page_fan_count"] = candidate.PageLikeCount,
             ["page_followers_count"] = candidate.PageFollowerCount,
             ["page_post_count"] = candidate.PagePostCount,
+            ["page_username"] = candidate.PageUsername,
+            ["page_about"] = candidate.PageAbout,
+            ["page_description"] = candidate.PageDescription,
+            ["page_category"] = candidate.PageCategory,
+            ["page_bio"] = candidate.PageBio,
+            ["page_website"] = candidate.PageWebsite,
+            ["page_email"] = candidate.PageEmail,
+            ["page_phone"] = candidate.PagePhone,
+            ["page_location"] = candidate.PageLocation,
+            ["page_profile_picture_url"] = candidate.PageProfilePictureUrl,
             ["access_token"] = accessToken
         };
 
@@ -365,7 +375,17 @@ public sealed class CompleteFacebookOAuthCommandHandler
                     page.AccessToken,
                     page.FanCount,
                     page.FollowersCount,
-                    page.PostCount))
+                    page.PostCount,
+                    page.Username,
+                    page.About,
+                    page.Description,
+                    page.Category,
+                    page.Bio,
+                    page.Website,
+                    page.Email,
+                    page.Phone,
+                    page.Location,
+                    page.ProfilePictureUrl))
                 .ToList();
         }
 
@@ -384,7 +404,17 @@ public sealed class CompleteFacebookOAuthCommandHandler
                 profile.PageAccessToken,
                 profile.PageLikeCount,
                 profile.PageFollowerCount,
-                profile.PagePostCount)
+                profile.PagePostCount,
+                profile.PageUsername,
+                profile.PageAbout,
+                profile.PageDescription,
+                profile.PageCategory,
+                profile.PageBio,
+                profile.PageWebsite,
+                profile.PageEmail,
+                profile.PagePhone,
+                profile.PageLocation,
+                profile.PageProfilePictureUrl)
         ];
     }
 
@@ -408,6 +438,16 @@ public sealed class CompleteFacebookOAuthCommandHandler
         string? PageAccessToken,
         int? PageLikeCount,
         int? PageFollowerCount,
-        int? PagePostCount);
+        int? PagePostCount,
+        string? PageUsername,
+        string? PageAbout,
+        string? PageDescription,
+        string? PageCategory,
+        string? PageBio,
+        string? PageWebsite,
+        string? PageEmail,
+        string? PagePhone,
+        string? PageLocation,
+        string? PageProfilePictureUrl);
 
 }

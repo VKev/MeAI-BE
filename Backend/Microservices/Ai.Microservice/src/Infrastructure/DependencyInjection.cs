@@ -130,8 +130,11 @@ namespace Infrastructure
                 var s3PublicBaseUrl = configuration["Rag:S3PublicBaseUrl"]
                                       ?? configuration["RAG_S3_PUBLIC_BASE_URL"]
                                       ?? configuration["S3:PublicBaseUrl"]
-                                      ?? configuration["VIDEORAG_S3_PUBLIC_BASE_URL"]
-                                      ?? "https://static.vkev.me";
+                                      ?? configuration["VIDEORAG_S3_PUBLIC_BASE_URL"];
+                if (string.IsNullOrWhiteSpace(s3PublicBaseUrl))
+                {
+                    s3PublicBaseUrl = null;
+                }
                 return new RagOptions
                 {
                     IngestQueue = ingest,
@@ -265,7 +268,8 @@ namespace Infrastructure
             services.AddHttpClient<Application.Abstractions.Rag.IRerankClient,
                                    Infrastructure.Logic.Rag.JinaRerankClient>();
 
-            services.AddHttpClient<IMultimodalLlmClient, OpenRouterMultimodalLlmClient>();
+            services.AddHttpClient<OpenRouterMultimodalLlmClient>();
+            services.AddScoped<IMultimodalLlmClient, KieFirstMultimodalLlmClient>();
 
             services.AddSingleton(sp =>
             {
@@ -289,7 +293,8 @@ namespace Infrastructure
                     Timeout = TimeSpan.FromSeconds(timeoutSeconds),
                 };
             });
-            services.AddHttpClient<IImageGenerationClient, OpenRouterImageGenerationClient>();
+            services.AddHttpClient<OpenRouterImageGenerationClient>();
+            services.AddScoped<IImageGenerationClient, KieFirstImageGenerationClient>();
 
             services.AddScoped<IDraftPostTaskRepository, DraftPostTaskRepository>();
             services.AddScoped<IRecommendPostRepository, RecommendPostRepository>();

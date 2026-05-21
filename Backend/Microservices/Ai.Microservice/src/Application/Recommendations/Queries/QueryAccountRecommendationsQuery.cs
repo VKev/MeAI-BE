@@ -149,6 +149,11 @@ public sealed class QueryAccountRecommendationsQueryHandler
         "swap an unusual TLD for '.com'; do NOT drop subdomains/paths; do NOT replace a specific " +
         "email with a canonical one ('contact@', 'info@', 'hello@', 'support@'); do NOT invent a " +
         "phone number that is not in the profile. If a field is absent from the profile, OMIT it.\n\n" +
+        "CAPTION LENGTH LIMITS: Any draft caption you suggest must fit the MeAI publish limit " +
+        "for the target platform, including hashtags, emojis, URLs, email, phone, and line " +
+        "breaks. Facebook: 2,200 characters. Instagram: 2,200 characters. TikTok: 2,200 " +
+        "characters. Threads: 500 characters. If the target platform is Threads, be concise " +
+        "and do not suggest a caption that would need publish-time truncation.\n\n" +
         "WEB SEARCH: you have web-search ability. Use it whenever the work requires fresh / current " +
         "information — ALWAYS in auto-discovery mode (to find what is trending in the page's pillars), " +
         "and in user-supplied-topic mode only when the topic itself involves recent events / launches " +
@@ -760,24 +765,67 @@ public sealed class QueryAccountRecommendationsQueryHandler
         var byPostId = new Dictionary<string, RecommendationReference>(StringComparer.Ordinal);
 
         // Text leg
-        var textIds = rag.Text?.MatchedDocumentIds ?? Array.Empty<string>();
-        for (var i = 0; i < textIds.Count; i++)
+        var textRefs = rag.Text?.References ?? Array.Empty<RagTextReference>();
+        if (textRefs.Count > 0)
         {
-            var docId = textIds[i];
-            var postId = ExtractPostId(docId, prefix);
-            var key = postId ?? docId;
-            rrfScores[key] = rrfScores.GetValueOrDefault(key) + 1.0 / (RrfK + i + 1);
-            if (!byPostId.ContainsKey(key))
+            for (var i = 0; i < textRefs.Count; i++)
             {
-                byPostId[key] = new RecommendationReference(
-                    DocumentId: docId,
-                    PostId: postId,
-                    ImageUrl: null,
-                    Caption: null,
-                    Source: "text",
-                    Score: 0d,
-                    VideoSegmentTime: null,
-                    VideoTranscript: null);
+                var textRef = textRefs[i];
+                var docId = textRef.DocumentId;
+                if (string.IsNullOrWhiteSpace(docId))
+                {
+                    continue;
+                }
+
+                var postId = string.IsNullOrWhiteSpace(textRef.PostId)
+                    ? ExtractPostId(docId, prefix)
+                    : textRef.PostId;
+                var key = postId ?? docId;
+                var caption = FirstNonEmpty(textRef.Caption, textRef.Content);
+                rrfScores[key] = rrfScores.GetValueOrDefault(key) + 1.0 / (RrfK + i + 1);
+                if (byPostId.TryGetValue(key, out var existing))
+                {
+                    byPostId[key] = existing with
+                    {
+                        Caption = existing.Caption ?? caption,
+                        Source = MergeSource(existing.Source, "text"),
+                    };
+                }
+                else
+                {
+                    byPostId[key] = new RecommendationReference(
+                        DocumentId: docId,
+                        PostId: postId,
+                        ImageUrl: null,
+                        Caption: caption,
+                        Source: "text",
+                        Score: 0d,
+                        VideoSegmentTime: null,
+                        VideoTranscript: null);
+                }
+            }
+        }
+        else
+        {
+            var textIds = rag.Text?.MatchedDocumentIds ?? Array.Empty<string>();
+            for (var i = 0; i < textIds.Count; i++)
+            {
+                var docId = textIds[i];
+                var postId = ExtractPostId(docId, prefix);
+                var key = postId ?? docId;
+                rrfScores[key] = rrfScores.GetValueOrDefault(key) + 1.0 / (RrfK + i + 1);
+                if (!byPostId.ContainsKey(key))
+                {
+                    byPostId[key] = new RecommendationReference(
+                        DocumentId: docId,
+                        PostId: postId,
+                        ImageUrl: null,
+                        Caption: null,
+                        Source: "text",
+                        Score: 0d,
+                        VideoSegmentTime: null,
+                        VideoTranscript: null);
+                }
             }
         }
 
@@ -891,6 +939,18 @@ public sealed class QueryAccountRecommendationsQueryHandler
         var parts = a.Split('+', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
         parts.Add(b);
         return string.Join('+', parts.OrderBy(s => s, StringComparer.Ordinal));
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+        return null;
     }
 
     private static string? ExtractPostId(string documentId, string prefix)

@@ -14,6 +14,8 @@ public sealed record RecommendPostTaskResponse(
     string? ResultCaption,
     Guid? ResultResourceId,
     string? ResultPresignedUrl,
+    IReadOnlyList<Guid> ResultResourceIds,
+    IReadOnlyList<string> ResultPresignedUrls,
     string? ErrorCode,
     string? ErrorMessage,
     DateTime CreatedAt,

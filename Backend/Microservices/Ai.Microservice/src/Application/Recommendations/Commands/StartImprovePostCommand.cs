@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Application.Abstractions.SocialMedias;
 using Application.Posts;
 using Application.Recommendations.Models;
@@ -212,6 +213,8 @@ public sealed class StartImprovePostCommandHandler
                     resultCaption = entity.ResultCaption,
                     resultResourceId = entity.ResultResourceId,
                     resultPresignedUrl = entity.ResultPresignedUrl,
+                    resultResourceIds = ParseResultResourceIds(entity),
+                    resultPresignedUrls = ParseResultPresignedUrls(entity),
                     errorCode = entity.ErrorCode,
                     errorMessage = entity.ErrorMessage,
                     createdAt = entity.CreatedAt,
@@ -236,6 +239,9 @@ public sealed class StartImprovePostCommandHandler
 
     internal static RecommendPostTaskResponse MapToResponse(RecommendPost task)
     {
+        var resultResourceIds = ParseResultResourceIds(task);
+        var resultPresignedUrls = ParseResultPresignedUrls(task);
+
         return new RecommendPostTaskResponse(
             RecommendId: task.Id,
             CorrelationId: task.CorrelationId,
@@ -250,10 +256,75 @@ public sealed class StartImprovePostCommandHandler
             ResultCaption: task.ResultCaption,
             ResultResourceId: task.ResultResourceId,
             ResultPresignedUrl: task.ResultPresignedUrl,
+            ResultResourceIds: resultResourceIds,
+            ResultPresignedUrls: resultPresignedUrls,
             ErrorCode: task.ErrorCode,
             ErrorMessage: task.ErrorMessage,
             CreatedAt: task.CreatedAt,
             CompletedAt: task.CompletedAt);
+    }
+
+    public static IReadOnlyList<Guid> ParseResultResourceIds(RecommendPost task)
+    {
+        var parsed = ParseGuidArray(task.ResultResourceIdsJson);
+        if (parsed.Count > 0)
+        {
+            return parsed;
+        }
+
+        return task.ResultResourceId.HasValue
+            ? new[] { task.ResultResourceId.Value }
+            : Array.Empty<Guid>();
+    }
+
+    public static IReadOnlyList<string> ParseResultPresignedUrls(RecommendPost task)
+    {
+        var parsed = ParseStringArray(task.ResultPresignedUrlsJson);
+        if (parsed.Count > 0)
+        {
+            return parsed;
+        }
+
+        return string.IsNullOrWhiteSpace(task.ResultPresignedUrl)
+            ? Array.Empty<string>()
+            : new[] { task.ResultPresignedUrl };
+    }
+
+    private static IReadOnlyList<Guid> ParseGuidArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<Guid>();
+        }
+
+        try
+        {
+            var values = JsonSerializer.Deserialize<List<Guid>>(json);
+            return values is null ? Array.Empty<Guid>() : values;
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<Guid>();
+        }
+    }
+
+    private static IReadOnlyList<string> ParseStringArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            return (JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<string>();
+        }
     }
 
     private static string? NormalizePlatform(string? value)

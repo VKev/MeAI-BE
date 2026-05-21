@@ -19,7 +19,12 @@ from moviepy.video.io.VideoFileClip import VideoFileClip
 from PIL import Image
 from tqdm import tqdm
 
-from ..openrouter_helpers import multimodal_embedding, multimodal_embedding_batch, text_embedding
+from ..openrouter_helpers import (
+    encode_pil_to_data_url,
+    multimodal_embedding,
+    multimodal_embedding_batch,
+    text_embedding,
+)
 from ..s3_frame_uploader import upload_pil_frames
 
 logger = logging.getLogger("videorag.feature")
@@ -55,6 +60,18 @@ def _sample_frames_from_segment(segment_path: str, n: int) -> list[Image.Image]:
             img = Image.fromarray(arr.astype("uint8")).resize((1280, 720))
             pil_frames.append(img)
     return pil_frames
+
+
+def _data_urls_for_uploaded_frames(
+    pil_frames: list[Image.Image],
+    frame_urls: list[str],
+) -> list[str]:
+    """Build inline frame refs aligned with the uploaded URL count."""
+    return [
+        encode_pil_to_data_url(frame)
+        for frame in pil_frames[:len(frame_urls)]
+        if frame is not None
+    ]
 
 
 class _NumpyAsTorchShim:
@@ -119,7 +136,15 @@ def encode_video_segments(video_paths, embedder=None):
                 logger.warning("no frame URLs for %s — emitting zero vec", seg_path)
                 vectors.append(np.zeros(3072, dtype=np.float32))
                 continue
-            vec = multimodal_embedding(image_urls=frame_urls, text=None)
+            try:
+                vec = multimodal_embedding(image_urls=frame_urls, text=None)
+            except Exception as ex:
+                logger.warning(
+                    "segment URL embed failed for %s - falling back to base64 frames: %s",
+                    seg_path, ex,
+                )
+                data_urls = _data_urls_for_uploaded_frames(pil_frames, frame_urls)
+                vec = multimodal_embedding(image_urls=data_urls, text=None)
             vectors.append(np.asarray(vec, dtype=np.float32))
         except Exception as ex:
             logger.warning("encode_video_segments failed for %s: %s — zero vec", seg_path, ex)
@@ -181,7 +206,8 @@ def encode_video_frames(video_paths) -> list[dict]:
                     seg_path, ex,
                 )
                 vectors = []
-                for u in frame_urls:
+                fallback_urls = _data_urls_for_uploaded_frames(pil_frames, frame_urls)
+                for u in fallback_urls:
                     if not u:
                         vectors.append(np.zeros(3072, dtype=np.float32).tolist())
                         continue
@@ -190,9 +216,19 @@ def encode_video_frames(video_paths) -> list[dict]:
                     except Exception as inner:
                         logger.warning(
                             "single-frame embed failed for %s: %s — zero vec",
-                            u, inner,
+                            seg_path, inner,
                         )
                         vectors.append(np.zeros(3072, dtype=np.float32).tolist())
+
+            if len(vectors) < len(frame_urls):
+                logger.warning(
+                    "frame embed returned %d vectors for %d URLs in %s - padding zero vecs",
+                    len(vectors), len(frame_urls), seg_path,
+                )
+                while len(vectors) < len(frame_urls):
+                    vectors.append(np.zeros(3072, dtype=np.float32).tolist())
+            elif len(vectors) > len(frame_urls):
+                vectors = vectors[:len(frame_urls)]
 
             for f_idx, (url, vec) in enumerate(zip(frame_urls, vectors)):
                 if not url:

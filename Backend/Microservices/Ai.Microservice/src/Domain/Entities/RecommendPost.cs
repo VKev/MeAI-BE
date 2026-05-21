@@ -78,6 +78,22 @@ public sealed class RecommendPost
     /// the FE so it doesn't need a second round-trip.</summary>
     public string? ResultPresignedUrl { get; set; }
 
+    /// <summary>
+    /// JSON array of all generated replacement resource ids. The legacy
+    /// <see cref="ResultResourceId"/> remains populated with the first id for
+    /// backward-compatible clients.
+    /// </summary>
+    [Column(TypeName = "jsonb")]
+    public string? ResultResourceIdsJson { get; set; }
+
+    /// <summary>
+    /// JSON array of all generated replacement pre-signed URLs. The legacy
+    /// <see cref="ResultPresignedUrl"/> remains populated with the first URL for
+    /// backward-compatible clients.
+    /// </summary>
+    [Column(TypeName = "jsonb")]
+    public string? ResultPresignedUrlsJson { get; set; }
+
     [Column(TypeName = "jsonb")]
     public string? ResultReferencesJson { get; set; }
 

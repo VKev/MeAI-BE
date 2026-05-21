@@ -93,7 +93,17 @@ public sealed record FacebookPageProfile(
     string? AccessToken,
     int? FanCount,
     int? FollowersCount,
-    int? PostCount);
+    int? PostCount,
+    string? Username = null,
+    string? About = null,
+    string? Description = null,
+    string? Category = null,
+    string? Bio = null,
+    string? Website = null,
+    string? Email = null,
+    string? Phone = null,
+    string? Location = null,
+    string? ProfilePictureUrl = null);
 
 public sealed class FacebookProfilePictureResponse
 {

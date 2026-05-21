@@ -96,7 +96,8 @@ public sealed class PublishPostsCommandHandler
                     new Error("Post.Unauthorized", "You are not authorized to publish this post."));
             }
 
-            if (!post.WorkspaceId.HasValue)
+            var workspaceId = post.WorkspaceId ?? Guid.Empty;
+            if (target.PublishToMeAiFeed && workspaceId == Guid.Empty)
             {
                 return Result.Failure<PublishPostsResponse>(PostErrors.WorkspaceIdRequired);
             }
@@ -137,7 +138,7 @@ public sealed class PublishPostsCommandHandler
                 var feedPublishResult = await _feedPostPublishService.PublishAiPostToFeedAsync(
                     new FeedDirectPublishRequest(
                         request.UserId,
-                        post.WorkspaceId!.Value,
+                        workspaceId,
                         post.Id,
                         post.Content?.Content,
                         GetResourceIds(post),
@@ -162,7 +163,7 @@ public sealed class PublishPostsCommandHandler
                 {
                     Id = Guid.CreateVersion7(),
                     PostId = post.Id,
-                    WorkspaceId = post.WorkspaceId!.Value,
+                    WorkspaceId = workspaceId,
                     SocialMediaId = Guid.Empty,
                     SocialMediaType = MeAiFeedType,
                     DestinationOwnerId = MeAiFeedKey,
@@ -184,7 +185,7 @@ public sealed class PublishPostsCommandHandler
                 {
                     Id = publicationId,
                     PostId = post.Id,
-                    WorkspaceId = post.WorkspaceId!.Value,
+                    WorkspaceId = workspaceId,
                     SocialMediaId = socialMediaId,
                     SocialMediaType = socialMedia.Type,
                     DestinationOwnerId = socialMediaId.ToString(),
@@ -212,7 +213,7 @@ public sealed class PublishPostsCommandHandler
                 {
                     CorrelationId = correlationId,
                     UserId = request.UserId,
-                    WorkspaceId = post.WorkspaceId!.Value,
+                    WorkspaceId = workspaceId,
                     PostId = post.Id,
                     SocialMediaId = socialMediaId,
                     PublicationId = publicationId,

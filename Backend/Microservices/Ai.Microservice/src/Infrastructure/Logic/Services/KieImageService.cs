@@ -58,7 +58,7 @@ public sealed class KieImageService : IKieImageService
             {
                 Model = model,
                 Input = BuildInputParams(model, request),
-                CallBackUrl = BuildCallbackUrl(request.CorrelationId)
+                CallBackUrl = request.UseCallback ? BuildCallbackUrl(request.CorrelationId) : null
             };
 
         try
@@ -227,7 +227,7 @@ public sealed class KieImageService : IKieImageService
             EnableTranslation = false,
             PromptUpsampling = false,
             SafetyTolerance = 2,
-            CallBackUrl = BuildCallbackUrl(request.CorrelationId)
+            CallBackUrl = request.UseCallback ? BuildCallbackUrl(request.CorrelationId) : null
         };
     }
 
@@ -246,6 +246,25 @@ public sealed class KieImageService : IKieImageService
 
     private static Dictionary<string, object?> BuildInputParams(string model, KieGenerateRequest request)
     {
+        if (model.StartsWith("gpt-image-2-", StringComparison.OrdinalIgnoreCase))
+        {
+            var gptImageInput = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["aspect_ratio"] = string.IsNullOrWhiteSpace(request.AspectRatio)
+                    ? "auto"
+                    : request.AspectRatio
+            };
+
+            if (string.Equals(model, "gpt-image-2-image-to-image", StringComparison.OrdinalIgnoreCase) &&
+                request.ImageInput is { Count: > 0 })
+            {
+                gptImageInput["input_urls"] = request.ImageInput;
+            }
+
+            return gptImageInput;
+        }
+
         // Ideogram V3 Reframe: resizes an existing image into a different aspect ratio.
         // Needs image_url (single string) + image_size — no prompt, no image_input.
         // Explicit rendering_speed=TURBO for fast reframe turnaround.

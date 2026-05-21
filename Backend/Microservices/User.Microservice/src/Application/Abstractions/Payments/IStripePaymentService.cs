@@ -88,6 +88,12 @@ public interface IStripePaymentService
         string paymentMethodId,
         IEnumerable<string> stripeSubscriptionIds,
         CancellationToken cancellationToken = default);
+
+    Task DeleteCardAsync(
+        string stripeCustomerId,
+        string paymentMethodId,
+        IEnumerable<string> stripeSubscriptionIds,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record StripeCustomerResult(string StripeCustomerId);

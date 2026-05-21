@@ -64,7 +64,7 @@ resource "aws_s3_bucket_cors_configuration" "tf_state_app_downloads" {
 
   cors_rule {
     allowed_headers = ["*"]
-    allowed_methods = ["GET", "HEAD"]
+    allowed_methods = ["GET", "HEAD", "PUT"]
     allowed_origins = var.app_cors_allowed_origins
     expose_headers  = ["ETag", "Content-Length", "Content-Type"]
     max_age_seconds = 3600

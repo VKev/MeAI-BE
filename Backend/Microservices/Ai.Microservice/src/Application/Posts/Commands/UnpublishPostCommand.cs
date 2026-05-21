@@ -59,11 +59,6 @@ public sealed class UnpublishPostCommandHandler
                 new Error("Post.Unauthorized", "You are not authorized to unpublish this post."));
         }
 
-        if (!post.WorkspaceId.HasValue)
-        {
-            return Result.Failure<UnpublishPostResponse>(PostErrors.WorkspaceIdRequired);
-        }
-
         var publications = await _postPublicationRepository.GetByPostIdForUpdateAsync(post.Id, cancellationToken);
         var active = publications
             .Where(p => !p.DeletedAt.HasValue &&
@@ -96,7 +91,7 @@ public sealed class UnpublishPostCommandHandler
         {
             CorrelationId = correlationId,
             UserId = request.UserId,
-            WorkspaceId = post.WorkspaceId!.Value,
+            WorkspaceId = publication.WorkspaceId,
             PostId = post.Id,
             PublicationId = publication.Id,
             SocialMediaId = publication.SocialMediaId,

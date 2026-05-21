@@ -266,4 +266,56 @@ class LightRagFacadeImpl:
             result = await self._rag.aquery(query, param=param)
         finally:
             _chunk_id_allowlist.reset(token)
-        return result if isinstance(result, str) else str(result)
+        if isinstance(result, str):
+            return result
+        return getattr(result, "content", None) or str(result)
+
+    async def query_with_references(
+        self,
+        query: str,
+        *,
+        mode: str = "hybrid",
+        top_k: int = 10,
+        only_need_context: bool = False,
+        ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        param = QueryParam(
+            mode=mode,
+            top_k=top_k,
+            only_need_context=only_need_context,
+        )
+        token = _chunk_id_allowlist.set(ids if ids else None)
+        try:
+            result = await self._rag.aquery(query, param=param)
+        finally:
+            _chunk_id_allowlist.reset(token)
+
+        if isinstance(result, str):
+            return {"content": result, "references": [], "raw_data": None}
+
+        return {
+            "content": getattr(result, "content", None) or str(result),
+            "references": getattr(result, "reference_list", []) or [],
+            "raw_data": getattr(result, "raw_data", None),
+        }
+
+    async def get_full_documents(
+        self, document_ids: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        if not document_ids:
+            return {}
+
+        full_docs = getattr(self._rag, "full_docs", None)
+        if full_docs is None:
+            return {}
+
+        docs_by_id: dict[str, dict[str, Any]] = {}
+        try:
+            docs = await full_docs.get_by_ids(document_ids)
+            for doc_id, doc in zip(document_ids, docs):
+                if isinstance(doc, dict):
+                    docs_by_id[doc_id] = doc
+        except Exception:
+            logger.exception("Failed to read LightRAG full_docs by ids")
+
+        return docs_by_id

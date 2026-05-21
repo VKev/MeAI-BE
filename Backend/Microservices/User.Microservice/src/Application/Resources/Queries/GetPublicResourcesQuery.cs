@@ -77,7 +77,7 @@ public sealed class GetPublicResourcesQueryHandler
                 resource.ContentType,
                 resource.ResourceType,
                 resource.OriginKind,
-                resource.OriginSourceUrl,
+                ResourceOriginSource.NormalizeForResponse(resource.OriginSourceUrl),
                 resource.OriginChatSessionId,
                 resource.OriginChatId));
         }

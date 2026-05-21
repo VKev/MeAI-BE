@@ -14,7 +14,8 @@ public sealed record KieGenerateRequest(
     string Resolution = "1K",
     string OutputFormat = "png",
     int NumberOfVariances = 1,
-    Guid? CorrelationId = null);
+    Guid? CorrelationId = null,
+    bool UseCallback = true);
 
 public sealed record KieGenerateResult(
     bool Success,
