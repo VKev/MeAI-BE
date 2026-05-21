@@ -82,8 +82,10 @@ public sealed class TikTokPublishServiceTests
     }
 
     [Fact]
-    public async Task PublishAsync_ShouldFail_WhenCreatorDoesNotAllowSelfOnlyPrivacy()
+    public async Task PublishAsync_ShouldFallbackToFirstOption_WhenCreatorDoesNotAllowSelfOnlyPrivacy()
     {
+        string? capturedPrivacyLevel = null;
+
         var service = CreateService(request =>
         {
             var path = request.RequestUri!.AbsolutePath;
@@ -97,6 +99,74 @@ public sealed class TikTokPublishServiceTests
                         "creator_username": "creator",
                         "creator_nickname": "Creator",
                         "privacy_level_options": ["PUBLIC_TO_EVERYONE"],
+                        "comment_disabled": false,
+                        "duet_disabled": false,
+                        "stitch_disabled": false,
+                        "max_video_post_duration_sec": 600
+                      },
+                      "error": {
+                        "code": "ok",
+                        "message": ""
+                      }
+                    }
+                    """);
+            }
+
+            if (path.EndsWith("/video/init/", StringComparison.Ordinal))
+            {
+                var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                using var document = JsonDocument.Parse(body);
+                capturedPrivacyLevel = document.RootElement
+                    .GetProperty("post_info")
+                    .GetProperty("privacy_level")
+                    .GetString();
+
+                return JsonResponse("""
+                    {
+                      "data": {
+                        "publish_id": "publish-123"
+                      },
+                      "error": {
+                        "code": "ok",
+                        "message": ""
+                      }
+                    }
+                    """);
+            }
+
+            throw new InvalidOperationException($"Unexpected TikTok API path: {path}");
+        });
+
+        var result = await service.PublishAsync(
+            new TikTokPublishRequest(
+                AccessToken: "access-token",
+                OpenId: "open-123",
+                Caption: "caption",
+                Media: new TikTokPublishMedia("https://cdn.example.com/video.mp4", "video/mp4"),
+                IsPrivate: false),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        capturedPrivacyLevel.Should().Be("PUBLIC_TO_EVERYONE");
+        result.Value.PublishId.Should().Be("publish-123");
+    }
+
+    [Fact]
+    public async Task PublishAsync_ShouldFail_WhenCreatorHasNoPrivacyLevelOptions()
+    {
+        var service = CreateService(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+
+            if (path.EndsWith("/creator_info/query/", StringComparison.Ordinal))
+            {
+                return JsonResponse("""
+                    {
+                      "data": {
+                        "creator_avatar_url": "https://cdn.example.com/avatar.jpg",
+                        "creator_username": "creator",
+                        "creator_nickname": "Creator",
+                        "privacy_level_options": [],
                         "comment_disabled": false,
                         "duet_disabled": false,
                         "stitch_disabled": false,
@@ -124,6 +194,88 @@ public sealed class TikTokPublishServiceTests
 
         result.IsFailure.Should().BeTrue();
         result.Error.Code.Should().Be("TikTok.PrivateNotSupported");
+    }
+
+    [Fact]
+    public async Task PublishCarouselAsync_ShouldTruncateTitleAndPassFullDescription_WhenCaptionIsLong()
+    {
+        string? capturedTitle = null;
+        string? capturedDescription = null;
+
+        var service = CreateService(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+
+            if (path.EndsWith("/creator_info/query/", StringComparison.Ordinal))
+            {
+                return JsonResponse("""
+                    {
+                      "data": {
+                        "creator_avatar_url": "https://cdn.example.com/avatar.jpg",
+                        "creator_username": "creator",
+                        "creator_nickname": "Creator",
+                        "privacy_level_options": ["PUBLIC_TO_EVERYONE", "SELF_ONLY"],
+                        "comment_disabled": false,
+                        "duet_disabled": false,
+                        "stitch_disabled": false,
+                        "max_video_post_duration_sec": 600
+                      },
+                      "error": {
+                        "code": "ok",
+                        "message": ""
+                      }
+                    }
+                    """);
+            }
+
+            if (path.EndsWith("/content/init/", StringComparison.Ordinal))
+            {
+                var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                using var document = JsonDocument.Parse(body);
+                capturedTitle = document.RootElement
+                    .GetProperty("post_info")
+                    .GetProperty("title")
+                    .GetString();
+
+                capturedDescription = document.RootElement
+                    .GetProperty("post_info")
+                    .GetProperty("description")
+                    .GetString();
+
+                return JsonResponse("""
+                    {
+                      "data": {
+                        "publish_id": "publish-carousel-123"
+                      },
+                      "error": {
+                        "code": "ok",
+                        "message": ""
+                      }
+                    }
+                    """);
+            }
+
+            throw new InvalidOperationException($"Unexpected TikTok API path: {path}");
+        });
+
+        var longCaption = "This is a very long caption that spans across multiple characters, possibly exceeding the standard ninety character limit specified by TikTok for photo posts. It also has some hashtags at the end. #Long #Hashtags";
+        var imageUrls = new[] { "https://cdn.example.com/img1.jpg", "https://cdn.example.com/img2.jpg" };
+
+        var result = await service.PublishCarouselAsync(
+            new TikTokCarouselPublishRequest(
+                AccessToken: "access-token",
+                OpenId: "open-123",
+                Caption: longCaption,
+                ImageUrls: imageUrls,
+                IsPrivate: true),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        capturedTitle.Should().NotBeNull();
+        capturedTitle!.Length.Should().BeLessThanOrEqualTo(83); // 80 + "..."
+        capturedTitle.Should().EndWith("...");
+        capturedDescription.Should().Be(longCaption);
+        result.Value.PublishId.Should().Be("publish-carousel-123");
     }
 
     private static ITikTokPublishService CreateService(Func<HttpRequestMessage, HttpResponseMessage> responder)

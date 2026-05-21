@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using Application.Abstractions.Automation;
 using Application.Abstractions.Resources;
@@ -13,7 +14,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
     private const int MaxPageContentLength = 4000;
     private const int MaxContextExcerptLength = 900;
     private const int MaxMediaUrlsPerResult = 6;
-    private const int MaxImportedMediaCount = 6;
+    private const int MaxImportedMediaCount = 0;
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IUserResourceService _userResourceService;
@@ -200,7 +201,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
             }
 
             var html = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (string.IsNullOrWhiteSpace(html))
+            if (string.IsNullOrWhiteSpace(html) || LooksLikeBinaryPayload(html))
             {
                 return null;
             }
@@ -310,7 +311,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
         var withoutComments = HtmlCommentRegex().Replace(withoutNoscript, " ");
         var withLineBreaks = BlockBoundaryRegex().Replace(withoutComments, "\n");
         var text = HtmlTagRegex().Replace(withLineBreaks, " ");
-        text = WebUtility.HtmlDecode(text);
+        text = SanitizeText(WebUtility.HtmlDecode(text)) ?? string.Empty;
         text = WhitespaceRegex().Replace(text, " ").Trim();
 
         return string.IsNullOrWhiteSpace(text)
@@ -360,7 +361,13 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
                 continue;
             }
 
-            if (!Uri.TryCreate(baseUri, value.Trim(), out var resolved))
+            var sanitizedValue = SanitizeText(value)?.Trim();
+            if (string.IsNullOrWhiteSpace(sanitizedValue))
+            {
+                continue;
+            }
+
+            if (!Uri.TryCreate(baseUri, sanitizedValue, out var resolved))
             {
                 continue;
             }
@@ -414,7 +421,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
             return null;
         }
 
-        return WebUtility.HtmlDecode(HtmlTagRegex().Replace(match.Groups["value"].Value, " ")).Trim();
+        return SanitizeText(WebUtility.HtmlDecode(HtmlTagRegex().Replace(match.Groups["value"].Value, " ")))?.Trim();
     }
 
     private static bool TryCreateHttpUri(string? value, out Uri uri)
@@ -432,7 +439,7 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
 
     private static string NormalizeUrl(string value)
     {
-        return value.Trim();
+        return SanitizeText(value)?.Trim() ?? string.Empty;
     }
 
     private static string? ClassifyMediaType(string? url)
@@ -461,15 +468,93 @@ public sealed partial class WebSearchEnrichmentService : IWebSearchEnrichmentSer
 
     private static string? Truncate(string? value, int maxLength)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        var sanitized = SanitizeText(value);
+        if (string.IsNullOrWhiteSpace(sanitized))
         {
             return null;
         }
 
-        var normalized = value.Trim();
+        var normalized = sanitized.Trim();
         return normalized.Length <= maxLength
             ? normalized
             : normalized[..maxLength].TrimEnd() + "...";
+    }
+
+    private static bool LooksLikeBinaryPayload(string value)
+    {
+        if (value.Length == 0)
+        {
+            return false;
+        }
+
+        if (value[0] == '\u001f')
+        {
+            return true;
+        }
+
+        var sampleLength = Math.Min(value.Length, 512);
+        var disallowedControlCount = 0;
+        for (var index = 0; index < sampleLength; index++)
+        {
+            var character = value[index];
+            if (character == '\0')
+            {
+                return true;
+            }
+
+            if (IsUnsupportedTextControl(character))
+            {
+                disallowedControlCount++;
+            }
+        }
+
+        return disallowedControlCount > Math.Max(4, sampleLength / 20);
+    }
+
+    private static string? SanitizeText(string? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        StringBuilder? builder = null;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (!IsUnsupportedTextControl(character) && !IsInvalidSurrogate(value, index))
+            {
+                builder?.Append(character);
+                continue;
+            }
+
+            builder ??= new StringBuilder(value.Length).Append(value, 0, index);
+            builder.Append(' ');
+        }
+
+        return builder?.ToString() ?? value;
+    }
+
+    private static bool IsUnsupportedTextControl(char character)
+    {
+        return character == '\0' ||
+               (char.IsControl(character) && character is not '\t' and not '\n' and not '\r');
+    }
+
+    private static bool IsInvalidSurrogate(string value, int index)
+    {
+        var character = value[index];
+        if (!char.IsSurrogate(character))
+        {
+            return false;
+        }
+
+        if (char.IsHighSurrogate(character))
+        {
+            return index + 1 >= value.Length || !char.IsLowSurrogate(value[index + 1]);
+        }
+
+        return index == 0 || !char.IsHighSurrogate(value[index - 1]);
     }
 
     private static string? FirstNonEmpty(params string?[] values)

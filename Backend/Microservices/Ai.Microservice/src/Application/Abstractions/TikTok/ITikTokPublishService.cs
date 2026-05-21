@@ -11,6 +11,14 @@ public interface ITikTokPublishService
     Task<Result<TikTokPublishResult>> PublishAsync(
         TikTokPublishRequest request,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Publishes a photo carousel post (1–35 images) using TikTok's
+    /// Direct Post photo API endpoint.
+    /// </summary>
+    Task<Result<TikTokPublishResult>> PublishCarouselAsync(
+        TikTokCarouselPublishRequest request,
+        CancellationToken cancellationToken);
 }
 
 public sealed record TikTokCreatorInfo(
@@ -28,6 +36,18 @@ public sealed record TikTokPublishRequest(
     string OpenId,
     string Caption,
     TikTokPublishMedia Media,
+    bool? IsPrivate = null,
+    TikTokCreatorInfo? CreatorInfo = null);
+
+/// <summary>
+/// Request to publish a TikTok photo carousel post (postType = "posts").
+/// </summary>
+public sealed record TikTokCarouselPublishRequest(
+    string AccessToken,
+    string OpenId,
+    string Caption,
+    /// <summary>1–35 publicly accessible image URLs (JPEG/PNG, max 10 MB each).</summary>
+    IReadOnlyList<string> ImageUrls,
     bool? IsPrivate = null,
     TikTokCreatorInfo? CreatorInfo = null);
 

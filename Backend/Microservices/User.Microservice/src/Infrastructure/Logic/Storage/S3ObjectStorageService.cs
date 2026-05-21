@@ -3,6 +3,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Application.Abstractions.Storage;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using StackExchange.Redis;
@@ -24,13 +25,16 @@ public sealed class S3ObjectStorageService : IObjectStorageService
     private readonly bool _forcePathStyle;
     private readonly bool _isConfigured;
     private readonly IDatabase? _cache;
+    private readonly ILogger<S3ObjectStorageService> _logger;
 
     public string? CurrentNamespace => _namespace;
 
     public S3ObjectStorageService(
         IConfiguration configuration,
-        IConnectionMultiplexer multiplexer)
+        IConnectionMultiplexer multiplexer,
+        ILogger<S3ObjectStorageService> logger)
     {
+        _logger = logger;
         _bucket = configuration["S3:Bucket"] ?? string.Empty;
         var accessKey = configuration["S3:AccessKey"];
         var secretKey = configuration["S3:SecretKey"];
@@ -107,13 +111,61 @@ public sealed class S3ObjectStorageService : IObjectStorageService
             var url = BuildUrl(key);
             return Result.Success(new StorageUploadResult(key, url, _bucket, _region, _namespace));
         }
+        catch (AmazonS3Exception ex) when (ex.ErrorCode == "NoSuchBucket")
+        {
+            try
+            {
+                _logger.LogInformation("Bucket '{Bucket}' does not exist. Attempting auto-creation in region '{Region}'...", _bucket, _region);
+                var putBucketRequest = new PutBucketRequest
+                {
+                    BucketName = _bucket,
+                    UseClientRegion = true
+                };
+                await _client.PutBucketAsync(putBucketRequest, cancellationToken);
+                _logger.LogInformation("Successfully created bucket '{Bucket}'. Retrying S3 upload...", _bucket);
+
+                // Reset stream position if possible, so retry can read from start
+                if (request.Content.CanSeek)
+                {
+                    request.Content.Position = 0;
+                }
+
+                var key = NormalizeKey(request.Key, applyNamespace: true);
+                var putRequest = new PutObjectRequest
+                {
+                    BucketName = _bucket,
+                    Key = key,
+                    InputStream = request.Content,
+                    ContentType = request.ContentType,
+                    AutoCloseStream = false
+                };
+
+                if (request.ContentLength > 0)
+                {
+                    putRequest.Headers.ContentLength = request.ContentLength;
+                }
+
+                await _client.PutObjectAsync(putRequest, cancellationToken);
+
+                var url = BuildUrl(key);
+                return Result.Success(new StorageUploadResult(key, url, _bucket, _region, _namespace));
+            }
+            catch (Exception retryEx)
+            {
+                _logger.LogError(retryEx, "Failed to auto-create S3 bucket '{Bucket}' or retry upload", _bucket);
+                return Result.Failure<StorageUploadResult>(
+                    new Error("S3.UploadFailed", $"Bucket auto-creation failed: {retryEx.Message}"));
+            }
+        }
         catch (AmazonS3Exception ex)
         {
+            _logger.LogError(ex, "S3 upload failed with AmazonS3Exception");
             return Result.Failure<StorageUploadResult>(
                 new Error("S3.UploadFailed", ex.Message));
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "S3 upload failed with general exception");
             return Result.Failure<StorageUploadResult>(
                 new Error("S3.UploadFailed", ex.Message));
         }
