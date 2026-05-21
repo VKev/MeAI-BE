@@ -9,6 +9,7 @@ public static class CoinActionTypes
     public const string VideoGeneration = "video_generation";
     public const string CaptionGeneration = "caption_generation";
     public const string PostEnhancement = "post_enhancement";
+    public const string DraftPostGeneration = "draft_post_generation";
     public const string FormulaGeneration = "formula_generation";
 }
 
@@ -22,6 +23,8 @@ public static class CoinDebitReasons
     public const string CaptionGenerationRefund = "ai.caption_generation.refund";
     public const string PostEnhancementDebit = "ai.post_enhancement.debit";
     public const string PostEnhancementRefund = "ai.post_enhancement.refund";
+    public const string DraftPostGenerationDebit = "ai.draft_post_generation.debit";
+    public const string DraftPostGenerationRefund = "ai.draft_post_generation.refund";
     public const string FormulaGenerationDebit = "ai.formula_generation.debit";
     public const string FormulaGenerationRefund = "ai.formula_generation.refund";
 }
@@ -31,7 +34,10 @@ public static class CoinReferenceTypes
     public const string ChatImage = "chat_image";
     public const string ChatVideo = "chat_video";
     public const string CaptionBatch = "caption_batch";
+    public const string GeminiDraftPost = "gemini_draft_post";
     public const string PostEnhancement = "post_enhancement";
+    public const string DraftPostGeneration = "draft_post_generation";
+    public const string ImprovePost = "improve_post";
     public const string FormulaGeneration = "formula_generation";
 }
 
@@ -43,6 +49,8 @@ public static class AiSpendProviders
 
 public static class AiSpendStatuses
 {
+    public const string Pending = "pending";
     public const string Debited = "debited";
     public const string Refunded = "refunded";
+    public const string Failed = "failed";
 }

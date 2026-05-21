@@ -326,6 +326,10 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
         chat.Status = "Completed";
         chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         await TryAttachResultsToLinkedPostAsync(chat, resourceIds, cancellationToken);
+        await MarkSpendRecordsDebitedAsync(
+            CoinReferenceTypes.ChatImage,
+            chat.Id.ToString(),
+            cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return uploaded;
@@ -350,6 +354,31 @@ public class ImageCompletedConsumer : IConsumer<ImageGenerationCompleted>
 
         return await _dbContext.Chats
             .FirstOrDefaultAsync(c => c.Id == matched.Id, cancellationToken);
+    }
+
+    private async Task MarkSpendRecordsDebitedAsync(
+        string referenceType,
+        string referenceId,
+        CancellationToken cancellationToken)
+    {
+        var records = await _dbContext.AiSpendRecords
+            .Where(record => record.ReferenceType == referenceType && record.ReferenceId == referenceId)
+            .ToListAsync(cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Pending, StringComparison.OrdinalIgnoreCase))
+            {
+                record.Status = AiSpendStatuses.Debited;
+                record.UpdatedAt = updatedAt;
+            }
+        }
     }
 
     private async Task TryAttachResultsToLinkedPostAsync(

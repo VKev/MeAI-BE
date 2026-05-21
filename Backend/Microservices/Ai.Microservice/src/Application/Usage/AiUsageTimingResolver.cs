@@ -13,15 +13,21 @@ public sealed class AiUsageTimingResolver : IAiUsageTimingResolver
     private readonly IChatRepository _chatRepository;
     private readonly IImageTaskRepository _imageTaskRepository;
     private readonly IVideoTaskRepository _videoTaskRepository;
+    private readonly IDraftPostTaskRepository _draftPostTaskRepository;
+    private readonly IRecommendPostRepository _recommendPostRepository;
 
     public AiUsageTimingResolver(
         IChatRepository chatRepository,
         IImageTaskRepository imageTaskRepository,
-        IVideoTaskRepository videoTaskRepository)
+        IVideoTaskRepository videoTaskRepository,
+        IDraftPostTaskRepository draftPostTaskRepository,
+        IRecommendPostRepository recommendPostRepository)
     {
         _chatRepository = chatRepository;
         _imageTaskRepository = imageTaskRepository;
         _videoTaskRepository = videoTaskRepository;
+        _draftPostTaskRepository = draftPostTaskRepository;
+        _recommendPostRepository = recommendPostRepository;
     }
 
     public async Task<IReadOnlyDictionary<Guid, AiUsageTiming>> ResolveAsync(
@@ -40,6 +46,12 @@ public sealed class AiUsageTimingResolver : IAiUsageTimingResolver
         var videoRecords = records
             .Where(record => string.Equals(record.ReferenceType, CoinReferenceTypes.ChatVideo, StringComparison.Ordinal))
             .ToList();
+        var draftRecords = records
+            .Where(record => string.Equals(record.ReferenceType, CoinReferenceTypes.DraftPostGeneration, StringComparison.Ordinal))
+            .ToList();
+        var improveRecords = records
+            .Where(record => string.Equals(record.ReferenceType, CoinReferenceTypes.ImprovePost, StringComparison.Ordinal))
+            .ToList();
 
         var chatIds = imageRecords
             .Concat(videoRecords)
@@ -54,8 +66,64 @@ public sealed class AiUsageTimingResolver : IAiUsageTimingResolver
 
         await MapImageTimingsAsync(imageRecords, chatsById, results, cancellationToken);
         await MapVideoTimingsAsync(videoRecords, chatsById, results, cancellationToken);
+        await MapDraftTimingsAsync(draftRecords, results, cancellationToken);
+        await MapImproveTimingsAsync(improveRecords, results, cancellationToken);
 
         return results;
+    }
+
+    private async Task MapDraftTimingsAsync(
+        IReadOnlyList<AiSpendRecord> records,
+        Dictionary<Guid, AiUsageTiming> results,
+        CancellationToken cancellationToken)
+    {
+        var ids = records
+            .Select(record => TryParseGuid(record.ReferenceId))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        var tasks = await _draftPostTaskRepository.GetByIdsAsync(ids, cancellationToken);
+        var tasksById = tasks.ToDictionary(task => task.Id);
+
+        foreach (var record in records)
+        {
+            var id = TryParseGuid(record.ReferenceId);
+            if (!id.HasValue || !tasksById.TryGetValue(id.Value, out var task))
+            {
+                continue;
+            }
+
+            results[record.Id] = ToTiming(task.CreatedAt, task.CompletedAt);
+        }
+    }
+
+    private async Task MapImproveTimingsAsync(
+        IReadOnlyList<AiSpendRecord> records,
+        Dictionary<Guid, AiUsageTiming> results,
+        CancellationToken cancellationToken)
+    {
+        var ids = records
+            .Select(record => TryParseGuid(record.ReferenceId))
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        var tasks = await _recommendPostRepository.GetByIdsAsync(ids, cancellationToken);
+        var tasksById = tasks.ToDictionary(task => task.Id);
+
+        foreach (var record in records)
+        {
+            var id = TryParseGuid(record.ReferenceId);
+            if (!id.HasValue || !tasksById.TryGetValue(id.Value, out var task))
+            {
+                continue;
+            }
+
+            results[record.Id] = ToTiming(task.CreatedAt, task.CompletedAt);
+        }
     }
 
     private async Task MapImageTimingsAsync(

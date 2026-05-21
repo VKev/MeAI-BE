@@ -12,6 +12,10 @@ public interface IDraftPostTaskRepository
 
     Task<DraftPostTask?> GetByCorrelationIdForUpdateAsync(Guid correlationId, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<DraftPostTask>> GetByIdsAsync(
+        IReadOnlyList<Guid> ids,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<DraftPostTask>> GetByResultPostIdsAsync(
         IReadOnlyList<Guid> postIds,
         CancellationToken cancellationToken);

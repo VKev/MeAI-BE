@@ -349,7 +349,7 @@ public sealed class CreateChatImageCommandHandler
                 TotalCoins = quote.UnitCostCoins,
                 ReferenceType = CoinReferenceTypes.ChatImage,
                 ReferenceId = chatId.ToString(),
-                Status = AiSpendStatuses.Debited,
+                Status = AiSpendStatuses.Pending,
                 CreatedAt = createdAt
             }
         };
@@ -372,7 +372,7 @@ public sealed class CreateChatImageCommandHandler
                 TotalCoins = quote.UnitCostCoins * variantQuantity,
                 ReferenceType = CoinReferenceTypes.ChatImage,
                 ReferenceId = chatId.ToString(),
-                Status = AiSpendStatuses.Debited,
+                Status = AiSpendStatuses.Pending,
                 CreatedAt = createdAt
             });
         }

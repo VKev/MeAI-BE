@@ -1,6 +1,8 @@
+using Application.Abstractions.Billing;
 using Application.Abstractions.Configs;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Resources;
+using Application.Billing;
 using Application.Posts.Commands;
 using Domain.Entities;
 using Domain.Repositories;
@@ -71,9 +73,49 @@ public sealed class CreateGeminiPostCommandTests
             .ReturnsAsync(Result.Success("Generated caption #tag"));
         geminiCaptionService
             .Setup(service => service.GenerateTitleAsync(
-                It.Is<GeminiTitleRequest>(request => request.Content == "Generated caption #tag"),
+                It.Is<GeminiTitleRequest>(request => request.Content == "Generated caption"),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success("Generated title"));
+
+        var pricingService = new Mock<ICoinPricingService>(MockBehavior.Strict);
+        pricingService
+            .Setup(service => service.GetCostAsync(
+                CoinActionTypes.CaptionGeneration,
+                "gpt-5-4",
+                null,
+                1,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new CoinCostQuote(
+                CoinActionTypes.CaptionGeneration,
+                "gpt-5-4",
+                null,
+                "per_platform",
+                3m,
+                1,
+                3m)));
+
+        var billingClient = new Mock<IBillingClient>(MockBehavior.Strict);
+        billingClient
+            .Setup(client => client.DebitAsync(
+                userId,
+                3m,
+                CoinDebitReasons.CaptionGenerationDebit,
+                CoinReferenceTypes.GeminiDraftPost,
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(97m));
+
+        var aiSpendRecordRepository = new Mock<IAiSpendRecordRepository>(MockBehavior.Strict);
+        aiSpendRecordRepository
+            .Setup(repository => repository.AddAsync(It.IsAny<AiSpendRecord>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        aiSpendRecordRepository
+            .Setup(repository => repository.Update(It.Is<AiSpendRecord>(record =>
+                record.Status == AiSpendStatuses.Debited &&
+                record.ReferenceId == addedPost!.Id.ToString())));
+        aiSpendRecordRepository
+            .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
 
         var handler = new CreateGeminiPostCommandHandler(
             postRepository.Object,
@@ -81,7 +123,10 @@ public sealed class CreateGeminiPostCommandTests
             workspaceRepository.Object,
             userConfigService.Object,
             userResourceService.Object,
-            geminiCaptionService.Object);
+            geminiCaptionService.Object,
+            pricingService.Object,
+            billingClient.Object,
+            aiSpendRecordRepository.Object);
 
         var result = await handler.Handle(
             new CreateGeminiPostCommand(
@@ -118,5 +163,8 @@ public sealed class CreateGeminiPostCommandTests
         userConfigService.VerifyAll();
         userResourceService.VerifyAll();
         geminiCaptionService.VerifyAll();
+        pricingService.VerifyAll();
+        billingClient.VerifyAll();
+        aiSpendRecordRepository.VerifyAll();
     }
 }

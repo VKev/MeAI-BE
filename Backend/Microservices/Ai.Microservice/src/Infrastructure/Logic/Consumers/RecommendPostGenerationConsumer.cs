@@ -1,7 +1,9 @@
 using System.Text;
 using System.Text.Json;
+using Application.Abstractions.Billing;
 using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
+using Application.Billing;
 using Application.Recommendations.Commands;
 using Application.Recommendations.Queries;
 using Domain.Entities;
@@ -146,6 +148,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
     private readonly IMultimodalLlmClient _multimodalLlm;
     private readonly IImageGenerationClient _imageGenClient;
     private readonly Application.Recommendations.Services.IQueryRewriter _queryRewriter;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
+    private readonly IBillingClient _billingClient;
     private readonly ILogger<RecommendPostGenerationConsumer> _logger;
 
     public RecommendPostGenerationConsumer(
@@ -157,6 +161,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         IMultimodalLlmClient multimodalLlm,
         IImageGenerationClient imageGenClient,
         Application.Recommendations.Services.IQueryRewriter queryRewriter,
+        IAiSpendRecordRepository aiSpendRecordRepository,
+        IBillingClient billingClient,
         ILogger<RecommendPostGenerationConsumer> logger)
     {
         _mediator = mediator;
@@ -167,6 +173,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         _multimodalLlm = multimodalLlm;
         _imageGenClient = imageGenClient;
         _queryRewriter = queryRewriter;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
+        _billingClient = billingClient;
         _logger = logger;
     }
 
@@ -471,6 +479,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             task.CompletedAt = DateTimeExtensions.PostgreSqlUtcNow;
             task.UpdatedAt = task.CompletedAt;
             await _taskRepository.SaveChangesAsync(ct);
+            await MarkSpendRecordDebitedAsync(task.Id, ct);
 
             await PublishImproveNotificationAsync(
                 context,
@@ -498,6 +507,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             try
             {
                 await _taskRepository.SaveChangesAsync(ct);
+                await RefundSpendRecordAsync(msg.UserId, task.Id, ct);
             }
             catch (Exception saveEx)
             {
@@ -522,6 +532,78 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 _logger.LogError(notifyEx, "ImprovePost {Id}: failed to publish failure notification", task.Id);
             }
         }
+    }
+
+    private async Task MarkSpendRecordDebitedAsync(Guid taskId, CancellationToken cancellationToken)
+    {
+        var records = await _aiSpendRecordRepository.GetByReferenceAsync(
+            CoinReferenceTypes.ImprovePost,
+            taskId.ToString(),
+            cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Pending, StringComparison.OrdinalIgnoreCase))
+            {
+                record.Status = AiSpendStatuses.Debited;
+                record.UpdatedAt = updatedAt;
+                _aiSpendRecordRepository.Update(record);
+            }
+        }
+
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RefundSpendRecordAsync(Guid userId, Guid taskId, CancellationToken cancellationToken)
+    {
+        var records = await _aiSpendRecordRepository.GetByReferenceAsync(
+            CoinReferenceTypes.ImprovePost,
+            taskId.ToString(),
+            cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Refunded, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var refund = await _billingClient.RefundAsync(
+                userId,
+                record.TotalCoins,
+                CoinDebitReasons.PostEnhancementRefund,
+                CoinReferenceTypes.ImprovePost,
+                taskId.ToString(),
+                cancellationToken);
+            if (refund.IsFailure)
+            {
+                _logger.LogWarning(
+                    "ImprovePost {TaskId}: failed to refund spend record {SpendRecordId}: {Code} {Message}",
+                    taskId,
+                    record.Id,
+                    refund.Error.Code,
+                    refund.Error.Description);
+                continue;
+            }
+
+            record.Status = AiSpendStatuses.Refunded;
+            record.UpdatedAt = updatedAt;
+            _aiSpendRecordRepository.Update(record);
+        }
+
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────

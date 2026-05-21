@@ -44,7 +44,12 @@ public sealed class CoinPricingSeeder
         // caption generation, but tracks spend separately so usage/billing can distinguish it.
         (CoinActionTypes.PostEnhancement, "gpt-5-4", null, "per_platform", 3m),
         (CoinActionTypes.PostEnhancement, "gpt-5-2", null, "per_platform", 2m),
+        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "caption", "per_request", 3m),
+        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "image", "per_request", 25m),
+        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "caption_image", "per_request", 28m),
         (CoinActionTypes.PostEnhancement, "*", null, "per_platform", 3m),
+        (CoinActionTypes.DraftPostGeneration, "openrouter/draft-post-v1", null, "per_draft", 50m),
+        (CoinActionTypes.DraftPostGeneration, "*", null, "per_draft", 50m),
         (CoinActionTypes.FormulaGeneration, "gpt-5-4", null, "per_variant", 2m),
         (CoinActionTypes.FormulaGeneration, "*", null, "per_variant", 2m)
     };
