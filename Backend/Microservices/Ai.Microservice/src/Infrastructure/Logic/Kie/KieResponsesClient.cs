@@ -242,10 +242,10 @@ public sealed class KieResponsesClient
         {
             response = await _httpClient.SendAsync(requestMessage, cancellationToken);
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex)
         {
             _logger.LogWarning(ex, "Kie Responses request failed.");
-            return Result.Failure<string>(new Error(failureCode, $"Network error: {ex.Message}"));
+            return Result.Failure<string>(new Error(failureCode, $"Request error: {ex.Message}"));
         }
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);

@@ -66,7 +66,14 @@ namespace Infrastructure
             services.AddHttpClient<IKieFallbackCallbackService, KieFallbackCallbackService>();
             services.AddSingleton<IAiFallbackTemplateService, AiFallbackTemplateService>();
             services.AddHttpClient("Gemini");
-            services.AddHttpClient("KieChat");
+            services.AddHttpClient("KieChat", (sp, client) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var timeoutSeconds = int.TryParse(
+                    configuration["Kie:TimeoutSeconds"] ?? configuration["Kie__TimeoutSeconds"],
+                    out var s) ? s : 30;
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            });
             services.AddScoped<Infrastructure.Logic.Kie.KieResponsesClient>();
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");

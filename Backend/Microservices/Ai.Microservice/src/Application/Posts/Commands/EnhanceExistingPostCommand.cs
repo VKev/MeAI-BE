@@ -148,7 +148,7 @@ public sealed class EnhanceExistingPostCommandHandler
             TotalCoins = quoteResult.Value.TotalCoins,
             ReferenceType = CoinReferenceTypes.PostEnhancement,
             ReferenceId = referenceId,
-            Status = AiSpendStatuses.Debited,
+            Status = AiSpendStatuses.Pending,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -207,6 +207,11 @@ public sealed class EnhanceExistingPostCommandHandler
             return Result.Failure<EnhanceExistingPostResponse>(
                 new Error("Gemini.EmptySuggestions", "AI did not return any enhancement suggestions."));
         }
+
+        spendRecord.Status = AiSpendStatuses.Debited;
+        spendRecord.UpdatedAt = DateTime.UtcNow;
+        _aiSpendRecordRepository.Update(spendRecord);
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new EnhanceExistingPostResponse(
             request.PostId,

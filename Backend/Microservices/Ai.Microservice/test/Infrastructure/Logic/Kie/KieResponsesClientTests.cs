@@ -268,9 +268,43 @@ public sealed class KieResponsesClientTests
             Mock.Of<ILogger<KieResponsesClient>>());
     }
 
+    [Fact]
+    public async Task GetFunctionArgumentsAsync_ShouldReturnFailureResult_WhenRequestTimesOut()
+    {
+        var exception = new TaskCanceledException("The request was canceled due to the configured Timeout of 30s elapsing.");
+        var handler = new StubHttpMessageHandler(exception);
+        var client = CreateClient(handler);
+
+        var result = await client.GetFunctionArgumentsAsync(
+            "gpt-5-4",
+            [KieResponsesClient.UserText("moderate this")],
+            new KieResponsesFunctionTool
+            {
+                Name = "report_sensitive_content",
+                Description = "Moderate content",
+                Parameters = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        is_sensitive = new { type = "boolean" }
+                    }
+                }
+            },
+            "ContentModeration.RequestFailed",
+            "Kie content moderation request failed.",
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("ContentModeration.RequestFailed");
+        result.Error.Description.Should().Contain("Request error");
+        result.Error.Description.Should().Contain("The request was canceled");
+    }
+
     private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
-        private readonly HttpResponseMessage _response;
+        private readonly HttpResponseMessage? _response;
+        private readonly Exception? _exceptionToThrow;
         public string? LastRequestBody { get; private set; }
 
         public StubHttpMessageHandler(HttpResponseMessage response)
@@ -278,14 +312,24 @@ public sealed class KieResponsesClientTests
             _response = response;
         }
 
+        public StubHttpMessageHandler(Exception exceptionToThrow)
+        {
+            _exceptionToThrow = exceptionToThrow;
+        }
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            if (_exceptionToThrow is not null)
+            {
+                throw _exceptionToThrow;
+            }
+
             LastRequestBody = request.Content is null
                 ? null
                 : request.Content.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult();
-            return Task.FromResult(_response);
+            return Task.FromResult(_response!);
         }
     }
 }

@@ -10,6 +10,10 @@ public interface IRecommendPostRepository
 
     Task<RecommendPost?> GetByCorrelationIdForUpdateAsync(Guid correlationId, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<RecommendPost>> GetByIdsAsync(
+        IReadOnlyList<Guid> ids,
+        CancellationToken cancellationToken);
+
     /// <summary>Looks up the active RecommendPost for an OriginalPostId, if any.
     /// Used by the GET endpoint and (read-only) by the start command's pre-flight.
     /// Replace-on-rerun deletion uses <see cref="GetByOriginalPostIdForUpdateAsync"/>.</summary>

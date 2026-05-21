@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using Application.Usage.Models;
 using Application.Usage.Queries;
@@ -39,6 +40,74 @@ public sealed class AiUsageController : ApiController
         }
 
         var result = await _mediator.Send(new GetMyAiUsageHistoryQuery(userId, filterResult.Value), cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpGet("summary")]
+    [ProducesResponseType(typeof(Result<AiUsageSummaryResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSummary(
+        [FromQuery] string? period,
+        [FromQuery] string? fromUtc,
+        [FromQuery] string? toUtc,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        DateTime? parsedFrom = null;
+        DateTime? parsedTo = null;
+
+        if (!string.IsNullOrWhiteSpace(fromUtc))
+        {
+            if (!DateTime.TryParse(
+                    fromUtc,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+                    out var from))
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "Invalid fromUtc",
+                    Detail = "fromUtc must be a valid UTC date time."
+                });
+            }
+
+            parsedFrom = from;
+        }
+
+        if (!string.IsNullOrWhiteSpace(toUtc))
+        {
+            if (!DateTime.TryParse(
+                    toUtc,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+                    out var to))
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "Invalid toUtc",
+                    Detail = "toUtc must be a valid UTC date time."
+                });
+            }
+
+            parsedTo = to;
+        }
+
+        var result = await _mediator.Send(
+            new GetMyAiUsageSummaryQuery(userId, period, parsedFrom, parsedTo),
+            cancellationToken);
+
         if (result.IsFailure)
         {
             return HandleFailure(result);
