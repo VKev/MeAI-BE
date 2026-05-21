@@ -10,12 +10,14 @@ using SharedLibrary.Configs;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
+using Application.Billing.Commands;
 
 namespace Application.Billing.Commands;
 
 public sealed record PurchaseCoinPackageCommand(
     Guid PackageId,
-    Guid UserId) : IRequest<Result<CoinPackageCheckoutResponse>>;
+    Guid UserId,
+    bool UseDefaultCard = false) : IRequest<Result<CoinPackageCheckoutResponse>>;
 
 public sealed class PurchaseCoinPackageCommandHandler
     : IRequestHandler<PurchaseCoinPackageCommand, Result<CoinPackageCheckoutResponse>>
@@ -24,6 +26,7 @@ public sealed class PurchaseCoinPackageCommandHandler
     private readonly IRepository<Transaction> _transactionRepository;
     private readonly IStripeCustomerResolver _stripeCustomerResolver;
     private readonly IStripePaymentService _stripePaymentService;
+    private readonly ISender _sender;
     private readonly string _configuredCurrency;
 
     // Domain dependency marker for architecture tests
@@ -33,12 +36,14 @@ public sealed class PurchaseCoinPackageCommandHandler
         IUnitOfWork unitOfWork,
         IStripeCustomerResolver stripeCustomerResolver,
         IStripePaymentService stripePaymentService,
-        IOptions<BillingCurrencyOptions> billingCurrencyOptions)
+        IOptions<BillingCurrencyOptions> billingCurrencyOptions,
+        ISender sender)
     {
         _coinPackageRepository = unitOfWork.Repository<CoinPackage>();
         _transactionRepository = unitOfWork.Repository<Transaction>();
         _stripeCustomerResolver = stripeCustomerResolver;
         _stripePaymentService = stripePaymentService;
+        _sender = sender;
         _configuredCurrency = ResolveCurrency(billingCurrencyOptions.Value);
     }
 
@@ -77,6 +82,20 @@ public sealed class PurchaseCoinPackageCommandHandler
             return Result.Failure<CoinPackageCheckoutResponse>(customerResult.Error);
         }
 
+        string? defaultPaymentMethodId = null;
+        if (request.UseDefaultCard)
+        {
+            defaultPaymentMethodId = await _stripePaymentService.GetCustomerDefaultPaymentMethodIdAsync(
+                customerResult.Value.StripeCustomerId,
+                cancellationToken: cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(defaultPaymentMethodId))
+            {
+                return Result.Failure<CoinPackageCheckoutResponse>(
+                    new Error("Stripe.DefaultPaymentMethodNotFound", "Default payment method was not found."));
+            }
+        }
+
         var now = DateTimeExtensions.PostgreSqlUtcNow;
         var transaction = new Transaction
         {
@@ -113,12 +132,30 @@ public sealed class PurchaseCoinPackageCommandHandler
                 _configuredCurrency,
                 package.Name,
                 metadata,
+                defaultPaymentMethodId,
                 cancellationToken);
 
             transaction.ProviderReferenceId = stripeResult.PaymentIntentId;
             transaction.Status = stripeResult.Status;
             transaction.Cost = stripeResult.AmountDue;
             transaction.UpdatedAt = now;
+
+            if (string.Equals(stripeResult.Status, "succeeded", StringComparison.OrdinalIgnoreCase))
+            {
+                var confirmResult = await _sender.Send(
+                    new ConfirmCoinPackagePaymentCommand(
+                        request.UserId,
+                        package.Id,
+                        transaction.Id,
+                        stripeResult.PaymentIntentId,
+                        stripeResult.Status),
+                    cancellationToken);
+
+                if (confirmResult.IsFailure)
+                {
+                    return Result.Failure<CoinPackageCheckoutResponse>(confirmResult.Error);
+                }
+            }
 
             return Result.Success(new CoinPackageCheckoutResponse(
                 package.Id,

@@ -136,25 +136,44 @@ public sealed class StripePaymentService : IStripePaymentService
         string currency,
         string description,
         IDictionary<string, string> metadata,
+        string? paymentMethodId = null,
         CancellationToken cancellationToken = default)
     {
         var currencyCode = ResolveCurrency();
 
-        var paymentIntent = await CreatePaymentIntentService().CreateAsync(
-            new PaymentIntentCreateOptions
+        var options = new PaymentIntentCreateOptions
+        {
+            Customer = stripeCustomerId,
+            Amount = ToMinorAmount(amount),
+            Currency = currencyCode,
+            Description = description,
+            ReceiptEmail = customerEmail,
+            Metadata = metadata.Count == 0 ? null : new Dictionary<string, string>(metadata)
+        };
+
+        if (!string.IsNullOrWhiteSpace(paymentMethodId))
+        {
+            options.PaymentMethod = paymentMethodId;
+            options.Confirm = true;
+            options.OffSession = true;
+        }
+        else
+        {
+            options.AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
             {
-                Customer = stripeCustomerId,
-                Amount = ToMinorAmount(amount),
-                Currency = currencyCode,
-                Description = description,
-                ReceiptEmail = customerEmail,
-                Metadata = metadata.Count == 0 ? null : new Dictionary<string, string>(metadata),
-                AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
-                {
-                    Enabled = true
-                }
-            },
-            cancellationToken: cancellationToken);
+                Enabled = true
+            };
+        }
+
+        PaymentIntent paymentIntent;
+        try
+        {
+            paymentIntent = await CreatePaymentIntentService().CreateAsync(options, cancellationToken: cancellationToken);
+        }
+        catch (StripeException ex) when (ex.StripeError?.PaymentIntent != null)
+        {
+            paymentIntent = ex.StripeError.PaymentIntent;
+        }
 
         return new StripeOneTimePaymentResult(
             paymentIntent.Id,
@@ -423,6 +442,14 @@ public sealed class StripePaymentService : IStripePaymentService
             updatedSubscription.Status,
             updatedSubscription.ScheduleId,
             updatedSubscription.CurrentPeriodEnd);
+    }
+
+    public async Task<string?> GetCustomerDefaultPaymentMethodIdAsync(
+        string stripeCustomerId,
+        string? stripeSubscriptionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await ResolveDefaultPaymentMethodIdAsync(stripeCustomerId, stripeSubscriptionId, cancellationToken);
     }
 
     public async Task<IReadOnlyList<StripeCardResult>> GetCustomerCardsAsync(

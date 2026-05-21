@@ -7,7 +7,7 @@ Tài liệu này mô tả trạng thái backend hiện tại của feature coin 
 ### API đã triển khai
 
 - [x] `GET /api/User/billing/coin-packages`
-- [x] `POST /api/User/billing/coin-packages/{packageId}/checkout`
+- [x] `POST /api/User/billing/coin-packages/{packageId}/checkout` (hỗ trợ `useDefaultCard` query parameter)
 - [x] `POST /api/User/billing/coin-packages/resolve-checkout`
 - [x] `GET /api/User/admin/billing/coin-packages`
 - [x] `POST /api/User/admin/billing/coin-packages`
@@ -46,16 +46,23 @@ Package `inactive` vẫn còn trong dữ liệu để admin và các màn hình 
 
 ## Checkout
 
-`POST /api/User/billing/coin-packages/{packageId}/checkout`
+`POST /api/User/billing/coin-packages/{packageId}/checkout?useDefaultCard={bool}`
 
-Luồng hiện tại:
+Hỗ trợ mua coin trực tiếp thông qua thẻ mặc định đã lưu (`useDefaultCard=true`):
 
 1. Validate package tồn tại, đang `active`, giá hợp lệ, và currency khớp `Stripe:Currency`.
 2. Tạo hoặc resolve Stripe customer cho user.
-3. Tạo `Transaction` pending.
-4. Tạo Stripe `PaymentIntent`.
-5. Lưu `ProviderReferenceId` và status payment vào `Transaction`.
-6. Trả payload checkout cho FE.
+3. Nếu `useDefaultCard=true`:
+   - Tìm kiếm phương thức thanh toán mặc định (`default_payment_method`) đã lưu trên Stripe của customer.
+   - Nếu không có thẻ lưu mặc định, trả về lỗi `Stripe.DefaultPaymentMethodNotFound`.
+4. Tạo `Transaction` pending.
+5. Tạo Stripe `PaymentIntent`:
+   - Nếu `useDefaultCard=true`, kích hoạt off-session payment (`Confirm = true`, `OffSession = true`, gán `PaymentMethod`).
+   - Nếu không, tạo PaymentIntent thông thường chờ xác thực từ frontend.
+6. Đồng bộ hóa trạng thái thanh toán:
+   - Nếu thanh toán thành công ngay lập tức (`succeeded`), gọi trực tiếp lệnh confirm để cộng coin đồng bộ cho user.
+   - Nếu thanh toán thất bại hoặc yêu cầu xác thực thêm (như 3D Secure / `authentication_required`), bắt ngoại lệ gracefully để trả về `ClientSecret` cùng trạng thái thanh toán, cho phép frontend mở giao diện xác thực (Stripe Elements/3DS sheet).
+7. Trả payload checkout về cho frontend.
 
 ## Resolve và webhook
 
@@ -80,5 +87,5 @@ Admin có thể:
 
 - Coin package là luồng one-time payment.
 - Không phải subscription recurring.
-- PaymentIntent của coin package không gắn `off_session`, nên không mở đường cho auto-renew hoặc recharge nền.
+- Hỗ trợ cơ chế tự động trừ tiền qua thẻ lưu mặc định (`useDefaultCard=true`) thông qua `off_session` và auto-confirm trên Stripe, đi kèm graceful fallback về 3D Secure ở frontend nếu có yêu cầu từ ngân hàng.
 - Idempotency được đảm bảo theo transaction.

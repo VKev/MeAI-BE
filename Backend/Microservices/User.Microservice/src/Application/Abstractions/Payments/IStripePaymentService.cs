@@ -32,6 +32,12 @@ public interface IStripePaymentService
         string currency,
         string description,
         IDictionary<string, string> metadata,
+        string? paymentMethodId = null,
+        CancellationToken cancellationToken = default);
+
+    Task<string?> GetCustomerDefaultPaymentMethodIdAsync(
+        string stripeCustomerId,
+        string? stripeSubscriptionId = null,
         CancellationToken cancellationToken = default);
 
     Task<StripeRecurringSubscriptionResult> UpgradeSubscriptionAsync(
