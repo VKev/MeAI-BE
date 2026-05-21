@@ -26,7 +26,7 @@ public sealed class KieContentModerationService : IGeminiContentModerationServic
     {
         _chatModel = configuration["Kie:ModerationModel"] 
                      ?? configuration["Kie__ModerationModel"] 
-                     ?? "gpt-5-4-mini";
+                     ?? "gpt-4o-mini";
         _responsesClient = responsesClient;
         _logger = logger;
     }

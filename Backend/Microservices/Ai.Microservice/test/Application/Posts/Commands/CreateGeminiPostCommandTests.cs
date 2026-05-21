@@ -81,13 +81,13 @@ public sealed class CreateGeminiPostCommandTests
         pricingService
             .Setup(service => service.GetCostAsync(
                 CoinActionTypes.CaptionGeneration,
-                "gpt-5-4",
+                "gpt-4o-mini",
                 null,
                 1,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new CoinCostQuote(
                 CoinActionTypes.CaptionGeneration,
-                "gpt-5-4",
+                "gpt-4o-mini",
                 null,
                 "per_platform",
                 3m,

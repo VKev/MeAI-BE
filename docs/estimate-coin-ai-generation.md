@@ -52,7 +52,7 @@ Request:
 | Operation | Route thật | Cách tính |
 |---|---|---|
 | `captions` | `POST /api/AiGeneration/captions` | `caption_generation`, model `openai/gpt-4o`, quantity `1` |
-| `post` | `POST /api/AiGeneration/post` | `caption_generation`, model từ active `UserAiConfig.ChatModel`, fallback `gpt-5-4`, quantity `1` |
+| `post` | `POST /api/AiGeneration/post` | `caption_generation`, model từ active `UserAiConfig.ChatModel`, fallback `gpt-4o-mini`, quantity `1` |
 | `post-prepare` | `POST /api/AiGeneration/post-prepare` | `0` coin vì chỉ tạo draft/post builder, không gọi LLM |
 
 Aliases được chấp nhận:

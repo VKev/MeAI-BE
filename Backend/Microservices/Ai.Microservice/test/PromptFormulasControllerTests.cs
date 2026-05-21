@@ -65,20 +65,20 @@ public sealed class PromptFormulasControllerTests
                             request.VariantCount == 3),
                         It.IsAny<CancellationToken>()))
                     .ReturnsAsync(Result.Success(new FormulaGenerationServiceResult(
-                        "gpt-5-4",
+                        "gpt-4o-mini",
                         new[] { "variant 1", "variant 2", "variant 3" })));
             },
             pricingService: pricing =>
             {
                 pricing.Setup(x => x.GetCostAsync(
                         CoinActionTypes.FormulaGeneration,
-                        "gpt-5-4",
+                        "gpt-4o-mini",
                         null,
                         3,
                         It.IsAny<CancellationToken>()))
                     .ReturnsAsync(Result.Success(new CoinCostQuote(
                         CoinActionTypes.FormulaGeneration,
-                        "gpt-5-4",
+                        "gpt-4o-mini",
                         null,
                         "per_variant",
                         2m,
@@ -128,7 +128,7 @@ public sealed class PromptFormulasControllerTests
                 log.FormulaKeySnapshot == "launch-caption" &&
                 log.RenderedPrompt == "Rendered prompt" &&
                 log.OutputType == "caption" &&
-                log.Model == "gpt-5-4" &&
+                log.Model == "gpt-4o-mini" &&
                 log.VariablesJson.Contains("MeAI") &&
                 log.VariablesJson.Contains("creator")),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -159,7 +159,7 @@ public sealed class PromptFormulasControllerTests
             generationService: service =>
             {
                 service.Setup(x => x.GenerateAsync(It.IsAny<FormulaGenerationServiceRequest>(), It.IsAny<CancellationToken>()))
-                    .ReturnsAsync(Result.Success(new FormulaGenerationServiceResult("gpt-5-4", new[] { "hook" })));
+                    .ReturnsAsync(Result.Success(new FormulaGenerationServiceResult("gpt-4o-mini", new[] { "hook" })));
             });
 
         await harness.Controller.Generate(
@@ -188,7 +188,7 @@ public sealed class PromptFormulasControllerTests
             generationService: service =>
             {
                 service.Setup(x => x.GenerateAsync(It.IsAny<FormulaGenerationServiceRequest>(), It.IsAny<CancellationToken>()))
-                    .ReturnsAsync(Result.Success(new FormulaGenerationServiceResult("gpt-5-4", new[] { "outline" })));
+                    .ReturnsAsync(Result.Success(new FormulaGenerationServiceResult("gpt-4o-mini", new[] { "outline" })));
             });
 
         var result = await harness.Controller.Generate(
@@ -305,13 +305,13 @@ public sealed class PromptFormulasControllerTests
             {
                 pricing.Setup(x => x.GetCostAsync(
                         CoinActionTypes.FormulaGeneration,
-                        "gpt-5-4",
+                        "gpt-4o-mini",
                         null,
                         1,
                         It.IsAny<CancellationToken>()))
                     .ReturnsAsync(Result.Success(new CoinCostQuote(
                         CoinActionTypes.FormulaGeneration,
-                        "gpt-5-4",
+                        "gpt-4o-mini",
                         null,
                         "per_variant",
                         2m,
@@ -370,12 +370,12 @@ public sealed class PromptFormulasControllerTests
 
         generationServiceMock
             .Setup(x => x.GenerateAsync(It.IsAny<FormulaGenerationServiceRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new FormulaGenerationServiceResult("gpt-5-4", new[] { "generated" })));
+            .ReturnsAsync(Result.Success(new FormulaGenerationServiceResult("gpt-4o-mini", new[] { "generated" })));
 
         pricingServiceMock
             .Setup(x => x.GetCostAsync(
                 CoinActionTypes.FormulaGeneration,
-                "gpt-5-4",
+                "gpt-4o-mini",
                 null,
                 It.IsAny<int>(),
                 It.IsAny<CancellationToken>()))

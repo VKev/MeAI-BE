@@ -46,18 +46,18 @@ public sealed class EnhanceExistingPostCommandTests
 
         userConfigService
             .Setup(service => service.GetActiveConfigAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success<UserAiConfig?>(new UserAiConfig(Guid.NewGuid(), "gpt-5-4", null, 4)));
+            .ReturnsAsync(Result.Success<UserAiConfig?>(new UserAiConfig(Guid.NewGuid(), "gpt-4o-mini", null, 4)));
 
         pricingService
             .Setup(service => service.GetCostAsync(
                 CoinActionTypes.PostEnhancement,
-                "gpt-5-4",
+                "gpt-4o-mini",
                 null,
                 1,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new CoinCostQuote(
                 CoinActionTypes.PostEnhancement,
-                "gpt-5-4",
+                "gpt-4o-mini",
                 null,
                 "per_platform",
                 3m,
@@ -261,11 +261,11 @@ public sealed class EnhanceExistingPostCommandTests
 
         userConfigService
             .Setup(service => service.GetActiveConfigAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success<UserAiConfig?>(new UserAiConfig(Guid.NewGuid(), "gpt-5-4", null, 3)));
+            .ReturnsAsync(Result.Success<UserAiConfig?>(new UserAiConfig(Guid.NewGuid(), "gpt-4o-mini", null, 3)));
 
         pricingService
-            .Setup(service => service.GetCostAsync(CoinActionTypes.PostEnhancement, "gpt-5-4", null, 1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new CoinCostQuote(CoinActionTypes.PostEnhancement, "gpt-5-4", null, "per_platform", 3m, 1, 3m)));
+            .Setup(service => service.GetCostAsync(CoinActionTypes.PostEnhancement, "gpt-4o-mini", null, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new CoinCostQuote(CoinActionTypes.PostEnhancement, "gpt-4o-mini", null, "per_platform", 3m, 1, 3m)));
 
         billingClient
             .Setup(client => client.DebitAsync(
@@ -421,11 +421,11 @@ public sealed class EnhanceExistingPostCommandTests
 
         userConfigService
             .Setup(service => service.GetActiveConfigAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success<UserAiConfig?>(new UserAiConfig(Guid.NewGuid(), "gpt-5-4", null, 3)));
+            .ReturnsAsync(Result.Success<UserAiConfig?>(new UserAiConfig(Guid.NewGuid(), "gpt-4o-mini", null, 3)));
 
         pricingService
-            .Setup(service => service.GetCostAsync(CoinActionTypes.PostEnhancement, "gpt-5-4", null, 1, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Success(new CoinCostQuote(CoinActionTypes.PostEnhancement, "gpt-5-4", null, "per_platform", 3m, 1, 3m)));
+            .Setup(service => service.GetCostAsync(CoinActionTypes.PostEnhancement, "gpt-4o-mini", null, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new CoinCostQuote(CoinActionTypes.PostEnhancement, "gpt-4o-mini", null, "per_platform", 3m, 1, 3m)));
 
         billingClient
             .Setup(client => client.DebitAsync(

@@ -127,7 +127,7 @@ public sealed class CreateGeminiPostCommandHandler
         var preferredModel = string.IsNullOrWhiteSpace(activeConfig?.ChatModel)
             ? null
             : activeConfig.ChatModel.Trim();
-        var billingModel = string.IsNullOrWhiteSpace(preferredModel) ? "gpt-5-4" : preferredModel;
+        var billingModel = string.IsNullOrWhiteSpace(preferredModel) ? "gpt-4o-mini" : preferredModel;
 
         var quoteResult = await _pricingService.GetCostAsync(
             CoinActionTypes.CaptionGeneration,

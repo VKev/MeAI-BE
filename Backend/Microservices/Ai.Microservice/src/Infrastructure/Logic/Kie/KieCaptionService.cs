@@ -11,7 +11,7 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Infrastructure.Logic.Kie;
 
-// Caption generator backed by Kie's GPT-5.4 Responses API (POST /codex/v1/responses).
+// Caption generator backed by Kie's GPT-4o-mini Responses API (POST /codex/v1/responses).
 // Implements IGeminiCaptionService so all existing Gemini* command/request records and
 // the GenerateSocialMediaCaptionsCommand handler keep working unchanged — only the DI
 // binding + the HTTP client behind the interface change. Replaces the old Mistral
@@ -19,7 +19,7 @@ namespace Infrastructure.Logic.Kie;
 public sealed class KieCaptionService : IGeminiCaptionService
 {
     private const string DefaultBaseUrl = "https://api.kie.ai";
-    private const string DefaultChatModel = "gpt-5-4";
+    private const string DefaultChatModel = "gpt-4o-mini";
     private const string ResponsesPath = "/codex/v1/responses";
 
     private readonly string _baseUrl;
@@ -132,7 +132,7 @@ public sealed class KieCaptionService : IGeminiCaptionService
 
         foreach (var resource in request.Resources)
         {
-            // GPT-5.4 Responses API accepts `input_image.image_url` as a plain STRING
+            // GPT-4o-mini Responses API accepts `input_image.image_url` as a plain STRING
             // (not an object), unlike Chat Completions. Presigned S3 URLs work as-is.
             contentParts.Add(new ResponsesContentPart
             {
@@ -349,7 +349,7 @@ public sealed class KieCaptionService : IGeminiCaptionService
         var builder = new StringBuilder();
         if (hasImages)
         {
-            // Explicitly tell GPT-5.4 to actually LOOK at the attached images — otherwise
+            // Explicitly tell GPT-4o-mini to actually LOOK at the attached images — otherwise
             // it sometimes hallucinates generic copy without referencing visible content.
             builder.AppendLine(
                 "You are writing social-media captions for the images attached in this message.");
@@ -459,7 +459,7 @@ public sealed class KieCaptionService : IGeminiCaptionService
 
     private static Result<IReadOnlyList<GeminiGeneratedCaption>> ParseSocialMediaCaptions(string text, int expected)
     {
-        // GPT-5.4 usually obeys the JSON-only instruction but occasionally wraps it in
+        // GPT-4o-mini usually obeys the JSON-only instruction but occasionally wraps it in
         // fences — strip markdown fences defensively before parsing.
         var trimmed = StripMarkdownFence(text);
 
@@ -569,7 +569,7 @@ public sealed class KieCaptionService : IGeminiCaptionService
     {
         [JsonPropertyName("type")] public string Type { get; set; } = "input_text";
         [JsonPropertyName("text")] public string? Text { get; set; }
-        // GPT-5.4 expects `image_url` as a plain string, not an object. Serializer emits
+        // GPT-4o-mini expects `image_url` as a plain string, not an object. Serializer emits
         // it as `"image_url": "https://..."` when set, or omits it when null.
         [JsonPropertyName("image_url")] public string? ImageUrl { get; set; }
     }

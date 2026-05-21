@@ -23,7 +23,7 @@ public sealed class AiGenerationController : ApiController
     private const string GeminiDraftPostEstimateOperation = "post";
     private const string PostPrepareEstimateOperation = "post_prepare";
     private const string CaptionModel = "openai/gpt-4o";
-    private const string DefaultGeminiDraftPostModel = "gpt-5-4";
+    private const string DefaultGeminiDraftPostModel = "gpt-4o-mini";
 
     private readonly ICoinPricingService _pricingService;
     private readonly IBillingClient _billingClient;

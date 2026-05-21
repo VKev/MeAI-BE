@@ -38,7 +38,7 @@ public sealed class KieResponsesClientTests
 
         var client = CreateClient(responseBody);
         var result = await client.GetFunctionArgumentsAsync(
-            "gpt-5-4",
+            "gpt-4o-mini",
             [KieResponsesClient.UserText("analyze this")],
             new KieResponsesFunctionTool
             {
@@ -84,7 +84,7 @@ public sealed class KieResponsesClientTests
 
         var client = CreateClient(responseBody);
         var result = await client.GetFunctionArgumentsAsync(
-            "gpt-5-4",
+            "gpt-4o-mini",
             [KieResponsesClient.UserText("moderate this")],
             new KieResponsesFunctionTool
             {
@@ -135,7 +135,7 @@ public sealed class KieResponsesClientTests
 
         var client = CreateClient(responseBody);
         var result = await client.GetFunctionArgumentsAsync(
-            "gpt-5-4",
+            "gpt-4o-mini",
             [KieResponsesClient.UserText("analyze this")],
             new KieResponsesFunctionTool
             {
@@ -191,7 +191,7 @@ public sealed class KieResponsesClientTests
         var client = CreateClient(handler);
 
         var result = await client.GetFunctionArgumentsAsync(
-            "gpt-5-4",
+            "gpt-4o-mini",
             [KieResponsesClient.UserText("analyze this")],
             new KieResponsesFunctionTool
             {
@@ -216,10 +216,10 @@ public sealed class KieResponsesClientTests
     }
 
     [Theory]
-    [InlineData("gpt-5-4", null, "gpt-5-4")]
+    [InlineData("gpt-4o-mini", null, "gpt-4o-mini")]
     [InlineData("gpt-5.3-codex", null, "gpt-5.3-codex")]
     [InlineData("gemini-3.1-flash-lite-preview", "gpt-5-5", "gpt-5-5")]
-    [InlineData("gemini-3.1-flash-lite-preview", null, "gpt-5-4")]
+    [InlineData("gemini-3.1-flash-lite-preview", null, "gpt-4o-mini")]
     public void ResolveResponsesModel_ShouldFallback_WhenPreferredModelIsUnsupported(
         string? preferredModel,
         string? configuredModel,
@@ -276,7 +276,7 @@ public sealed class KieResponsesClientTests
         var client = CreateClient(handler);
 
         var result = await client.GetFunctionArgumentsAsync(
-            "gpt-5-4",
+            "gpt-4o-mini",
             [KieResponsesClient.UserText("moderate this")],
             new KieResponsesFunctionTool
             {
