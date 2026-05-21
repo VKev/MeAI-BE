@@ -1,3 +1,5 @@
+using Application.Abstractions.Billing;
+using Application.Billing;
 using Application.Abstractions.SocialMedias;
 using Application.Recommendations.Models;
 using Domain.Entities;
@@ -27,6 +29,7 @@ public sealed record StartDraftPostGenerationCommand(
 public sealed class StartDraftPostGenerationCommandHandler
     : IRequestHandler<StartDraftPostGenerationCommand, Result<DraftPostTaskResponse>>
 {
+    private const string BillingModel = "openrouter/draft-post-v1";
     private const int DefaultTopK = 6;
     private const int DefaultMaxReferenceImages = 4;
     private const int DefaultMaxRagPosts = 30;
@@ -41,6 +44,9 @@ public sealed class StartDraftPostGenerationCommandHandler
     private readonly IDraftPostTaskRepository _repository;
     private readonly IPostRepository _postRepository;
     private readonly IUserSocialMediaService _userSocialMediaService;
+    private readonly ICoinPricingService _pricingService;
+    private readonly IBillingClient _billingClient;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<StartDraftPostGenerationCommandHandler> _logger;
 
@@ -48,12 +54,18 @@ public sealed class StartDraftPostGenerationCommandHandler
         IDraftPostTaskRepository repository,
         IPostRepository postRepository,
         IUserSocialMediaService userSocialMediaService,
+        ICoinPricingService pricingService,
+        IBillingClient billingClient,
+        IAiSpendRecordRepository aiSpendRecordRepository,
         IPublishEndpoint publishEndpoint,
         ILogger<StartDraftPostGenerationCommandHandler> logger)
     {
         _repository = repository;
         _postRepository = postRepository;
         _userSocialMediaService = userSocialMediaService;
+        _pricingService = pricingService;
+        _billingClient = billingClient;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
         _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
@@ -163,7 +175,50 @@ public sealed class StartDraftPostGenerationCommandHandler
             UpdatedAt = now,
         };
 
+        var quoteResult = await _pricingService.GetCostAsync(
+            CoinActionTypes.DraftPostGeneration,
+            BillingModel,
+            variant: null,
+            quantity: 1,
+            cancellationToken);
+        if (quoteResult.IsFailure)
+        {
+            return Result.Failure<DraftPostTaskResponse>(quoteResult.Error);
+        }
+
+        var debitResult = await _billingClient.DebitAsync(
+            request.UserId,
+            quoteResult.Value.TotalCoins,
+            CoinDebitReasons.DraftPostGenerationDebit,
+            CoinReferenceTypes.DraftPostGeneration,
+            task.Id.ToString(),
+            cancellationToken);
+        if (debitResult.IsFailure)
+        {
+            return Result.Failure<DraftPostTaskResponse>(debitResult.Error);
+        }
+
         await _repository.AddAsync(task, cancellationToken);
+        await _aiSpendRecordRepository.AddAsync(
+            new AiSpendRecord
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = request.UserId,
+                WorkspaceId = request.WorkspaceId,
+                Provider = AiSpendProviders.OpenRouter,
+                ActionType = CoinActionTypes.DraftPostGeneration,
+                Model = BillingModel,
+                Variant = null,
+                Unit = quoteResult.Value.Unit,
+                Quantity = quoteResult.Value.Quantity,
+                UnitCostCoins = quoteResult.Value.UnitCostCoins,
+                TotalCoins = quoteResult.Value.TotalCoins,
+                ReferenceType = CoinReferenceTypes.DraftPostGeneration,
+                ReferenceId = task.Id.ToString(),
+                Status = AiSpendStatuses.Pending,
+                CreatedAt = now
+            },
+            cancellationToken);
         // Single SaveChanges commits both Post and DraftPostTask atomically — they
         // share the same scoped DbContext via DI.
         await _repository.SaveChangesAsync(cancellationToken);

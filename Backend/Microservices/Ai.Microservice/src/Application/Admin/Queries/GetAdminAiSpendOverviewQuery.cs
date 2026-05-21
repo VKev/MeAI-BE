@@ -23,7 +23,10 @@ public sealed class GetAdminAiSpendOverviewQueryHandler
         (CoinActionTypes.ImageGeneration, "Image generation"),
         (CoinActionTypes.ImageReframeVariant, "Image reframe / variant generation"),
         (CoinActionTypes.VideoGeneration, "Video generation"),
-        (CoinActionTypes.CaptionGeneration, "Caption generation")
+        (CoinActionTypes.CaptionGeneration, "Caption generation"),
+        (CoinActionTypes.PostEnhancement, "Post enhancement"),
+        (CoinActionTypes.DraftPostGeneration, "Draft post generation"),
+        (CoinActionTypes.FormulaGeneration, "Formula generation")
     ];
 
     private static readonly IReadOnlyList<(string Key, string Label)> ModelOrder =
@@ -34,7 +37,7 @@ public sealed class GetAdminAiSpendOverviewQueryHandler
         ("veo3", "veo3"),
         ("veo3_quality", "veo3_quality"),
         ("openai/gpt-4o", "openai/gpt-4o / caption model"),
-        ("gpt-5-4", "gpt-5-4 / caption model")
+        ("gpt-4o-mini", "gpt-4o-mini / caption model")
     ];
 
     private readonly IAiSpendRecordRepository _spendRecordRepository;

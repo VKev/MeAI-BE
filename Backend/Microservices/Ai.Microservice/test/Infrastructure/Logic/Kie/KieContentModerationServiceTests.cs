@@ -124,7 +124,8 @@ public sealed class KieContentModerationServiceTests
             {
                 ["Kie:ApiKey"] = "unit-test-key",
                 ["Kie:BaseUrl"] = "https://unit.test",
-                ["Kie:ChatModel"] = "gpt-5-4"
+                ["Kie:ChatModel"] = "gpt-4o-mini",
+                ["Kie:ModerationModel"] = "gpt-4o-mini"
             })
             .Build();
 

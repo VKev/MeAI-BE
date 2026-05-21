@@ -6,8 +6,16 @@ namespace WebApi.OpenApi;
 
 internal static class AiGenerationOpenApiTransformers
 {
+    private const string EstimatePath = "api/AiGeneration/estimate";
     private const string PreparePath = "api/AiGeneration/post-prepare";
     private const string CaptionsPath = "api/AiGeneration/captions";
+
+    private const string EstimateExample =
+        """
+        {
+          "operation": "captions"
+        }
+        """;
 
     private const string PrepareExample =
         """
@@ -54,6 +62,27 @@ internal static class AiGenerationOpenApiTransformers
         OpenApiOperationTransformerContext context,
         CancellationToken cancellationToken)
     {
+        if (string.Equals(context.Description.RelativePath, EstimatePath, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(context.Description.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
+        {
+            if (operation.RequestBody?.Content is not { Count: > 0 })
+            {
+                return Task.CompletedTask;
+            }
+
+            if (operation.RequestBody.Content.TryGetValue("application/json", out var estimateMediaType))
+            {
+                estimateMediaType.Example = JsonNode.Parse(EstimateExample);
+            }
+
+            if (operation.RequestBody.Content.TryGetValue("application/*+json", out var estimateExtendedMediaType))
+            {
+                estimateExtendedMediaType.Example = JsonNode.Parse(EstimateExample);
+            }
+
+            return Task.CompletedTask;
+        }
+
         if (string.Equals(context.Description.RelativePath, PreparePath, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(context.Description.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
         {

@@ -24,7 +24,9 @@ public sealed class KieContentModerationService : IGeminiContentModerationServic
         KieResponsesClient responsesClient,
         ILogger<KieContentModerationService> logger)
     {
-        _chatModel = configuration["Kie:ChatModel"] ?? configuration["Kie__ChatModel"] ?? KieResponsesClient.DefaultChatModel;
+        _chatModel = configuration["Kie:ModerationModel"]
+                     ?? configuration["Kie__ModerationModel"]
+                     ?? "gpt-4o-mini";
         _responsesClient = responsesClient;
         _logger = logger;
     }

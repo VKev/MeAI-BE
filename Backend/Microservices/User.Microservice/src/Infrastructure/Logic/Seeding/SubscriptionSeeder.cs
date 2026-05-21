@@ -22,17 +22,16 @@ public sealed class SubscriptionSeeder
             .Where(subscription => subscription.Name != null)
             .ToListAsync(cancellationToken);
 
-        var existingByName = existingSubscriptions
-            .ToDictionary(subscription => subscription.Name!, StringComparer.OrdinalIgnoreCase);
         var now = DateTime.UtcNow;
 
         var toAdd = new List<Subscription>();
         var updatedCount = 0;
         foreach (var seed in BillingSeedCatalog.Tiers)
         {
-            if (existingByName.TryGetValue(seed.SubscriptionName, out var existing))
+            var existing = FindExistingSubscription(existingSubscriptions, seed);
+            if (existing is not null)
             {
-                if (ApplySeededLimits(existing, seed, now))
+                if (ApplySeededValues(existing, seed, now))
                 {
                     updatedCount++;
                 }
@@ -85,17 +84,95 @@ public sealed class SubscriptionSeeder
         };
     }
 
-    private static bool ApplySeededLimits(Subscription subscription, BillingSeedTier seed, DateTime updatedAt)
+    private static Subscription? FindExistingSubscription(
+        IReadOnlyList<Subscription> existingSubscriptions,
+        BillingSeedTier seed)
     {
-        subscription.Limits ??= new SubscriptionLimits();
+        return existingSubscriptions.FirstOrDefault(subscription =>
+            MatchesName(subscription.Name, seed.SubscriptionName, seed.LegacySubscriptionNames));
+    }
 
-        if (subscription.Limits.NumberOfWorkspaces == seed.Workspaces)
+    private static bool ApplySeededValues(Subscription subscription, BillingSeedTier seed, DateTime updatedAt)
+    {
+        var changed = false;
+
+        if (!string.Equals(subscription.Name, seed.SubscriptionName, StringComparison.Ordinal))
+        {
+            subscription.Name = seed.SubscriptionName;
+            changed = true;
+        }
+
+        if (subscription.Cost != (float)seed.SubscriptionCostVnd)
+        {
+            subscription.Cost = (float)seed.SubscriptionCostVnd;
+            changed = true;
+        }
+
+        if (subscription.MeAiCoin != seed.CoinAmount)
+        {
+            subscription.MeAiCoin = seed.CoinAmount;
+            changed = true;
+        }
+
+        if (subscription.DurationMonths != 1)
+        {
+            subscription.DurationMonths = 1;
+            changed = true;
+        }
+
+        if (!subscription.IsActive)
+        {
+            subscription.IsActive = true;
+            changed = true;
+        }
+
+        var seededLimits = CreateSeededLimits(seed);
+        if (!LimitsEqual(subscription.Limits, seededLimits))
+        {
+            subscription.Limits = seededLimits;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            subscription.UpdatedAt = updatedAt;
+        }
+
+        return changed;
+    }
+
+    private static bool LimitsEqual(SubscriptionLimits? current, SubscriptionLimits seeded)
+    {
+        if (current is null)
         {
             return false;
         }
 
-        subscription.Limits.NumberOfWorkspaces = seed.Workspaces;
-        subscription.UpdatedAt = updatedAt;
-        return true;
+        return current.NumberOfSocialAccounts == seeded.NumberOfSocialAccounts
+            && current.RateLimitForContentCreation == seeded.RateLimitForContentCreation
+            && current.NumberOfWorkspaces == seeded.NumberOfWorkspaces
+            && current.MaxPagesPerSocialAccount == seeded.MaxPagesPerSocialAccount
+            && current.StorageQuotaBytes == seeded.StorageQuotaBytes
+            && current.MaxUploadFileBytes == seeded.MaxUploadFileBytes
+            && current.RetentionDaysAfterDelete == seeded.RetentionDaysAfterDelete;
+    }
+
+    private static bool MatchesName(
+        string? existingName,
+        string canonicalName,
+        IReadOnlyList<string> legacyNames)
+    {
+        if (string.IsNullOrWhiteSpace(existingName))
+        {
+            return false;
+        }
+
+        if (string.Equals(existingName, canonicalName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return legacyNames.Any(legacyName =>
+            string.Equals(existingName, legacyName, StringComparison.OrdinalIgnoreCase));
     }
 }

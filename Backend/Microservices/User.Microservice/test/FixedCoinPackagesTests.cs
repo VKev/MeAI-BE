@@ -19,6 +19,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Configs;
+using MediatR;
 
 namespace test;
 
@@ -85,6 +86,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
                     metadata["flow_type"] == "coin_package" &&
                     metadata["user_id"] == user.Id.ToString() &&
                     metadata["coin_package_id"] == package.Id.ToString()),
+                null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StripeOneTimePaymentResult(
                 "pi_coin_package",
@@ -98,7 +100,8 @@ public sealed class FixedCoinPackagesTests : IDisposable
             unitOfWork,
             stripeCustomerResolver,
             stripePaymentService.Object,
-            StripeOptions);
+            StripeOptions,
+            new Mock<ISender>().Object);
 
         var result = await handler.Handle(new PurchaseCoinPackageCommand(package.Id, user.Id), CancellationToken.None);
         await unitOfWork.SaveChangesAsync(CancellationToken.None);
@@ -142,7 +145,8 @@ public sealed class FixedCoinPackagesTests : IDisposable
             unitOfWork,
             stripeCustomerResolver,
             stripePaymentService.Object,
-            StripeOptions);
+            StripeOptions,
+            new Mock<ISender>().Object);
 
         var result = await handler.Handle(new PurchaseCoinPackageCommand(package.Id, user.Id), CancellationToken.None);
 
@@ -382,9 +386,9 @@ public sealed class FixedCoinPackagesTests : IDisposable
 
         packages.Should().HaveCount(3);
         packages.Select(item => item.Name).Should().ContainInOrder(
-            "Coin Package 10000",
-            "Coin Package 15000",
-            "Coin Package 20000");
+            "Plus Coins",
+            "Pro Coins",
+            "Pro Max Coins");
         packages.Select(item => item.CoinAmount).Should().ContainInOrder(10000m, 15000m, 20000m);
         packages.Select(item => item.Price).Should().ContainInOrder(100000m, 150000m, 200000m);
         packages.Should().OnlyContain(item => item.Currency == "vnd");
@@ -408,6 +412,132 @@ public sealed class FixedCoinPackagesTests : IDisposable
         result.Value.Should().HaveCount(2);
         result.Value.Select(item => item.Name).Should().ContainInOrder("Inactive", "Active");
         result.Value.Select(item => item.IsActive).Should().ContainInOrder(false, true);
+    }
+
+    [Fact]
+    public async Task PurchaseCoinPackageCommand_WithUseDefaultCard_SucceedsAndAutoConfirms()
+    {
+        await using var dbContext = CreateDbContext();
+        var user = CreateUser(Guid.NewGuid(), "buyer-autocharge", "buyer-autocharge@example.com");
+        var package = CreateCoinPackage(Guid.NewGuid(), "500 Coins", 500m, 50m, 49900m, true, 1);
+        dbContext.Users.Add(user);
+        dbContext.CoinPackages.Add(package);
+        await dbContext.SaveChangesAsync();
+
+        using var unitOfWork = new UnitOfWork(dbContext);
+        var stripePaymentService = new Mock<IStripePaymentService>();
+        stripePaymentService
+            .Setup(service => service.CreateCustomerAsync(
+                user.Email,
+                user.FullName,
+                It.IsAny<IDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StripeCustomerResult("cus_coin_package"));
+        stripePaymentService
+            .Setup(service => service.GetCustomerDefaultPaymentMethodIdAsync(
+                "cus_coin_package",
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync("pm_default");
+        stripePaymentService
+            .Setup(service => service.CreateCoinPackagePaymentIntentAsync(
+                "cus_coin_package",
+                user.Email,
+                user.FullName,
+                package.Price,
+                package.Currency,
+                package.Name,
+                It.Is<IDictionary<string, string>>(metadata =>
+                    metadata["flow_type"] == "coin_package" &&
+                    metadata["user_id"] == user.Id.ToString() &&
+                    metadata["coin_package_id"] == package.Id.ToString()),
+                "pm_default",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StripeOneTimePaymentResult(
+                "pi_coin_package",
+                "secret_coin_package",
+                "succeeded",
+                "vnd",
+                49900m));
+
+        var sender = new Mock<ISender>();
+        sender
+            .Setup(s => s.Send(It.IsAny<ConfirmCoinPackagePaymentCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success(new ConfirmCoinPackagePaymentResponse(
+                package.Id,
+                Guid.NewGuid(),
+                "succeeded",
+                true,
+                false,
+                550m,
+                550m)));
+
+        var stripeCustomerResolver = new StripeCustomerResolver(unitOfWork, stripePaymentService.Object);
+        var handler = new PurchaseCoinPackageCommandHandler(
+            unitOfWork,
+            stripeCustomerResolver,
+            stripePaymentService.Object,
+            StripeOptions,
+            sender.Object);
+
+        var result = await handler.Handle(
+            new PurchaseCoinPackageCommand(package.Id, user.Id, UseDefaultCard: true),
+            CancellationToken.None);
+        await unitOfWork.SaveChangesAsync(CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Status.Should().Be("succeeded");
+        result.Value.AmountDue.Should().Be(49900m);
+
+        sender.Verify(
+            s => s.Send(It.Is<ConfirmCoinPackagePaymentCommand>(c =>
+                c.UserId == user.Id &&
+                c.PackageId == package.Id &&
+                c.PaymentIntentId == "pi_coin_package" &&
+                c.Status == "succeeded"), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task PurchaseCoinPackageCommand_WithUseDefaultCard_FailsWhenNoDefaultCardFound()
+    {
+        await using var dbContext = CreateDbContext();
+        var user = CreateUser(Guid.NewGuid(), "buyer-nocard", "buyer-nocard@example.com");
+        var package = CreateCoinPackage(Guid.NewGuid(), "500 Coins", 500m, 50m, 49900m, true, 1);
+        dbContext.Users.Add(user);
+        dbContext.CoinPackages.Add(package);
+        await dbContext.SaveChangesAsync();
+
+        using var unitOfWork = new UnitOfWork(dbContext);
+        var stripePaymentService = new Mock<IStripePaymentService>();
+        stripePaymentService
+            .Setup(service => service.CreateCustomerAsync(
+                user.Email,
+                user.FullName,
+                It.IsAny<IDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StripeCustomerResult("cus_coin_package"));
+        stripePaymentService
+            .Setup(service => service.GetCustomerDefaultPaymentMethodIdAsync(
+                "cus_coin_package",
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(string.Empty); // No default card found
+
+        var stripeCustomerResolver = new StripeCustomerResolver(unitOfWork, stripePaymentService.Object);
+        var handler = new PurchaseCoinPackageCommandHandler(
+            unitOfWork,
+            stripeCustomerResolver,
+            stripePaymentService.Object,
+            StripeOptions,
+            new Mock<ISender>().Object);
+
+        var result = await handler.Handle(
+            new PurchaseCoinPackageCommand(package.Id, user.Id, UseDefaultCard: true),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("Stripe.DefaultPaymentMethodNotFound");
     }
 
     private MyDbContext CreateDbContext()

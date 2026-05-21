@@ -1,7 +1,9 @@
 using System.Text;
 using System.Text.Json;
+using Application.Abstractions.Billing;
 using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
+using Application.Billing;
 using Application.Recommendations.Commands;
 using Application.Recommendations.Queries;
 using Domain.Entities;
@@ -86,10 +88,15 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         "INPUTS YOU SEE:\n" +
         "  (a) The post's caption (current or just-improved) — that's what the new image must illustrate\n" +
         "  (b) The user's optional improvement instruction for the image\n" +
-        "  (c) The original image attached as a reference for subject / palette / brand identity\n" +
+        "  (c) Only the current media item's original image attached as a reference for subject / palette / brand identity\n" +
         "  (d) Style-knowledge for the requested style ('creative' / 'branded' / 'marketing'), " +
         "      describing on-image text rules + visual conventions for that style\n\n" +
         "RULES:\n" +
+        "  * If this is one item in a multi-media post, ignore sibling media entirely. Do not " +
+        "    create a collage, comparison, or combined scene from other carousel resources. " +
+        "    Preserve and improve only the attached media item's subject. If the caption describes " +
+        "    the whole carousel, use it only for tone/context and do not visualize caption parts " +
+        "    that refer to other media items.\n" +
         "  * Preserve the subject of the original image — same product / scene / person — unless " +
         "    the user's instruction explicitly asks to change it.\n" +
         "  * Improve composition, lighting, palette, or text overlay quality per the style-knowledge.\n" +
@@ -195,6 +202,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
     private readonly IMultimodalLlmClient _multimodalLlm;
     private readonly IImageGenerationClient _imageGenClient;
     private readonly Application.Recommendations.Services.IQueryRewriter _queryRewriter;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
+    private readonly IBillingClient _billingClient;
     private readonly ILogger<RecommendPostGenerationConsumer> _logger;
 
     public RecommendPostGenerationConsumer(
@@ -206,6 +215,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         IMultimodalLlmClient multimodalLlm,
         IImageGenerationClient imageGenClient,
         Application.Recommendations.Services.IQueryRewriter queryRewriter,
+        IAiSpendRecordRepository aiSpendRecordRepository,
+        IBillingClient billingClient,
         ILogger<RecommendPostGenerationConsumer> logger)
     {
         _mediator = mediator;
@@ -216,6 +227,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         _multimodalLlm = multimodalLlm;
         _imageGenClient = imageGenClient;
         _queryRewriter = queryRewriter;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
+        _billingClient = billingClient;
         _logger = logger;
     }
 
@@ -688,107 +701,134 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     ct,
                     phaseStatus: "completed");
 
-                // Step 4.0 — image-brief LLM (authors the prompt for image-gen)
-                var briefUserText = BuildImageBriefUserText(
-                    captionForImage: improvedCaption,
-                    userInstruction: msg.UserInstruction,
-                    styleKnowledge: styleKnowledge,
-                    platform: targetPlatform,
-                    platformKnowledge: platformKnowledge,
-                    style: style);
-                _logger.LogInformation(
-                    "LLM[improveImageBrief] INPUT for ImprovePost {Id} Style={Style} ({UserTextLen} chars, {RefCount} ref images)",
-                    task.Id, style, briefUserText.Length, originalRefImageUrls.Count);
+                // Step 4.0 — image-brief LLM (authors the prompt for image-gen).
+                // Build a separate brief per original resource. If one shared brief sees
+                // every carousel item, it tends to blend them and Kie produces near-duplicate
+                // improved media. Each target below sees only its own original reference.
+                var imageTargets = originalRefImageUrls.Count > 0
+                    ? originalRefImageUrls.Select((url, index) => new ImageImproveTarget(index + 1, originalRefImageUrls.Count, new[] { url })).ToList()
+                    : new List<ImageImproveTarget> { new(1, 1, Array.Empty<string>()) };
                 await PublishThinkingAsync(
                     context,
                     task,
                     "image_brief_generation_started",
-                    "AI is planning the improved image",
-                    "AI is turning the caption, style knowledge, and original media into an image brief.",
+                    imageTargets.Count == 1 ? "AI is planning the improved image" : "AI is planning improved media",
+                    imageTargets.Count == 1
+                        ? "AI is turning the caption, style knowledge, and original media into an image brief."
+                        : "AI is creating a separate image brief for each original media item.",
                     new
                     {
                         style,
                         caption = improvedCaption,
-                        userText = briefUserText,
+                        mediaTotal = imageTargets.Count,
                         referenceImageCount = originalRefImageUrls.Count,
                     },
                     ct);
 
-                var briefResult = await _multimodalLlm.GenerateAnswerAsync(
-                    new MultimodalAnswerRequest(
-                        SystemPrompt: ImproveImageBriefSystemPrompt,
-                        UserText: briefUserText,
-                        ReferenceImageUrls: originalRefImageUrls),
-                    ct);
-                var brief = ParseImageBrief(briefResult.Answer ?? string.Empty);
-                _logger.LogInformation(
-                    "LLM[improveImageBrief] OUTPUT for ImprovePost {Id} aspect={Aspect}, prompt={PromptLen} chars, styleNotes={NotesLen} chars",
-                    task.Id, brief.AspectRatio, brief.Prompt.Length, brief.StyleNotes?.Length ?? 0);
+                var imageBriefs = (await Task.WhenAll(imageTargets.Select(async imageTarget =>
+                {
+                    var briefUserText = BuildImageBriefUserText(
+                        captionForImage: improvedCaption,
+                        userInstruction: msg.UserInstruction,
+                        styleKnowledge: styleKnowledge,
+                        platform: targetPlatform,
+                        platformKnowledge: platformKnowledge,
+                        style: style,
+                        target: imageTarget);
+                    _logger.LogInformation(
+                        "LLM[improveImageBrief] INPUT for ImprovePost {Id} Style={Style} Media={Ordinal}/{Total} ({UserTextLen} chars, {RefCount} ref images)",
+                        task.Id, style, imageTarget.Ordinal, imageTarget.Total,
+                        briefUserText.Length, imageTarget.ReferenceImageUrls.Count);
+
+                    var briefResult = await _multimodalLlm.GenerateAnswerAsync(
+                        new MultimodalAnswerRequest(
+                            SystemPrompt: ImproveImageBriefSystemPrompt,
+                            UserText: briefUserText,
+                            ReferenceImageUrls: imageTarget.ReferenceImageUrls),
+                        ct);
+                    var brief = ParseImageBrief(briefResult.Answer ?? string.Empty);
+                    _logger.LogInformation(
+                        "LLM[improveImageBrief] OUTPUT for ImprovePost {Id} Media={Ordinal}/{Total} aspect={Aspect}, prompt={PromptLen} chars, styleNotes={NotesLen} chars",
+                        task.Id, imageTarget.Ordinal, imageTarget.Total,
+                        brief.AspectRatio, brief.Prompt.Length, brief.StyleNotes?.Length ?? 0);
+                    return new ImproveImageBrief(imageTarget, brief);
+                })))
+                    .OrderBy(item => item.Target.Ordinal)
+                    .ToList();
+
                 await PublishThinkingAsync(
                     context,
                     task,
                     "image_brief_generation_completed",
-                    "AI planned the improved image",
-                    "AI finished the image-generation brief.",
+                    imageBriefs.Count == 1 ? "AI planned the improved image" : "AI planned improved media",
+                    imageBriefs.Count == 1
+                        ? "AI finished the image-generation brief."
+                        : "AI finished separate image-generation briefs for each media item.",
                     new
                     {
-                        prompt = brief.Prompt,
-                        brief.AspectRatio,
-                        brief.StyleNotes,
-                        referenceImageCount = originalRefImageUrls.Count,
+                        mediaTotal = imageBriefs.Count,
+                        briefs = imageBriefs.Select(item => new
+                        {
+                            mediaOrdinal = item.Target.Ordinal,
+                            mediaTotal = item.Target.Total,
+                            prompt = item.Brief.Prompt,
+                            item.Brief.AspectRatio,
+                            item.Brief.StyleNotes,
+                            referenceImageCount = item.Target.ReferenceImageUrls.Count,
+                        }).ToList(),
                     },
                     ct,
                     phaseStatus: "completed");
 
                 // Step 4.1 — image generation
-                var imageTargets = originalRefImageUrls.Count > 0
-                    ? originalRefImageUrls.Select((url, index) => new ImageImproveTarget(index + 1, originalRefImageUrls.Count, new[] { url })).ToList()
-                    : new List<ImageImproveTarget> { new(1, 1, Array.Empty<string>()) };
-
                 var imageBaseSystem = ImageSystemPromptFor(style);
-                var baseImageSystemPrompt = string.IsNullOrWhiteSpace(brief.StyleNotes)
-                    ? imageBaseSystem
-                    : $"{imageBaseSystem}\n\nAdditional style constraints from the art-director brief: {brief.StyleNotes}";
-
-                foreach (var imageTarget in imageTargets)
+                var imagePlans = imageBriefs.Select(item =>
                 {
-                    var fullImagePrompt = BuildImproveImagePrompt(brief, imageTarget);
-                    var fullImageSystemPrompt = BuildImproveImageSystemPrompt(baseImageSystemPrompt, imageTarget);
+                    var baseImageSystemPrompt = string.IsNullOrWhiteSpace(item.Brief.StyleNotes)
+                        ? imageBaseSystem
+                        : $"{imageBaseSystem}\n\nAdditional style constraints from this media item's art-director brief: {item.Brief.StyleNotes}";
+                    return new ImproveImagePlan(
+                        item.Target,
+                        item.Brief,
+                        BuildImproveImagePrompt(item.Brief, item.Target),
+                        BuildImproveImageSystemPrompt(baseImageSystemPrompt, item.Target));
+                }).ToList();
+
+                foreach (var imagePlan in imagePlans)
+                {
                     _logger.LogInformation(
                         "IMAGEGEN INPUT for ImprovePost {Id} Style={Style} Media={Ordinal}/{Total} ({RefCount} ref images)\n  --- prompt ---\n{Prompt}\n  --- system ---\n{System}",
-                        task.Id, style, imageTarget.Ordinal, imageTarget.Total, imageTarget.ReferenceImageUrls.Count,
-                        Truncate(fullImagePrompt, 2500),
-                        Truncate(fullImageSystemPrompt, 1500));
+                        task.Id, style, imagePlan.Target.Ordinal, imagePlan.Target.Total, imagePlan.Target.ReferenceImageUrls.Count,
+                        Truncate(imagePlan.Prompt, 2500),
+                        Truncate(imagePlan.SystemPrompt, 1500));
                     await PublishThinkingAsync(
                         context,
                         task,
-                        $"image_generation_started_{imageTarget.Ordinal}",
-                        $"AI is generating improved media {imageTarget.Ordinal}/{imageTarget.Total}",
-                        "AI is generating improved media from the brief and original reference.",
+                        $"image_generation_started_{imagePlan.Target.Ordinal}",
+                        $"AI is generating improved media {imagePlan.Target.Ordinal}/{imagePlan.Target.Total}",
+                        "AI is generating improved media from that item's own brief and original reference.",
                         new
                         {
                             style,
-                            prompt = fullImagePrompt,
-                            systemPrompt = fullImageSystemPrompt,
-                            mediaOrdinal = imageTarget.Ordinal,
-                            mediaTotal = imageTarget.Total,
-                            referenceImageCount = imageTarget.ReferenceImageUrls.Count,
+                            prompt = imagePlan.Prompt,
+                            systemPrompt = imagePlan.SystemPrompt,
+                            mediaOrdinal = imagePlan.Target.Ordinal,
+                            mediaTotal = imagePlan.Target.Total,
+                            referenceImageCount = imagePlan.Target.ReferenceImageUrls.Count,
                         },
                         ct);
 
                 }
 
-                var generatedImages = (await Task.WhenAll(imageTargets.Select(async imageTarget =>
+                var generatedImages = (await Task.WhenAll(imagePlans.Select(async imagePlan =>
                 {
-                    var fullImagePrompt = BuildImproveImagePrompt(brief, imageTarget);
-                    var fullImageSystemPrompt = BuildImproveImageSystemPrompt(baseImageSystemPrompt, imageTarget);
                     var result = await _imageGenClient.GenerateImageAsync(
                         new ImageGenerationRequest(
-                            Prompt: fullImagePrompt,
-                            ReferenceImageUrls: imageTarget.ReferenceImageUrls,
-                            SystemPrompt: fullImageSystemPrompt),
+                            Prompt: imagePlan.Prompt,
+                            ReferenceImageUrls: imagePlan.Target.ReferenceImageUrls,
+                            SystemPrompt: imagePlan.SystemPrompt),
                         ct);
-                    return new GeneratedImproveImage(imageTarget.Ordinal, imageTarget.Total, result);
+                    return new GeneratedImproveImage(imagePlan.Target.Ordinal, imagePlan.Target.Total, result);
                 })))
                     .OrderBy(image => image.Ordinal)
                     .ToList();
@@ -934,6 +974,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             task.CompletedAt = DateTimeExtensions.PostgreSqlUtcNow;
             task.UpdatedAt = task.CompletedAt;
             await _taskRepository.SaveChangesAsync(ct);
+            await MarkSpendRecordDebitedAsync(task.Id, ct);
             await PublishThinkingAsync(
                 context,
                 task,
@@ -981,6 +1022,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             try
             {
                 await _taskRepository.SaveChangesAsync(ct);
+                await RefundSpendRecordAsync(msg.UserId, task.Id, ct);
             }
             catch (Exception saveEx)
             {
@@ -1018,6 +1060,78 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 _logger.LogError(notifyEx, "ImprovePost {Id}: failed to publish failure notification", task.Id);
             }
         }
+    }
+
+    private async Task MarkSpendRecordDebitedAsync(Guid taskId, CancellationToken cancellationToken)
+    {
+        var records = await _aiSpendRecordRepository.GetByReferenceAsync(
+            CoinReferenceTypes.ImprovePost,
+            taskId.ToString(),
+            cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Pending, StringComparison.OrdinalIgnoreCase))
+            {
+                record.Status = AiSpendStatuses.Debited;
+                record.UpdatedAt = updatedAt;
+                _aiSpendRecordRepository.Update(record);
+            }
+        }
+
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RefundSpendRecordAsync(Guid userId, Guid taskId, CancellationToken cancellationToken)
+    {
+        var records = await _aiSpendRecordRepository.GetByReferenceAsync(
+            CoinReferenceTypes.ImprovePost,
+            taskId.ToString(),
+            cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Refunded, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var refund = await _billingClient.RefundAsync(
+                userId,
+                record.TotalCoins,
+                CoinDebitReasons.PostEnhancementRefund,
+                CoinReferenceTypes.ImprovePost,
+                taskId.ToString(),
+                cancellationToken);
+            if (refund.IsFailure)
+            {
+                _logger.LogWarning(
+                    "ImprovePost {TaskId}: failed to refund spend record {SpendRecordId}: {Code} {Message}",
+                    taskId,
+                    record.Id,
+                    refund.Error.Code,
+                    refund.Error.Description);
+                continue;
+            }
+
+            record.Status = AiSpendStatuses.Refunded;
+            record.UpdatedAt = updatedAt;
+            _aiSpendRecordRepository.Update(record);
+        }
+
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
@@ -1290,13 +1404,29 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         string styleKnowledge,
         string? platform,
         string platformKnowledge,
-        string style)
+        string style,
+        ImageImproveTarget target)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"Requested post STYLE: {style}");
         if (!string.IsNullOrWhiteSpace(platform))
         {
             sb.AppendLine($"Target platform: {platform}");
+        }
+        sb.AppendLine();
+        sb.AppendLine("=== Current media item scope ===");
+        if (target.Total > 1)
+        {
+            sb.AppendLine($"You are improving ONLY media item {target.Ordinal} of {target.Total}.");
+            sb.AppendLine("The attached reference image(s), if any, belong only to this one media item.");
+            sb.AppendLine("Do not infer subject, objects, layout, or text from sibling carousel items.");
+            sb.AppendLine("Do not create a combined collage or comparison of multiple media items.");
+            sb.AppendLine("The new image must preserve and improve the subject visible in this attached media item only.");
+            sb.AppendLine("The caption may describe the whole carousel; use it only for tone/context and do not visualize caption parts that refer to other media items.");
+        }
+        else
+        {
+            sb.AppendLine("You are improving the only media item in this post.");
         }
         sb.AppendLine();
         sb.AppendLine("=== Caption (the new image must illustrate this) ===");
@@ -1428,6 +1558,14 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         int Ordinal,
         int Total,
         IReadOnlyList<string> ReferenceImageUrls);
+
+    private sealed record ImproveImageBrief(ImageImproveTarget Target, ImageBrief Brief);
+
+    private sealed record ImproveImagePlan(
+        ImageImproveTarget Target,
+        ImageBrief Brief,
+        string Prompt,
+        string SystemPrompt);
 
     private sealed record GeneratedImproveImage(int Ordinal, int Total, ImageGenerationResult Result);
 

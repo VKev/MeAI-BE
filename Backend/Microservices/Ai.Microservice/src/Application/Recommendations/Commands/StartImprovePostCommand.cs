@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Application.Abstractions.Billing;
 using Application.Abstractions.SocialMedias;
+using Application.Billing;
 using Application.Posts;
 using Application.Recommendations.Models;
 using Domain.Entities;
@@ -33,9 +35,14 @@ public sealed record StartImprovePostCommand(
 public sealed class StartImprovePostCommandHandler
     : IRequestHandler<StartImprovePostCommand, Result<RecommendPostTaskResponse>>
 {
+    private const string BillingModel = "openrouter/improve-post-v1";
+
     private readonly IPostRepository _postRepository;
     private readonly IRecommendPostRepository _recommendPostRepository;
     private readonly IUserSocialMediaService _userSocialMediaService;
+    private readonly ICoinPricingService _pricingService;
+    private readonly IBillingClient _billingClient;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<StartImprovePostCommandHandler> _logger;
 
@@ -43,12 +50,18 @@ public sealed class StartImprovePostCommandHandler
         IPostRepository postRepository,
         IRecommendPostRepository recommendPostRepository,
         IUserSocialMediaService userSocialMediaService,
+        ICoinPricingService pricingService,
+        IBillingClient billingClient,
+        IAiSpendRecordRepository aiSpendRecordRepository,
         IPublishEndpoint publishEndpoint,
         ILogger<StartImprovePostCommandHandler> logger)
     {
         _postRepository = postRepository;
         _recommendPostRepository = recommendPostRepository;
         _userSocialMediaService = userSocialMediaService;
+        _pricingService = pricingService;
+        _billingClient = billingClient;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
         _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
@@ -161,7 +174,51 @@ public sealed class StartImprovePostCommandHandler
             UpdatedAt = now,
         };
 
+        var variant = ResolveBillingVariant(request.ImproveCaption, request.ImproveImage);
+        var quoteResult = await _pricingService.GetCostAsync(
+            CoinActionTypes.PostEnhancement,
+            BillingModel,
+            variant,
+            quantity: 1,
+            cancellationToken);
+        if (quoteResult.IsFailure)
+        {
+            return Result.Failure<RecommendPostTaskResponse>(quoteResult.Error);
+        }
+
+        var debitResult = await _billingClient.DebitAsync(
+            request.UserId,
+            quoteResult.Value.TotalCoins,
+            CoinDebitReasons.PostEnhancementDebit,
+            CoinReferenceTypes.ImprovePost,
+            entity.Id.ToString(),
+            cancellationToken);
+        if (debitResult.IsFailure)
+        {
+            return Result.Failure<RecommendPostTaskResponse>(debitResult.Error);
+        }
+
         await _recommendPostRepository.AddAsync(entity, cancellationToken);
+        await _aiSpendRecordRepository.AddAsync(
+            new AiSpendRecord
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = request.UserId,
+                WorkspaceId = post.WorkspaceId,
+                Provider = AiSpendProviders.OpenRouter,
+                ActionType = CoinActionTypes.PostEnhancement,
+                Model = BillingModel,
+                Variant = variant,
+                Unit = quoteResult.Value.Unit,
+                Quantity = quoteResult.Value.Quantity,
+                UnitCostCoins = quoteResult.Value.UnitCostCoins,
+                TotalCoins = quoteResult.Value.TotalCoins,
+                ReferenceType = CoinReferenceTypes.ImprovePost,
+                ReferenceId = entity.Id.ToString(),
+                Status = AiSpendStatuses.Pending,
+                CreatedAt = now
+            },
+            cancellationToken);
 
         // Set the FK on the post AT submit time — the GET endpoint joins through
         // this so the FE can poll status while the consumer is still working.
@@ -341,6 +398,16 @@ public sealed class StartImprovePostCommandHandler
             "tiktok" or "tik tok" => "tiktok",
             "threads" or "thread" => "threads",
             _ => null,
+        };
+    }
+
+    private static string ResolveBillingVariant(bool improveCaption, bool improveImage)
+    {
+        return (improveCaption, improveImage) switch
+        {
+            (true, true) => "caption_image",
+            (false, true) => "image",
+            _ => "caption",
         };
     }
 }

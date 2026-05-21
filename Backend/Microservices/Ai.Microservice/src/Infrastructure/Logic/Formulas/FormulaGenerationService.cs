@@ -7,7 +7,7 @@ namespace Infrastructure.Logic.Formulas;
 
 public sealed class FormulaGenerationService : IFormulaGenerationService
 {
-    private const string DefaultModel = "gpt-5-4";
+    private const string DefaultModel = "gpt-4o-mini";
 
     private readonly IGeminiCaptionService _captionService;
 

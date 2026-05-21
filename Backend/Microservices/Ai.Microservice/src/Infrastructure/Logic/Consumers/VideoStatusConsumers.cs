@@ -163,7 +163,36 @@ public class VideoCompletedConsumer : IConsumer<VideoGenerationCompleted>
         chat.Status = "Completed";
         chat.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         await TryAttachResultsToLinkedPostAsync(chat, resourceIds, cancellationToken);
+        await MarkSpendRecordsDebitedAsync(
+            CoinReferenceTypes.ChatVideo,
+            chat.Id.ToString(),
+            cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task MarkSpendRecordsDebitedAsync(
+        string referenceType,
+        string referenceId,
+        CancellationToken cancellationToken)
+    {
+        var records = await _dbContext.AiSpendRecords
+            .Where(record => record.ReferenceType == referenceType && record.ReferenceId == referenceId)
+            .ToListAsync(cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Pending, StringComparison.OrdinalIgnoreCase))
+            {
+                record.Status = AiSpendStatuses.Debited;
+                record.UpdatedAt = updatedAt;
+            }
+        }
     }
 
     private async Task<Chat?> FindChatByCorrelationAsync(Guid correlationId, CancellationToken cancellationToken)

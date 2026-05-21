@@ -40,14 +40,17 @@ public sealed class BillingCoinPackagesController : ApiController
     [ProducesResponseType(typeof(Result<CoinPackageCheckoutResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Checkout(Guid packageId, CancellationToken cancellationToken)
+    public async Task<IActionResult> Checkout(
+        Guid packageId,
+        [FromQuery] bool useDefaultCard = false,
+        CancellationToken cancellationToken = default)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new PurchaseCoinPackageCommand(packageId, userId), cancellationToken);
+        var result = await _mediator.Send(new PurchaseCoinPackageCommand(packageId, userId, useDefaultCard), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);

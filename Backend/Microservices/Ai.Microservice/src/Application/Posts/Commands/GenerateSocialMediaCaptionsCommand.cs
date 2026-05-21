@@ -179,7 +179,7 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
             TotalCoins = quoteResult.Value.TotalCoins,
             ReferenceType = CoinReferenceTypes.CaptionBatch,
             ReferenceId = batchReferenceId,
-            Status = AiSpendStatuses.Debited,
+            Status = AiSpendStatuses.Pending,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -209,6 +209,11 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
                 cancellationToken);
             return Result.Failure<GenerateSocialMediaCaptionsResponse>(captionsResult.Error);
         }
+
+        spendRecord.Status = AiSpendStatuses.Debited;
+        spendRecord.UpdatedAt = DateTime.UtcNow;
+        _aiSpendRecordRepository.Update(spendRecord);
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new GenerateSocialMediaCaptionsResponse(
         [

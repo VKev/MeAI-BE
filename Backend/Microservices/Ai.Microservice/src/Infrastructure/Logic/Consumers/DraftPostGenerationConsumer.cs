@@ -1,9 +1,11 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Application.Abstractions.Billing;
 using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
 using Application.Abstractions.Search;
+using Application.Billing;
 using Application.Recommendations.Commands;
 using Application.Recommendations.Models;
 using Application.Recommendations.Queries;
@@ -419,6 +421,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     private readonly IImageSearchClient _imageSearchClient;
     private readonly IRerankClient _rerankClient;
     private readonly Application.Recommendations.Services.IQueryRewriter _queryRewriter;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
+    private readonly IBillingClient _billingClient;
     private readonly ILogger<DraftPostGenerationConsumer> _logger;
 
     public DraftPostGenerationConsumer(
@@ -432,6 +436,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         IImageSearchClient imageSearchClient,
         IRerankClient rerankClient,
         Application.Recommendations.Services.IQueryRewriter queryRewriter,
+        IAiSpendRecordRepository aiSpendRecordRepository,
+        IBillingClient billingClient,
         ILogger<DraftPostGenerationConsumer> logger)
     {
         _mediator = mediator;
@@ -444,6 +450,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         _imageSearchClient = imageSearchClient;
         _rerankClient = rerankClient;
         _queryRewriter = queryRewriter;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
+        _billingClient = billingClient;
         _logger = logger;
     }
 
@@ -1600,6 +1608,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             task.CompletedAt = DateTimeExtensions.PostgreSqlUtcNow;
             task.UpdatedAt = task.CompletedAt;
             await _taskRepository.SaveChangesAsync(ct);
+            await MarkSpendRecordDebitedAsync(task.Id, ct);
 
             await context.Publish(
                 NotificationRequestedEventFactory.CreateForUser(
@@ -1689,6 +1698,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             try
             {
                 await _taskRepository.SaveChangesAsync(ct);
+                await RefundSpendRecordAsync(msg.UserId, task.Id, ct);
             }
             catch (Exception saveEx)
             {
@@ -1726,6 +1736,78 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 _logger.LogError(notifyEx, "DraftPost {Id}: failed to publish failure notification", task.Id);
             }
         }
+    }
+
+    private async Task MarkSpendRecordDebitedAsync(Guid taskId, CancellationToken cancellationToken)
+    {
+        var records = await _aiSpendRecordRepository.GetByReferenceAsync(
+            CoinReferenceTypes.DraftPostGeneration,
+            taskId.ToString(),
+            cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Pending, StringComparison.OrdinalIgnoreCase))
+            {
+                record.Status = AiSpendStatuses.Debited;
+                record.UpdatedAt = updatedAt;
+                _aiSpendRecordRepository.Update(record);
+            }
+        }
+
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RefundSpendRecordAsync(Guid userId, Guid taskId, CancellationToken cancellationToken)
+    {
+        var records = await _aiSpendRecordRepository.GetByReferenceAsync(
+            CoinReferenceTypes.DraftPostGeneration,
+            taskId.ToString(),
+            cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Refunded, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var refund = await _billingClient.RefundAsync(
+                userId,
+                record.TotalCoins,
+                CoinDebitReasons.DraftPostGenerationRefund,
+                CoinReferenceTypes.DraftPostGeneration,
+                taskId.ToString(),
+                cancellationToken);
+            if (refund.IsFailure)
+            {
+                _logger.LogWarning(
+                    "DraftPost {TaskId}: failed to refund spend record {SpendRecordId}: {Code} {Message}",
+                    taskId,
+                    record.Id,
+                    refund.Error.Code,
+                    refund.Error.Description);
+                continue;
+            }
+
+            record.Status = AiSpendStatuses.Refunded;
+            record.UpdatedAt = updatedAt;
+            _aiSpendRecordRepository.Update(record);
+        }
+
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
     }
 
     private static string BuildCaptionUserText(

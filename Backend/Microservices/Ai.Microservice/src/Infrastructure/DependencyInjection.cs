@@ -66,7 +66,14 @@ namespace Infrastructure
             services.AddHttpClient<IKieFallbackCallbackService, KieFallbackCallbackService>();
             services.AddSingleton<IAiFallbackTemplateService, AiFallbackTemplateService>();
             services.AddHttpClient("Gemini");
-            services.AddHttpClient("KieChat");
+            services.AddHttpClient("KieChat", (sp, client) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var timeoutSeconds = int.TryParse(
+                    configuration["Kie:TimeoutSeconds"] ?? configuration["Kie__TimeoutSeconds"],
+                    out var s) ? s : 30;
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            });
             services.AddScoped<Infrastructure.Logic.Kie.KieResponsesClient>();
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");
@@ -77,7 +84,7 @@ namespace Infrastructure
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; MeAIWebSearch/1.0)");
                 client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9,vi;q=0.8");
             });
-            // Caption generation runs through Kie's GPT-5.4 Responses API. GeminiCaptionService
+            // Caption generation runs through Kie's GPT-4o-mini Responses API. GeminiCaptionService
             // stays registered as a concrete class for future fallback / A-B; the interface
             // binding points at the Kie-backed implementation.
             services.AddScoped<IGeminiCaptionService, Infrastructure.Logic.Kie.KieCaptionService>();

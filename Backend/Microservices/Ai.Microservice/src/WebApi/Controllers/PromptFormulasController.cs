@@ -20,7 +20,7 @@ namespace WebApi.Controllers;
 [Route("api/Ai")]
 public sealed class PromptFormulasController : ApiController
 {
-    private const string DefaultModel = "gpt-5-4";
+    private const string DefaultModel = "gpt-4o-mini";
 
     private static readonly JsonSerializerOptions VariableJsonOptions = new()
     {
@@ -169,7 +169,7 @@ public sealed class PromptFormulasController : ApiController
             TotalCoins = quoteResult.Value.TotalCoins,
             ReferenceType = CoinReferenceTypes.FormulaGeneration,
             ReferenceId = referenceId,
-            Status = AiSpendStatuses.Debited,
+            Status = AiSpendStatuses.Pending,
             CreatedAt = now
         };
 
@@ -217,6 +217,11 @@ public sealed class PromptFormulasController : ApiController
 
         await _formulaGenerationLogRepository.AddAsync(log, cancellationToken);
         await _formulaGenerationLogRepository.SaveChangesAsync(cancellationToken);
+
+        spendRecord.Status = AiSpendStatuses.Debited;
+        spendRecord.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        _aiSpendRecordRepository.Update(spendRecord);
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
 
         return Ok(Result.Success(new FormulaGenerateResponse(
             templateSource.TemplateEntity?.Id,
