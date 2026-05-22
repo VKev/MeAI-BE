@@ -298,24 +298,24 @@ jobs:
           CF_DOMAIN_NAME=$(jq -r '.domain_name // empty' "$FILE")
           CF_USER_EMAIL=$(jq -r '.cloudflare_user_email // .cloudflare_email // empty' "$FILE")
 
-          if [ -z "$CF_ACCOUNT_ID" ] || [ -z "$CF_GLOBAL_API_KEY" ] || [ -z "$CF_USER_EMAIL" ]; then
-            echo "::error::cloudflare_account_id, cloudflare_global_api_key, or cloudflare_user_email missing from merged tfvars" >&2
+          if [ -z "$CF_ACCOUNT_ID" ] || { [ -z "$CF_API_TOKEN" ] && { [ -z "$CF_GLOBAL_API_KEY" ] || [ -z "$CF_USER_EMAIL" ]; }; }; then
+            echo "::error::cloudflare_account_id and either cloudflare_api_token or cloudflare_global_api_key/cloudflare_user_email missing from merged tfvars" >&2
             exit 1
           fi
 
           [ -n "$CF_API_TOKEN" ] && echo "::add-mask::$CF_API_TOKEN"
-          echo "::add-mask::$CF_GLOBAL_API_KEY"
+          [ -n "$CF_GLOBAL_API_KEY" ] && echo "::add-mask::$CF_GLOBAL_API_KEY"
           echo "::add-mask::$CF_ACCOUNT_ID"
           [ -n "$CF_ZONE_ID" ] && echo "::add-mask::$CF_ZONE_ID"
-          echo "::add-mask::$CF_USER_EMAIL"
+          [ -n "$CF_USER_EMAIL" ] && echo "::add-mask::$CF_USER_EMAIL"
 
           {
             echo "CF_ACCOUNT_ID=$CF_ACCOUNT_ID"
             [ -n "$CF_API_TOKEN" ] && echo "CF_API_TOKEN=$CF_API_TOKEN"
-            echo "CF_GLOBAL_API_KEY=$CF_GLOBAL_API_KEY"
+            [ -n "$CF_GLOBAL_API_KEY" ] && echo "CF_GLOBAL_API_KEY=$CF_GLOBAL_API_KEY"
             [ -n "$CF_ZONE_ID" ] && echo "CF_ZONE_ID=$CF_ZONE_ID"
             [ -n "$CF_DOMAIN_NAME" ] && echo "CF_DOMAIN_NAME=$CF_DOMAIN_NAME"
-            echo "CF_USER_EMAIL=$CF_USER_EMAIL"
+            [ -n "$CF_USER_EMAIL" ] && echo "CF_USER_EMAIL=$CF_USER_EMAIL"
           } >> "$GITHUB_ENV"
 
       - name: Build Cloudflare nuke config
@@ -493,6 +493,11 @@ jobs:
           TMP_DIR="$(mktemp -d)"
           git clone --depth 1 https://github.com/VKev/Cloudflare-Nuke.git "$TMP_DIR"
           rm -f "$TMP_DIR/resources/r2.go"
+          if [ -n "${CF_API_TOKEN:-}" ]; then
+            # AccountToken is protected in the config and token auth often cannot list
+            # account tokens unless the token also has token-management privileges.
+            rm -f "$TMP_DIR/resources/accountToken.go"
+          fi
           (cd "$TMP_DIR" && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$OLDPWD/cf-nuke-linux-amd64" .)
           chmod +x cf-nuke-linux-amd64
 
@@ -500,18 +505,32 @@ jobs:
         working-directory: Terraform
         run: |
           set -euo pipefail
-          if [ -z "${CF_ACCOUNT_ID:-}" ] || [ -z "${CF_GLOBAL_API_KEY:-}" ] || [ -z "${CF_USER_EMAIL:-}" ]; then
-            echo "::error::Missing Cloudflare credentials" >&2
+          if [ -z "${CF_ACCOUNT_ID:-}" ]; then
+            echo "::error::Missing Cloudflare account id" >&2
             exit 1
           fi
 
-          printf 'yes\n' | ./cf-nuke-linux-amd64 nuke \
-            --mode account \
-            -c cloudflare_nuke/nuke-config.final.yaml \
-            -a "$CF_ACCOUNT_ID" \
-            -k "$CF_GLOBAL_API_KEY" \
-            -u "$CF_USER_EMAIL" \
-            --no-dry-run
+          if [ -n "${CF_API_TOKEN:-}" ]; then
+            printf 'yes\n' | ./cf-nuke-linux-amd64 nuke \
+              --mode token \
+              -c cloudflare_nuke/nuke-config.final.yaml \
+              -a "$CF_ACCOUNT_ID" \
+              -k "$CF_API_TOKEN" \
+              --no-dry-run
+          else
+            if [ -z "${CF_GLOBAL_API_KEY:-}" ] || [ -z "${CF_USER_EMAIL:-}" ]; then
+              echo "::error::Missing Cloudflare Global API Key or user email for account-mode cf-nuke" >&2
+              exit 1
+            fi
+
+            printf 'yes\n' | ./cf-nuke-linux-amd64 nuke \
+              --mode account \
+              -c cloudflare_nuke/nuke-config.final.yaml \
+              -a "$CF_ACCOUNT_ID" \
+              -k "$CF_GLOBAL_API_KEY" \
+              -u "$CF_USER_EMAIL" \
+              --no-dry-run
+          fi
 
       - name: Finished
         run: echo "Cloudflare nuke completed"
