@@ -168,6 +168,17 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                 }
 
                 lastError = publishResult.Error;
+                _logger.LogWarning(
+                    "Publish attempt {Attempt}/{Max} failed. CorrelationId: {CorrelationId}, PublicationId: {PublicationId}, PostId: {PostId}, SocialMediaId: {SocialMediaId}, Platform: {Platform}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
+                    attempt,
+                    MaxAttempts,
+                    message.CorrelationId,
+                    message.PublicationId,
+                    message.PostId,
+                    message.SocialMediaId,
+                    socialMedia.Type,
+                    lastError.Code,
+                    lastError.Description);
             }
             catch (Exception ex)
             {
@@ -238,7 +249,7 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         {
             Id = Guid.CreateVersion7(),
             PostId = post.Id,
-            WorkspaceId = post.WorkspaceId!.Value,
+            WorkspaceId = placeholder.WorkspaceId,
             SocialMediaId = socialMedia.SocialMediaId,
             SocialMediaType = socialMedia.Type,
             DestinationOwnerId = destination.PageId,

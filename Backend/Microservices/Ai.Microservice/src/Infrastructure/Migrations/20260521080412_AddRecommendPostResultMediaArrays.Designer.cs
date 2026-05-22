@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(MyDbContext))]
-    partial class MyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260521080412_AddRecommendPostResultMediaArrays")]
+    partial class AddRecommendPostResultMediaArrays
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -391,12 +394,6 @@ namespace Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_auto_topic");
 
-                    b.Property<int>("ImageCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1)
-                        .HasColumnName("image_count");
-
                     b.Property<int>("MaxRagPosts")
                         .HasColumnType("integer")
                         .HasColumnName("max_rag_posts");
@@ -421,10 +418,6 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("result_presigned_url");
 
-                    b.Property<string>("ResultPresignedUrlsJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("result_presigned_urls");
-
                     b.Property<string>("ResultReferencesJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("result_references");
@@ -432,10 +425,6 @@ namespace Infrastructure.Migrations
                     b.Property<Guid?>("ResultResourceId")
                         .HasColumnType("uuid")
                         .HasColumnName("result_resource_id");
-
-                    b.Property<string>("ResultResourceIdsJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("result_resource_ids");
 
                     b.Property<Guid>("SocialMediaId")
                         .HasColumnType("uuid")

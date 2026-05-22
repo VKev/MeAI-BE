@@ -22,7 +22,7 @@ variable "cloudfront_distribution_arn" {
 }
 
 variable "app_cors_allowed_origins" {
-  description = "Origins allowed to read presigned S3 objects from the app. Use [\"*\"] for public browser downloads of signed URLs."
+  description = "Origins allowed to read and PUT presigned S3 objects from the app. Use [\"*\"] for public browser access to signed URLs."
   type        = list(string)
   default     = ["*"]
 }

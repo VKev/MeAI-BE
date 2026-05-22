@@ -47,12 +47,15 @@ public sealed class CoinPricingSeeder
         // caption generation, but tracks spend separately so usage/billing can distinguish it.
         (CoinActionTypes.PostEnhancement, "gpt-4o-mini", null, "per_platform", UsdToCoins(0.0008m)),
         (CoinActionTypes.PostEnhancement, "gpt-5-2", null, "per_platform", UsdToCoins(0.0010m)),
-        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "caption", "per_request", UsdToCoins(0.015m)),
-        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "image", "per_request", UsdToCoins(0.234m)),
-        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "caption_image", "per_request", UsdToCoins(0.249m)),
+        // Recommendation draft and improve flows use fixed product pricing in the start
+        // command handlers: 100 coins for the request plus 50 for each generated image
+        // after the first. Keep the catalog base rows aligned for admin visibility.
+        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "caption", "per_request", GeneratedPostCoinCost.BaseCoins),
+        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "image", "per_request", GeneratedPostCoinCost.BaseCoins),
+        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "caption_image", "per_request", GeneratedPostCoinCost.BaseCoins),
         (CoinActionTypes.PostEnhancement, "*", null, "per_platform", UsdToCoins(0.0010m)),
-        (CoinActionTypes.DraftPostGeneration, "openrouter/draft-post-v1", null, "per_draft", UsdToCoins(0.234m)),
-        (CoinActionTypes.DraftPostGeneration, "*", null, "per_draft", UsdToCoins(0.234m)),
+        (CoinActionTypes.DraftPostGeneration, "openrouter/draft-post-v1", null, "per_request", GeneratedPostCoinCost.BaseCoins),
+        (CoinActionTypes.DraftPostGeneration, "*", null, "per_request", GeneratedPostCoinCost.BaseCoins),
         (CoinActionTypes.FormulaGeneration, "gpt-4o-mini", null, "per_variant", UsdToCoins(0.0004m)),
         (CoinActionTypes.FormulaGeneration, "*", null, "per_variant", UsdToCoins(0.0004m))
     };

@@ -61,7 +61,7 @@ def _public_base_url() -> str:
     return (
         os.environ.get("VIDEORAG_S3_PUBLIC_BASE_URL")
         or os.environ.get("S3__PublicBaseUrl")
-        or "https://static.vkev.me"
+        or ""
     ).rstrip("/")
 
 

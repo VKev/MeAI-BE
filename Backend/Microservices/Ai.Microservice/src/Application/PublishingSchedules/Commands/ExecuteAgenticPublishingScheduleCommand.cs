@@ -159,7 +159,8 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
                 new IndexSocialAccountPostsCommand(
                     schedule.UserId,
                     groundingTarget.SocialMediaId,
-                    30),
+                    30,
+                    BackfillMissingMediaDocuments: false),
                 cancellationToken);
 
             if (indexResult.IsFailure)

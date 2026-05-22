@@ -107,7 +107,8 @@ public sealed class RecommendationsController : ApiController
                 WorkspaceId: request.WorkspaceId,
                 TopK: request.TopK,
                 MaxReferenceImages: request.MaxReferenceImages,
-                MaxRagPosts: request.MaxRagPosts),
+                MaxRagPosts: request.MaxRagPosts,
+                ImageCount: request.ImageCount),
             cancellationToken);
 
         if (result.IsFailure)
@@ -180,6 +181,7 @@ public sealed class RecommendationsController : ApiController
                 ImproveImage: request.ImproveImage,
                 Style: request.Style,
                 Platform: request.Platform,
+                SocialMediaId: request.SocialMediaId,
                 UserInstruction: request.UserInstruction),
             cancellationToken);
 

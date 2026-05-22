@@ -87,6 +87,31 @@ public sealed class BillingCardsController : ApiController
         return Ok(result);
     }
 
+    [HttpDelete("{paymentMethodId}")]
+    [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> DeleteCard(
+        string paymentMethodId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new DeleteStripeCardCommand(userId, paymentMethodId),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     private bool TryGetUserId(out Guid userId)
     {
         var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);

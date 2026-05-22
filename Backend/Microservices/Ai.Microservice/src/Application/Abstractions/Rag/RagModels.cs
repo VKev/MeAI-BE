@@ -88,9 +88,16 @@ public sealed record RagVideoSegmentHit(
     /// <summary>0-based frame index within the segment (typically 0..4 for 5 frames).</summary>
     int? FrameIndex = null);
 
+public sealed record RagTextReference(
+    string DocumentId,
+    string? PostId,
+    string? Content,
+    string? Caption);
+
 public sealed record RagTextResults(
     string? Context,
-    IReadOnlyList<string> MatchedDocumentIds);
+    IReadOnlyList<string> MatchedDocumentIds,
+    IReadOnlyList<RagTextReference>? References = null);
 
 public sealed record RagMultimodalQueryResponse(
     string Query,

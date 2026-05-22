@@ -11,6 +11,7 @@ using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Contracts.Notifications;
 using SharedLibrary.Contracts.Recommendations;
 using SharedLibrary.Extensions;
+using System.Text.Json;
 
 namespace Application.Recommendations.Commands;
 
@@ -22,7 +23,8 @@ public sealed record StartDraftPostGenerationCommand(
     Guid? WorkspaceId = null,
     int? TopK = null,
     int? MaxReferenceImages = null,
-    int? MaxRagPosts = null) : IRequest<Result<DraftPostTaskResponse>>;
+    int? MaxRagPosts = null,
+    int? ImageCount = null) : IRequest<Result<DraftPostTaskResponse>>;
 
 public sealed class StartDraftPostGenerationCommandHandler
     : IRequestHandler<StartDraftPostGenerationCommand, Result<DraftPostTaskResponse>>
@@ -36,11 +38,12 @@ public sealed class StartDraftPostGenerationCommandHandler
     // the requested cap; image-gen models tolerate up to ~8 refs before quality drops.
     private const int MaxAllowedReferenceImages = 8;
     private const int MaxAllowedRagPosts = 200;
+    private const int DefaultImageCount = 1;
+    private const int MaxAllowedImageCount = 4;
 
     private readonly IDraftPostTaskRepository _repository;
     private readonly IPostRepository _postRepository;
     private readonly IUserSocialMediaService _userSocialMediaService;
-    private readonly ICoinPricingService _pricingService;
     private readonly IBillingClient _billingClient;
     private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
     private readonly IPublishEndpoint _publishEndpoint;
@@ -50,7 +53,6 @@ public sealed class StartDraftPostGenerationCommandHandler
         IDraftPostTaskRepository repository,
         IPostRepository postRepository,
         IUserSocialMediaService userSocialMediaService,
-        ICoinPricingService pricingService,
         IBillingClient billingClient,
         IAiSpendRecordRepository aiSpendRecordRepository,
         IPublishEndpoint publishEndpoint,
@@ -59,7 +61,6 @@ public sealed class StartDraftPostGenerationCommandHandler
         _repository = repository;
         _postRepository = postRepository;
         _userSocialMediaService = userSocialMediaService;
-        _pricingService = pricingService;
         _billingClient = billingClient;
         _aiSpendRecordRepository = aiSpendRecordRepository;
         _publishEndpoint = publishEndpoint;
@@ -106,6 +107,7 @@ public sealed class StartDraftPostGenerationCommandHandler
         var topK = Math.Clamp(request.TopK ?? DefaultTopK, 1, MaxAllowedTopK);
         var maxRefs = Math.Clamp(request.MaxReferenceImages ?? DefaultMaxReferenceImages, 1, MaxAllowedReferenceImages);
         var maxRagPosts = Math.Clamp(request.MaxRagPosts ?? DefaultMaxRagPosts, 1, MaxAllowedRagPosts);
+        var imageCount = Math.Clamp(request.ImageCount ?? DefaultImageCount, 1, MaxAllowedImageCount);
 
         // Validate style strictly: null/empty → "branded" default; anything else must
         // match one of the allowed values (creative / branded / marketing) or we reject.
@@ -163,26 +165,22 @@ public sealed class StartDraftPostGenerationCommandHandler
             TopK = topK,
             MaxReferenceImages = maxRefs,
             MaxRagPosts = maxRagPosts,
+            ImageCount = imageCount,
             Status = DraftPostTaskStatuses.Submitted,
             ResultPostId = draftPost.Id,           // ← bind upfront so 202 returns a real postId
             CreatedAt = now,
             UpdatedAt = now,
         };
 
-        var quoteResult = await _pricingService.GetCostAsync(
+        var quote = GeneratedPostCoinCost.CreateQuote(
             CoinActionTypes.DraftPostGeneration,
             BillingModel,
             variant: null,
-            quantity: 1,
-            cancellationToken);
-        if (quoteResult.IsFailure)
-        {
-            return Result.Failure<DraftPostTaskResponse>(quoteResult.Error);
-        }
+            requestedImageCount: imageCount);
 
         var debitResult = await _billingClient.DebitAsync(
             request.UserId,
-            quoteResult.Value.TotalCoins,
+            quote.TotalCoins,
             CoinDebitReasons.DraftPostGenerationDebit,
             CoinReferenceTypes.DraftPostGeneration,
             task.Id.ToString(),
@@ -203,10 +201,10 @@ public sealed class StartDraftPostGenerationCommandHandler
                 ActionType = CoinActionTypes.DraftPostGeneration,
                 Model = BillingModel,
                 Variant = null,
-                Unit = quoteResult.Value.Unit,
-                Quantity = quoteResult.Value.Quantity,
-                UnitCostCoins = quoteResult.Value.UnitCostCoins,
-                TotalCoins = quoteResult.Value.TotalCoins,
+                Unit = quote.Unit,
+                Quantity = quote.Quantity,
+                UnitCostCoins = quote.UnitCostCoins,
+                TotalCoins = quote.TotalCoins,
                 ReferenceType = CoinReferenceTypes.DraftPostGeneration,
                 ReferenceId = task.Id.ToString(),
                 Status = AiSpendStatuses.Pending,
@@ -230,6 +228,7 @@ public sealed class StartDraftPostGenerationCommandHandler
                 TopK = topK,
                 MaxReferenceImages = maxRefs,
                 MaxRagPosts = maxRagPosts,
+                ImageCount = imageCount,
                 StartedAt = now,
             },
             cancellationToken);
@@ -254,6 +253,7 @@ public sealed class StartDraftPostGenerationCommandHandler
                     topK = task.TopK,
                     maxReferenceImages = task.MaxReferenceImages,
                     maxRagPosts = task.MaxRagPosts,
+                    imageCount = task.ImageCount,
                     createdAt = task.CreatedAt,
                 },
                 createdAt: now,
@@ -282,14 +282,77 @@ public sealed class StartDraftPostGenerationCommandHandler
             UserPrompt: task.UserPrompt,
             IsAutoTopic: task.IsAutoTopic,
             Style: task.Style,
+            ImageCount: task.ImageCount,
             ResultPostBuilderId: task.ResultPostBuilderId,
             ResultPostId: task.ResultPostId,
             ResultResourceId: task.ResultResourceId,
             ResultPresignedUrl: task.ResultPresignedUrl,
+            ResultResourceIds: ParseResultResourceIds(task),
+            ResultPresignedUrls: ParseResultPresignedUrls(task),
             ResultCaption: task.ResultCaption,
             ErrorCode: task.ErrorCode,
             ErrorMessage: task.ErrorMessage,
             CreatedAt: task.CreatedAt,
             CompletedAt: task.CompletedAt);
+    }
+
+    public static IReadOnlyList<Guid> ParseResultResourceIds(DraftPostTask task)
+    {
+        var parsed = ParseGuidArray(task.ResultResourceIdsJson);
+        if (parsed.Count > 0)
+        {
+            return parsed;
+        }
+
+        return task.ResultResourceId.HasValue ? new[] { task.ResultResourceId.Value } : Array.Empty<Guid>();
+    }
+
+    public static IReadOnlyList<string> ParseResultPresignedUrls(DraftPostTask task)
+    {
+        var parsed = ParseStringArray(task.ResultPresignedUrlsJson);
+        if (parsed.Count > 0)
+        {
+            return parsed;
+        }
+
+        return string.IsNullOrWhiteSpace(task.ResultPresignedUrl)
+            ? Array.Empty<string>()
+            : new[] { task.ResultPresignedUrl };
+    }
+
+    private static IReadOnlyList<Guid> ParseGuidArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<Guid>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<Guid>>(json) ?? new List<Guid>();
+        }
+        catch
+        {
+            return Array.Empty<Guid>();
+        }
+    }
+
+    private static IReadOnlyList<string> ParseStringArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json)?
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToList() ?? new List<string>();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
     }
 }

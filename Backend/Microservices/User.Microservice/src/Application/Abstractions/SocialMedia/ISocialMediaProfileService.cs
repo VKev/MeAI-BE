@@ -24,4 +24,7 @@ public sealed record SocialMediaUserProfile(
     int? PageLikeCount,
     string? PageId = null,
     string? PageName = null,
-    string? PageProfilePictureUrl = null);
+    string? PageProfilePictureUrl = null,
+    string? Email = null,
+    string? Phone = null,
+    string? Website = null);

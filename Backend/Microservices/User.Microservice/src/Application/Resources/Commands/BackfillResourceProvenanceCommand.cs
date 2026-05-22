@@ -72,9 +72,10 @@ public sealed class BackfillResourceProvenanceCommandHandler
                 changed = true;
             }
 
-            if (string.IsNullOrWhiteSpace(resource.OriginSourceUrl) && !string.IsNullOrWhiteSpace(item.OriginSourceUrl))
+            var originSourceUrl = ResourceOriginSource.NormalizeForStorage(item.OriginSourceUrl);
+            if (string.IsNullOrWhiteSpace(resource.OriginSourceUrl) && !string.IsNullOrWhiteSpace(originSourceUrl))
             {
-                resource.OriginSourceUrl = item.OriginSourceUrl.Trim();
+                resource.OriginSourceUrl = originSourceUrl;
                 changed = true;
             }
 

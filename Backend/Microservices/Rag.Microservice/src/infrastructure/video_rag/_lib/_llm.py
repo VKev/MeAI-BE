@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import numpy as np
 
 from openai import AsyncOpenAI, AsyncAzureOpenAI, APIConnectionError, RateLimitError
@@ -15,9 +17,12 @@ from tenacity import (
 )
 import os
 
+from .openrouter_helpers import kie_chat_is_configured, kie_text_response
 from ._utils import compute_args_hash, wrap_embedding_func_with_attrs
 from .base import BaseKVStorage
 from ._utils import EmbeddingFunc
+
+logger = logging.getLogger("videorag.llm")
 
 global_openai_async_client = None
 global_azure_openai_async_client = None
@@ -114,6 +119,27 @@ async def openai_complete_if_cache(
         # NOTE: I update here to avoid the if_cache_return["return"] is None
         if if_cache_return is not None and if_cache_return["return"] is not None:
             return if_cache_return["return"]
+
+    if kie_chat_is_configured():
+        try:
+            content = await asyncio.to_thread(
+                kie_text_response,
+                messages,
+                kwargs.get("temperature", 0.4),
+                kwargs.get("max_tokens"),
+            )
+            if hashing_kv is not None and use_cache:
+                await hashing_kv.upsert(
+                    {args_hash: {"return": content, "model": "kie:" + model}}
+                )
+                await hashing_kv.index_done_callback()
+            return content
+        except Exception as ex:
+            logger.warning(
+                "Kie chat completion failed; falling back to OpenRouter. model=%s err=%s",
+                model,
+                ex,
+            )
 
     response = await openai_async_client.chat.completions.create(
         model=model, messages=messages, **kwargs

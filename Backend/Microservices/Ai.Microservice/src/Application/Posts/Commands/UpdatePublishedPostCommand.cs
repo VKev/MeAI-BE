@@ -98,7 +98,7 @@ public sealed class UpdatePublishedPostCommandHandler
             {
                 CorrelationId = correlationId,
                 UserId = request.UserId,
-                WorkspaceId = post.WorkspaceId!.Value,
+                WorkspaceId = publication.WorkspaceId,
                 PostId = post.Id,
                 PublicationId = publication.Id,
                 SocialMediaId = publication.SocialMediaId,

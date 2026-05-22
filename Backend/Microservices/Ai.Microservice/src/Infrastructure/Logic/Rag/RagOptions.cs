@@ -20,11 +20,10 @@ public sealed class RagOptions
     public TimeSpan GrpcIngestTimeout { get; init; } = TimeSpan.FromMinutes(5);
 
     /// <summary>
-    /// Public CDN/base URL used for S3-backed RAG image assets. Older VideoRAG rows
-    /// may still store direct S3 frame URLs; query results rewrite those hosts to
-    /// this base so FE cards and downstream multimodal calls use the public CDN.
+    /// Optional public CDN/base URL used for S3-backed RAG image assets. When
+    /// null or empty, query results keep direct S3 URLs.
     /// </summary>
-    public string? S3PublicBaseUrl { get; init; } = "https://static.vkev.me";
+    public string? S3PublicBaseUrl { get; init; }
 
     /// <summary>
     /// Timeout for the dedicated <c>WaitForRagReady</c> RPC. Cold-container

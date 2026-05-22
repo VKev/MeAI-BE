@@ -221,7 +221,32 @@ public sealed class RabbitMqRagClient : IRagClient, IAsyncDisposable
                     if (item.ValueKind == JsonValueKind.String) matched.Add(item.GetString()!);
                 }
             }
-            textResults = new RagTextResults(ctx, matched);
+
+            var references = new List<RagTextReference>();
+            if (textNode.TryGetProperty("references", out var refsNode) && refsNode.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in refsNode.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    var documentId = ReadString(item, "documentId");
+                    if (string.IsNullOrWhiteSpace(documentId))
+                    {
+                        continue;
+                    }
+
+                    references.Add(new RagTextReference(
+                        DocumentId: documentId,
+                        PostId: ReadString(item, "postId"),
+                        Content: ReadString(item, "content"),
+                        Caption: ReadString(item, "caption")));
+                }
+            }
+
+            textResults = new RagTextResults(ctx, matched, references);
         }
 
         var visualHits = new List<RagVisualHit>();
