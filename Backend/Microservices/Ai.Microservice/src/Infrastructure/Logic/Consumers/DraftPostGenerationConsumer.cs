@@ -455,13 +455,6 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         _logger = logger;
     }
 
-    private static bool ShouldSuppressTerminalThinking(string action, string? phaseStatus)
-    {
-        return string.Equals(phaseStatus, "completed", StringComparison.OrdinalIgnoreCase)
-               || action.EndsWith("_completed", StringComparison.OrdinalIgnoreCase)
-               || action.EndsWith("_finalized", StringComparison.OrdinalIgnoreCase);
-    }
-
     private async Task PublishThinkingAsync(
         ConsumeContext<GenerateDraftPostStarted> context,
         DraftPostTask task,
@@ -472,16 +465,6 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         CancellationToken cancellationToken,
         string phaseStatus = "processing")
     {
-        if (ShouldSuppressTerminalThinking(action, phaseStatus))
-        {
-            _logger.LogDebug(
-                "DraftPost {Id}: suppressed terminal thinking notification action={Action} phaseStatus={PhaseStatus}",
-                task.Id,
-                action,
-                phaseStatus);
-            return;
-        }
-
         var createdAt = DateTimeExtensions.PostgreSqlUtcNow;
 
         try
