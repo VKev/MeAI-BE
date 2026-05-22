@@ -1,3 +1,5 @@
+using Infrastructure.Context;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,8 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(MyDbContext))]
+    [Migration("20260521123000_AddDraftPostTaskImageCountAndResultMediaArrays")]
     public partial class AddDraftPostTaskImageCountAndResultMediaArrays : Migration
     {
         /// <inheritdoc />

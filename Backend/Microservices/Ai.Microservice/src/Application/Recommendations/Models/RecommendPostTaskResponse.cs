@@ -33,9 +33,13 @@ public sealed record StartImprovePostRequest(
     /// "branded").</summary>
     string? Style = null,
     /// <summary>Optional platform hint ("facebook" | "instagram" | "tiktok" |
-    /// "threads"). Used when the original post is not bound to a SocialMediaId.
-    /// Connected posts still use their linked social account as the source of truth.</summary>
+    /// "threads"). Used when no explicit or original SocialMediaId can provide the
+    /// platform context.</summary>
     string? Platform = null,
+    /// <summary>Optional connected account id to use as the RAG/profile context for
+    /// the improvement. When provided, this account is validated against the user and
+    /// takes precedence over the original post's stored SocialMediaId.</summary>
+    Guid? SocialMediaId = null,
     /// <summary>Optional free-form steering text from the user (e.g.
     /// "make the caption more playful", "use a cooler color palette in the image").
     /// Forwarded into both the caption and image-brief prompts when present.</summary>

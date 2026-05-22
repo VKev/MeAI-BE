@@ -26,6 +26,12 @@ public sealed class GenerateRecommendPostStarted
     /// </summary>
     public string? Platform { get; set; }
 
+    /// <summary>
+    /// Optional connected account id selected for account-specific RAG/profile context.
+    /// When omitted, the consumer falls back to the original post's SocialMediaId.
+    /// </summary>
+    public Guid? SocialMediaId { get; set; }
+
     /// <summary>Optional free-form steering text from the user.</summary>
     public string? UserInstruction { get; set; }
 

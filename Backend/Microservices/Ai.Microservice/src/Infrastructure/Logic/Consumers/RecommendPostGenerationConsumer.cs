@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Application.Abstractions.Billing;
 using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
@@ -86,7 +87,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         "social-media post image. The user has the existing post and wants the image regenerated " +
         "while staying recognizably on-topic.\n\n" +
         "INPUTS YOU SEE:\n" +
-        "  (a) The post's caption (current or just-improved) — that's what the new image must illustrate\n" +
+        "  (a) The post's caption (current or just-improved) for tone/context; the attached image defines the exact subject for this call\n" +
         "  (b) The user's optional improvement instruction for the image\n" +
         "  (c) Only the current media item's original image attached as a reference for subject / palette / brand identity\n" +
         "  (d) Style-knowledge for the requested style ('creative' / 'branded' / 'marketing'), " +
@@ -97,6 +98,14 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         "    Preserve and improve only the attached media item's subject. If the caption describes " +
         "    the whole carousel, use it only for tone/context and do not visualize caption parts " +
         "    that refer to other media items.\n" +
+        "  * The attached reference image is the authoritative subject source for this media item. " +
+        "    If the caption or user instruction mentions several cameras, products, scenes, or " +
+        "    people, use only the one visibly present in the attached reference image. Never swap " +
+        "    in a sibling product/object that is not visible in this reference.\n" +
+        "  * Each KIE image-generation call receives one original media reference. Your brief must " +
+        "    describe only that one reference. Do not write 'two cameras', 'both cameras', " +
+        "    'comparison', or similar multi-item language unless multiple items are already visible " +
+        "    inside the attached reference image itself.\n" +
         "  * Preserve the subject of the original image — same product / scene / person — unless " +
         "    the user's instruction explicitly asks to change it.\n" +
         "  * Improve composition, lighting, palette, or text overlay quality per the style-knowledge.\n" +
@@ -151,6 +160,13 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
     private static string BuildImproveImagePrompt(ImageBrief brief, ImageImproveTarget target)
     {
         return
+            "CRITICAL SOURCE LOCK: This KIE call generates exactly one replacement image, " +
+            $"for original media item {target.Ordinal} of {target.Total}. " +
+            "Use only the attached reference image as the visual subject source. " +
+            "If the caption, user instruction, or brief mentions multiple cameras/products/scenes, " +
+            "ignore anything that is not visible in this attached source image. " +
+            "Do not render sibling media subjects, do not create a comparison image, and do not reuse " +
+            "a product/object from another carousel item.\n\n" +
             $"{brief.Prompt}\n\n" +
             $"Aspect ratio: {brief.AspectRatio}. " +
             $"Improve original media item {target.Ordinal} of {target.Total}. " +
@@ -168,6 +184,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         return baseSystemPrompt + "\n\n" +
             "This is a multi-media post improvement. Generate ONLY replacement media item " +
             $"{target.Ordinal} of {target.Total}. Use only that item's attached original reference as the visual anchor. " +
+            "Never infer or render products, cameras, people, scenes, or text from sibling media or from " +
+            "global caption/instruction wording when they are not visible in the attached source image. " +
             "Every output in the set must be visibly different because each original media item is different. " +
             "Do not reuse the same composition, crop, background, pose, product angle, or rendered text arrangement across items.";
     }
@@ -240,9 +258,9 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         var notificationPlatform = NormalizePlatform(msg.Platform);
 
         _logger.LogInformation(
-            "ImprovePost: starting CorrelationId={CorrelationId} UserId={UserId} OriginalPostId={PostId} ImproveCaption={Caption} ImproveImage={Image} Style={Style} PlatformHint={Platform}",
+            "ImprovePost: starting CorrelationId={CorrelationId} UserId={UserId} OriginalPostId={PostId} ImproveCaption={Caption} ImproveImage={Image} Style={Style} PlatformHint={Platform} SocialMediaId={SocialMediaId}",
             msg.CorrelationId, msg.UserId, msg.OriginalPostId,
-            msg.ImproveCaption, msg.ImproveImage, style, notificationPlatform);
+            msg.ImproveCaption, msg.ImproveImage, style, notificationPlatform, msg.SocialMediaId);
 
         var task = await _taskRepository.GetByCorrelationIdForUpdateAsync(msg.CorrelationId, ct);
         if (task is null)
@@ -266,6 +284,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 task,
                 task.UpdatedAt,
                 notificationPlatform,
+                msg.SocialMediaId,
                 ct);
             await PublishThinkingAsync(
                 context,
@@ -279,6 +298,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     improveImage = msg.ImproveImage,
                     style,
                     platform = notificationPlatform,
+                    socialMediaId = msg.SocialMediaId,
                     hasUserInstruction = !string.IsNullOrWhiteSpace(msg.UserInstruction),
                 },
                 ct);
@@ -292,11 +312,16 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             }
             var originalCaption = originalPost.Content?.Content ?? string.Empty;
             var originalResourceIds = ParseResourceIds(originalPost.Content?.ResourceList);
+            var contextSocialMediaId = msg.SocialMediaId.HasValue && msg.SocialMediaId.Value != Guid.Empty
+                ? msg.SocialMediaId.Value
+                : originalPost.SocialMediaId.HasValue && originalPost.SocialMediaId.Value != Guid.Empty
+                    ? originalPost.SocialMediaId.Value
+                    : (Guid?)null;
             var targetPlatform = notificationPlatform ?? NormalizePlatform(originalPost.Platform);
             notificationPlatform = targetPlatform;
             _logger.LogInformation(
-                "ImprovePost {Id}: original captionLen={CaptionLen} chars, originalResources={ResCount}, platform={Platform}",
-                task.Id, originalCaption.Length, originalResourceIds.Count, targetPlatform);
+                "ImprovePost {Id}: original captionLen={CaptionLen} chars, originalResources={ResCount}, platform={Platform}, socialMediaId={SocialMediaId}",
+                task.Id, originalCaption.Length, originalResourceIds.Count, targetPlatform, contextSocialMediaId);
 
             // ── Step 0 — WaitForRagReady (same contract as draft-post) ──────
             _logger.LogInformation("ImprovePost {Id}: waiting for RAG to be ready...", task.Id);
@@ -321,10 +346,10 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 phaseStatus: "completed");
 
             // ── Step 1 — re-index the social account if we have one ────────
-            // Only meaningful when the post is bound to a social media account.
+            // Only meaningful when the request or post is bound to a social media account.
             // For unbound drafts (SocialMediaId = null), skip this step — the
             // RAG anchor query in Step 2 is unscoped which still finds knowledge.
-            if (originalPost.SocialMediaId.HasValue && originalPost.SocialMediaId.Value != Guid.Empty)
+            if (contextSocialMediaId.HasValue)
             {
                 _logger.LogDebug("ImprovePost {Id}: re-indexing posts (max=30)...", task.Id);
                 await PublishThinkingAsync(
@@ -335,7 +360,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     "AI is checking recent account posts before updating RAG knowledge.",
                     new
                     {
-                        socialMediaId = originalPost.SocialMediaId.Value,
+                        socialMediaId = contextSocialMediaId.Value,
                         maxPosts = 30,
                         purpose = "Only new or changed account content is indexed.",
                     },
@@ -343,7 +368,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 var indexResult = await _mediator.Send(
                     new IndexSocialAccountPostsCommand(
                         msg.UserId,
-                        originalPost.SocialMediaId.Value,
+                        contextSocialMediaId.Value,
                         30,
                         StopOnProviderCreditFailure: true,
                         OnIngestProgress: (progress, cancellationToken) =>
@@ -389,13 +414,13 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             else
             {
                 _logger.LogInformation(
-                    "ImprovePost {Id}: skipping re-index (post has no SocialMediaId)", task.Id);
+                    "ImprovePost {Id}: skipping re-index (no SocialMediaId context)", task.Id);
                 await PublishThinkingAsync(
                     context,
                     task,
                     "account_posts_indexing_skipped",
                     "Account post indexing skipped",
-                    "This post is not connected to a social media account, so AI skipped account RAG indexing.",
+                    "No connected account was selected or stored on the post, so AI skipped account RAG indexing.",
                     new
                     {
                         reason = "missing_social_media_id",
@@ -482,8 +507,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             // For unbound posts this still works — the query just runs unscoped.
             string ragAnswer = string.Empty;
             string ragReferencesJson = "[]";
-            if (originalPost.SocialMediaId.HasValue && originalPost.SocialMediaId.Value != Guid.Empty
-                && !string.IsNullOrWhiteSpace(originalCaption))
+            if (contextSocialMediaId.HasValue && !string.IsNullOrWhiteSpace(originalCaption))
             {
                 _logger.LogDebug("ImprovePost {Id}: querying RAG (anchor=caption, with rewriter)", task.Id);
                 await PublishThinkingAsync(
@@ -494,7 +518,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     "AI is searching account knowledge for matching voice, hooks, and content formulas.",
                     new
                     {
-                        socialMediaId = originalPost.SocialMediaId.Value,
+                        socialMediaId = contextSocialMediaId.Value,
                         query = originalCaption,
                         topK = DefaultRagTopK,
                         precomputedRewrite = new
@@ -511,7 +535,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 var queryResult = await _mediator.Send(
                     new QueryAccountRecommendationsQuery(
                         msg.UserId,
-                        originalPost.SocialMediaId.Value,
+                        contextSocialMediaId.Value,
                         originalCaption,
                         DefaultRagTopK,
                         PrecomputedRewrite: rewrite),
@@ -550,12 +574,13 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     task,
                     "rag_query_skipped",
                     "Account knowledge search skipped",
-                    "AI skipped account-specific RAG search because this post has no account link or caption.",
+                    "AI skipped account-specific RAG search because no account context or caption was available.",
                     new
                     {
-                        reason = originalPost.SocialMediaId.HasValue && originalPost.SocialMediaId.Value != Guid.Empty
+                        reason = contextSocialMediaId.HasValue
                             ? "empty_caption"
                             : "missing_social_media_id",
+                        socialMediaId = contextSocialMediaId,
                         originalCaptionLength = originalCaption.Length,
                     },
                     ct,
@@ -572,7 +597,10 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 "AI is preparing the original post media as references for improvement.",
                 new { resourceIds = originalResourceIds },
                 ct);
-            var originalRefImageUrls = await PresignAsync(msg.UserId, originalResourceIds, ct);
+            var originalImageReferences = await PresignOriginalImagesAsync(msg.UserId, originalResourceIds, ct);
+            var originalRefImageUrls = originalImageReferences
+                .Select(reference => reference.PresignedUrl)
+                .ToList();
             _logger.LogInformation(
                 "ImprovePost {Id}: presigned {Count} original image refs", task.Id, originalRefImageUrls.Count);
             await PublishThinkingAsync(
@@ -624,10 +652,17 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                         UserText: captionUserText,
                         ReferenceImageUrls: originalRefImageUrls),
                     ct);
-                improvedCaption = (captionResult.Answer ?? string.Empty).Trim().Trim('"');
+                var rawImprovedCaption = (captionResult.Answer ?? string.Empty).Trim().Trim('"');
+                improvedCaption = StripSocialCaptionMarkdown(rawImprovedCaption);
                 if (string.IsNullOrWhiteSpace(improvedCaption))
                 {
                     throw new InvalidOperationException("Improve-caption LLM returned empty content.");
+                }
+                if (!string.Equals(rawImprovedCaption, improvedCaption, StringComparison.Ordinal))
+                {
+                    _logger.LogInformation(
+                        "ImprovePost {Id}: stripped Markdown formatting from improved caption ({BeforeLen}->{AfterLen} chars)",
+                        task.Id, rawImprovedCaption.Length, improvedCaption.Length);
                 }
                 _logger.LogInformation(
                     "LLM[improveCaption] OUTPUT for ImprovePost {Id} ({CaptionLen} chars):\n{Caption}",
@@ -705,9 +740,15 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 // Build a separate brief per original resource. If one shared brief sees
                 // every carousel item, it tends to blend them and Kie produces near-duplicate
                 // improved media. Each target below sees only its own original reference.
-                var imageTargets = originalRefImageUrls.Count > 0
-                    ? originalRefImageUrls.Select((url, index) => new ImageImproveTarget(index + 1, originalRefImageUrls.Count, new[] { url })).ToList()
-                    : new List<ImageImproveTarget> { new(1, 1, Array.Empty<string>()) };
+                var imageTargets = originalImageReferences.Count > 0
+                    ? originalImageReferences
+                        .Select((reference, index) => new ImageImproveTarget(
+                            index + 1,
+                            originalImageReferences.Count,
+                            reference.ResourceId,
+                            new[] { reference.PresignedUrl }))
+                        .ToList()
+                    : new List<ImageImproveTarget> { new(1, 1, null, Array.Empty<string>()) };
                 await PublishThinkingAsync(
                     context,
                     task,
@@ -722,6 +763,13 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                         caption = improvedCaption,
                         mediaTotal = imageTargets.Count,
                         referenceImageCount = originalRefImageUrls.Count,
+                        targets = imageTargets.Select(target => new
+                        {
+                            mediaOrdinal = target.Ordinal,
+                            mediaTotal = target.Total,
+                            sourceResourceId = target.SourceResourceId,
+                            referenceImageCount = target.ReferenceImageUrls.Count,
+                        }).ToList(),
                     },
                     ct);
 
@@ -736,8 +784,9 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                         style: style,
                         target: imageTarget);
                     _logger.LogInformation(
-                        "LLM[improveImageBrief] INPUT for ImprovePost {Id} Style={Style} Media={Ordinal}/{Total} ({UserTextLen} chars, {RefCount} ref images)",
+                        "LLM[improveImageBrief] INPUT for ImprovePost {Id} Style={Style} Media={Ordinal}/{Total} SourceResourceId={SourceResourceId} ({UserTextLen} chars, {RefCount} ref images)",
                         task.Id, style, imageTarget.Ordinal, imageTarget.Total,
+                        imageTarget.SourceResourceId,
                         briefUserText.Length, imageTarget.ReferenceImageUrls.Count);
 
                     var briefResult = await _multimodalLlm.GenerateAnswerAsync(
@@ -771,6 +820,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                         {
                             mediaOrdinal = item.Target.Ordinal,
                             mediaTotal = item.Target.Total,
+                            sourceResourceId = item.Target.SourceResourceId,
                             prompt = item.Brief.Prompt,
                             item.Brief.AspectRatio,
                             item.Brief.StyleNotes,
@@ -797,8 +847,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 foreach (var imagePlan in imagePlans)
                 {
                     _logger.LogInformation(
-                        "IMAGEGEN INPUT for ImprovePost {Id} Style={Style} Media={Ordinal}/{Total} ({RefCount} ref images)\n  --- prompt ---\n{Prompt}\n  --- system ---\n{System}",
-                        task.Id, style, imagePlan.Target.Ordinal, imagePlan.Target.Total, imagePlan.Target.ReferenceImageUrls.Count,
+                        "IMAGEGEN INPUT for ImprovePost {Id} Style={Style} Media={Ordinal}/{Total} SourceResourceId={SourceResourceId} ({RefCount} ref images)\n  --- prompt ---\n{Prompt}\n  --- system ---\n{System}",
+                        task.Id, style, imagePlan.Target.Ordinal, imagePlan.Target.Total, imagePlan.Target.SourceResourceId, imagePlan.Target.ReferenceImageUrls.Count,
                         Truncate(imagePlan.Prompt, 2500),
                         Truncate(imagePlan.SystemPrompt, 1500));
                     await PublishThinkingAsync(
@@ -814,6 +864,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                             systemPrompt = imagePlan.SystemPrompt,
                             mediaOrdinal = imagePlan.Target.Ordinal,
                             mediaTotal = imagePlan.Target.Total,
+                            sourceResourceId = imagePlan.Target.SourceResourceId,
                             referenceImageCount = imagePlan.Target.ReferenceImageUrls.Count,
                         },
                         ct);
@@ -1005,6 +1056,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 task,
                 task.CompletedAt,
                 notificationPlatform,
+                msg.SocialMediaId,
                 ct);
 
             _logger.LogInformation(
@@ -1053,6 +1105,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     task,
                     task.CompletedAt,
                     notificationPlatform,
+                    msg.SocialMediaId,
                     ct);
             }
             catch (Exception notifyEx)
@@ -1292,6 +1345,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         RecommendPost task,
         DateTime? createdAt,
         string? platform,
+        Guid? socialMediaId,
         CancellationToken cancellationToken)
     {
         return context.Publish(
@@ -1314,6 +1368,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     improveImage = task.ImproveImage,
                     style = task.Style,
                     platform = platform,
+                    socialMediaId = socialMediaId,
                     userInstruction = task.UserInstruction,
                     resultCaption = task.ResultCaption,
                     resultResourceId = task.ResultResourceId,
@@ -1347,14 +1402,34 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         return ids;
     }
 
-    private async Task<List<string>> PresignAsync(Guid userId, IReadOnlyList<Guid> resourceIds, CancellationToken ct)
+    private async Task<List<PresignedOriginalImageReference>> PresignOriginalImagesAsync(
+        Guid userId,
+        IReadOnlyList<Guid> resourceIds,
+        CancellationToken ct)
     {
-        if (resourceIds.Count == 0) return new List<string>();
+        if (resourceIds.Count == 0)
+        {
+            return new List<PresignedOriginalImageReference>();
+        }
+
         var presignResult = await _userResourceService.GetPresignedResourcesAsync(userId, resourceIds, ct);
-        if (presignResult.IsFailure) return new List<string>();
-        return presignResult.Value
+        if (presignResult.IsFailure)
+        {
+            return new List<PresignedOriginalImageReference>();
+        }
+
+        var resourcesById = presignResult.Value
             .Where(r => !string.IsNullOrWhiteSpace(r.PresignedUrl))
-            .Select(r => r.PresignedUrl)
+            .GroupBy(r => r.ResourceId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        return resourceIds
+            .Where(resourceId => resourcesById.ContainsKey(resourceId))
+            .Select(resourceId =>
+            {
+                var resource = resourcesById[resourceId];
+                return new PresignedOriginalImageReference(resource.ResourceId, resource.PresignedUrl);
+            })
             .ToList();
     }
 
@@ -1415,6 +1490,10 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         }
         sb.AppendLine();
         sb.AppendLine("=== Current media item scope ===");
+        if (target.SourceResourceId.HasValue)
+        {
+            sb.AppendLine($"Source resource id for this call: {target.SourceResourceId.Value:D}");
+        }
         if (target.Total > 1)
         {
             sb.AppendLine($"You are improving ONLY media item {target.Ordinal} of {target.Total}.");
@@ -1423,18 +1502,19 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             sb.AppendLine("Do not create a combined collage or comparison of multiple media items.");
             sb.AppendLine("The new image must preserve and improve the subject visible in this attached media item only.");
             sb.AppendLine("The caption may describe the whole carousel; use it only for tone/context and do not visualize caption parts that refer to other media items.");
+            sb.AppendLine("If the caption or user instruction mentions multiple cameras/products, choose only the camera/product visible in the attached reference for this call.");
         }
         else
         {
             sb.AppendLine("You are improving the only media item in this post.");
         }
         sb.AppendLine();
-        sb.AppendLine("=== Caption (the new image must illustrate this) ===");
+        sb.AppendLine("=== Caption (tone/context only; attached media defines the exact subject) ===");
         sb.AppendLine(string.IsNullOrWhiteSpace(captionForImage) ? "(empty)" : captionForImage);
         sb.AppendLine();
         if (!string.IsNullOrWhiteSpace(userInstruction))
         {
-            sb.AppendLine("=== User improvement instruction ===");
+            sb.AppendLine("=== User improvement instruction (apply only the part relevant to this attached media item) ===");
             sb.AppendLine(userInstruction);
             sb.AppendLine();
         }
@@ -1554,9 +1634,12 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
 
     private sealed record ImageBrief(string Prompt, string AspectRatio, string? StyleNotes);
 
+    private sealed record PresignedOriginalImageReference(Guid ResourceId, string PresignedUrl);
+
     private sealed record ImageImproveTarget(
         int Ordinal,
         int Total,
+        Guid? SourceResourceId,
         IReadOnlyList<string> ReferenceImageUrls);
 
     private sealed record ImproveImageBrief(ImageImproveTarget Target, ImageBrief Brief);
@@ -1596,6 +1679,49 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
 
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max] + "...[truncated]";
+
+    private static string StripSocialCaptionMarkdown(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return string.Empty;
+        }
+
+        var text = raw
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Trim();
+
+        // Strip fenced-code wrappers first so fence markers never leak into captions.
+        text = Regex.Replace(text, @"```[a-zA-Z0-9_-]*\s*([\s\S]*?)```", "$1");
+
+        // Convert markdown links to visible plain text plus the bare URL when available.
+        text = Regex.Replace(
+            text,
+            @"\[([^\]\r\n]+)\]\((https?:\/\/[^\s)]+|www\.[^\s)]+|mailto:[^\s)]+|tel:[^\s)]+)\)",
+            "$1 $2",
+            RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"\[([^\]\r\n]+)\]\([^\)\r\n]+\)", "$1");
+
+        // Remove line-level markdown while preserving normal hashtags like #BrandName.
+        text = Regex.Replace(text, @"(?m)^\s{0,3}#{1,6}\s+", string.Empty);
+        text = Regex.Replace(text, @"(?m)^\s*>\s?", string.Empty);
+        text = Regex.Replace(text, @"(?m)^\s*[-*+]\s+", string.Empty);
+        text = Regex.Replace(text, @"(?m)^\s*(?:[-*_]\s*){3,}$", string.Empty);
+
+        // Remove inline emphasis/code markers without changing the caption wording.
+        text = Regex.Replace(text, @"\*\*([^\r\n*]+)\*\*", "$1");
+        text = Regex.Replace(text, @"__([^\r\n_]+)__", "$1");
+        text = Regex.Replace(text, @"(?<!\*)\*([^\r\n*]+)\*(?!\*)", "$1");
+        text = Regex.Replace(text, @"(?<!_)_([^\r\n_]+)_(?!_)", "$1");
+        text = Regex.Replace(text, @"~~([^\r\n~]+)~~", "$1");
+        text = Regex.Replace(text, @"`([^`\r\n]+)`", "$1");
+
+        text = Regex.Replace(text, @"[ \t]+\n", "\n");
+        text = Regex.Replace(text, @"\n{3,}", "\n\n");
+
+        return text.Trim().Trim('"');
+    }
 
     /// <summary>
     /// Localized literal for the style-design knowledge query. Same table as the

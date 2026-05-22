@@ -44,7 +44,6 @@ public sealed class StartDraftPostGenerationCommandHandler
     private readonly IDraftPostTaskRepository _repository;
     private readonly IPostRepository _postRepository;
     private readonly IUserSocialMediaService _userSocialMediaService;
-    private readonly ICoinPricingService _pricingService;
     private readonly IBillingClient _billingClient;
     private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
     private readonly IPublishEndpoint _publishEndpoint;
@@ -54,7 +53,6 @@ public sealed class StartDraftPostGenerationCommandHandler
         IDraftPostTaskRepository repository,
         IPostRepository postRepository,
         IUserSocialMediaService userSocialMediaService,
-        ICoinPricingService pricingService,
         IBillingClient billingClient,
         IAiSpendRecordRepository aiSpendRecordRepository,
         IPublishEndpoint publishEndpoint,
@@ -63,7 +61,6 @@ public sealed class StartDraftPostGenerationCommandHandler
         _repository = repository;
         _postRepository = postRepository;
         _userSocialMediaService = userSocialMediaService;
-        _pricingService = pricingService;
         _billingClient = billingClient;
         _aiSpendRecordRepository = aiSpendRecordRepository;
         _publishEndpoint = publishEndpoint;
@@ -175,20 +172,15 @@ public sealed class StartDraftPostGenerationCommandHandler
             UpdatedAt = now,
         };
 
-        var quoteResult = await _pricingService.GetCostAsync(
+        var quote = GeneratedPostCoinCost.CreateQuote(
             CoinActionTypes.DraftPostGeneration,
             BillingModel,
             variant: null,
-            quantity: 1,
-            cancellationToken);
-        if (quoteResult.IsFailure)
-        {
-            return Result.Failure<DraftPostTaskResponse>(quoteResult.Error);
-        }
+            requestedImageCount: imageCount);
 
         var debitResult = await _billingClient.DebitAsync(
             request.UserId,
-            quoteResult.Value.TotalCoins,
+            quote.TotalCoins,
             CoinDebitReasons.DraftPostGenerationDebit,
             CoinReferenceTypes.DraftPostGeneration,
             task.Id.ToString(),
@@ -209,10 +201,10 @@ public sealed class StartDraftPostGenerationCommandHandler
                 ActionType = CoinActionTypes.DraftPostGeneration,
                 Model = BillingModel,
                 Variant = null,
-                Unit = quoteResult.Value.Unit,
-                Quantity = quoteResult.Value.Quantity,
-                UnitCostCoins = quoteResult.Value.UnitCostCoins,
-                TotalCoins = quoteResult.Value.TotalCoins,
+                Unit = quote.Unit,
+                Quantity = quote.Quantity,
+                UnitCostCoins = quote.UnitCostCoins,
+                TotalCoins = quote.TotalCoins,
                 ReferenceType = CoinReferenceTypes.DraftPostGeneration,
                 ReferenceId = task.Id.ToString(),
                 Status = AiSpendStatuses.Pending,

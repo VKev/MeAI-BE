@@ -181,6 +181,7 @@ public sealed class RecommendationsController : ApiController
                 ImproveImage: request.ImproveImage,
                 Style: request.Style,
                 Platform: request.Platform,
+                SocialMediaId: request.SocialMediaId,
                 UserInstruction: request.UserInstruction),
             cancellationToken);
 
