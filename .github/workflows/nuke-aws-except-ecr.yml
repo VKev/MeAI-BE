@@ -292,6 +292,7 @@ jobs:
           fi
 
           CF_ACCOUNT_ID=$(jq -r '.cloudflare_account_id // empty' "$FILE")
+          CF_API_TOKEN=$(jq -r '.cloudflare_api_token // empty' "$FILE")
           CF_GLOBAL_API_KEY=$(jq -r '.cloudflare_global_api_key // empty' "$FILE")
           CF_ZONE_ID=$(jq -r '.cloudflare_zone_id // empty' "$FILE")
           CF_DOMAIN_NAME=$(jq -r '.domain_name // empty' "$FILE")
@@ -302,6 +303,7 @@ jobs:
             exit 1
           fi
 
+          [ -n "$CF_API_TOKEN" ] && echo "::add-mask::$CF_API_TOKEN"
           echo "::add-mask::$CF_GLOBAL_API_KEY"
           echo "::add-mask::$CF_ACCOUNT_ID"
           [ -n "$CF_ZONE_ID" ] && echo "::add-mask::$CF_ZONE_ID"
@@ -309,6 +311,7 @@ jobs:
 
           {
             echo "CF_ACCOUNT_ID=$CF_ACCOUNT_ID"
+            [ -n "$CF_API_TOKEN" ] && echo "CF_API_TOKEN=$CF_API_TOKEN"
             echo "CF_GLOBAL_API_KEY=$CF_GLOBAL_API_KEY"
             [ -n "$CF_ZONE_ID" ] && echo "CF_ZONE_ID=$CF_ZONE_ID"
             [ -n "$CF_DOMAIN_NAME" ] && echo "CF_DOMAIN_NAME=$CF_DOMAIN_NAME"
@@ -374,29 +377,52 @@ jobs:
           protected_domains = split_list(os.environ.get("PROTECTED_CF_WORKER_DOMAINS"))
 
           account_id = os.environ.get("CF_ACCOUNT_ID", "").strip()
+          api_token = os.environ.get("CF_API_TOKEN", "").strip()
           api_key = os.environ.get("CF_GLOBAL_API_KEY", "").strip()
           email = os.environ.get("CF_USER_EMAIL", "").strip()
+
+          def cloudflare_error_message(error):
+              body = ""
+              try:
+                  body = error.read().decode("utf-8", errors="replace")
+              except Exception:
+                  body = ""
+              if body:
+                  try:
+                      payload = json.loads(body)
+                      errors = "; ".join(item.get("message", str(item)) for item in payload.get("errors", []))
+                      return f"HTTP {error.code}: {errors or payload}"
+                  except json.JSONDecodeError:
+                      return f"HTTP {error.code}: {body[:500]}"
+              return f"HTTP {error.code}: {getattr(error, 'reason', '') or 'no response body'}"
+
+          def cf_headers():
+              headers = {"Content-Type": "application/json"}
+              if api_token:
+                  headers["Authorization"] = f"Bearer {api_token}"
+              else:
+                  headers["X-Auth-Email"] = email
+                  headers["X-Auth-Key"] = api_key
+              return headers
 
           def cf_get(path):
               req = urllib.request.Request(
                   f"https://api.cloudflare.com/client/v4{path}",
-                  headers={
-                      "X-Auth-Email": email,
-                      "X-Auth-Key": api_key,
-                      "Content-Type": "application/json",
-                  },
+                  headers=cf_headers(),
               )
-              with urllib.request.urlopen(req, timeout=30) as response:
-                  payload = json.loads(response.read().decode("utf-8"))
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      payload = json.loads(response.read().decode("utf-8"))
+              except urllib.error.HTTPError as error:
+                  raise RuntimeError(f"Cloudflare API failed for {path}: {cloudflare_error_message(error)}") from error
+              except urllib.error.URLError as error:
+                  raise RuntimeError(f"Cloudflare API request failed for {path}: {error.reason}") from error
               if not payload.get("success", False):
                   errors = "; ".join(error.get("message", str(error)) for error in payload.get("errors", []))
                   raise RuntimeError(f"Cloudflare API failed for {path}: {errors or payload}")
               return payload
 
-          if protected_domains:
-              if not account_id or not api_key or not email:
-                  raise SystemExit("Protected Cloudflare worker domains were configured, but Cloudflare credentials are missing")
-
+          def resolve_protected_worker_domains():
               all_domains = []
               page = 1
               while True:
@@ -420,6 +446,27 @@ jobs:
                       print(f"Protecting Worker script {service!r} because it serves {hostname!r}")
                   else:
                       print(f"::warning::Protected Worker domain {hostname!r} was not found in Cloudflare workers/domains")
+
+          if protected_domains:
+              has_lookup_credentials = bool(account_id and (api_token or (api_key and email)))
+              if not has_lookup_credentials:
+                  if protected_scripts:
+                      print("::warning::Protected Worker domains were configured, but Cloudflare lookup credentials are missing. Continuing with explicit protected Worker scripts.")
+                  else:
+                      raise SystemExit("Protected Cloudflare worker domains were configured, but Cloudflare lookup credentials and PROTECTED_CF_WORKER_SCRIPTS fallback are missing")
+              else:
+                  try:
+                      resolve_protected_worker_domains()
+                  except RuntimeError as error:
+                      if protected_scripts:
+                          scripts = ", ".join(sorted(protected_scripts))
+                          print(f"::warning::Could not resolve protected Worker domains from Cloudflare. Continuing with explicit protected Worker scripts ({scripts}). {error}")
+                      else:
+                          raise SystemExit(
+                              "Protected Cloudflare worker domains were configured, but Cloudflare lookup failed "
+                              "and PROTECTED_CF_WORKER_SCRIPTS was empty. Add the Worker script name as a fallback "
+                              "or retry after the Cloudflare API recovers."
+                          ) from error
 
           for script in sorted(protected_scripts):
               add_resource_exclude("WorkersScript", script)
