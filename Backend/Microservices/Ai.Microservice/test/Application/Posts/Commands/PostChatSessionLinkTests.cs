@@ -32,6 +32,9 @@ public sealed class PostChatSessionLinkTests
             .Callback<Post, CancellationToken>((post, _) => addedPost = post)
             .Returns(Task.CompletedTask);
         postRepository
+            .Setup(repository => repository.GetTrackedByPostBuilderIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Post>());
+        postRepository
             .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 

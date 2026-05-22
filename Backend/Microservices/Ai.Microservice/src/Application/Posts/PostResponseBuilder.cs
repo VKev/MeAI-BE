@@ -170,8 +170,9 @@ public sealed class PostResponseBuilder
             Content: post.Content,
             Status: responseStatus,
             Schedule: schedule,
-            IsPublished: publications.Any(publication =>
-                string.Equals(publication.PublishStatus, "published", StringComparison.OrdinalIgnoreCase)),
+            IsPublished: string.Equals(post.Status, "published", StringComparison.OrdinalIgnoreCase) ||
+                         publications.Any(publication =>
+                             string.Equals(publication.PublishStatus, "published", StringComparison.OrdinalIgnoreCase)),
             Media: media,
             Publications: publications,
             CreatedAt: post.CreatedAt,

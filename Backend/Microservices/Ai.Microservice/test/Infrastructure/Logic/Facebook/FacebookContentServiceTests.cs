@@ -150,7 +150,14 @@ public sealed class FacebookContentServiceTests
                 ["love"] = 5
             },
             ReachCount: 1200,
-            ImpressionCount: null));
+            ImpressionCount: null,
+            VideoSourceUrl: null,
+            MediaItems: new[]
+            {
+                new FacebookPostMediaItem(
+                    Url: "https://cdn.example.com/thumb.jpg",
+                    ResourceType: "image")
+            }));
     }
 
     [Fact]

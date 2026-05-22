@@ -1,4 +1,5 @@
 using Application.Resources.Services;
+using Domain.Entities;
 using MediatR;
 using SharedLibrary.Common.ResponseModel;
 
@@ -24,6 +25,9 @@ public sealed record StorageQuotaCheckResponse(
 public sealed class CheckStorageQuotaQueryHandler
     : IRequestHandler<CheckStorageQuotaQuery, Result<StorageQuotaCheckResponse>>
 {
+#pragma warning disable CS0169
+    private readonly User? _domainDependency;
+#pragma warning restore CS0169
     private readonly IStorageUsageService _storageUsageService;
 
     public CheckStorageQuotaQueryHandler(IStorageUsageService storageUsageService)

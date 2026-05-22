@@ -71,7 +71,8 @@ public sealed class ChatWebPostServiceTests
                 "Generated title",
                 "Generated content",
                 "#example",
-                "posts")));
+                "posts",
+                [importedResourceId])));
 
         mediator
             .Setup(service => service.Send(

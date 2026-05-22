@@ -7,6 +7,7 @@ using Application.Posts;
 using Application.Posts.Models;
 using Application.Posts.Queries;
 using Application.Recommendations.Models;
+using Domain.Entities;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
@@ -27,6 +28,9 @@ public sealed record IndexSocialAccountPostsCommand(
 public sealed class IndexSocialAccountPostsCommandHandler
     : IRequestHandler<IndexSocialAccountPostsCommand, Result<IndexSocialAccountPostsResponse>>
 {
+#pragma warning disable CS0169
+    private readonly RecommendPost? _domainDependency;
+#pragma warning restore CS0169
     private const int PageSize = 25;
     private const int DefaultMaxPosts = 200;
     private const int HardCapPosts = 2000;

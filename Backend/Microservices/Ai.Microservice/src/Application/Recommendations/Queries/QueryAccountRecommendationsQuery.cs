@@ -2,6 +2,7 @@ using System.Text;
 using Application.Abstractions.Rag;
 using Application.Abstractions.SocialMedias;
 using Application.Recommendations.Services;
+using Domain.Entities;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
@@ -68,6 +69,9 @@ public sealed record RecommendationReference(
 public sealed class QueryAccountRecommendationsQueryHandler
     : IRequestHandler<QueryAccountRecommendationsQuery, Result<AccountRecommendationsAnswer>>
 {
+#pragma warning disable CS0169
+    private readonly RecommendPost? _domainDependency;
+#pragma warning restore CS0169
     private const int DefaultTopK = 6;
     private const int RrfK = 60;
     private const int MaxImagesToLlm = 4;

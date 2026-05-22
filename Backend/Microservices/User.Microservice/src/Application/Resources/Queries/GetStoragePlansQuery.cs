@@ -84,6 +84,9 @@ public sealed record GetStoragePlanByIdQuery(Guid SubscriptionId) : IRequest<Res
 public sealed class GetStoragePlanByIdQueryHandler
     : IRequestHandler<GetStoragePlanByIdQuery, Result<StoragePlanResponse>>
 {
+#pragma warning disable CS0169
+    private readonly User? _domainDependency;
+#pragma warning restore CS0169
     private readonly IMediator _mediator;
 
     public GetStoragePlanByIdQueryHandler(IMediator mediator)
