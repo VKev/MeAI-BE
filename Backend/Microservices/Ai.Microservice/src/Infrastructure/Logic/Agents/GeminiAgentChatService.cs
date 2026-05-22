@@ -984,7 +984,7 @@ public sealed class GeminiAgentChatService : IAgentChatService
             return PublishingScheduleErrors.InvalidTimezone;
         }
 
-        if (NormalizeScheduleExecutionTime(options.ExecuteAtUtc) <= DateTime.UtcNow)
+        if (NormalizeScheduleExecutionTime(options.ExecuteAtUtc) < DateTime.UtcNow.AddMinutes(-15))
         {
             return PublishingScheduleErrors.ExecuteAtInPast;
         }

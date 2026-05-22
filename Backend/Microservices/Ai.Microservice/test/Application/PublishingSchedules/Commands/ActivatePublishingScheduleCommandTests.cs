@@ -138,7 +138,7 @@ public sealed class ActivatePublishingScheduleCommandTests
             Name = "Expired AI schedule",
             Mode = PublishingScheduleState.AgenticMode,
             Status = PublishingScheduleState.StatusCancelled,
-            ExecuteAtUtc = DateTime.UtcNow.AddMinutes(-5),
+            ExecuteAtUtc = DateTime.UtcNow.AddMinutes(-30),
             Timezone = "Asia/Ho_Chi_Minh",
             PlatformPreference = "facebook",
             AgentPrompt = "Hãy đăng bài tổng hợp tin AI mới nhất vào thời điểm chạy.",

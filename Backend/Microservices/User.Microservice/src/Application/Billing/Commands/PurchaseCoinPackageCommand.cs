@@ -22,6 +22,7 @@ public sealed record PurchaseCoinPackageCommand(
 public sealed class PurchaseCoinPackageCommandHandler
     : IRequestHandler<PurchaseCoinPackageCommand, Result<CoinPackageCheckoutResponse>>
 {
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IRepository<CoinPackage> _coinPackageRepository;
     private readonly IRepository<Transaction> _transactionRepository;
     private readonly IStripeCustomerResolver _stripeCustomerResolver;
@@ -39,6 +40,7 @@ public sealed class PurchaseCoinPackageCommandHandler
         IOptions<BillingCurrencyOptions> billingCurrencyOptions,
         ISender sender)
     {
+        _unitOfWork = unitOfWork;
         _coinPackageRepository = unitOfWork.Repository<CoinPackage>();
         _transactionRepository = unitOfWork.Repository<Transaction>();
         _stripeCustomerResolver = stripeCustomerResolver;
@@ -112,6 +114,7 @@ public sealed class PurchaseCoinPackageCommandHandler
         };
 
         await _transactionRepository.AddAsync(transaction, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         try
         {

@@ -11,7 +11,9 @@ public sealed class TikTokPublishService : ITikTokPublishService
 {
     private const string CreatorInfoEndpoint = "https://open.tiktokapis.com/v2/post/publish/creator_info/query/";
     private const string VideoPublishInitEndpoint = "https://open.tiktokapis.com/v2/post/publish/video/init/";
+    private const string ContentPublishInitEndpoint = "https://open.tiktokapis.com/v2/post/publish/content/init/";
     private const string PrivatePrivacyLevel = "SELF_ONLY";
+    private const int MaxCarouselImages = 35;
     private readonly HttpClient _httpClient;
     private readonly ILogger<TikTokPublishService> _logger;
 
@@ -158,6 +160,57 @@ public sealed class TikTokPublishService : ITikTokPublishService
             "PROCESSING"));
     }
 
+    /// <inheritdoc />
+    public async Task<Result<TikTokPublishResult>> PublishCarouselAsync(
+        TikTokCarouselPublishRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.AccessToken))
+        {
+            return Result.Failure<TikTokPublishResult>(
+                new Error("TikTok.InvalidToken", "TikTok access token is missing."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.OpenId))
+        {
+            return Result.Failure<TikTokPublishResult>(
+                new Error("TikTok.InvalidAccount", "TikTok open_id is missing."));
+        }
+
+        if (request.ImageUrls == null || request.ImageUrls.Count == 0)
+        {
+            return Result.Failure<TikTokPublishResult>(
+                new Error("TikTok.MissingMedia", "At least one image URL is required for a TikTok photo carousel."));
+        }
+
+        if (request.ImageUrls.Count > MaxCarouselImages)
+        {
+            return Result.Failure<TikTokPublishResult>(
+                new Error("TikTok.TooManyImages", $"TikTok photo carousel supports a maximum of {MaxCarouselImages} images."));
+        }
+
+        // Query creator info first
+        var creatorInfo = request.CreatorInfo;
+        if (creatorInfo == null)
+        {
+            var creatorInfoResult = await QueryCreatorInfoAsync(request.AccessToken, cancellationToken);
+            if (creatorInfoResult.IsFailure)
+            {
+                return Result.Failure<TikTokPublishResult>(creatorInfoResult.Error);
+            }
+            creatorInfo = creatorInfoResult.Value;
+        }
+
+        return await InitiateCarouselPublishAsync(
+            request.AccessToken,
+            request.OpenId,
+            request.Caption,
+            request.ImageUrls,
+            creatorInfo,
+            request.IsPrivate,
+            cancellationToken);
+    }
+
     private async Task<Result<string>> InitiateVideoPublishAsync(
         string accessToken,
         string caption,
@@ -168,32 +221,45 @@ public sealed class TikTokPublishService : ITikTokPublishService
     {
         try
         {
+            var privacyLevel = PrivatePrivacyLevel;
             if (!creatorInfo.PrivacyLevelOptions.Contains(PrivatePrivacyLevel, StringComparer.Ordinal))
             {
-                _logger.LogWarning(
-                    "[TikTok] Refusing publish because creator does not allow {PrivacyLevel}. requested_isPrivate={IsPrivate}, available_options=[{Options}]",
+                if (creatorInfo.PrivacyLevelOptions.Count > 0)
+                {
+                    privacyLevel = creatorInfo.PrivacyLevelOptions[0];
+                    _logger.LogInformation(
+                        "[TikTok] PrivacyLevel {PrivatePrivacyLevel} not supported by creator. Falling back to {FallbackPrivacyLevel}.",
+                        PrivatePrivacyLevel,
+                        privacyLevel);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "[TikTok] Refusing publish because creator does not allow {PrivacyLevel} and no other options are available. requested_isPrivate={IsPrivate}",
+                        PrivatePrivacyLevel,
+                        isPrivate);
+
+                    return Result.Failure<string>(
+                        new Error(
+                            "TikTok.PrivateNotSupported",
+                            "TikTok creator account does not allow private publishing (SELF_ONLY) and has no options."));
+                }
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "[TikTok] Publishing video with forced privacy_level={PrivacyLevel}, requested_isPrivate={IsPrivate}, available_options=[{Options}]",
                     PrivatePrivacyLevel,
                     isPrivate,
                     string.Join(", ", creatorInfo.PrivacyLevelOptions));
-
-                return Result.Failure<string>(
-                    new Error(
-                        "TikTok.PrivateNotSupported",
-                        "TikTok creator account does not allow private publishing (SELF_ONLY)."));
             }
-
-            _logger.LogInformation(
-                "[TikTok] Publishing video with forced privacy_level={PrivacyLevel}, requested_isPrivate={IsPrivate}, available_options=[{Options}]",
-                PrivatePrivacyLevel,
-                isPrivate,
-                string.Join(", ", creatorInfo.PrivacyLevelOptions));
 
             var requestBody = new TikTokVideoPublishRequest
             {
                 PostInfo = new TikTokApiPostInfo
                 {
                     Title = caption,
-                    PrivacyLevel = PrivatePrivacyLevel,
+                    PrivacyLevel = privacyLevel,
                     DisableDuet = creatorInfo.DuetDisabled,
                     DisableComment = creatorInfo.CommentDisabled,
                     DisableStitch = creatorInfo.StitchDisabled,
@@ -208,7 +274,7 @@ public sealed class TikTokPublishService : ITikTokPublishService
             };
 
             var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
-            
+
             _logger.LogInformation("[TikTok] Publish request to {Endpoint}: {RequestBody}",
                 VideoPublishInitEndpoint, JsonSerializer.Serialize(requestBody, JsonOptionsIndented));
 
@@ -258,6 +324,152 @@ public sealed class TikTokPublishService : ITikTokPublishService
             return Result.Failure<string>(
                 new Error("TikTok.ParseError", $"JSON parse error: {ex.Message}"));
         }
+    }
+
+    private async Task<Result<TikTokPublishResult>> InitiateCarouselPublishAsync(
+        string accessToken,
+        string openId,
+        string caption,
+        IReadOnlyList<string> imageUrls,
+        TikTokCreatorInfo creatorInfo,
+        bool? isPrivate,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var privacyLevel = PrivatePrivacyLevel;
+            if (!creatorInfo.PrivacyLevelOptions.Contains(PrivatePrivacyLevel, StringComparer.Ordinal))
+            {
+                if (creatorInfo.PrivacyLevelOptions.Count > 0)
+                {
+                    privacyLevel = creatorInfo.PrivacyLevelOptions[0];
+                    _logger.LogInformation(
+                        "[TikTok] Carousel PrivacyLevel {PrivatePrivacyLevel} not supported by creator. Falling back to {FallbackPrivacyLevel}.",
+                        PrivatePrivacyLevel,
+                        privacyLevel);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "[TikTok] Refusing carousel publish: creator does not allow {PrivacyLevel} and no other options are available. requested_isPrivate={IsPrivate}",
+                        PrivatePrivacyLevel,
+                        isPrivate);
+
+                    return Result.Failure<TikTokPublishResult>(
+                        new Error("TikTok.PrivateNotSupported",
+                            "TikTok creator account does not allow private publishing (SELF_ONLY) and has no options."));
+                }
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "[TikTok] Carousel publishing with forced privacy_level={PrivacyLevel}, requested_isPrivate={IsPrivate}, available_options=[{Options}]",
+                    PrivatePrivacyLevel,
+                    isPrivate,
+                    string.Join(", ", creatorInfo.PrivacyLevelOptions));
+            }
+
+            var requestBody = new TikTokPhotoPublishRequest
+            {
+                PostInfo = new TikTokApiPostInfo
+                {
+                    Title = GetSafeTitle(caption),
+                    Description = caption,
+                    PrivacyLevel = privacyLevel,
+                    DisableDuet = creatorInfo.DuetDisabled,
+                    DisableComment = creatorInfo.CommentDisabled,
+                    DisableStitch = creatorInfo.StitchDisabled,
+                    BrandContentToggle = false,
+                    BrandOrganicToggle = false
+                },
+                SourceInfo = new TikTokApiPhotoSourceInfo
+                {
+                    Source = "PULL_FROM_URL",
+                    PhotoImages = imageUrls.ToArray(),
+                    PhotoCoverIndex = 0
+                },
+                PostMode = "DIRECT_POST",
+                MediaType = "PHOTO"
+            };
+
+            var jsonContent = JsonSerializer.Serialize(requestBody, JsonOptions);
+
+            _logger.LogInformation("[TikTok] Carousel publish request to {Endpoint} ({Count} images): {RequestBody}",
+                ContentPublishInitEndpoint, imageUrls.Count, JsonSerializer.Serialize(requestBody, JsonOptionsIndented));
+
+            using var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ContentPublishInitEndpoint);
+            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            httpRequest.Content = content;
+
+            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            _logger.LogInformation("[TikTok] Carousel publish response: StatusCode={StatusCode}, Body={Body}",
+                (int)response.StatusCode, responseBody);
+
+            var apiResponse = JsonSerializer.Deserialize<TikTokApiVideoInitResponse>(responseBody, JsonOptions);
+
+            if (apiResponse?.Error?.Code != null && apiResponse.Error.Code != "ok")
+            {
+                _logger.LogWarning("[TikTok] Carousel publish failed: Code={Code}, Message={Message}, LogId={LogId}",
+                    apiResponse.Error.Code, apiResponse.Error.Message, apiResponse.Error.LogId);
+
+                return Result.Failure<TikTokPublishResult>(
+                    new Error("TikTok.CarouselPublishFailed",
+                        $"[{apiResponse.Error.Code}] {apiResponse.Error.Message ?? "TikTok carousel publish failed."}"));
+            }
+
+            if (string.IsNullOrWhiteSpace(apiResponse?.Data?.PublishId))
+            {
+                _logger.LogWarning("[TikTok] Carousel publish response missing publish_id");
+                return Result.Failure<TikTokPublishResult>(
+                    new Error("TikTok.CarouselPublishFailed", "TikTok response did not include a publish id."));
+            }
+
+            _logger.LogInformation("[TikTok] Carousel publish initiated: PublishId={PublishId}, Images={Count}",
+                apiResponse.Data.PublishId, imageUrls.Count);
+
+            return Result.Success(new TikTokPublishResult(openId, apiResponse.Data.PublishId, "PROCESSING"));
+        }
+        catch (HttpRequestException ex)
+        {
+            return Result.Failure<TikTokPublishResult>(
+                new Error("TikTok.NetworkError", $"Network error: {ex.Message}"));
+        }
+        catch (JsonException ex)
+        {
+            return Result.Failure<TikTokPublishResult>(
+                new Error("TikTok.ParseError", $"JSON parse error: {ex.Message}"));
+        }
+    }
+
+    private static string GetSafeTitle(string caption, int maxLength = 80)
+    {
+        if (string.IsNullOrWhiteSpace(caption))
+        {
+            return "Post";
+        }
+
+        // Use the first line or first paragraph
+        var firstLine = caption.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                               .FirstOrDefault() ?? "Post";
+
+        firstLine = firstLine.Trim();
+
+        if (firstLine.Length <= maxLength)
+        {
+            return firstLine;
+        }
+
+        // Truncate firstLine and add ellipsis
+        var truncated = firstLine[..maxLength];
+        var lastSpace = truncated.LastIndexOf(' ');
+        if (lastSpace > maxLength / 2)
+        {
+            truncated = truncated[..lastSpace];
+        }
+        return truncated.Trim() + "...";
     }
 
     private static MediaType ResolveMediaType(TikTokPublishMedia media)
@@ -341,10 +553,33 @@ public sealed class TikTokPublishService : ITikTokPublishService
         public TikTokApiSourceInfo? SourceInfo { get; set; }
     }
 
+    /// <summary>
+    /// Request body for the /v2/post/publish/content/init/ endpoint (photo carousel).
+    /// </summary>
+    private sealed class TikTokPhotoPublishRequest
+    {
+        [JsonPropertyName("post_info")]
+        public TikTokApiPostInfo? PostInfo { get; set; }
+
+        [JsonPropertyName("source_info")]
+        public TikTokApiPhotoSourceInfo? SourceInfo { get; set; }
+
+        /// <summary>"DIRECT_POST" for immediate publishing.</summary>
+        [JsonPropertyName("post_mode")]
+        public string PostMode { get; set; } = "DIRECT_POST";
+
+        /// <summary>"PHOTO" for carousel / photo post.</summary>
+        [JsonPropertyName("media_type")]
+        public string MediaType { get; set; } = "PHOTO";
+    }
+
     private sealed class TikTokApiPostInfo
     {
         [JsonPropertyName("title")]
         public string Title { get; set; } = string.Empty;
+
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
 
         [JsonPropertyName("privacy_level")]
         public string PrivacyLevel { get; set; } = PrivatePrivacyLevel;
@@ -372,6 +607,20 @@ public sealed class TikTokPublishService : ITikTokPublishService
 
         [JsonPropertyName("video_url")]
         public string? VideoUrl { get; set; }
+    }
+
+    private sealed class TikTokApiPhotoSourceInfo
+    {
+        [JsonPropertyName("source")]
+        public string Source { get; set; } = "PULL_FROM_URL";
+
+        /// <summary>Array of publicly accessible image URLs (1–35).</summary>
+        [JsonPropertyName("photo_images")]
+        public string[]? PhotoImages { get; set; }
+
+        /// <summary>Zero-based index of the cover photo in the PhotoImages array.</summary>
+        [JsonPropertyName("photo_cover_index")]
+        public int PhotoCoverIndex { get; set; }
     }
 
     private sealed class TikTokApiVideoInitResponse
