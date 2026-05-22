@@ -937,13 +937,20 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
                 RequiresSingleMedia: true,
                 AllowTextOnly: true,
                 "Threads supports text-only posts or a single attached media item."),
+            "facebook" when normalizedPostType == "posts" => new RuntimePublishingConstraint(
+                normalizedPlatform,
+                "posts",
+                RequiresVideoMedia: false,
+                RequiresSingleMedia: false,
+                AllowTextOnly: true,
+                "Facebook posts support text-only, or single/multiple images, or a single video. Generate or import one or more suitable images for a visually richer post."),
             _ => new RuntimePublishingConstraint(
                 normalizedPlatform,
                 normalizedPostType,
                 RequiresVideoMedia: false,
                 RequiresSingleMedia: false,
                 AllowTextOnly: true,
-                "Facebook posts support text-only or compatible media attachments.")
+                $"{(string.IsNullOrEmpty(normalizedPlatform) ? "Social media" : char.ToUpper(normalizedPlatform[0]) + normalizedPlatform[1..])} posts support text-only or compatible media attachments. Generate or import one or more suitable images for a visually richer post.")
         };
     }
 

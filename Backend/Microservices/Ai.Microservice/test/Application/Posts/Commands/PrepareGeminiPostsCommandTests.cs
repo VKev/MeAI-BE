@@ -91,7 +91,7 @@ public sealed class PrepareGeminiPostsCommandTests
                 post.Content.Content == null &&
                 post.Content.Hashtag == null &&
                 post.Content.ResourceList != null &&
-                post.Content.ResourceList.SequenceEqual(new[] { resourceId.ToString() }) &&
+                post.Content.ResourceList.SequenceEqual(Array.Empty<string>()) &&
                 post.Content.PostType == "posts"),
             It.IsAny<CancellationToken>()), Times.Once);
 

@@ -200,6 +200,28 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 "If no suitable video URL is found in web_search results, still call create_runtime_post_draft with postType=reels and an empty resourceIds list — the system will report the missing video. ";
         }
 
+        // Instagram posts (Requires exactly one media, text-only NOT allowed)
+        if (string.Equals(platform, "instagram", StringComparison.Ordinal) &&
+            string.Equals(postType, "posts", StringComparison.Ordinal))
+        {
+            return
+                "This is an Instagram post. You MUST attach exactly one media resource (image or video). " +
+                "First, try to find and validate a relevant web image/video URL via validate_media and import it via import_media if suitable. " +
+                "If no suitable web media is found, you MUST call generate_image to create a single high-quality decorative image for the post. ";
+        }
+
+        // Platforms that allow text-only but support media (Facebook, Threads, and any generic/custom platform posts)
+        if (string.Equals(postType, "posts", StringComparison.Ordinal) &&
+            !string.Equals(platform, "tiktok", StringComparison.Ordinal) &&
+            !string.Equals(platform, "instagram", StringComparison.Ordinal))
+        {
+            var capitalizedPlatform = string.IsNullOrEmpty(platform) ? "social media" : char.ToUpper(platform[0]) + platform[1..];
+            return
+                $"This is a {capitalizedPlatform} post. While text-only posts are allowed, you should highly prefer generating or importing a suitable image to make the post visually engaging and ensure it has resources. " +
+                "First, try to find and validate a relevant web image URL via validate_media and import it via import_media if suitable. " +
+                "If no suitable web images are found, ALWAYS call generate_image to create a single high-quality decorative image for the post. ";
+        }
+
         // Generic video-required (Facebook/Instagram reels)
         if (request.RequiresVideoMedia == true)
         {

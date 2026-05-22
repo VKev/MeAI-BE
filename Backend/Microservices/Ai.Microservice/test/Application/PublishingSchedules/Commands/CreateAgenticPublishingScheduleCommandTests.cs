@@ -27,8 +27,6 @@ public sealed class CreateAgenticPublishingScheduleCommandTests
             .Callback<PublishingSchedule, CancellationToken>((schedule, _) => storedSchedule = schedule)
             .Returns(Task.CompletedTask);
         scheduleRepository
-            .Setup(repository => repository.Update(It.IsAny<PublishingSchedule>()));
-        scheduleRepository
             .Setup(repository => repository.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 

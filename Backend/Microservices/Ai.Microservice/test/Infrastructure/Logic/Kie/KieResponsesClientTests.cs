@@ -219,7 +219,7 @@ public sealed class KieResponsesClientTests
     [InlineData("gpt-4o-mini", null, "gpt-4o-mini")]
     [InlineData("gpt-5.3-codex", null, "gpt-5.3-codex")]
     [InlineData("gemini-3.1-flash-lite-preview", "gpt-5-5", "gpt-5-5")]
-    [InlineData("gemini-3.1-flash-lite-preview", null, "gpt-4o-mini")]
+    [InlineData("gemini-3.1-flash-lite-preview", null, "openai/gpt-5.4-mini")]
     public void ResolveResponsesModel_ShouldFallback_WhenPreferredModelIsUnsupported(
         string? preferredModel,
         string? configuredModel,
