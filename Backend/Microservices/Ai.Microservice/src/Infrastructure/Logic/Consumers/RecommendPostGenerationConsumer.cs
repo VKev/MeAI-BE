@@ -1189,13 +1189,6 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    private static bool ShouldSuppressTerminalThinking(string action, string? phaseStatus)
-    {
-        return string.Equals(phaseStatus, "completed", StringComparison.OrdinalIgnoreCase)
-               || action.EndsWith("_completed", StringComparison.OrdinalIgnoreCase)
-               || action.EndsWith("_finalized", StringComparison.OrdinalIgnoreCase);
-    }
-
     private async Task PublishThinkingAsync(
         ConsumeContext<GenerateRecommendPostStarted> context,
         RecommendPost task,
@@ -1206,16 +1199,6 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         CancellationToken cancellationToken,
         string phaseStatus = "processing")
     {
-        if (ShouldSuppressTerminalThinking(action, phaseStatus))
-        {
-            _logger.LogDebug(
-                "ImprovePost {Id}: suppressed terminal thinking notification action={Action} phaseStatus={PhaseStatus}",
-                task.Id,
-                action,
-                phaseStatus);
-            return;
-        }
-
         var createdAt = DateTimeExtensions.PostgreSqlUtcNow;
 
         try
