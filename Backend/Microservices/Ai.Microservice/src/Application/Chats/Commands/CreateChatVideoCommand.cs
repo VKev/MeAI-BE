@@ -201,7 +201,7 @@ public sealed class CreateChatVideoCommandHandler
                 TotalCoins = videoQuoteResult.Value.TotalCoins,
                 ReferenceType = CoinReferenceTypes.ChatVideo,
                 ReferenceId = chatId.ToString(),
-                Status = AiSpendStatuses.Debited,
+                Status = AiSpendStatuses.Pending,
                 CreatedAt = messageCreatedAt
             },
             cancellationToken);

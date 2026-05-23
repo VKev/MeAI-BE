@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Abstractions.Threads;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
 
 namespace Infrastructure.Logic.Threads;
@@ -8,9 +9,11 @@ namespace Infrastructure.Logic.Threads;
 public sealed class ThreadsPublishService : IThreadsPublishService
 {
     private const string GraphApiBaseUrl = "https://graph.threads.net/v1.0";
+    private const int MaxTextLength = 500;
     private static readonly TimeSpan VideoStatusPollDelay = TimeSpan.FromSeconds(4);
     private const int VideoStatusMaxAttempts = 30;
     private readonly HttpClient _httpClient;
+    private readonly ILogger<ThreadsPublishService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -19,9 +22,12 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         NumberHandling = JsonNumberHandling.AllowReadingFromString
     };
 
-    public ThreadsPublishService(IHttpClientFactory httpClientFactory)
+    public ThreadsPublishService(
+        IHttpClientFactory httpClientFactory,
+        ILogger<ThreadsPublishService> logger)
     {
         _httpClient = httpClientFactory.CreateClient("Threads");
+        _logger = logger;
     }
 
     public async Task<Result<bool>> DeleteAsync(
@@ -52,6 +58,15 @@ public sealed class ThreadsPublishService : IThreadsPublishService
             {
                 return Result.Success(true);
             }
+
+            _logger.LogWarning(
+                "Threads delete failed. ThreadsPostId={ThreadsPostId}, MediaId={MediaId}, StatusCode={StatusCode}, Error={Error}, Body={Body}",
+                request.ThreadsPostId,
+                id,
+                (int)response.StatusCode,
+                ReadGraphApiError(body),
+                TruncateForLog(body));
+
             return Result.Failure<bool>(
                 new Error("Threads.DeleteFailed", ReadGraphApiError(body) ?? $"Threads delete failed with status {(int)response.StatusCode}: {body}"));
         }
@@ -123,10 +138,20 @@ public sealed class ThreadsPublishService : IThreadsPublishService
                 new Error("Threads.UnsupportedMedia", "Unsupported Threads media type."));
         }
 
+        var text = NormalizeTextForThreads(request.Text);
+        if (text.Length != request.Text.Length)
+        {
+            _logger.LogInformation(
+                "Threads text was capped before publish. ThreadsUserId={ThreadsUserId}, OriginalLength={OriginalLength}, SentLength={SentLength}",
+                request.ThreadsUserId,
+                request.Text.Length,
+                text.Length);
+        }
+
         var creationResult = await CreateThreadContainerAsync(
             request.ThreadsUserId,
             request.AccessToken,
-            request.Text,
+            text,
             request.Media,
             mediaType,
             cancellationToken);
@@ -160,6 +185,22 @@ public sealed class ThreadsPublishService : IThreadsPublishService
             : $"{publishResult.Value}|{permalink}";
 
         return Result.Success(new ThreadsPublishResult(request.ThreadsUserId, combined));
+    }
+
+    private static string NormalizeTextForThreads(string text)
+    {
+        if (text.Length <= MaxTextLength)
+        {
+            return text;
+        }
+
+        var truncated = text[..MaxTextLength];
+        if (truncated.Length > 0 && char.IsHighSurrogate(truncated[^1]))
+        {
+            truncated = truncated[..^1];
+        }
+
+        return truncated.TrimEnd();
     }
 
     private static string ExtractMediaIdFromStored(string storedExternalId)
@@ -242,8 +283,18 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
+            var errorMessage = ReadGraphApiError(body);
+            _logger.LogWarning(
+                "Threads create-container failed. ThreadsUserId={ThreadsUserId}, StatusCode={StatusCode}, MediaType={MediaType}, TextLength={TextLength}, Error={Error}, Body={Body}",
+                threadsUserId,
+                (int)response.StatusCode,
+                mediaType,
+                text.Length,
+                errorMessage,
+                TruncateForLog(body));
+
             return Result.Failure<string>(
-                new Error("Threads.CreateFailed", ReadGraphApiError(body) ?? "Failed to create Threads container."));
+                new Error("Threads.CreateFailed", errorMessage ?? "Failed to create Threads container."));
         }
 
         var parsed = JsonSerializer.Deserialize<GraphApiIdResponse>(body, JsonOptions);
@@ -290,8 +341,18 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
+            var errorMessage = ReadGraphApiError(body);
+            _logger.LogWarning(
+                "Threads publish failed. ThreadsUserId={ThreadsUserId}, CreationId={CreationId}, StatusCode={StatusCode}, MediaType={MediaType}, Error={Error}, Body={Body}",
+                threadsUserId,
+                creationId,
+                (int)response.StatusCode,
+                mediaType,
+                errorMessage,
+                TruncateForLog(body));
+
             return Result.Failure<string>(
-                new Error("Threads.PublishFailed", ReadGraphApiError(body) ?? "Failed to publish Threads post."));
+                new Error("Threads.PublishFailed", errorMessage ?? "Failed to publish Threads post."));
         }
 
         var parsed = JsonSerializer.Deserialize<GraphApiIdResponse>(body, JsonOptions);
@@ -328,11 +389,20 @@ public sealed class ThreadsPublishService : IThreadsPublishService
                 var message = string.IsNullOrWhiteSpace(statusResult.Value.ErrorMessage)
                     ? "Threads video processing failed."
                     : statusResult.Value.ErrorMessage;
+                _logger.LogWarning(
+                    "Threads video container processing failed. CreationId={CreationId}, Status={Status}, Error={Error}",
+                    creationId,
+                    status,
+                    message);
                 return Result.Failure<bool>(new Error("Threads.VideoProcessingFailed", message));
             }
 
             if (string.Equals(status, "EXPIRED", StringComparison.OrdinalIgnoreCase))
             {
+                _logger.LogWarning(
+                    "Threads video container expired before publish. CreationId={CreationId}, Status={Status}",
+                    creationId,
+                    status);
                 return Result.Failure<bool>(
                     new Error("Threads.VideoExpired", "Threads video container expired before publishing."));
             }
@@ -357,8 +427,16 @@ public sealed class ThreadsPublishService : IThreadsPublishService
 
         if (!response.IsSuccessStatusCode)
         {
+            var errorMessage = ReadGraphApiError(body);
+            _logger.LogWarning(
+                "Threads status fetch failed. CreationId={CreationId}, StatusCode={StatusCode}, Error={Error}, Body={Body}",
+                creationId,
+                (int)response.StatusCode,
+                errorMessage,
+                TruncateForLog(body));
+
             return Result.Failure<GraphApiStatusResponse>(
-                new Error("Threads.StatusFailed", ReadGraphApiError(body) ?? "Failed to fetch Threads container status."));
+                new Error("Threads.StatusFailed", errorMessage ?? "Failed to fetch Threads container status."));
         }
 
         var parsed = JsonSerializer.Deserialize<GraphApiStatusResponse>(body, JsonOptions);
@@ -435,6 +513,16 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         {
             return null;
         }
+    }
+
+    private static string TruncateForLog(string? value, int max = 1000)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return value.Length <= max ? value : value[..max] + "...";
     }
 
     private sealed class GraphApiIdResponse

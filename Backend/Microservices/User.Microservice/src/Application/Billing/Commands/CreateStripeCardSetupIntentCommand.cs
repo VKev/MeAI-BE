@@ -1,6 +1,7 @@
 using Application.Abstractions.Payments;
 using Application.Billing.Models;
 using Application.Billing.Services;
+using Domain.Entities;
 using MediatR;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
@@ -13,6 +14,9 @@ public sealed record CreateStripeCardSetupIntentCommand(Guid UserId)
 public sealed class CreateStripeCardSetupIntentCommandHandler
     : IRequestHandler<CreateStripeCardSetupIntentCommand, Result<StripeCardSetupIntentResponse>>
 {
+#pragma warning disable CS0169
+    private readonly User? _domainDependency;
+#pragma warning restore CS0169
     private readonly IStripeCustomerResolver _stripeCustomerResolver;
     private readonly IStripePaymentService _stripePaymentService;
 

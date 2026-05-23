@@ -872,6 +872,10 @@ OAuth redirect URIs in this compose file must point to the FE callback routes on
 do not copy these local compose domains into Terraform unless the production domain plan
 also changes.
 
+Local compose should also keep RAG media URLs as direct regional S3 presigned URLs
+(`https://s3.ap-southeast-1.amazonaws.com/...`). `static.vkev.me` is the production
+Cloudflare CDN host and belongs in Terraform/k8s deployment config, not local compose.
+
 ### 20.2 Deploy rules
 
 - **Image tagging**: every build pushes both a `latest` tag and a SHA-pinned tag. Production

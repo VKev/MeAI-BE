@@ -18,5 +18,6 @@ public sealed class GenerateDraftPostStarted
     public int TopK { get; set; } = 6;
     public int MaxReferenceImages { get; set; } = 3;
     public int MaxRagPosts { get; set; } = 30;
+    public int ImageCount { get; set; } = 1;
     public DateTime StartedAt { get; set; }
 }

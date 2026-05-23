@@ -17,6 +17,9 @@ public sealed record GetPublicUserProfilesByIdsQuery(IReadOnlyCollection<Guid> U
 public sealed class GetPublicUserProfileByUsernameQueryHandler
     : IRequestHandler<GetPublicUserProfileByUsernameQuery, Result<PublicUserProfileResponse>>
 {
+#pragma warning disable CS0169
+    private readonly User? _domainDependency;
+#pragma warning restore CS0169
     private readonly PublicUserProfileReader _reader;
 
     public GetPublicUserProfileByUsernameQueryHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)
@@ -38,6 +41,9 @@ public sealed class GetPublicUserProfileByUsernameQueryHandler
 public sealed class GetPublicUserProfilesByIdsQueryHandler
     : IRequestHandler<GetPublicUserProfilesByIdsQuery, Result<IReadOnlyList<PublicUserProfileResponse>>>
 {
+#pragma warning disable CS0169
+    private readonly User? _domainDependency;
+#pragma warning restore CS0169
     private readonly PublicUserProfileReader _reader;
 
     public GetPublicUserProfilesByIdsQueryHandler(IUnitOfWork unitOfWork, IObjectStorageService objectStorageService)

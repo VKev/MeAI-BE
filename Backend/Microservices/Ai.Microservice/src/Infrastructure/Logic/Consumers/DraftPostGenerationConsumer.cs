@@ -1,9 +1,11 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Application.Abstractions.Billing;
 using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
 using Application.Abstractions.Search;
+using Application.Billing;
 using Application.Recommendations.Commands;
 using Application.Recommendations.Models;
 using Application.Recommendations.Queries;
@@ -67,6 +69,11 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         "  - Do NOT invent any contact field that is missing from the profile — OMIT it.\n" +
         "If you are unsure whether a value is meant to be exactly as the profile shows it: " +
         "the answer is YES, copy verbatim.\n\n" +
+        "CAPTION LENGTH LIMITS: The final caption must fit the MeAI publish limit for the " +
+        "target platform, including hashtags, emojis, URLs, email, phone, and line breaks. " +
+        "Facebook: 2,200 characters. Instagram: 2,200 characters. TikTok: 2,200 characters. " +
+        "Threads: 500 characters. If the target platform is Threads, be concise and do not " +
+        "write a caption that would need publish-time truncation.\n\n" +
         "FORMATTING — CRITICAL: The caption is rendered VERBATIM by Facebook / Instagram / " +
         "TikTok / Threads, none of which parse Markdown. Every Markdown character will appear " +
         "literally as punctuation (e.g. `**bold**` shows as the four asterisks plus the word). " +
@@ -187,6 +194,49 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         DraftPostStyles.Marketing => ImageSystemPromptMarketing,
         _ => ImageSystemPromptBranded,
     };
+
+    private static string BuildDraftImagePrompt(ImageBrief brief, DraftImageTarget target)
+    {
+        return
+            $"{brief.Prompt}\n\n" +
+            $"Aspect ratio: {brief.AspectRatio}. " +
+            BuildDraftImageVariationDirective(target) + " " +
+            "Render at high resolution. Output an image, no text response.";
+    }
+
+    private static string BuildDraftImageSystemPrompt(string baseSystemPrompt, DraftImageTarget target)
+    {
+        if (target.Total <= 1)
+        {
+            return baseSystemPrompt;
+        }
+
+        return baseSystemPrompt + "\n\n" +
+            "This is a multi-image draft post. Generate ONLY media item " +
+            $"{target.Ordinal} of {target.Total}. Each item in the set must be visibly distinct: " +
+            "different composition, framing, background, subject pose or product angle, and any text placement. " +
+            "Keep the same campaign idea and brand direction, but do not create duplicate-looking images.";
+    }
+
+    private static string BuildDraftImageVariationDirective(DraftImageTarget target)
+    {
+        if (target.Total <= 1)
+        {
+            return "Create one complete, publish-ready image for the post.";
+        }
+
+        var focus = ((target.Ordinal - 1) % 4) switch
+        {
+            0 => "hero overview with the main product or subject clearly established",
+            1 => "lifestyle or real-use scene that shows the benefit in context",
+            2 => "detail or feature-focused close-up with a different crop and background",
+            _ => "action, comparison, or audience-focused scene with a distinct visual angle",
+        };
+
+        return
+            $"Create media item {target.Ordinal} of {target.Total} for the same post. " +
+            $"Variation focus: {focus}. Do not copy the layout, crop, background, or rendered text arrangement from the other images in this set.";
+    }
 
     /// <summary>
     /// "Art-director" prompt — gpt-4o-mini reads everything the image-gen model can't
@@ -309,6 +359,22 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     /// </summary>
     private sealed record ImageBrief(string Prompt, string StyleNotes, string AspectRatio);
 
+    private sealed record DraftImageTarget(int Ordinal, int Total);
+
+    private sealed record GeneratedDraftImage(int Ordinal, int Total, ImageGenerationResult Result);
+
+    private sealed record UploadedDraftImage(
+        int Ordinal,
+        int Total,
+        Guid ResourceId,
+        string PresignedUrl,
+        string? ContentType,
+        string? ResourceType,
+        string? OriginKind,
+        string? OriginSourceUrl,
+        Guid? OriginChatSessionId,
+        Guid? OriginChatId);
+
     private sealed record FreshTopicImageSearchOutcome(
         IReadOnlyList<Application.Abstractions.Search.ImageSearchHit> Hits,
         Exception? Error = null);
@@ -355,6 +421,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     private readonly IImageSearchClient _imageSearchClient;
     private readonly IRerankClient _rerankClient;
     private readonly Application.Recommendations.Services.IQueryRewriter _queryRewriter;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
+    private readonly IBillingClient _billingClient;
     private readonly ILogger<DraftPostGenerationConsumer> _logger;
 
     public DraftPostGenerationConsumer(
@@ -368,6 +436,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         IImageSearchClient imageSearchClient,
         IRerankClient rerankClient,
         Application.Recommendations.Services.IQueryRewriter queryRewriter,
+        IAiSpendRecordRepository aiSpendRecordRepository,
+        IBillingClient billingClient,
         ILogger<DraftPostGenerationConsumer> logger)
     {
         _mediator = mediator;
@@ -380,7 +450,16 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         _imageSearchClient = imageSearchClient;
         _rerankClient = rerankClient;
         _queryRewriter = queryRewriter;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
+        _billingClient = billingClient;
         _logger = logger;
+    }
+
+    private static bool ShouldSuppressTerminalThinking(string action, string? phaseStatus)
+    {
+        return string.Equals(phaseStatus, "completed", StringComparison.OrdinalIgnoreCase)
+               || action.EndsWith("_completed", StringComparison.OrdinalIgnoreCase)
+               || action.EndsWith("_finalized", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task PublishThinkingAsync(
@@ -393,6 +472,16 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         CancellationToken cancellationToken,
         string phaseStatus = "processing")
     {
+        if (ShouldSuppressTerminalThinking(action, phaseStatus))
+        {
+            _logger.LogDebug(
+                "DraftPost {Id}: suppressed terminal thinking notification action={Action} phaseStatus={PhaseStatus}",
+                task.Id,
+                action,
+                phaseStatus);
+            return;
+        }
+
         var createdAt = DateTimeExtensions.PostgreSqlUtcNow;
 
         try
@@ -458,12 +547,6 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             phaseStatus: phaseStatus);
     }
 
-    private static bool IsVisualIngestFailure(IndexSocialAccountIngestFailure failure)
-    {
-        return failure.DocumentId.Contains(":vis2:", StringComparison.OrdinalIgnoreCase)
-               || failure.DocumentId.Contains(":img:", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static bool LooksLikeProviderCreditFailure(string? error)
     {
         if (string.IsNullOrWhiteSpace(error))
@@ -475,55 +558,43 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                || error.Contains("Insufficient credits", StringComparison.OrdinalIgnoreCase);
     }
 
-    private Task PublishIngestFailureWarningAsync(
+    private Task PublishAccountPostsReadProgressAsync(
         ConsumeContext<GenerateDraftPostStarted> context,
         DraftPostTask task,
-        IndexSocialAccountIngestFailureBatch batch,
+        IndexSocialAccountIngestProgress progress,
         CancellationToken cancellationToken)
     {
-        var isCreditFailure = batch.FailedDocuments.Any(item => LooksLikeProviderCreditFailure(item.Error));
-        return PublishThinkingAsync(
-            context,
-            task,
-            isCreditFailure ? "rag_provider_credit_failed" : "rag_ingest_batch_warning",
-            isCreditFailure ? "OpenRouter needs credits" : "Some account media could not be indexed",
-            isCreditFailure
-                ? "AI stopped because OpenRouter rejected media analysis with insufficient credits."
-                : "RAG could not index some account media. AI will continue with the content that indexed successfully.",
-            new
-            {
-                socialMediaId = batch.SocialMediaId,
-                platform = batch.Platform,
-                documentIdPrefix = batch.DocumentIdPrefix,
-                failedCount = batch.FailedDocuments.Count,
-                provider = isCreditFailure ? "OpenRouter" : null,
-                failedDocuments = batch.FailedDocuments,
-            },
-            cancellationToken,
-            phaseStatus: isCreditFailure ? "failed" : "warning");
-    }
+        var total = Math.Max(progress.TotalDocuments, 0);
+        var completed = total > 0
+            ? Math.Clamp(progress.CompletedDocuments, 0, total)
+            : Math.Max(progress.CompletedDocuments, 0);
+        var batchStart = total > 0 ? Math.Clamp(progress.CurrentBatchStart, 1, total) : 0;
+        var batchEnd = total > 0 ? Math.Clamp(progress.CurrentBatchEnd, batchStart, total) : 0;
+        var label = total > 0
+            ? batchEnd > batchStart ? $"{batchStart}-{batchEnd}/{total}" : $"{completed}/{total}"
+            : "0/0";
 
-    private Task PublishReadBatchAsync(
-        ConsumeContext<GenerateDraftPostStarted> context,
-        DraftPostTask task,
-        IndexSocialAccountReadBatch batch,
-        int batchNumber,
-        CancellationToken cancellationToken)
-    {
         return PublishThinkingAsync(
             context,
             task,
-            "rag_account_context_indexing_batch",
-            "AI is updating RAG knowledge",
-            "AI is indexing page profile and account post context for retrieval.",
+            "account_posts_reading_started",
+            "AI is reading account posts",
+            total > 0
+                ? $"AI is indexing account knowledge ({label})."
+                : "AI checked account knowledge; nothing new needs indexing.",
             new
             {
-                socialMediaId = batch.SocialMediaId,
-                platform = batch.Platform,
-                documentIdPrefix = batch.DocumentIdPrefix,
-                batchNumber,
-                knowledgeItems = batch.Posts,
-                posts = batch.Posts,
+                socialMediaId = progress.SocialMediaId,
+                platform = progress.Platform,
+                documentIdPrefix = progress.DocumentIdPrefix,
+                completedDocuments = completed,
+                totalDocuments = total,
+                currentBatchStart = batchStart,
+                currentBatchEnd = batchEnd,
+                progressLabel = label,
+                ingestedDocuments = progress.IngestedDocuments,
+                unchangedDocuments = progress.UnchangedDocuments,
+                failedDocuments = progress.FailedDocuments,
             },
             cancellationToken);
     }
@@ -603,52 +674,17 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     purpose = "Read recent account content before RAG indexing.",
                 },
                 ct);
-            var liveIngestCreditWarningSent = false;
-            var liveIngestWarningSent = false;
-            var readBatchNumber = 0;
-            async Task PublishLiveIngestWarningAsync(
-                IndexSocialAccountIngestFailureBatch batch,
-                CancellationToken cancellationToken)
-            {
-                var isCreditFailure = batch.FailedDocuments.Any(item => LooksLikeProviderCreditFailure(item.Error));
-                if (isCreditFailure)
-                {
-                    if (liveIngestCreditWarningSent)
-                    {
-                        return;
-                    }
-
-                    liveIngestCreditWarningSent = true;
-                }
-                else
-                {
-                    if (liveIngestWarningSent)
-                    {
-                        return;
-                    }
-
-                    liveIngestWarningSent = true;
-                }
-
-                await PublishIngestFailureWarningAsync(context, task, batch, cancellationToken);
-            }
-
-            Task PublishLiveReadBatchAsync(
-                IndexSocialAccountReadBatch batch,
-                CancellationToken cancellationToken)
-            {
-                readBatchNumber++;
-                return PublishReadBatchAsync(context, task, batch, readBatchNumber, cancellationToken);
-            }
-
             var indexResult = await _mediator.Send(
                 new IndexSocialAccountPostsCommand(
                     msg.UserId,
                     msg.SocialMediaId,
                     indexMaxPosts,
-                    PublishLiveIngestWarningAsync,
-                    PublishLiveReadBatchAsync,
-                    StopOnProviderCreditFailure: true),
+                    OnIngestFailures: null,
+                    OnReadBatch: null,
+                    StopOnProviderCreditFailure: true,
+                    OnIngestProgress: (progress, cancellationToken) =>
+                        PublishAccountPostsReadProgressAsync(context, task, progress, cancellationToken),
+                    BackfillMissingMediaDocuments: false),
                 ct);
             if (indexResult.IsFailure)
             {
@@ -687,81 +723,10 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     queuedImageDocuments = indexResult.Value.QueuedImageDocuments,
                     queuedVideoDocuments = indexResult.Value.QueuedVideoDocuments,
                     queuedProfileDocuments = indexResult.Value.QueuedProfileDocuments,
-                    failedIngestDocuments,
+                    nonBlockingFailedDocuments = failedIngestDocuments.Count,
                 },
                 ct,
                 phaseStatus: "completed");
-            if (failedIngestDocuments.Count > 0)
-            {
-                await PublishThinkingAsync(
-                    context,
-                    task,
-                    "account_posts_indexing_partial_failure",
-                    "Some account knowledge could not be indexed",
-                    "AI will continue with the account content that indexed successfully.",
-                    new
-                    {
-                        socialMediaId = indexResult.Value.SocialMediaId,
-                        platform = indexResult.Value.Platform,
-                        documentIdPrefix = indexResult.Value.DocumentIdPrefix,
-                        failedCount = failedIngestDocuments.Count,
-                        failedDocuments = failedIngestDocuments,
-                    },
-                    ct,
-                    phaseStatus: "warning");
-
-                var visualEmbeddingFailures = failedIngestDocuments
-                    .Where(IsVisualIngestFailure)
-                    .ToArray();
-                if (visualEmbeddingFailures.Length > 0 && !liveIngestCreditWarningSent && !liveIngestWarningSent)
-                {
-                    var isCreditFailure = visualEmbeddingFailures.Any(item =>
-                        LooksLikeProviderCreditFailure(item.Error));
-                    await PublishThinkingAsync(
-                        context,
-                        task,
-                        "rag_visual_embedding_failed",
-                        isCreditFailure
-                            ? "Image embedding provider needs credits"
-                            : "Some image knowledge could not be embedded",
-                        isCreditFailure
-                            ? "OpenRouter rejected image embedding because the configured account has insufficient credits. AI will continue with available knowledge and retry during the next sync."
-                            : "RAG could not embed some account images. AI will continue with available knowledge and retry during the next sync.",
-                        new
-                        {
-                            socialMediaId = indexResult.Value.SocialMediaId,
-                            platform = indexResult.Value.Platform,
-                            failedCount = visualEmbeddingFailures.Length,
-                            provider = isCreditFailure ? "OpenRouter" : null,
-                            retryPolicy = "The RAG service does not record the fingerprint when every visual embedding fails, so the same image document is retried on the next /index.",
-                            failedDocuments = visualEmbeddingFailures,
-                        },
-                        ct,
-                        phaseStatus: "warning");
-                }
-            }
-            if (indexResult.Value.QueuedVideoDocuments > 0)
-            {
-                await PublishThinkingAsync(
-                    context,
-                    task,
-                    "video_rag_indexing_completed",
-                    "AI processed video knowledge",
-                    "RAG split video posts into searchable frame and segment context for recommendation retrieval.",
-                    new
-                    {
-                        socialMediaId = indexResult.Value.SocialMediaId,
-                        platform = indexResult.Value.Platform,
-                        queuedVideoDocuments = indexResult.Value.QueuedVideoDocuments,
-                        documentIdPrefix = indexResult.Value.DocumentIdPrefix,
-                        failedVideoDocuments = (indexResult.Value.FailedIngestDocuments ?? Array.Empty<Application.Recommendations.Models.IndexSocialAccountIngestFailure>())
-                            .Where(item => item.DocumentId.Contains(":vid:", StringComparison.OrdinalIgnoreCase))
-                            .ToArray(),
-                    },
-                    ct,
-                    phaseStatus: "completed");
-            }
-
             // Step 2 — RAG multimodal query. Reuses the same retrieval as /query: text context
             // + visual hits with image URLs. In auto-topic mode we substitute a
             // first-class auto-discovery instruction; the recommendation system prompt
@@ -1388,81 +1353,113 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 },
                 ct,
                 phaseStatus: "completed");
+            var imageCount = Math.Clamp(msg.ImageCount > 0 ? msg.ImageCount : task.ImageCount > 0 ? task.ImageCount : 1, 1, 4);
+            task.ImageCount = imageCount;
             var imageBaseSystem = ImageSystemPromptFor(style);
-            var fullImagePrompt =
-                $"{brief.Prompt}\n\n" +
-                $"Aspect ratio: {brief.AspectRatio}. " +
-                "Render at high resolution. Output an image, no text response.";
-            var fullImageSystemPrompt = string.IsNullOrWhiteSpace(brief.StyleNotes)
+            var imageTargets = Enumerable.Range(1, imageCount)
+                .Select(ordinal => new DraftImageTarget(ordinal, imageCount))
+                .ToList();
+            var baseImageSystemPrompt = string.IsNullOrWhiteSpace(brief.StyleNotes)
                 ? imageBaseSystem
                 : $"{imageBaseSystem}\n\nAdditional style constraints from the art-director brief: {brief.StyleNotes}";
-            _logger.LogInformation(
-                "IMAGEGEN INPUT for DraftPost {Id} Style={Style} ({RefCount} ref images = {PastCount} past-post + {FreshCount} fresh-topic):\n  --- prompt ---\n{Prompt}\n  --- system ---\n{System}",
-                task.Id, style, imageBriefRefImageUrls.Count, topImageUrls.Count, freshRefImageUrls.Count,
-                Truncate(fullImagePrompt, 2500),
-                Truncate(fullImageSystemPrompt, 1500));
-            await PublishThinkingAsync(
-                context,
-                task,
-                "image_generation_started",
-                "AI is generating the image",
-                "AI is generating the draft image from the brief and selected references.",
-                new
-                {
-                    style,
-                    prompt = fullImagePrompt,
-                    systemPrompt = fullImageSystemPrompt,
-                    referenceImageUrls = imageBriefRefImageUrls,
-                },
-                ct);
-            var imageResult = await _imageGenClient.GenerateImageAsync(
-                new ImageGenerationRequest(
-                    Prompt: fullImagePrompt,
-                    ReferenceImageUrls: imageBriefRefImageUrls,
-                    SystemPrompt: fullImageSystemPrompt),
-                ct);
-            _logger.LogInformation(
-                "IMAGEGEN OUTPUT for DraftPost {Id}: mime={MimeType}, dataUrlLen={Len}, promptTokens={Pt}, completionTokens={Ct}, costUsd={Cost}",
-                task.Id, imageResult.MimeType, imageResult.DataUrl.Length,
-                imageResult.PromptTokens, imageResult.CompletionTokens, imageResult.CostUsd);
-            await PublishThinkingAsync(
-                context,
-                task,
-                "image_generation_completed",
-                "AI generated the image",
-                "AI finished generating the draft image.",
-                new
-                {
-                    imageResult.MimeType,
-                    dataUrlLength = imageResult.DataUrl.Length,
-                    imageResult.PromptTokens,
-                    imageResult.CompletionTokens,
-                    imageResult.CostUsd,
-                },
-                ct,
-                phaseStatus: "completed");
+            foreach (var imageTarget in imageTargets)
+            {
+                var targetPrompt = BuildDraftImagePrompt(brief, imageTarget);
+                var targetSystemPrompt = BuildDraftImageSystemPrompt(baseImageSystemPrompt, imageTarget);
+                _logger.LogInformation(
+                    "IMAGEGEN INPUT for DraftPost {Id} Style={Style} Media={Ordinal}/{Total} ({RefCount} ref images = {PastCount} past-post + {FreshCount} fresh-topic):\n  --- prompt ---\n{Prompt}\n  --- system ---\n{System}",
+                    task.Id, style, imageTarget.Ordinal, imageTarget.Total,
+                    imageBriefRefImageUrls.Count, topImageUrls.Count, freshRefImageUrls.Count,
+                    Truncate(targetPrompt, 2500),
+                    Truncate(targetSystemPrompt, 1500));
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    $"image_generation_started_{imageTarget.Ordinal}",
+                    imageTarget.Total == 1
+                        ? "AI is generating the image"
+                        : $"AI is generating draft media {imageTarget.Ordinal}/{imageTarget.Total}",
+                    "AI is generating draft media from the brief and selected references.",
+                    new
+                    {
+                        style,
+                        prompt = targetPrompt,
+                        systemPrompt = targetSystemPrompt,
+                        mediaOrdinal = imageTarget.Ordinal,
+                        mediaTotal = imageTarget.Total,
+                        referenceImageUrls = imageBriefRefImageUrls,
+                    },
+                    ct);
+            }
+
+            var generatedImages = (await Task.WhenAll(imageTargets.Select(async imageTarget =>
+            {
+                var targetPrompt = BuildDraftImagePrompt(brief, imageTarget);
+                var targetSystemPrompt = BuildDraftImageSystemPrompt(baseImageSystemPrompt, imageTarget);
+                var result = await _imageGenClient.GenerateImageAsync(
+                    new ImageGenerationRequest(
+                        Prompt: targetPrompt,
+                        ReferenceImageUrls: imageBriefRefImageUrls,
+                        SystemPrompt: targetSystemPrompt),
+                    ct);
+                return new GeneratedDraftImage(imageTarget.Ordinal, imageTarget.Total, result);
+            })))
+                .OrderBy(item => item.Ordinal)
+                .ToList();
+
+            foreach (var generatedImage in generatedImages)
+            {
+                _logger.LogInformation(
+                    "IMAGEGEN OUTPUT for DraftPost {Id} Media={Ordinal}/{Total}: mime={MimeType}, dataUrlLen={Len}, promptTokens={Pt}, completionTokens={Ct}, costUsd={Cost}",
+                    task.Id, generatedImage.Ordinal, generatedImage.Total, generatedImage.Result.MimeType,
+                    generatedImage.Result.DataUrl.Length, generatedImage.Result.PromptTokens,
+                    generatedImage.Result.CompletionTokens, generatedImage.Result.CostUsd);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    $"image_generation_completed_{generatedImage.Ordinal}",
+                    generatedImage.Total == 1
+                        ? "AI generated the image"
+                        : $"AI generated draft media {generatedImage.Ordinal}/{generatedImage.Total}",
+                    "AI finished generating draft media.",
+                    new
+                    {
+                        generatedImage.Result.MimeType,
+                        dataUrlLength = generatedImage.Result.DataUrl.Length,
+                        generatedImage.Result.PromptTokens,
+                        generatedImage.Result.CompletionTokens,
+                        generatedImage.Result.CostUsd,
+                        mediaOrdinal = generatedImage.Ordinal,
+                        mediaTotal = generatedImage.Total,
+                    },
+                    ct,
+                    phaseStatus: "completed");
+            }
 
             // Step 5 — upload generated image to S3. The User microservice's
             // CreateResourcesFromUrlsAsync handles `data:` URLs by decoding base64 server-side.
-            _logger.LogDebug("DraftPost {Id}: uploading generated image to S3...", task.Id);
+            _logger.LogDebug("DraftPost {Id}: uploading {Count} generated image(s) to S3...", task.Id, generatedImages.Count);
             await PublishThinkingAsync(
                 context,
                 task,
                 "resource_upload_started",
-                "AI is saving the image",
-                "AI is uploading the generated image to workspace storage.",
+                generatedImages.Count == 1 ? "AI is saving the image" : "AI is saving generated media",
+                generatedImages.Count == 1
+                    ? "AI is uploading the generated image to workspace storage."
+                    : "AI is uploading the generated media to workspace storage.",
                 new
                 {
                     workspaceId = msg.WorkspaceId,
                     resourceType = "image",
                     status = "generated",
-                    contentType = imageResult.MimeType,
+                    imageCount = generatedImages.Count,
+                    contentTypes = generatedImages.Select(image => image.Result.MimeType).ToList(),
                     originKind = ResourceOriginKinds.AiGenerated,
                 },
                 ct);
             var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
                 userId: msg.UserId,
-                urls: new[] { imageResult.DataUrl },
+                urls: generatedImages.Select(image => image.Result.DataUrl).ToArray(),
                 status: "generated",
                 resourceType: "image",
                 cancellationToken: ct,
@@ -1472,28 +1469,40 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     OriginChatSessionId: null,
                     OriginChatId: null));
 
-            if (uploadResult.IsFailure || uploadResult.Value.Count == 0)
+            if (uploadResult.IsFailure || uploadResult.Value.Count < generatedImages.Count)
             {
                 throw new InvalidOperationException(
                     $"S3 upload failed: {uploadResult.Error?.Code} {uploadResult.Error?.Description}");
             }
-            var uploaded = uploadResult.Value[0];
+            var uploadedImages = uploadResult.Value
+                .Take(generatedImages.Count)
+                .Select((uploaded, index) =>
+                    new UploadedDraftImage(
+                        generatedImages[index].Ordinal,
+                        generatedImages[index].Total,
+                        uploaded.ResourceId,
+                        uploaded.PresignedUrl,
+                        uploaded.ContentType,
+                        uploaded.ResourceType,
+                        uploaded.OriginKind,
+                        uploaded.OriginSourceUrl,
+                        uploaded.OriginChatSessionId,
+                        uploaded.OriginChatId))
+                .ToList();
             await PublishThinkingAsync(
                 context,
                 task,
                 "resource_upload_completed",
-                "AI saved the image",
-                "AI finished uploading the generated image.",
+                uploadedImages.Count == 1 ? "AI saved the image" : "AI saved generated media",
+                uploadedImages.Count == 1
+                    ? "AI finished uploading the generated image."
+                    : "AI finished uploading the generated media.",
                 new
                 {
-                    uploaded.ResourceId,
-                    uploaded.PresignedUrl,
-                    uploaded.ContentType,
-                    uploaded.ResourceType,
-                    uploaded.OriginKind,
-                    uploaded.OriginSourceUrl,
-                    uploaded.OriginChatSessionId,
-                    uploaded.OriginChatId,
+                    resourceIds = uploadedImages.Select(image => image.ResourceId).ToList(),
+                    presignedUrls = uploadedImages.Select(image => image.PresignedUrl).ToList(),
+                    mediaTotal = uploadedImages.Count,
+                    items = uploadedImages,
                 },
                 ct,
                 phaseStatus: "completed");
@@ -1517,14 +1526,14 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 {
                     draftPostId = task.ResultPostId,
                     hasPrecreatedDraftPost = task.ResultPostId.HasValue,
-                    resourceId = uploaded.ResourceId,
+                    resourceIds = uploadedImages.Select(image => image.ResourceId).ToList(),
                     caption,
                 },
                 ct);
             var content = new PostContent
             {
                 Content = caption,
-                ResourceList = new List<string> { uploaded.ResourceId.ToString() },
+                ResourceList = uploadedImages.Select(image => image.ResourceId.ToString()).ToList(),
                 PostType = "posts",
             };
             Post draftPost;
@@ -1565,6 +1574,9 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             await _postRepository.SaveChangesAsync(ct);
             postFinalized = true;
             task.ResultPostId = draftPost.Id;
+            var primaryUploaded = uploadedImages[0];
+            var resultResourceIds = uploadedImages.Select(image => image.ResourceId).ToList();
+            var resultPresignedUrls = uploadedImages.Select(image => image.PresignedUrl).ToList();
             await PublishThinkingAsync(
                 context,
                 task,
@@ -1574,8 +1586,10 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 new
                 {
                     draftPostId = draftPost.Id,
-                    resourceId = uploaded.ResourceId,
-                    presignedUrl = uploaded.PresignedUrl,
+                    resourceId = primaryUploaded.ResourceId,
+                    presignedUrl = primaryUploaded.PresignedUrl,
+                    resourceIds = resultResourceIds,
+                    presignedUrls = resultPresignedUrls,
                     caption,
                 },
                 ct,
@@ -1585,13 +1599,16 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             task.Status = DraftPostTaskStatuses.Completed;
             task.ResultPostBuilderId = null;
             task.ResultPostId = draftPost.Id;
-            task.ResultResourceId = uploaded.ResourceId;
-            task.ResultPresignedUrl = uploaded.PresignedUrl;
+            task.ResultResourceId = primaryUploaded.ResourceId;
+            task.ResultPresignedUrl = primaryUploaded.PresignedUrl;
+            task.ResultResourceIdsJson = JsonSerializer.Serialize(resultResourceIds);
+            task.ResultPresignedUrlsJson = JsonSerializer.Serialize(resultPresignedUrls);
             task.ResultCaption = caption;
             task.ResultReferencesJson = SerializeReferences(rag.References);
             task.CompletedAt = DateTimeExtensions.PostgreSqlUtcNow;
             task.UpdatedAt = task.CompletedAt;
             await _taskRepository.SaveChangesAsync(ct);
+            await MarkSpendRecordDebitedAsync(task.Id, ct);
 
             await context.Publish(
                 NotificationRequestedEventFactory.CreateForUser(
@@ -1607,6 +1624,11 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                         postId = task.ResultPostId,
                         resourceId = task.ResultResourceId,
                         presignedUrl = task.ResultPresignedUrl,
+                        resourceIds = resultResourceIds,
+                        presignedUrls = resultPresignedUrls,
+                        resultResourceIds,
+                        resultPresignedUrls,
+                        imageCount = task.ImageCount,
                         caption = task.ResultCaption,
                     },
                     createdAt: task.CompletedAt,
@@ -1676,6 +1698,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             try
             {
                 await _taskRepository.SaveChangesAsync(ct);
+                await RefundSpendRecordAsync(msg.UserId, task.Id, ct);
             }
             catch (Exception saveEx)
             {
@@ -1713,6 +1736,78 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 _logger.LogError(notifyEx, "DraftPost {Id}: failed to publish failure notification", task.Id);
             }
         }
+    }
+
+    private async Task MarkSpendRecordDebitedAsync(Guid taskId, CancellationToken cancellationToken)
+    {
+        var records = await _aiSpendRecordRepository.GetByReferenceAsync(
+            CoinReferenceTypes.DraftPostGeneration,
+            taskId.ToString(),
+            cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Pending, StringComparison.OrdinalIgnoreCase))
+            {
+                record.Status = AiSpendStatuses.Debited;
+                record.UpdatedAt = updatedAt;
+                _aiSpendRecordRepository.Update(record);
+            }
+        }
+
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RefundSpendRecordAsync(Guid userId, Guid taskId, CancellationToken cancellationToken)
+    {
+        var records = await _aiSpendRecordRepository.GetByReferenceAsync(
+            CoinReferenceTypes.DraftPostGeneration,
+            taskId.ToString(),
+            cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Refunded, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var refund = await _billingClient.RefundAsync(
+                userId,
+                record.TotalCoins,
+                CoinDebitReasons.DraftPostGenerationRefund,
+                CoinReferenceTypes.DraftPostGeneration,
+                taskId.ToString(),
+                cancellationToken);
+            if (refund.IsFailure)
+            {
+                _logger.LogWarning(
+                    "DraftPost {TaskId}: failed to refund spend record {SpendRecordId}: {Code} {Message}",
+                    taskId,
+                    record.Id,
+                    refund.Error.Code,
+                    refund.Error.Description);
+                continue;
+            }
+
+            record.Status = AiSpendStatuses.Refunded;
+            record.UpdatedAt = updatedAt;
+            _aiSpendRecordRepository.Update(record);
+        }
+
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
     }
 
     private static string BuildCaptionUserText(

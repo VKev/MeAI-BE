@@ -90,7 +90,8 @@ public sealed class UploadResourceFromUrlCommandHandler
             ResourceType = request.ResourceType?.Trim(),
             ContentType = fetchResult.Value.ContentType.Trim(),
             OriginKind = Normalize(request.Provenance?.OriginKind),
-            OriginSourceUrl = Normalize(request.Provenance?.OriginSourceUrl) ?? request.Url.Trim(),
+            OriginSourceUrl = ResourceOriginSource.NormalizeForStorage(request.Provenance?.OriginSourceUrl)
+                ?? ResourceOriginSource.NormalizeForStorage(request.Url),
             OriginChatSessionId = NormalizeGuid(request.Provenance?.OriginChatSessionId),
             OriginChatId = NormalizeGuid(request.Provenance?.OriginChatId),
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow

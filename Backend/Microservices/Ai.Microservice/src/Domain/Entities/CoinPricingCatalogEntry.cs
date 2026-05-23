@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Domain.Entities;
 
 // One row per priced (ActionType, Model, Variant) AI action. Prices are stored in coin
-// units — 1 coin = $0.01 USD per the product rate. Rows are user-visible for transparency
+// units — 1 coin = 10 VND per the product rate. Rows are user-visible for transparency
 // (FE fetches the public catalog to show "costs N coins" on the Generate button) and
 // editable by admins without a redeploy.
 public sealed class CoinPricingCatalogEntry

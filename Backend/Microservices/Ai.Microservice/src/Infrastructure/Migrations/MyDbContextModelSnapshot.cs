@@ -391,6 +391,12 @@ namespace Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_auto_topic");
 
+                    b.Property<int>("ImageCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("image_count");
+
                     b.Property<int>("MaxRagPosts")
                         .HasColumnType("integer")
                         .HasColumnName("max_rag_posts");
@@ -415,6 +421,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("result_presigned_url");
 
+                    b.Property<string>("ResultPresignedUrlsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result_presigned_urls");
+
                     b.Property<string>("ResultReferencesJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("result_references");
@@ -422,6 +432,10 @@ namespace Infrastructure.Migrations
                     b.Property<Guid?>("ResultResourceId")
                         .HasColumnType("uuid")
                         .HasColumnName("result_resource_id");
+
+                    b.Property<string>("ResultResourceIdsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result_resource_ids");
 
                     b.Property<Guid>("SocialMediaId")
                         .HasColumnType("uuid")
@@ -1325,6 +1339,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("result_presigned_url");
 
+                    b.Property<string>("ResultPresignedUrlsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result_presigned_urls");
+
                     b.Property<string>("ResultReferencesJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("result_references");
@@ -1332,6 +1350,10 @@ namespace Infrastructure.Migrations
                     b.Property<Guid?>("ResultResourceId")
                         .HasColumnType("uuid")
                         .HasColumnName("result_resource_id");
+
+                    b.Property<string>("ResultResourceIdsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result_resource_ids");
 
                     b.Property<string>("Status")
                         .IsRequired()

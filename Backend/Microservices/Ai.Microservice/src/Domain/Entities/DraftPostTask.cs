@@ -40,6 +40,8 @@ public sealed class DraftPostTask
 
     public int MaxRagPosts { get; set; }
 
+    public int ImageCount { get; set; } = 1;
+
     public string Status { get; set; } = DraftPostTaskStatuses.Submitted;
 
     public string? ErrorCode { get; set; }
@@ -53,6 +55,12 @@ public sealed class DraftPostTask
     public Guid? ResultResourceId { get; set; }
 
     public string? ResultPresignedUrl { get; set; }
+
+    [Column(TypeName = "jsonb")]
+    public string? ResultResourceIdsJson { get; set; }
+
+    [Column(TypeName = "jsonb")]
+    public string? ResultPresignedUrlsJson { get; set; }
 
     public string? ResultCaption { get; set; }
 

@@ -168,6 +168,17 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                 }
 
                 lastError = publishResult.Error;
+                _logger.LogWarning(
+                    "Publish attempt {Attempt}/{Max} failed. CorrelationId: {CorrelationId}, PublicationId: {PublicationId}, PostId: {PostId}, SocialMediaId: {SocialMediaId}, Platform: {Platform}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
+                    attempt,
+                    MaxAttempts,
+                    message.CorrelationId,
+                    message.PublicationId,
+                    message.PostId,
+                    message.SocialMediaId,
+                    socialMedia.Type,
+                    lastError.Code,
+                    lastError.Description);
             }
             catch (Exception ex)
             {
@@ -238,7 +249,7 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         {
             Id = Guid.CreateVersion7(),
             PostId = post.Id,
-            WorkspaceId = post.WorkspaceId!.Value,
+            WorkspaceId = placeholder.WorkspaceId,
             SocialMediaId = socialMedia.SocialMediaId,
             SocialMediaType = socialMedia.Type,
             DestinationOwnerId = destination.PageId,
@@ -479,18 +490,6 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
 
         if (string.Equals(socialMedia.Type, TikTokType, StringComparison.OrdinalIgnoreCase))
         {
-            if (presignedResources.Count == 0)
-            {
-                return Result.Failure<IReadOnlyList<(string, string)>>(
-                    new Error("TikTok.MissingMedia", "TikTok publishing requires at least one video."));
-            }
-
-            if (presignedResources.Count > 1)
-            {
-                return Result.Failure<IReadOnlyList<(string, string)>>(
-                    new Error("TikTok.UnsupportedMedia", "TikTok publishing currently supports only one video."));
-            }
-
             var accessToken = GetMetadataValue(metadata, "access_token");
             var openId = GetMetadataValue(metadata, "open_id");
 
@@ -506,25 +505,84 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                     new Error("TikTok.InvalidAccount", "TikTok open_id is missing in social media metadata."));
             }
 
-            var resource = presignedResources[0];
-            var publishResult = await _tikTokPublishService.PublishAsync(
-                new TikTokPublishRequest(
+            // Dynamic media detection: Check if there is at least one video resource in presignedResources
+            var videoResource = presignedResources.FirstOrDefault(r =>
+            {
+                var type = r.ContentType ?? r.ResourceType;
+                if (!string.IsNullOrWhiteSpace(type))
+                {
+                    if (type.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(type, "video", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+                var url = r.PresignedUrl;
+                if (!string.IsNullOrWhiteSpace(url))
+                {
+                    var cleanUrl = url;
+                    var queryIndex = cleanUrl.IndexOf('?', StringComparison.Ordinal);
+                    if (queryIndex > 0)
+                    {
+                        cleanUrl = cleanUrl[..queryIndex];
+                    }
+                    var extension = System.IO.Path.GetExtension(cleanUrl).ToLowerInvariant();
+                    return extension is ".mp4" or ".mov" or ".m4v" or ".webm";
+                }
+                return false;
+            });
+
+            // If a video is present, publish it as a video/reel
+            if (videoResource is not null)
+            {
+                var publishResult = await _tikTokPublishService.PublishAsync(
+                    new TikTokPublishRequest(
+                        AccessToken: accessToken,
+                        OpenId: openId,
+                        Caption: caption,
+                        Media: new TikTokPublishMedia(
+                            videoResource.PresignedUrl,
+                            videoResource.ContentType ?? videoResource.ResourceType),
+                        IsPrivate: isPrivate),
+                    cancellationToken);
+
+                if (publishResult.IsFailure)
+                {
+                    return Result.Failure<IReadOnlyList<(string, string)>>(publishResult.Error);
+                }
+
+                return Result.Success<IReadOnlyList<(string, string)>>(
+                    new[] { (publishResult.Value.OpenId, publishResult.Value.PublishId) });
+            }
+
+            // TikTok posts: photo carousel (1-35 images)
+            if (presignedResources.Count == 0)
+            {
+                return Result.Failure<IReadOnlyList<(string, string)>>(
+                    new Error("TikTok.MissingMedia", "TikTok photo carousel requires at least one image."));
+            }
+
+            var imageUrls = presignedResources
+                .Select(r => r.PresignedUrl)
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .ToList();
+
+            var carouselResult = await _tikTokPublishService.PublishCarouselAsync(
+                new TikTokCarouselPublishRequest(
                     AccessToken: accessToken,
                     OpenId: openId,
                     Caption: caption,
-                    Media: new TikTokPublishMedia(
-                        resource.PresignedUrl,
-                        resource.ContentType ?? resource.ResourceType),
+                    ImageUrls: imageUrls,
                     IsPrivate: isPrivate),
                 cancellationToken);
 
-            if (publishResult.IsFailure)
+            if (carouselResult.IsFailure)
             {
-                return Result.Failure<IReadOnlyList<(string, string)>>(publishResult.Error);
+                return Result.Failure<IReadOnlyList<(string, string)>>(carouselResult.Error);
             }
 
             return Result.Success<IReadOnlyList<(string, string)>>(
-                new[] { (publishResult.Value.OpenId, publishResult.Value.PublishId) });
+                new[] { (carouselResult.Value.OpenId, carouselResult.Value.PublishId) });
         }
 
         if (string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase))

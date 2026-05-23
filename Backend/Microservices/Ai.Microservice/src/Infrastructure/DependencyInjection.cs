@@ -66,7 +66,14 @@ namespace Infrastructure
             services.AddHttpClient<IKieFallbackCallbackService, KieFallbackCallbackService>();
             services.AddSingleton<IAiFallbackTemplateService, AiFallbackTemplateService>();
             services.AddHttpClient("Gemini");
-            services.AddHttpClient("KieChat");
+            services.AddHttpClient("KieChat", (sp, client) =>
+            {
+                var configuration = sp.GetRequiredService<IConfiguration>();
+                var timeoutSeconds = int.TryParse(
+                    configuration["Kie:TimeoutSeconds"] ?? configuration["Kie__TimeoutSeconds"],
+                    out var s) ? s : 30;
+                client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            });
             services.AddScoped<Infrastructure.Logic.Kie.KieResponsesClient>();
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");
@@ -76,8 +83,15 @@ namespace Infrastructure
                 client.Timeout = TimeSpan.FromSeconds(12);
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; MeAIWebSearch/1.0)");
                 client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9,vi;q=0.8");
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AutomaticDecompression =
+                    System.Net.DecompressionMethods.GZip |
+                    System.Net.DecompressionMethods.Deflate |
+                    System.Net.DecompressionMethods.Brotli
             });
-            // Caption generation runs through Kie's GPT-5.4 Responses API. GeminiCaptionService
+            // Caption generation runs through Kie's GPT-4o-mini Responses API. GeminiCaptionService
             // stays registered as a concrete class for future fallback / A-B; the interface
             // binding points at the Kie-backed implementation.
             services.AddScoped<IGeminiCaptionService, Infrastructure.Logic.Kie.KieCaptionService>();
@@ -130,8 +144,11 @@ namespace Infrastructure
                 var s3PublicBaseUrl = configuration["Rag:S3PublicBaseUrl"]
                                       ?? configuration["RAG_S3_PUBLIC_BASE_URL"]
                                       ?? configuration["S3:PublicBaseUrl"]
-                                      ?? configuration["VIDEORAG_S3_PUBLIC_BASE_URL"]
-                                      ?? "https://static.vkev.me";
+                                      ?? configuration["VIDEORAG_S3_PUBLIC_BASE_URL"];
+                if (string.IsNullOrWhiteSpace(s3PublicBaseUrl))
+                {
+                    s3PublicBaseUrl = null;
+                }
                 return new RagOptions
                 {
                     IngestQueue = ingest,
@@ -265,7 +282,8 @@ namespace Infrastructure
             services.AddHttpClient<Application.Abstractions.Rag.IRerankClient,
                                    Infrastructure.Logic.Rag.JinaRerankClient>();
 
-            services.AddHttpClient<IMultimodalLlmClient, OpenRouterMultimodalLlmClient>();
+            services.AddHttpClient<OpenRouterMultimodalLlmClient>();
+            services.AddScoped<IMultimodalLlmClient, KieFirstMultimodalLlmClient>();
 
             services.AddSingleton(sp =>
             {
@@ -289,7 +307,8 @@ namespace Infrastructure
                     Timeout = TimeSpan.FromSeconds(timeoutSeconds),
                 };
             });
-            services.AddHttpClient<IImageGenerationClient, OpenRouterImageGenerationClient>();
+            services.AddHttpClient<OpenRouterImageGenerationClient>();
+            services.AddScoped<IImageGenerationClient, KieFirstImageGenerationClient>();
 
             services.AddScoped<IDraftPostTaskRepository, DraftPostTaskRepository>();
             services.AddScoped<IRecommendPostRepository, RecommendPostRepository>();

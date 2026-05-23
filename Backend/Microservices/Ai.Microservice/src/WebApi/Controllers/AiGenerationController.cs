@@ -1,6 +1,9 @@
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.Abstractions.Billing;
+using Application.Abstractions.Configs;
+using Application.Billing;
 using Application.Posts.Commands;
 using Application.Posts.Models;
 using MediatR;
@@ -16,8 +19,107 @@ namespace WebApi.Controllers;
 [Authorize]
 public sealed class AiGenerationController : ApiController
 {
-    public AiGenerationController(IMediator mediator) : base(mediator)
+    private const string CaptionEstimateOperation = "captions";
+    private const string GeminiDraftPostEstimateOperation = "post";
+    private const string PostPrepareEstimateOperation = "post_prepare";
+    private const string CaptionModel = "openai/gpt-4o";
+    private const string DefaultGeminiDraftPostModel = "gpt-4o-mini";
+
+    private readonly ICoinPricingService _pricingService;
+    private readonly IBillingClient _billingClient;
+    private readonly IUserConfigService _userConfigService;
+
+    public AiGenerationController(
+        IMediator mediator,
+        ICoinPricingService pricingService,
+        IBillingClient billingClient,
+        IUserConfigService userConfigService) : base(mediator)
     {
+        _pricingService = pricingService;
+        _billingClient = billingClient;
+        _userConfigService = userConfigService;
+    }
+
+    [HttpPost("estimate")]
+    [Consumes("application/json")]
+    [ProducesResponseType(typeof(Result<AiGenerationCoinEstimateResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> EstimateCoin(
+        [FromBody] AiGenerationEstimateRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var operationResult = ResolveEstimateOperation(request?.Operation);
+        if (operationResult.IsFailure)
+        {
+            return HandleFailure(Result.Failure<AiGenerationCoinEstimateResponse>(operationResult.Error));
+        }
+
+        Result<CoinCostQuote> quoteResult;
+        if (operationResult.Value == CaptionEstimateOperation)
+        {
+            quoteResult = await _pricingService.GetCostAsync(
+                CoinActionTypes.CaptionGeneration,
+                CaptionModel,
+                variant: null,
+                quantity: 1,
+                cancellationToken);
+        }
+        else if (operationResult.Value == GeminiDraftPostEstimateOperation)
+        {
+            var model = await ResolveGeminiDraftPostBillingModelAsync(cancellationToken);
+            quoteResult = await _pricingService.GetCostAsync(
+                CoinActionTypes.CaptionGeneration,
+                model,
+                variant: null,
+                quantity: 1,
+                cancellationToken);
+        }
+        else
+        {
+            quoteResult = Result.Success(new CoinCostQuote(
+                PostPrepareEstimateOperation,
+                "none",
+                null,
+                "per_request",
+                0m,
+                1,
+                0m));
+        }
+
+        if (quoteResult.IsFailure)
+        {
+            return HandleFailure(Result.Failure<AiGenerationCoinEstimateResponse>(quoteResult.Error));
+        }
+
+        var balanceResult = await _billingClient.GetBalanceAsync(userId, cancellationToken);
+        if (balanceResult.IsFailure)
+        {
+            return HandleFailure(Result.Failure<AiGenerationCoinEstimateResponse>(balanceResult.Error));
+        }
+
+        var totalCoins = quoteResult.Value.TotalCoins;
+        var currentBalance = balanceResult.Value;
+        var shortfallCoins = Math.Max(0m, totalCoins - currentBalance);
+        var response = new AiGenerationCoinEstimateResponse(
+            operationResult.Value,
+            quoteResult.Value.ActionType,
+            quoteResult.Value.Model,
+            quoteResult.Value.Variant,
+            quoteResult.Value.Unit,
+            quoteResult.Value.UnitCostCoins,
+            quoteResult.Value.Quantity,
+            totalCoins,
+            currentBalance,
+            currentBalance >= totalCoins,
+            shortfallCoins);
+
+        return Ok(Result.Success(response));
     }
 
     [HttpPost("post-prepare")]
@@ -77,6 +179,7 @@ public sealed class AiGenerationController : ApiController
     [ProducesResponseType(typeof(Result<GenerateSocialMediaCaptionsResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status402PaymentRequired)]
     public async Task<IActionResult> GenerateSocialMediaCaptions(
         [FromBody] GenerateSocialMediaCaptionsRequest? request,
         CancellationToken cancellationToken)
@@ -111,7 +214,7 @@ public sealed class AiGenerationController : ApiController
 
         if (result.IsFailure)
         {
-            return HandleFailure(result);
+            return MapBillingFailureOrDefault(result);
         }
 
         return Ok(result);
@@ -121,6 +224,7 @@ public sealed class AiGenerationController : ApiController
     [ProducesResponseType(typeof(Result<FacebookDraftPostResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status402PaymentRequired)]
     public async Task<IActionResult> CreatePost(
         [FromBody] GeminiPostRequest request,
         CancellationToken cancellationToken)
@@ -143,10 +247,59 @@ public sealed class AiGenerationController : ApiController
 
         if (result.IsFailure)
         {
-            return HandleFailure(result);
+            return MapBillingFailureOrDefault(result);
         }
 
         return Ok(result);
+    }
+
+    private static Result<string> ResolveEstimateOperation(string? operation)
+    {
+        if (string.IsNullOrWhiteSpace(operation))
+        {
+            return Result.Failure<string>(
+                new Error("AiGenerationEstimate.InvalidOperation", "operation is required."));
+        }
+
+        var normalized = NormalizePropertyName(operation);
+        return normalized switch
+        {
+            "caption" or "captions" => Result.Success(CaptionEstimateOperation),
+            "post" or "geminipost" or "draftpost" => Result.Success(GeminiDraftPostEstimateOperation),
+            "postprepare" or "preparepost" or "prepareposts" => Result.Success(PostPrepareEstimateOperation),
+            _ => Result.Failure<string>(
+                new Error(
+                    "AiGenerationEstimate.UnsupportedOperation",
+                    "operation must be 'captions', 'post', or 'post-prepare'."))
+        };
+    }
+
+    private async Task<string> ResolveGeminiDraftPostBillingModelAsync(CancellationToken cancellationToken)
+    {
+        var result = await _userConfigService.GetActiveConfigAsync(cancellationToken);
+        if (result.IsSuccess && !string.IsNullOrWhiteSpace(result.Value?.ChatModel))
+        {
+            return result.Value.ChatModel.Trim();
+        }
+
+        return DefaultGeminiDraftPostModel;
+    }
+
+    private IActionResult MapBillingFailureOrDefault(Result result)
+    {
+        if (string.Equals(result.Error.Code, BillingClientErrors.InsufficientFunds, StringComparison.Ordinal))
+        {
+            return StatusCode(
+                StatusCodes.Status402PaymentRequired,
+                new ProblemDetails
+                {
+                    Status = StatusCodes.Status402PaymentRequired,
+                    Type = result.Error.Code,
+                    Detail = result.Error.Description
+                });
+        }
+
+        return HandleFailure(result);
     }
 
     private bool TryGetUserId(out Guid userId)
@@ -397,6 +550,24 @@ public sealed class AiGenerationController : ApiController
         return new string(characters.ToArray());
     }
 }
+
+public sealed class AiGenerationEstimateRequest
+{
+    public string? Operation { get; set; }
+}
+
+public sealed record AiGenerationCoinEstimateResponse(
+    string Operation,
+    string ActionType,
+    string Model,
+    string? Variant,
+    string Unit,
+    decimal UnitCostCoins,
+    int Quantity,
+    decimal TotalCoins,
+    decimal CurrentBalance,
+    bool CanAfford,
+    decimal ShortfallCoins);
 
 public sealed class GenerateSocialMediaCaptionsRequest
 {

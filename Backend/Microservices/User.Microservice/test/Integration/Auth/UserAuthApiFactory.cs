@@ -88,5 +88,15 @@ internal sealed class UserAuthApiFactory(
         {
             return Task.FromResult(Result.Success(new StorageUploadResult(request.Key, $"https://example.test/{request.Key}")));
         }
+
+        public Result<PresignedUploadUrlResult> GetPresignedUploadUrl(string key, string contentType, TimeSpan? expiresIn = null)
+        {
+            return Result.Success(new PresignedUploadUrlResult(key, "https://example.test/presigned-upload", "test-bucket", "test-region"));
+        }
+
+        public Task<Result<StorageObjectInfo>> GetObjectInfoAsync(string keyOrUrl, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Result.Success(new StorageObjectInfo(keyOrUrl, 100L, DateTime.UtcNow)));
+        }
     }
 }

@@ -202,6 +202,12 @@ variable "cloudflare_record_name" {
   default     = "@"
 }
 
+variable "cloudflare_allow_static_ai_fetchers" {
+  description = "Disable Cloudflare managed AI robots restrictions and serve an allow-all robots.txt on the static assets host so Vertex/Gemini/OpenRouter can fetch signed media URLs."
+  type        = bool
+  default     = true
+}
+
 variable "use_eks" {
   description = "When true, deploy workloads to EKS instead of ECS."
   type        = bool
@@ -430,4 +436,10 @@ variable "static_assets_bucket_domain_name" {
   description = "Domain name of the S3 bucket for static assets (e.g., my-bucket.s3.us-east-1.amazonaws.com)"
   type        = string
   default     = ""
+}
+
+variable "static_assets_cors_allowed_methods" {
+  description = "HTTP methods allowed by the static assets Cloudflare proxy CORS policy and forwarded to the S3 origin. PUT is only useful with a valid presigned PUT URL."
+  type        = list(string)
+  default     = ["GET", "HEAD", "OPTIONS"]
 }

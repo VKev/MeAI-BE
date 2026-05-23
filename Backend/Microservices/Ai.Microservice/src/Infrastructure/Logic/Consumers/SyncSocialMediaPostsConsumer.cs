@@ -446,12 +446,10 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
     {
         return new PostContent
         {
-            Content = FirstNonEmpty(
+            Content = FirstNonContentUrl(
                 platformPost.Text,
                 platformPost.Description,
-                platformPost.Title,
-                platformPost.Permalink,
-                platformPost.ShareUrl) ?? string.Empty,
+                platformPost.Title) ?? string.Empty,
             Hashtag = null,
             ResourceList = resourceList,
             PostType = postType
@@ -583,13 +581,13 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
 
     private static string BuildTitle(SocialPlatformPostSummaryResponse platformPost, string platform)
     {
-        var raw = FirstNonEmpty(platformPost.Title, platformPost.Text, platformPost.Description);
+        var raw = FirstNonContentUrl(platformPost.Title, platformPost.Text, platformPost.Description);
         if (!string.IsNullOrWhiteSpace(raw))
         {
             return TrimTo(raw, 140);
         }
 
-        return $"{NormalizePlatform(platform, platform)} post";
+        return $"{ToDisplayPlatform(NormalizePlatform(platform, platform))} post";
     }
 
     private static string ResolvePostType(string? mediaType)
@@ -652,6 +650,43 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         }
 
         return null;
+    }
+
+    private static string? FirstNonContentUrl(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            var trimmed = value.Trim();
+            if (!IsUrlLikeText(trimmed))
+            {
+                return trimmed;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsUrlLikeText(string value)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+               (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+    }
+
+    private static string ToDisplayPlatform(string platform)
+    {
+        return platform switch
+        {
+            "facebook" => "Facebook",
+            "instagram" => "Instagram",
+            "threads" => "Threads",
+            "tiktok" => "TikTok",
+            _ => platform
+        };
     }
 
     private static string TrimTo(string value, int maxLength)

@@ -70,7 +70,7 @@ internal sealed class PublishingScheduleCommandSupport
         }
 
         var normalizedExecuteAtUtc = NormalizeScheduledAtUtc(executeAtUtc);
-        if (normalizedExecuteAtUtc <= DateTimeExtensions.PostgreSqlUtcNow)
+        if (normalizedExecuteAtUtc < DateTimeExtensions.PostgreSqlUtcNow.AddMinutes(-15))
         {
             return Result.Failure<ValidatedPublishingScheduleData>(PublishingScheduleErrors.ExecuteAtInPast);
         }

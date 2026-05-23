@@ -93,6 +93,17 @@ resource "cloudflare_page_rule" "static_assets_cache" {
   }
 }
 
+# Cloudflare's managed robots.txt can prepend Disallow rules for AI fetchers.
+# The static assets host intentionally serves signed media to third-party model
+# APIs, so disable managed AI robots restrictions at the zone level and let the
+# static Worker answer /robots.txt explicitly.
+resource "cloudflare_bot_management" "allow_static_ai_fetchers" {
+  count = var.use_cloudflare && var.cloudflare_allow_static_ai_fetchers ? 1 : 0
+
+  zone_id            = var.cloudflare_zone_id
+  ai_bots_protection = "disabled"
+}
+
 # Worker to preserve the S3 Host header for presigned URLs while keeping caching at the edge.
 resource "cloudflare_workers_script" "static_assets_proxy" {
   count = var.use_cloudflare && var.static_assets_bucket_domain_name != "" ? 1 : 0
@@ -106,9 +117,10 @@ resource "cloudflare_workers_script" "static_assets_proxy" {
       async fetch(request, env, ctx) {
         const url = new URL(request.url);
         const bucketHost = "${var.static_assets_bucket_domain_name}";
+        const allowedMethods = ${jsonencode(var.static_assets_cors_allowed_methods)};
         const corsHeaders = {
           "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+          "Access-Control-Allow-Methods": allowedMethods.join(", "),
           "Access-Control-Allow-Headers": request.headers.get("Access-Control-Request-Headers") || "*",
           "Access-Control-Expose-Headers": "Content-Length, Content-Type, ETag",
           "Access-Control-Max-Age": "86400"
@@ -118,8 +130,33 @@ resource "cloudflare_workers_script" "static_assets_proxy" {
           return new Response(null, { status: 204, headers: corsHeaders });
         }
 
-        // Only allow safe methods to the bucket.
-        if (request.method !== "GET" && request.method !== "HEAD") {
+        if (url.pathname === "/robots.txt") {
+          const body = [
+            "User-agent: *",
+            "Allow: /",
+            "Content-Signal: search=yes,ai-input=yes,ai-train=no",
+            "",
+            "User-agent: Google-Extended",
+            "Allow: /",
+            "User-agent: GPTBot",
+            "Allow: /",
+            "User-agent: ChatGPT-User",
+            "Allow: /",
+            "User-agent: OAI-SearchBot",
+            "Allow: /",
+            ""
+          ].join("\\n");
+          return new Response(body, {
+            status: 200,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "text/plain; charset=utf-8",
+              "Cache-Control": "public, max-age=300"
+            }
+          });
+        }
+
+        if (!allowedMethods.includes(request.method)) {
           return new Response("Method Not Allowed", { status: 405, headers: corsHeaders });
         }
 
@@ -132,7 +169,9 @@ resource "cloudflare_workers_script" "static_assets_proxy" {
           method: request.method,
           headers,
           redirect: "follow",
-          cf: { cacheEverything: true, cacheTtl: 86400 }
+          ...(request.method === "GET" || request.method === "HEAD"
+            ? { cf: { cacheEverything: true, cacheTtl: 86400 } }
+            : { body: request.body })
         };
 
         const originResponse = await fetch(originUrl, init);

@@ -34,6 +34,8 @@ public sealed class RecommendPostConfiguration : IEntityTypeConfiguration<Recomm
         entity.Property(e => e.ResultCaption).HasColumnName("result_caption").HasColumnType("text");
         entity.Property(e => e.ResultResourceId).HasColumnName("result_resource_id");
         entity.Property(e => e.ResultPresignedUrl).HasColumnName("result_presigned_url").HasColumnType("text");
+        entity.Property(e => e.ResultResourceIdsJson).HasColumnName("result_resource_ids").HasColumnType("jsonb");
+        entity.Property(e => e.ResultPresignedUrlsJson).HasColumnName("result_presigned_urls").HasColumnType("jsonb");
         entity.Property(e => e.ResultReferencesJson).HasColumnName("result_references").HasColumnType("jsonb");
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");

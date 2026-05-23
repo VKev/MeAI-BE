@@ -1,7 +1,10 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using Application.Abstractions.Billing;
 using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
+using Application.Billing;
 using Application.Recommendations.Commands;
 using Application.Recommendations.Queries;
 using Domain.Entities;
@@ -60,6 +63,11 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         "  * APPLY the user's improvement instruction faithfully when one is provided.\n" +
         "  * KEEP contact info verbatim from the page profile (URL TLDs, email locals, phone " +
         "    numbers — never rewrite or canonicalize). Drop a contact field rather than invent one.\n\n" +
+        "CAPTION LENGTH LIMITS: The improved caption must fit the MeAI publish limit for the " +
+        "target platform, including hashtags, emojis, URLs, email, phone, and line breaks. " +
+        "Facebook: 2,200 characters. Instagram: 2,200 characters. TikTok: 2,200 characters. " +
+        "Threads: 500 characters. If the target platform is Threads, be concise and do not " +
+        "write a caption that would need publish-time truncation.\n\n" +
         "FORMATTING — CRITICAL: The caption is rendered VERBATIM by Facebook / Instagram / " +
         "TikTok / Threads, none of which parse Markdown. Output plain text only. NO `**`/`__`/" +
         "`*`/`_` for bold/italic. NO `#`/`##`/`###` heading lines (a hashtag is `#OneWord` with no " +
@@ -79,12 +87,25 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         "social-media post image. The user has the existing post and wants the image regenerated " +
         "while staying recognizably on-topic.\n\n" +
         "INPUTS YOU SEE:\n" +
-        "  (a) The post's caption (current or just-improved) — that's what the new image must illustrate\n" +
+        "  (a) The post's caption (current or just-improved) for tone/context; the attached image defines the exact subject for this call\n" +
         "  (b) The user's optional improvement instruction for the image\n" +
-        "  (c) The original image attached as a reference for subject / palette / brand identity\n" +
+        "  (c) Only the current media item's original image attached as a reference for subject / palette / brand identity\n" +
         "  (d) Style-knowledge for the requested style ('creative' / 'branded' / 'marketing'), " +
         "      describing on-image text rules + visual conventions for that style\n\n" +
         "RULES:\n" +
+        "  * If this is one item in a multi-media post, ignore sibling media entirely. Do not " +
+        "    create a collage, comparison, or combined scene from other carousel resources. " +
+        "    Preserve and improve only the attached media item's subject. If the caption describes " +
+        "    the whole carousel, use it only for tone/context and do not visualize caption parts " +
+        "    that refer to other media items.\n" +
+        "  * The attached reference image is the authoritative subject source for this media item. " +
+        "    If the caption or user instruction mentions several cameras, products, scenes, or " +
+        "    people, use only the one visibly present in the attached reference image. Never swap " +
+        "    in a sibling product/object that is not visible in this reference.\n" +
+        "  * Each KIE image-generation call receives one original media reference. Your brief must " +
+        "    describe only that one reference. Do not write 'two cameras', 'both cameras', " +
+        "    'comparison', or similar multi-item language unless multiple items are already visible " +
+        "    inside the attached reference image itself.\n" +
         "  * Preserve the subject of the original image — same product / scene / person — unless " +
         "    the user's instruction explicitly asks to change it.\n" +
         "  * Improve composition, lighting, palette, or text overlay quality per the style-knowledge.\n" +
@@ -136,6 +157,59 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             "Treat any URL/email/phone in the brief as exact verbatim text.",
     };
 
+    private static string BuildImproveImagePrompt(ImageBrief brief, ImageImproveTarget target)
+    {
+        return
+            "CRITICAL SOURCE LOCK: This KIE call generates exactly one replacement image, " +
+            $"for original media item {target.Ordinal} of {target.Total}. " +
+            "Use only the attached reference image as the visual subject source. " +
+            "If the caption, user instruction, or brief mentions multiple cameras/products/scenes, " +
+            "ignore anything that is not visible in this attached source image. " +
+            "Do not render sibling media subjects, do not create a comparison image, and do not reuse " +
+            "a product/object from another carousel item.\n\n" +
+            $"{brief.Prompt}\n\n" +
+            $"Aspect ratio: {brief.AspectRatio}. " +
+            $"Improve original media item {target.Ordinal} of {target.Total}. " +
+            BuildImproveImageVariationDirective(target) + " " +
+            "Render at high resolution. Output an image, no text response.";
+    }
+
+    private static string BuildImproveImageSystemPrompt(string baseSystemPrompt, ImageImproveTarget target)
+    {
+        if (target.Total <= 1)
+        {
+            return baseSystemPrompt;
+        }
+
+        return baseSystemPrompt + "\n\n" +
+            "This is a multi-media post improvement. Generate ONLY replacement media item " +
+            $"{target.Ordinal} of {target.Total}. Use only that item's attached original reference as the visual anchor. " +
+            "Never infer or render products, cameras, people, scenes, or text from sibling media or from " +
+            "global caption/instruction wording when they are not visible in the attached source image. " +
+            "Every output in the set must be visibly different because each original media item is different. " +
+            "Do not reuse the same composition, crop, background, pose, product angle, or rendered text arrangement across items.";
+    }
+
+    private static string BuildImproveImageVariationDirective(ImageImproveTarget target)
+    {
+        if (target.Total <= 1)
+        {
+            return "Preserve the original subject and topic while improving clarity, polish, and platform fit.";
+        }
+
+        var focus = ((target.Ordinal - 1) % 4) switch
+        {
+            0 => "make this item the hero or primary subject image",
+            1 => "make this item a lifestyle, context, or benefit-driven companion image",
+            2 => "make this item a detail, feature, or close-up companion image",
+            _ => "make this item an action, comparison, or audience-focused companion image",
+        };
+
+        return
+            $"Distinct role for this item: {focus}. Preserve what is unique in original media item {target.Ordinal}; " +
+            "do not generate a duplicate of another improved media item.";
+    }
+
     private const int DefaultRagTopK = 6;
 
     private readonly IMediator _mediator;
@@ -146,6 +220,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
     private readonly IMultimodalLlmClient _multimodalLlm;
     private readonly IImageGenerationClient _imageGenClient;
     private readonly Application.Recommendations.Services.IQueryRewriter _queryRewriter;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
+    private readonly IBillingClient _billingClient;
     private readonly ILogger<RecommendPostGenerationConsumer> _logger;
 
     public RecommendPostGenerationConsumer(
@@ -157,6 +233,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         IMultimodalLlmClient multimodalLlm,
         IImageGenerationClient imageGenClient,
         Application.Recommendations.Services.IQueryRewriter queryRewriter,
+        IAiSpendRecordRepository aiSpendRecordRepository,
+        IBillingClient billingClient,
         ILogger<RecommendPostGenerationConsumer> logger)
     {
         _mediator = mediator;
@@ -167,6 +245,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         _multimodalLlm = multimodalLlm;
         _imageGenClient = imageGenClient;
         _queryRewriter = queryRewriter;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
+        _billingClient = billingClient;
         _logger = logger;
     }
 
@@ -178,9 +258,9 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         var notificationPlatform = NormalizePlatform(msg.Platform);
 
         _logger.LogInformation(
-            "ImprovePost: starting CorrelationId={CorrelationId} UserId={UserId} OriginalPostId={PostId} ImproveCaption={Caption} ImproveImage={Image} Style={Style} PlatformHint={Platform}",
+            "ImprovePost: starting CorrelationId={CorrelationId} UserId={UserId} OriginalPostId={PostId} ImproveCaption={Caption} ImproveImage={Image} Style={Style} PlatformHint={Platform} SocialMediaId={SocialMediaId}",
             msg.CorrelationId, msg.UserId, msg.OriginalPostId,
-            msg.ImproveCaption, msg.ImproveImage, style, notificationPlatform);
+            msg.ImproveCaption, msg.ImproveImage, style, notificationPlatform, msg.SocialMediaId);
 
         var task = await _taskRepository.GetByCorrelationIdForUpdateAsync(msg.CorrelationId, ct);
         if (task is null)
@@ -204,6 +284,23 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 task,
                 task.UpdatedAt,
                 notificationPlatform,
+                msg.SocialMediaId,
+                ct);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "generation_started",
+                "AI is improving the post",
+                "AI started the post improvement pipeline.",
+                new
+                {
+                    improveCaption = msg.ImproveCaption,
+                    improveImage = msg.ImproveImage,
+                    style,
+                    platform = notificationPlatform,
+                    socialMediaId = msg.SocialMediaId,
+                    hasUserInstruction = !string.IsNullOrWhiteSpace(msg.UserInstruction),
+                },
                 ct);
 
             // ── Load original post + original resources ─────────────────────
@@ -215,29 +312,68 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             }
             var originalCaption = originalPost.Content?.Content ?? string.Empty;
             var originalResourceIds = ParseResourceIds(originalPost.Content?.ResourceList);
+            var contextSocialMediaId = msg.SocialMediaId.HasValue && msg.SocialMediaId.Value != Guid.Empty
+                ? msg.SocialMediaId.Value
+                : originalPost.SocialMediaId.HasValue && originalPost.SocialMediaId.Value != Guid.Empty
+                    ? originalPost.SocialMediaId.Value
+                    : (Guid?)null;
             var targetPlatform = notificationPlatform ?? NormalizePlatform(originalPost.Platform);
             notificationPlatform = targetPlatform;
             _logger.LogInformation(
-                "ImprovePost {Id}: original captionLen={CaptionLen} chars, originalResources={ResCount}, platform={Platform}",
-                task.Id, originalCaption.Length, originalResourceIds.Count, targetPlatform);
+                "ImprovePost {Id}: original captionLen={CaptionLen} chars, originalResources={ResCount}, platform={Platform}, socialMediaId={SocialMediaId}",
+                task.Id, originalCaption.Length, originalResourceIds.Count, targetPlatform, contextSocialMediaId);
 
             // ── Step 0 — WaitForRagReady (same contract as draft-post) ──────
             _logger.LogInformation("ImprovePost {Id}: waiting for RAG to be ready...", task.Id);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "rag_ready_wait_started",
+                "AI is preparing knowledge",
+                "AI is waiting for the RAG knowledge service to be ready.",
+                new { },
+                ct);
             await _ragClient.WaitForRagReadyAsync(ct);
             _logger.LogInformation("ImprovePost {Id}: RAG ready", task.Id);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "rag_ready_wait_completed",
+                "Knowledge service is ready",
+                "AI can now read account and style knowledge.",
+                new { },
+                ct,
+                phaseStatus: "completed");
 
             // ── Step 1 — re-index the social account if we have one ────────
-            // Only meaningful when the post is bound to a social media account.
+            // Only meaningful when the request or post is bound to a social media account.
             // For unbound drafts (SocialMediaId = null), skip this step — the
             // RAG anchor query in Step 2 is unscoped which still finds knowledge.
-            if (originalPost.SocialMediaId.HasValue && originalPost.SocialMediaId.Value != Guid.Empty)
+            if (contextSocialMediaId.HasValue)
             {
                 _logger.LogDebug("ImprovePost {Id}: re-indexing posts (max=30)...", task.Id);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "account_posts_reading_started",
+                    "AI is reading account posts",
+                    "AI is checking recent account posts before updating RAG knowledge.",
+                    new
+                    {
+                        socialMediaId = contextSocialMediaId.Value,
+                        maxPosts = 30,
+                        purpose = "Only new or changed account content is indexed.",
+                    },
+                    ct);
                 var indexResult = await _mediator.Send(
                     new IndexSocialAccountPostsCommand(
                         msg.UserId,
-                        originalPost.SocialMediaId.Value,
-                        30),
+                        contextSocialMediaId.Value,
+                        30,
+                        StopOnProviderCreditFailure: true,
+                        OnIngestProgress: (progress, cancellationToken) =>
+                            PublishAccountPostsReadProgressAsync(context, task, progress, cancellationToken),
+                        BackfillMissingMediaDocuments: false),
                     ct);
                 if (indexResult.IsFailure)
                 {
@@ -251,11 +387,47 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     indexResult.Value.NewPosts,
                     indexResult.Value.UpdatedPosts,
                     indexResult.Value.UnchangedPosts);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "account_posts_indexing_completed",
+                    "Account posts were checked",
+                    "AI finished syncing recent account content into knowledge.",
+                    new
+                    {
+                        socialMediaId = indexResult.Value.SocialMediaId,
+                        platform = indexResult.Value.Platform,
+                        documentIdPrefix = indexResult.Value.DocumentIdPrefix,
+                        totalPostsScanned = indexResult.Value.TotalPostsScanned,
+                        newPosts = indexResult.Value.NewPosts,
+                        updatedPosts = indexResult.Value.UpdatedPosts,
+                        unchangedPosts = indexResult.Value.UnchangedPosts,
+                        queuedTextDocuments = indexResult.Value.QueuedTextDocuments,
+                        queuedImageDocuments = indexResult.Value.QueuedImageDocuments,
+                        queuedVideoDocuments = indexResult.Value.QueuedVideoDocuments,
+                        queuedProfileDocuments = indexResult.Value.QueuedProfileDocuments,
+                        nonBlockingFailedDocuments = indexResult.Value.FailedIngestDocuments?.Count ?? 0,
+                    },
+                    ct,
+                    phaseStatus: "completed");
             }
             else
             {
                 _logger.LogInformation(
-                    "ImprovePost {Id}: skipping re-index (post has no SocialMediaId)", task.Id);
+                    "ImprovePost {Id}: skipping re-index (no SocialMediaId context)", task.Id);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "account_posts_indexing_skipped",
+                    "Account post indexing skipped",
+                    "No connected account was selected or stored on the post, so AI skipped account RAG indexing.",
+                    new
+                    {
+                        reason = "missing_social_media_id",
+                        originalPostId = originalPost.Id,
+                    },
+                    ct,
+                    phaseStatus: "info");
             }
 
             // ── Step 1.5 — Query rewriter. Single LLM call up-front; outputs feed
@@ -268,6 +440,20 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             var rewriterPrompt = !string.IsNullOrWhiteSpace(msg.UserInstruction)
                 ? $"Improve an existing social post: {msg.UserInstruction}. Original caption: {originalCaption}"
                 : $"Improve this social post while preserving its topic: {originalCaption}";
+            await PublishThinkingAsync(
+                context,
+                task,
+                "query_rewrite_started",
+                "AI is planning the knowledge search",
+                "AI is rewriting the improvement request into RAG and visual search terms.",
+                new
+                {
+                    style,
+                    platform = targetPlatform,
+                    hasUserInstruction = !string.IsNullOrWhiteSpace(msg.UserInstruction),
+                    originalCaptionLength = originalCaption.Length,
+                },
+                ct);
             var rewriteResult = await _queryRewriter.RewriteAsync(
                 new Application.Recommendations.Services.QueryRewriteRequest(
                     UserPrompt: rewriterPrompt,
@@ -288,6 +474,24 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 "ImprovePost {Id}: rewriter lang={Lang} intent={Intent} primary={Primary} visual={Visual}",
                 task.Id, rewrite.Language, rewrite.Intent,
                 Truncate(rewrite.PrimaryQuery, 180), Truncate(rewrite.VisualQuery, 180));
+            await PublishThinkingAsync(
+                context,
+                task,
+                "query_rewrite_completed",
+                "AI planned the knowledge search",
+                "AI created the text, visual, and keyword queries used for retrieval.",
+                new
+                {
+                    rewriteResult.IsSuccess,
+                    language = rewrite.Language,
+                    intent = rewrite.Intent,
+                    primaryQuery = rewrite.PrimaryQuery,
+                    altQueries = rewrite.AltQueries,
+                    visualQuery = rewrite.VisualQuery,
+                    keyTerms = rewrite.KeyTerms,
+                },
+                ct,
+                phaseStatus: "completed");
 
             var platformKnowledge = await FetchPlatformKnowledgeAsync(targetPlatform, rewrite.Language, ct);
             if (!string.IsNullOrWhiteSpace(platformKnowledge))
@@ -303,14 +507,35 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             // For unbound posts this still works — the query just runs unscoped.
             string ragAnswer = string.Empty;
             string ragReferencesJson = "[]";
-            if (originalPost.SocialMediaId.HasValue && originalPost.SocialMediaId.Value != Guid.Empty
-                && !string.IsNullOrWhiteSpace(originalCaption))
+            if (contextSocialMediaId.HasValue && !string.IsNullOrWhiteSpace(originalCaption))
             {
                 _logger.LogDebug("ImprovePost {Id}: querying RAG (anchor=caption, with rewriter)", task.Id);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "rag_query_started",
+                    "AI is reading knowledge",
+                    "AI is searching account knowledge for matching voice, hooks, and content formulas.",
+                    new
+                    {
+                        socialMediaId = contextSocialMediaId.Value,
+                        query = originalCaption,
+                        topK = DefaultRagTopK,
+                        precomputedRewrite = new
+                        {
+                            language = rewrite.Language,
+                            intent = rewrite.Intent,
+                            primaryQuery = rewrite.PrimaryQuery,
+                            altQueries = rewrite.AltQueries,
+                            visualQuery = rewrite.VisualQuery,
+                            keyTerms = rewrite.KeyTerms,
+                        },
+                    },
+                    ct);
                 var queryResult = await _mediator.Send(
                     new QueryAccountRecommendationsQuery(
                         msg.UserId,
-                        originalPost.SocialMediaId.Value,
+                        contextSocialMediaId.Value,
                         originalCaption,
                         DefaultRagTopK,
                         PrecomputedRewrite: rewrite),
@@ -325,18 +550,72 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     "ImprovePost {Id}: RAG returned answer={AnswerLen} chars, references={RefCount}",
                     task.Id, ragAnswer.Length, queryResult.Value.References.Count);
                 ragReferencesJson = SerializeReferences(queryResult.Value.References);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "rag_query_completed",
+                    "AI finished reading knowledge",
+                    "AI selected the account references and formulas for this improvement.",
+                    new
+                    {
+                        query = originalCaption,
+                        answer = ragAnswer,
+                        references = queryResult.Value.References,
+                    },
+                    ct,
+                    phaseStatus: "completed");
             }
             else
             {
                 _logger.LogInformation(
                     "ImprovePost {Id}: skipping RAG account-query (no SocialMediaId or empty caption)", task.Id);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "rag_query_skipped",
+                    "Account knowledge search skipped",
+                    "AI skipped account-specific RAG search because no account context or caption was available.",
+                    new
+                    {
+                        reason = contextSocialMediaId.HasValue
+                            ? "empty_caption"
+                            : "missing_social_media_id",
+                        socialMediaId = contextSocialMediaId,
+                        originalCaptionLength = originalCaption.Length,
+                    },
+                    ct,
+                    phaseStatus: "info");
             }
 
             // ── Presign the original image(s) — used as references for both
             //    the caption LLM and the image-brief LLM if those steps run ──
-            var originalRefImageUrls = await PresignAsync(msg.UserId, originalResourceIds, ct);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "original_references_started",
+                "AI is preparing original media",
+                "AI is preparing the original post media as references for improvement.",
+                new { resourceIds = originalResourceIds },
+                ct);
+            var originalImageReferences = await PresignOriginalImagesAsync(msg.UserId, originalResourceIds, ct);
+            var originalRefImageUrls = originalImageReferences
+                .Select(reference => reference.PresignedUrl)
+                .ToList();
             _logger.LogInformation(
                 "ImprovePost {Id}: presigned {Count} original image refs", task.Id, originalRefImageUrls.Count);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "original_references_completed",
+                "AI prepared original media",
+                "AI finished preparing original media references.",
+                new
+                {
+                    resourceCount = originalResourceIds.Count,
+                    referenceImageCount = originalRefImageUrls.Count,
+                },
+                ct,
+                phaseStatus: "completed");
 
             // ── Step 3 — caption regen (CONDITIONAL on ImproveCaption) ─────
             string improvedCaption = originalCaption;
@@ -352,6 +631,20 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 _logger.LogInformation(
                     "LLM[improveCaption] INPUT for ImprovePost {Id} Style={Style} ({UserTextLen} chars, {RefCount} ref images):\n{UserText}",
                     task.Id, style, captionUserText.Length, originalRefImageUrls.Count, Truncate(captionUserText, 4000));
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "caption_generation_started",
+                    "AI is writing the improved caption",
+                    "AI is rewriting the caption with account knowledge and the original media references.",
+                    new
+                    {
+                        style,
+                        platform = targetPlatform,
+                        userText = captionUserText,
+                        referenceImageCount = originalRefImageUrls.Count,
+                    },
+                    ct);
 
                 var captionResult = await _multimodalLlm.GenerateAnswerAsync(
                     new MultimodalAnswerRequest(
@@ -359,85 +652,286 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                         UserText: captionUserText,
                         ReferenceImageUrls: originalRefImageUrls),
                     ct);
-                improvedCaption = (captionResult.Answer ?? string.Empty).Trim().Trim('"');
+                var rawImprovedCaption = (captionResult.Answer ?? string.Empty).Trim().Trim('"');
+                improvedCaption = StripSocialCaptionMarkdown(rawImprovedCaption);
                 if (string.IsNullOrWhiteSpace(improvedCaption))
                 {
                     throw new InvalidOperationException("Improve-caption LLM returned empty content.");
                 }
+                if (!string.Equals(rawImprovedCaption, improvedCaption, StringComparison.Ordinal))
+                {
+                    _logger.LogInformation(
+                        "ImprovePost {Id}: stripped Markdown formatting from improved caption ({BeforeLen}->{AfterLen} chars)",
+                        task.Id, rawImprovedCaption.Length, improvedCaption.Length);
+                }
                 _logger.LogInformation(
                     "LLM[improveCaption] OUTPUT for ImprovePost {Id} ({CaptionLen} chars):\n{Caption}",
                     task.Id, improvedCaption.Length, Truncate(improvedCaption, 2000));
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "caption_generation_completed",
+                    "AI wrote the improved caption",
+                    "AI finished rewriting the caption.",
+                    new
+                    {
+                        caption = improvedCaption,
+                    },
+                    ct,
+                    phaseStatus: "completed");
             }
             else
             {
                 _logger.LogInformation(
                     "ImprovePost {Id}: caption regen skipped (ImproveCaption=false)", task.Id);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "caption_generation_skipped",
+                    "Caption improvement skipped",
+                    "This run was configured to keep the current caption.",
+                    new { improveCaption = false },
+                    ct,
+                    phaseStatus: "info");
             }
 
             // ── Step 4 — image regen (CONDITIONAL on ImproveImage) ─────────
             Guid? resultResourceId = null;
             string? resultPresignedUrl = null;
+            var resultResourceIds = new List<Guid>();
+            var resultPresignedUrls = new List<string>();
             if (msg.ImproveImage)
             {
                 // Step 3.4 — fetch style-knowledge for the requested style (localized)
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "style_knowledge_started",
+                    "AI is reading style knowledge",
+                    $"AI is reading {style} image-design knowledge from RAG.",
+                    new
+                    {
+                        style,
+                        language = rewrite.Language,
+                        documentIdPrefix = $"knowledge:image-design-{style}:",
+                    },
+                    ct);
                 var styleKnowledge = await FetchStyleKnowledgeAsync(style, rewrite.Language, ct);
                 _logger.LogInformation(
                     "ImprovePost {Id}: style-knowledge[{Style}] fetched ({Len} chars)",
                     task.Id, style, styleKnowledge.Length);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "style_knowledge_completed",
+                    "AI read style knowledge",
+                    $"AI finished reading {style} image-design knowledge.",
+                    new
+                    {
+                        style,
+                        language = rewrite.Language,
+                        documentIdPrefix = $"knowledge:image-design-{style}:",
+                        knowledge = styleKnowledge,
+                    },
+                    ct,
+                    phaseStatus: "completed");
 
-                // Step 4.0 — image-brief LLM (authors the prompt for image-gen)
-                var briefUserText = BuildImageBriefUserText(
-                    captionForImage: improvedCaption,
-                    userInstruction: msg.UserInstruction,
-                    styleKnowledge: styleKnowledge,
-                    platform: targetPlatform,
-                    platformKnowledge: platformKnowledge,
-                    style: style);
-                _logger.LogInformation(
-                    "LLM[improveImageBrief] INPUT for ImprovePost {Id} Style={Style} ({UserTextLen} chars, {RefCount} ref images)",
-                    task.Id, style, briefUserText.Length, originalRefImageUrls.Count);
-
-                var briefResult = await _multimodalLlm.GenerateAnswerAsync(
-                    new MultimodalAnswerRequest(
-                        SystemPrompt: ImproveImageBriefSystemPrompt,
-                        UserText: briefUserText,
-                        ReferenceImageUrls: originalRefImageUrls),
+                // Step 4.0 — image-brief LLM (authors the prompt for image-gen).
+                // Build a separate brief per original resource. If one shared brief sees
+                // every carousel item, it tends to blend them and Kie produces near-duplicate
+                // improved media. Each target below sees only its own original reference.
+                var imageTargets = originalImageReferences.Count > 0
+                    ? originalImageReferences
+                        .Select((reference, index) => new ImageImproveTarget(
+                            index + 1,
+                            originalImageReferences.Count,
+                            reference.ResourceId,
+                            new[] { reference.PresignedUrl }))
+                        .ToList()
+                    : new List<ImageImproveTarget> { new(1, 1, null, Array.Empty<string>()) };
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "image_brief_generation_started",
+                    imageTargets.Count == 1 ? "AI is planning the improved image" : "AI is planning improved media",
+                    imageTargets.Count == 1
+                        ? "AI is turning the caption, style knowledge, and original media into an image brief."
+                        : "AI is creating a separate image brief for each original media item.",
+                    new
+                    {
+                        style,
+                        caption = improvedCaption,
+                        mediaTotal = imageTargets.Count,
+                        referenceImageCount = originalRefImageUrls.Count,
+                        targets = imageTargets.Select(target => new
+                        {
+                            mediaOrdinal = target.Ordinal,
+                            mediaTotal = target.Total,
+                            sourceResourceId = target.SourceResourceId,
+                            referenceImageCount = target.ReferenceImageUrls.Count,
+                        }).ToList(),
+                    },
                     ct);
-                var brief = ParseImageBrief(briefResult.Answer ?? string.Empty);
-                _logger.LogInformation(
-                    "LLM[improveImageBrief] OUTPUT for ImprovePost {Id} aspect={Aspect}, prompt={PromptLen} chars, styleNotes={NotesLen} chars",
-                    task.Id, brief.AspectRatio, brief.Prompt.Length, brief.StyleNotes?.Length ?? 0);
+
+                var imageBriefs = (await Task.WhenAll(imageTargets.Select(async imageTarget =>
+                {
+                    var briefUserText = BuildImageBriefUserText(
+                        captionForImage: improvedCaption,
+                        userInstruction: msg.UserInstruction,
+                        styleKnowledge: styleKnowledge,
+                        platform: targetPlatform,
+                        platformKnowledge: platformKnowledge,
+                        style: style,
+                        target: imageTarget);
+                    _logger.LogInformation(
+                        "LLM[improveImageBrief] INPUT for ImprovePost {Id} Style={Style} Media={Ordinal}/{Total} SourceResourceId={SourceResourceId} ({UserTextLen} chars, {RefCount} ref images)",
+                        task.Id, style, imageTarget.Ordinal, imageTarget.Total,
+                        imageTarget.SourceResourceId,
+                        briefUserText.Length, imageTarget.ReferenceImageUrls.Count);
+
+                    var briefResult = await _multimodalLlm.GenerateAnswerAsync(
+                        new MultimodalAnswerRequest(
+                            SystemPrompt: ImproveImageBriefSystemPrompt,
+                            UserText: briefUserText,
+                            ReferenceImageUrls: imageTarget.ReferenceImageUrls),
+                        ct);
+                    var brief = ParseImageBrief(briefResult.Answer ?? string.Empty);
+                    _logger.LogInformation(
+                        "LLM[improveImageBrief] OUTPUT for ImprovePost {Id} Media={Ordinal}/{Total} aspect={Aspect}, prompt={PromptLen} chars, styleNotes={NotesLen} chars",
+                        task.Id, imageTarget.Ordinal, imageTarget.Total,
+                        brief.AspectRatio, brief.Prompt.Length, brief.StyleNotes?.Length ?? 0);
+                    return new ImproveImageBrief(imageTarget, brief);
+                })))
+                    .OrderBy(item => item.Target.Ordinal)
+                    .ToList();
+
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "image_brief_generation_completed",
+                    imageBriefs.Count == 1 ? "AI planned the improved image" : "AI planned improved media",
+                    imageBriefs.Count == 1
+                        ? "AI finished the image-generation brief."
+                        : "AI finished separate image-generation briefs for each media item.",
+                    new
+                    {
+                        mediaTotal = imageBriefs.Count,
+                        briefs = imageBriefs.Select(item => new
+                        {
+                            mediaOrdinal = item.Target.Ordinal,
+                            mediaTotal = item.Target.Total,
+                            sourceResourceId = item.Target.SourceResourceId,
+                            prompt = item.Brief.Prompt,
+                            item.Brief.AspectRatio,
+                            item.Brief.StyleNotes,
+                            referenceImageCount = item.Target.ReferenceImageUrls.Count,
+                        }).ToList(),
+                    },
+                    ct,
+                    phaseStatus: "completed");
 
                 // Step 4.1 — image generation
                 var imageBaseSystem = ImageSystemPromptFor(style);
-                var fullImagePrompt =
-                    $"{brief.Prompt}\n\n" +
-                    $"Aspect ratio: {brief.AspectRatio}. " +
-                    "Render at high resolution. Output an image, no text response.";
-                var fullImageSystemPrompt = string.IsNullOrWhiteSpace(brief.StyleNotes)
-                    ? imageBaseSystem
-                    : $"{imageBaseSystem}\n\nAdditional style constraints from the art-director brief: {brief.StyleNotes}";
-                _logger.LogInformation(
-                    "IMAGEGEN INPUT for ImprovePost {Id} Style={Style} ({RefCount} ref images)\n  --- prompt ---\n{Prompt}\n  --- system ---\n{System}",
-                    task.Id, style, originalRefImageUrls.Count,
-                    Truncate(fullImagePrompt, 2500),
-                    Truncate(fullImageSystemPrompt, 1500));
+                var imagePlans = imageBriefs.Select(item =>
+                {
+                    var baseImageSystemPrompt = string.IsNullOrWhiteSpace(item.Brief.StyleNotes)
+                        ? imageBaseSystem
+                        : $"{imageBaseSystem}\n\nAdditional style constraints from this media item's art-director brief: {item.Brief.StyleNotes}";
+                    return new ImproveImagePlan(
+                        item.Target,
+                        item.Brief,
+                        BuildImproveImagePrompt(item.Brief, item.Target),
+                        BuildImproveImageSystemPrompt(baseImageSystemPrompt, item.Target));
+                }).ToList();
 
-                var imageResult = await _imageGenClient.GenerateImageAsync(
-                    new ImageGenerationRequest(
-                        Prompt: fullImagePrompt,
-                        ReferenceImageUrls: originalRefImageUrls,
-                        SystemPrompt: fullImageSystemPrompt),
+                foreach (var imagePlan in imagePlans)
+                {
+                    _logger.LogInformation(
+                        "IMAGEGEN INPUT for ImprovePost {Id} Style={Style} Media={Ordinal}/{Total} SourceResourceId={SourceResourceId} ({RefCount} ref images)\n  --- prompt ---\n{Prompt}\n  --- system ---\n{System}",
+                        task.Id, style, imagePlan.Target.Ordinal, imagePlan.Target.Total, imagePlan.Target.SourceResourceId, imagePlan.Target.ReferenceImageUrls.Count,
+                        Truncate(imagePlan.Prompt, 2500),
+                        Truncate(imagePlan.SystemPrompt, 1500));
+                    await PublishThinkingAsync(
+                        context,
+                        task,
+                        $"image_generation_started_{imagePlan.Target.Ordinal}",
+                        $"AI is generating improved media {imagePlan.Target.Ordinal}/{imagePlan.Target.Total}",
+                        "AI is generating improved media from that item's own brief and original reference.",
+                        new
+                        {
+                            style,
+                            prompt = imagePlan.Prompt,
+                            systemPrompt = imagePlan.SystemPrompt,
+                            mediaOrdinal = imagePlan.Target.Ordinal,
+                            mediaTotal = imagePlan.Target.Total,
+                            sourceResourceId = imagePlan.Target.SourceResourceId,
+                            referenceImageCount = imagePlan.Target.ReferenceImageUrls.Count,
+                        },
+                        ct);
+
+                }
+
+                var generatedImages = (await Task.WhenAll(imagePlans.Select(async imagePlan =>
+                {
+                    var result = await _imageGenClient.GenerateImageAsync(
+                        new ImageGenerationRequest(
+                            Prompt: imagePlan.Prompt,
+                            ReferenceImageUrls: imagePlan.Target.ReferenceImageUrls,
+                            SystemPrompt: imagePlan.SystemPrompt),
+                        ct);
+                    return new GeneratedImproveImage(imagePlan.Target.Ordinal, imagePlan.Target.Total, result);
+                })))
+                    .OrderBy(image => image.Ordinal)
+                    .ToList();
+
+                foreach (var generatedImage in generatedImages)
+                {
+                    _logger.LogInformation(
+                        "IMAGEGEN OUTPUT for ImprovePost {Id} Media={Ordinal}/{Total}: mime={MimeType}, dataUrlLen={Len}, costUsd={Cost}",
+                        task.Id, generatedImage.Ordinal, generatedImage.Total,
+                        generatedImage.Result.MimeType, generatedImage.Result.DataUrl.Length, generatedImage.Result.CostUsd);
+                    await PublishThinkingAsync(
+                        context,
+                        task,
+                        $"image_generation_completed_{generatedImage.Ordinal}",
+                        $"AI generated improved media {generatedImage.Ordinal}/{generatedImage.Total}",
+                        "AI finished generating the improved media.",
+                        new
+                        {
+                            generatedImage.Result.MimeType,
+                            dataUrlLength = generatedImage.Result.DataUrl.Length,
+                            generatedImage.Result.PromptTokens,
+                            generatedImage.Result.CompletionTokens,
+                            generatedImage.Result.CostUsd,
+                            mediaOrdinal = generatedImage.Ordinal,
+                            mediaTotal = generatedImage.Total,
+                        },
+                        ct,
+                        phaseStatus: "completed");
+                }
+
+                _logger.LogDebug(
+                    "ImprovePost {Id}: uploading {Count} generated image(s) to S3...",
+                    task.Id, generatedImages.Count);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "resource_upload_started",
+                    "AI is saving improved media",
+                    "AI is uploading the improved media to workspace storage.",
+                    new
+                    {
+                        workspaceId = msg.WorkspaceId,
+                        resourceType = "image",
+                        status = "generated",
+                        imageCount = generatedImages.Count,
+                        contentTypes = generatedImages.Select(image => image.Result.MimeType).ToList(),
+                        originKind = ResourceOriginKinds.AiGenerated,
+                    },
                     ct);
-                _logger.LogInformation(
-                    "IMAGEGEN OUTPUT for ImprovePost {Id}: mime={MimeType}, dataUrlLen={Len}, costUsd={Cost}",
-                    task.Id, imageResult.MimeType, imageResult.DataUrl.Length, imageResult.CostUsd);
-
-                // Step 4.2 — upload to S3 via User microservice
-                _logger.LogDebug("ImprovePost {Id}: uploading generated image to S3...", task.Id);
                 var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
                     userId: msg.UserId,
-                    urls: new[] { imageResult.DataUrl },
+                    urls: generatedImages.Select(image => image.Result.DataUrl).ToArray(),
                     status: "generated",
                     resourceType: "image",
                     cancellationToken: ct,
@@ -446,31 +940,112 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                         OriginKind: ResourceOriginKinds.AiGenerated,
                         OriginChatSessionId: null,
                         OriginChatId: null));
-                if (uploadResult.IsFailure || uploadResult.Value.Count == 0)
+                if (uploadResult.IsFailure || uploadResult.Value.Count < generatedImages.Count)
                 {
                     throw new InvalidOperationException(
-                        $"S3 upload failed: {uploadResult.Error?.Code} {uploadResult.Error?.Description}");
+                        $"S3 upload failed for improved media: {uploadResult.Error?.Code} {uploadResult.Error?.Description}");
                 }
-                var uploaded = uploadResult.Value[0];
-                resultResourceId = uploaded.ResourceId;
-                resultPresignedUrl = uploaded.PresignedUrl;
+
+                var uploadedImages = uploadResult.Value
+                    .Take(generatedImages.Count)
+                    .Select((uploaded, index) =>
+                        new UploadedImproveImage(
+                            generatedImages[index].Ordinal,
+                            generatedImages[index].Total,
+                            uploaded.ResourceId,
+                            uploaded.PresignedUrl,
+                            uploaded.ContentType,
+                            uploaded.ResourceType,
+                            uploaded.OriginKind,
+                            uploaded.OriginSourceUrl,
+                            uploaded.OriginChatSessionId,
+                            uploaded.OriginChatId))
+                    .ToList();
+                resultResourceIds.AddRange(uploadedImages.Select(image => image.ResourceId));
+                resultPresignedUrls.AddRange(uploadedImages.Select(image => image.PresignedUrl));
+                resultResourceId ??= uploadedImages[0].ResourceId;
+                resultPresignedUrl ??= uploadedImages[0].PresignedUrl;
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "resource_upload_completed",
+                    "AI saved improved media",
+                    "AI finished uploading the improved media.",
+                    new
+                    {
+                        resourceIds = uploadedImages.Select(image => image.ResourceId).ToList(),
+                        presignedUrls = uploadedImages.Select(image => image.PresignedUrl).ToList(),
+                        mediaTotal = uploadedImages.Count,
+                        items = uploadedImages,
+                    },
+                    ct,
+                    phaseStatus: "completed");
             }
             else
             {
                 _logger.LogInformation(
                     "ImprovePost {Id}: image regen skipped (ImproveImage=false)", task.Id);
+                await PublishThinkingAsync(
+                    context,
+                    task,
+                    "image_generation_skipped",
+                    "Image improvement skipped",
+                    "This run was configured to keep the current media.",
+                    new { improveImage = false },
+                    ct,
+                    phaseStatus: "info");
             }
 
             // ── Step 5 — persist outputs on RecommendPost row, mark Completed ──
             // Note: original Post is NEVER modified.
+            await PublishThinkingAsync(
+                context,
+                task,
+                "improve_post_finalizing_started",
+                "AI is finalizing the suggestion",
+                "AI is saving the improved caption and media suggestion.",
+                new
+                {
+                    hasImprovedCaption = msg.ImproveCaption,
+                    hasImprovedImage = resultResourceIds.Count > 0,
+                    improvedMediaCount = resultResourceIds.Count,
+                },
+                ct);
             task.Status = RecommendPostStatuses.Completed;
             task.ResultCaption = msg.ImproveCaption ? improvedCaption : null;
             task.ResultResourceId = resultResourceId;
             task.ResultPresignedUrl = resultPresignedUrl;
+            task.ResultResourceIdsJson = resultResourceIds.Count == 0
+                ? null
+                : JsonSerializer.Serialize(resultResourceIds);
+            task.ResultPresignedUrlsJson = resultPresignedUrls.Count == 0
+                ? null
+                : JsonSerializer.Serialize(resultPresignedUrls);
             task.ResultReferencesJson = ragReferencesJson;
             task.CompletedAt = DateTimeExtensions.PostgreSqlUtcNow;
             task.UpdatedAt = task.CompletedAt;
             await _taskRepository.SaveChangesAsync(ct);
+            await MarkSpendRecordDebitedAsync(task.Id, ct);
+            await PublishThinkingAsync(
+                context,
+                task,
+                "improve_post_finalized",
+                "AI finalized the suggestion",
+                "AI saved the improved post suggestion.",
+                new
+                {
+                    recommendPostId = task.Id,
+                    originalPostId = task.OriginalPostId,
+                    resourceId = task.ResultResourceId,
+                    presignedUrl = task.ResultPresignedUrl,
+                    resourceIds = resultResourceIds,
+                    presignedUrls = resultPresignedUrls,
+                    resultResourceIds,
+                    resultPresignedUrls,
+                    caption = task.ResultCaption,
+                },
+                ct,
+                phaseStatus: "completed");
 
             await PublishImproveNotificationAsync(
                 context,
@@ -481,6 +1056,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 task,
                 task.CompletedAt,
                 notificationPlatform,
+                msg.SocialMediaId,
                 ct);
 
             _logger.LogInformation(
@@ -498,6 +1074,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             try
             {
                 await _taskRepository.SaveChangesAsync(ct);
+                await RefundSpendRecordAsync(msg.UserId, task.Id, ct);
             }
             catch (Exception saveEx)
             {
@@ -506,6 +1083,19 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
 
             try
             {
+                await PublishErrorThinkingAsync(
+                    context,
+                    task,
+                    "generation_failed",
+                    "Post improvement failed",
+                    "AI hit an error and stopped improving this post.",
+                    ex,
+                    new
+                    {
+                        originalPostId = task.OriginalPostId,
+                        recommendPostId = task.Id,
+                    },
+                    ct);
                 await PublishImproveNotificationAsync(
                     context,
                     msg.UserId,
@@ -515,6 +1105,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     task,
                     task.CompletedAt,
                     notificationPlatform,
+                    msg.SocialMediaId,
                     ct);
             }
             catch (Exception notifyEx)
@@ -524,7 +1115,226 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         }
     }
 
+    private async Task MarkSpendRecordDebitedAsync(Guid taskId, CancellationToken cancellationToken)
+    {
+        var records = await _aiSpendRecordRepository.GetByReferenceAsync(
+            CoinReferenceTypes.ImprovePost,
+            taskId.ToString(),
+            cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Pending, StringComparison.OrdinalIgnoreCase))
+            {
+                record.Status = AiSpendStatuses.Debited;
+                record.UpdatedAt = updatedAt;
+                _aiSpendRecordRepository.Update(record);
+            }
+        }
+
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RefundSpendRecordAsync(Guid userId, Guid taskId, CancellationToken cancellationToken)
+    {
+        var records = await _aiSpendRecordRepository.GetByReferenceAsync(
+            CoinReferenceTypes.ImprovePost,
+            taskId.ToString(),
+            cancellationToken);
+
+        if (records.Count == 0)
+        {
+            return;
+        }
+
+        var updatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var record in records)
+        {
+            if (string.Equals(record.Status, AiSpendStatuses.Refunded, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var refund = await _billingClient.RefundAsync(
+                userId,
+                record.TotalCoins,
+                CoinDebitReasons.PostEnhancementRefund,
+                CoinReferenceTypes.ImprovePost,
+                taskId.ToString(),
+                cancellationToken);
+            if (refund.IsFailure)
+            {
+                _logger.LogWarning(
+                    "ImprovePost {TaskId}: failed to refund spend record {SpendRecordId}: {Code} {Message}",
+                    taskId,
+                    record.Id,
+                    refund.Error.Code,
+                    refund.Error.Description);
+                continue;
+            }
+
+            record.Status = AiSpendStatuses.Refunded;
+            record.UpdatedAt = updatedAt;
+            _aiSpendRecordRepository.Update(record);
+        }
+
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────
+
+    private static bool ShouldSuppressTerminalThinking(string action, string? phaseStatus)
+    {
+        return string.Equals(phaseStatus, "completed", StringComparison.OrdinalIgnoreCase)
+               || action.EndsWith("_completed", StringComparison.OrdinalIgnoreCase)
+               || action.EndsWith("_finalized", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task PublishThinkingAsync(
+        ConsumeContext<GenerateRecommendPostStarted> context,
+        RecommendPost task,
+        string action,
+        string title,
+        string message,
+        object? details,
+        CancellationToken cancellationToken,
+        string phaseStatus = "processing")
+    {
+        if (ShouldSuppressTerminalThinking(action, phaseStatus))
+        {
+            _logger.LogDebug(
+                "ImprovePost {Id}: suppressed terminal thinking notification action={Action} phaseStatus={PhaseStatus}",
+                task.Id,
+                action,
+                phaseStatus);
+            return;
+        }
+
+        var createdAt = DateTimeExtensions.PostgreSqlUtcNow;
+
+        try
+        {
+            await context.Publish(
+                NotificationRequestedEventFactory.CreateForUser(
+                    task.UserId,
+                    NotificationTypes.AiPostImproveThinking,
+                    title,
+                    message,
+                    new
+                    {
+                        correlationId = task.CorrelationId,
+                        recommendPostId = task.Id,
+                        originalPostId = task.OriginalPostId,
+                        postId = task.OriginalPostId,
+                        userId = task.UserId,
+                        workspaceId = task.WorkspaceId,
+                        taskStatus = task.Status,
+                        status = task.Status,
+                        phaseStatus,
+                        action,
+                        details,
+                        resourceId = task.ResultResourceId,
+                        presignedUrl = task.ResultPresignedUrl,
+                        resourceIds = StartImprovePostCommandHandler.ParseResultResourceIds(task),
+                        presignedUrls = StartImprovePostCommandHandler.ParseResultPresignedUrls(task),
+                        caption = task.ResultCaption,
+                        resultResourceId = task.ResultResourceId,
+                        resultPresignedUrl = task.ResultPresignedUrl,
+                        resultResourceIds = StartImprovePostCommandHandler.ParseResultResourceIds(task),
+                        resultPresignedUrls = StartImprovePostCommandHandler.ParseResultPresignedUrls(task),
+                        resultCaption = task.ResultCaption,
+                        errorCode = task.ErrorCode,
+                        errorMessage = task.ErrorMessage,
+                        createdAt,
+                    },
+                    createdAt: createdAt,
+                    source: NotificationSourceConstants.Creator),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "ImprovePost {Id}: failed to publish thinking notification action={Action}",
+                task.Id,
+                action);
+        }
+    }
+
+    private Task PublishErrorThinkingAsync(
+        ConsumeContext<GenerateRecommendPostStarted> context,
+        RecommendPost task,
+        string action,
+        string title,
+        string message,
+        Exception error,
+        object? details,
+        CancellationToken cancellationToken,
+        string phaseStatus = "failed")
+    {
+        return PublishThinkingAsync(
+            context,
+            task,
+            action,
+            title,
+            message,
+            new
+            {
+                errorCode = error.GetType().Name,
+                errorMessage = error.Message,
+                exception = Truncate(error.ToString(), 6000),
+                details,
+            },
+            cancellationToken,
+            phaseStatus: phaseStatus);
+    }
+
+    private Task PublishAccountPostsReadProgressAsync(
+        ConsumeContext<GenerateRecommendPostStarted> context,
+        RecommendPost task,
+        Application.Recommendations.Models.IndexSocialAccountIngestProgress progress,
+        CancellationToken cancellationToken)
+    {
+        var total = Math.Max(progress.TotalDocuments, 0);
+        var completed = total > 0
+            ? Math.Clamp(progress.CompletedDocuments, 0, total)
+            : Math.Max(progress.CompletedDocuments, 0);
+        var batchStart = total > 0 ? Math.Clamp(progress.CurrentBatchStart, 1, total) : 0;
+        var batchEnd = total > 0 ? Math.Clamp(progress.CurrentBatchEnd, batchStart, total) : 0;
+        var label = total > 0
+            ? batchEnd > batchStart ? $"{batchStart}-{batchEnd}/{total}" : $"{completed}/{total}"
+            : "0/0";
+
+        return PublishThinkingAsync(
+            context,
+            task,
+            "account_posts_reading_started",
+            "AI is reading account posts",
+            total > 0
+                ? $"AI is indexing account knowledge ({label})."
+                : "AI checked account knowledge; nothing new needs indexing.",
+            new
+            {
+                socialMediaId = progress.SocialMediaId,
+                platform = progress.Platform,
+                documentIdPrefix = progress.DocumentIdPrefix,
+                completedDocuments = completed,
+                totalDocuments = total,
+                currentBatchStart = batchStart,
+                currentBatchEnd = batchEnd,
+                progressLabel = label,
+                ingestedDocuments = progress.IngestedDocuments,
+                unchangedDocuments = progress.UnchangedDocuments,
+                failedDocuments = progress.FailedDocuments,
+            },
+            cancellationToken);
+    }
 
     private static Task PublishImproveNotificationAsync(
         ConsumeContext<GenerateRecommendPostStarted> context,
@@ -535,6 +1345,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         RecommendPost task,
         DateTime? createdAt,
         string? platform,
+        Guid? socialMediaId,
         CancellationToken cancellationToken)
     {
         return context.Publish(
@@ -557,10 +1368,13 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     improveImage = task.ImproveImage,
                     style = task.Style,
                     platform = platform,
+                    socialMediaId = socialMediaId,
                     userInstruction = task.UserInstruction,
                     resultCaption = task.ResultCaption,
                     resultResourceId = task.ResultResourceId,
                     resultPresignedUrl = task.ResultPresignedUrl,
+                    resultResourceIds = StartImprovePostCommandHandler.ParseResultResourceIds(task),
+                    resultPresignedUrls = StartImprovePostCommandHandler.ParseResultPresignedUrls(task),
                     errorCode = task.ErrorCode,
                     errorMessage = task.ErrorMessage,
                     createdAt = task.CreatedAt,
@@ -588,14 +1402,34 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         return ids;
     }
 
-    private async Task<List<string>> PresignAsync(Guid userId, IReadOnlyList<Guid> resourceIds, CancellationToken ct)
+    private async Task<List<PresignedOriginalImageReference>> PresignOriginalImagesAsync(
+        Guid userId,
+        IReadOnlyList<Guid> resourceIds,
+        CancellationToken ct)
     {
-        if (resourceIds.Count == 0) return new List<string>();
+        if (resourceIds.Count == 0)
+        {
+            return new List<PresignedOriginalImageReference>();
+        }
+
         var presignResult = await _userResourceService.GetPresignedResourcesAsync(userId, resourceIds, ct);
-        if (presignResult.IsFailure) return new List<string>();
-        return presignResult.Value
+        if (presignResult.IsFailure)
+        {
+            return new List<PresignedOriginalImageReference>();
+        }
+
+        var resourcesById = presignResult.Value
             .Where(r => !string.IsNullOrWhiteSpace(r.PresignedUrl))
-            .Select(r => r.PresignedUrl)
+            .GroupBy(r => r.ResourceId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        return resourceIds
+            .Where(resourceId => resourcesById.ContainsKey(resourceId))
+            .Select(resourceId =>
+            {
+                var resource = resourcesById[resourceId];
+                return new PresignedOriginalImageReference(resource.ResourceId, resource.PresignedUrl);
+            })
             .ToList();
     }
 
@@ -645,7 +1479,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         string styleKnowledge,
         string? platform,
         string platformKnowledge,
-        string style)
+        string style,
+        ImageImproveTarget target)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"Requested post STYLE: {style}");
@@ -654,12 +1489,32 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
             sb.AppendLine($"Target platform: {platform}");
         }
         sb.AppendLine();
-        sb.AppendLine("=== Caption (the new image must illustrate this) ===");
+        sb.AppendLine("=== Current media item scope ===");
+        if (target.SourceResourceId.HasValue)
+        {
+            sb.AppendLine($"Source resource id for this call: {target.SourceResourceId.Value:D}");
+        }
+        if (target.Total > 1)
+        {
+            sb.AppendLine($"You are improving ONLY media item {target.Ordinal} of {target.Total}.");
+            sb.AppendLine("The attached reference image(s), if any, belong only to this one media item.");
+            sb.AppendLine("Do not infer subject, objects, layout, or text from sibling carousel items.");
+            sb.AppendLine("Do not create a combined collage or comparison of multiple media items.");
+            sb.AppendLine("The new image must preserve and improve the subject visible in this attached media item only.");
+            sb.AppendLine("The caption may describe the whole carousel; use it only for tone/context and do not visualize caption parts that refer to other media items.");
+            sb.AppendLine("If the caption or user instruction mentions multiple cameras/products, choose only the camera/product visible in the attached reference for this call.");
+        }
+        else
+        {
+            sb.AppendLine("You are improving the only media item in this post.");
+        }
+        sb.AppendLine();
+        sb.AppendLine("=== Caption (tone/context only; attached media defines the exact subject) ===");
         sb.AppendLine(string.IsNullOrWhiteSpace(captionForImage) ? "(empty)" : captionForImage);
         sb.AppendLine();
         if (!string.IsNullOrWhiteSpace(userInstruction))
         {
-            sb.AppendLine("=== User improvement instruction ===");
+            sb.AppendLine("=== User improvement instruction (apply only the part relevant to this attached media item) ===");
             sb.AppendLine(userInstruction);
             sb.AppendLine();
         }
@@ -779,6 +1634,36 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
 
     private sealed record ImageBrief(string Prompt, string AspectRatio, string? StyleNotes);
 
+    private sealed record PresignedOriginalImageReference(Guid ResourceId, string PresignedUrl);
+
+    private sealed record ImageImproveTarget(
+        int Ordinal,
+        int Total,
+        Guid? SourceResourceId,
+        IReadOnlyList<string> ReferenceImageUrls);
+
+    private sealed record ImproveImageBrief(ImageImproveTarget Target, ImageBrief Brief);
+
+    private sealed record ImproveImagePlan(
+        ImageImproveTarget Target,
+        ImageBrief Brief,
+        string Prompt,
+        string SystemPrompt);
+
+    private sealed record GeneratedImproveImage(int Ordinal, int Total, ImageGenerationResult Result);
+
+    private sealed record UploadedImproveImage(
+        int Ordinal,
+        int Total,
+        Guid ResourceId,
+        string PresignedUrl,
+        string? ContentType,
+        string? ResourceType,
+        string? OriginKind,
+        string? OriginSourceUrl,
+        Guid? OriginChatSessionId,
+        Guid? OriginChatId);
+
     private static string SerializeReferences(IReadOnlyList<Application.Recommendations.Queries.RecommendationReference> refs)
     {
         if (refs.Count == 0) return "[]";
@@ -794,6 +1679,49 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
 
     private static string Truncate(string s, int max)
         => string.IsNullOrEmpty(s) || s.Length <= max ? s : s[..max] + "...[truncated]";
+
+    private static string StripSocialCaptionMarkdown(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return string.Empty;
+        }
+
+        var text = raw
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Trim();
+
+        // Strip fenced-code wrappers first so fence markers never leak into captions.
+        text = Regex.Replace(text, @"```[a-zA-Z0-9_-]*\s*([\s\S]*?)```", "$1");
+
+        // Convert markdown links to visible plain text plus the bare URL when available.
+        text = Regex.Replace(
+            text,
+            @"\[([^\]\r\n]+)\]\((https?:\/\/[^\s)]+|www\.[^\s)]+|mailto:[^\s)]+|tel:[^\s)]+)\)",
+            "$1 $2",
+            RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"\[([^\]\r\n]+)\]\([^\)\r\n]+\)", "$1");
+
+        // Remove line-level markdown while preserving normal hashtags like #BrandName.
+        text = Regex.Replace(text, @"(?m)^\s{0,3}#{1,6}\s+", string.Empty);
+        text = Regex.Replace(text, @"(?m)^\s*>\s?", string.Empty);
+        text = Regex.Replace(text, @"(?m)^\s*[-*+]\s+", string.Empty);
+        text = Regex.Replace(text, @"(?m)^\s*(?:[-*_]\s*){3,}$", string.Empty);
+
+        // Remove inline emphasis/code markers without changing the caption wording.
+        text = Regex.Replace(text, @"\*\*([^\r\n*]+)\*\*", "$1");
+        text = Regex.Replace(text, @"__([^\r\n_]+)__", "$1");
+        text = Regex.Replace(text, @"(?<!\*)\*([^\r\n*]+)\*(?!\*)", "$1");
+        text = Regex.Replace(text, @"(?<!_)_([^\r\n_]+)_(?!_)", "$1");
+        text = Regex.Replace(text, @"~~([^\r\n~]+)~~", "$1");
+        text = Regex.Replace(text, @"`([^`\r\n]+)`", "$1");
+
+        text = Regex.Replace(text, @"[ \t]+\n", "\n");
+        text = Regex.Replace(text, @"\n{3,}", "\n\n");
+
+        return text.Trim().Trim('"');
+    }
 
     /// <summary>
     /// Localized literal for the style-design knowledge query. Same table as the

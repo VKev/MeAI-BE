@@ -9,44 +9,55 @@ namespace Infrastructure.Logic.Seeding;
 
 public sealed class CoinPricingSeeder
 {
-    // 1 coin = $0.01 USD, markup 2x over raw Kie cost:
-    //   - nano-banana-pro image (1K)  ~$0.03 raw ×2 = $0.06 = 6 coins
-    //   - nano-banana-pro image (2K)  ~$0.06 raw ×2 = $0.12 = 12 coins
-    //   - ideogram/v3 image           ~$0.08 raw ×2 = $0.16 = 16 coins
-    //   - image reframe variant       same as source gen at 1K = 6 coins
-    //   - veo3_fast 8s clip           ~$0.45 raw ×2 = $0.90 = 90 coins
-    //   - veo3 / veo3_quality 8s      ~$2.70 raw ×2 = $5.40 = 540 coins
+    // Billing baseline:
+    //   - 1 coin = 10 VND
+    //   - 1 USD ~= 26,309 VND (reference snapshot used for seed calibration)
+    //   - therefore 1 USD ~= 2,630.90 coins
+    //
+    // Kie-backed image/video entries keep the existing product markup assumptions, but are
+    // now converted into the real coin currency instead of the old "$0.01 per coin" scheme.
+    //
+    // OpenRouter-backed text/image workflows are seeded from current OpenRouter pricing or
+    // from the repo's documented workflow cost (for composite aliases such as draft-post-v1).
     // Model="*" is a wildcard fallback — any unseeded model falls back to this row so a
     // brand-new Kie model doesn't 400 the generation request. Admins can tweak at runtime.
     private static readonly (string ActionType, string Model, string? Variant, string Unit, decimal Cost)[] Defaults =
     {
-        (CoinActionTypes.ImageGeneration, "nano-banana-pro", "1K", "per_image", 6m),
-        (CoinActionTypes.ImageGeneration, "nano-banana-pro", "2K", "per_image", 12m),
-        (CoinActionTypes.ImageGeneration, "nano-banana-pro", null, "per_image", 6m),
-        (CoinActionTypes.ImageGeneration, "ideogram/v3-text-to-image", "1K", "per_image", 16m),
-        (CoinActionTypes.ImageGeneration, "ideogram/v3-text-to-image", "2K", "per_image", 24m),
-        (CoinActionTypes.ImageGeneration, "ideogram/v3-text-to-image", null, "per_image", 16m),
-        (CoinActionTypes.ImageGeneration, "*", null, "per_image", 10m),
-        (CoinActionTypes.ImageReframeVariant, "nano-banana-pro", null, "per_variant", 6m),
-        (CoinActionTypes.ImageReframeVariant, "*", null, "per_variant", 10m),
-        (CoinActionTypes.VideoGeneration, "veo3_fast", null, "per_clip", 90m),
-        (CoinActionTypes.VideoGeneration, "veo3", null, "per_clip", 540m),
-        (CoinActionTypes.VideoGeneration, "veo3_quality", null, "per_clip", 540m),
-        (CoinActionTypes.VideoGeneration, "*", null, "per_clip", 120m),
+        (CoinActionTypes.ImageGeneration, "nano-banana-pro", "1K", "per_image", UsdToCoins(0.06m)),
+        (CoinActionTypes.ImageGeneration, "nano-banana-pro", "2K", "per_image", UsdToCoins(0.12m)),
+        (CoinActionTypes.ImageGeneration, "nano-banana-pro", null, "per_image", UsdToCoins(0.06m)),
+        (CoinActionTypes.ImageGeneration, "ideogram/v3-text-to-image", "1K", "per_image", UsdToCoins(0.16m)),
+        (CoinActionTypes.ImageGeneration, "ideogram/v3-text-to-image", "2K", "per_image", UsdToCoins(0.24m)),
+        (CoinActionTypes.ImageGeneration, "ideogram/v3-text-to-image", null, "per_image", UsdToCoins(0.16m)),
+        (CoinActionTypes.ImageGeneration, "*", null, "per_image", UsdToCoins(0.10m)),
+        (CoinActionTypes.ImageReframeVariant, "nano-banana-pro", null, "per_variant", UsdToCoins(0.06m)),
+        (CoinActionTypes.ImageReframeVariant, "*", null, "per_variant", UsdToCoins(0.10m)),
+        (CoinActionTypes.VideoGeneration, "veo3_fast", null, "per_clip", UsdToCoins(0.90m)),
+        (CoinActionTypes.VideoGeneration, "veo3", null, "per_clip", UsdToCoins(5.40m)),
+        (CoinActionTypes.VideoGeneration, "veo3_quality", null, "per_clip", UsdToCoins(5.40m)),
+        (CoinActionTypes.VideoGeneration, "*", null, "per_clip", UsdToCoins(1.20m)),
         // Caption generation is charged per generated social platform/post.
-        // The interactive captions endpoint uses OpenRouter GPT-4o; older flows still
-        // have explicit Kie GPT rows, with "*" as a safety fallback.
-        (CoinActionTypes.CaptionGeneration, "openai/gpt-4o", null, "per_platform", 3m),
-        (CoinActionTypes.CaptionGeneration, "gpt-5-4", null, "per_platform", 3m),
-        (CoinActionTypes.CaptionGeneration, "gpt-5-2", null, "per_platform", 2m),
-        (CoinActionTypes.CaptionGeneration, "*", null, "per_platform", 3m),
+        // The interactive captions endpoint uses OpenRouter GPT-4o. The mini rows cover
+        // lighter legacy caption flows that still resolve via model-default pricing.
+        (CoinActionTypes.CaptionGeneration, "openai/gpt-4o", null, "per_platform", UsdToCoins(0.015m)),
+        (CoinActionTypes.CaptionGeneration, "gpt-4o-mini", null, "per_platform", UsdToCoins(0.0008m)),
+        (CoinActionTypes.CaptionGeneration, "gpt-5-2", null, "per_platform", UsdToCoins(0.0010m)),
+        (CoinActionTypes.CaptionGeneration, "*", null, "per_platform", UsdToCoins(0.0010m)),
         // Enhance-existing-post v1 reuses the same caption engine + price model as batch
         // caption generation, but tracks spend separately so usage/billing can distinguish it.
-        (CoinActionTypes.PostEnhancement, "gpt-5-4", null, "per_platform", 3m),
-        (CoinActionTypes.PostEnhancement, "gpt-5-2", null, "per_platform", 2m),
-        (CoinActionTypes.PostEnhancement, "*", null, "per_platform", 3m),
-        (CoinActionTypes.FormulaGeneration, "gpt-5-4", null, "per_variant", 2m),
-        (CoinActionTypes.FormulaGeneration, "*", null, "per_variant", 2m)
+        (CoinActionTypes.PostEnhancement, "gpt-4o-mini", null, "per_platform", UsdToCoins(0.0008m)),
+        (CoinActionTypes.PostEnhancement, "gpt-5-2", null, "per_platform", UsdToCoins(0.0010m)),
+        // Recommendation draft and improve flows use fixed product pricing in the start
+        // command handlers: 100 coins for the request plus 50 for each generated image
+        // after the first. Keep the catalog base rows aligned for admin visibility.
+        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "caption", "per_request", GeneratedPostCoinCost.BaseCoins),
+        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "image", "per_request", GeneratedPostCoinCost.BaseCoins),
+        (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "caption_image", "per_request", GeneratedPostCoinCost.BaseCoins),
+        (CoinActionTypes.PostEnhancement, "*", null, "per_platform", UsdToCoins(0.0010m)),
+        (CoinActionTypes.DraftPostGeneration, "openrouter/draft-post-v1", null, "per_request", GeneratedPostCoinCost.BaseCoins),
+        (CoinActionTypes.DraftPostGeneration, "*", null, "per_request", GeneratedPostCoinCost.BaseCoins),
+        (CoinActionTypes.FormulaGeneration, "gpt-4o-mini", null, "per_variant", UsdToCoins(0.0004m)),
+        (CoinActionTypes.FormulaGeneration, "*", null, "per_variant", UsdToCoins(0.0004m))
     };
 
     private readonly MyDbContext _dbContext;
@@ -61,18 +72,26 @@ public sealed class CoinPricingSeeder
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         var existing = await _dbContext.CoinPricingCatalog
-            .AsNoTracking()
-            .Select(e => new { e.ActionType, e.Model, e.Variant })
             .ToListAsync(cancellationToken);
 
-        var existingKeys = new HashSet<string>(
-            existing.Select(e => Key(e.ActionType, e.Model, e.Variant)));
-
         var toInsert = new List<CoinPricingCatalogEntry>();
+        var updatedCount = 0;
         foreach (var row in Defaults)
         {
-            var key = Key(row.ActionType, row.Model, row.Variant);
-            if (existingKeys.Contains(key)) continue;
+            var current = existing.FirstOrDefault(entry =>
+                string.Equals(entry.ActionType, row.ActionType, StringComparison.Ordinal) &&
+                string.Equals(entry.Model, row.Model, StringComparison.Ordinal) &&
+                string.Equals(entry.Variant, row.Variant, StringComparison.Ordinal));
+
+            if (current is not null)
+            {
+                if (ApplySeededValues(current, row))
+                {
+                    updatedCount++;
+                }
+
+                continue;
+            }
 
             toInsert.Add(new CoinPricingCatalogEntry
             {
@@ -87,17 +106,60 @@ public sealed class CoinPricingSeeder
             });
         }
 
-        if (toInsert.Count == 0)
+        if (toInsert.Count == 0 && updatedCount == 0)
         {
-            _logger.LogInformation("Coin pricing catalog already seeded — nothing to add.");
+            _logger.LogInformation("Coin pricing catalog already matches seed data.");
             return;
         }
 
-        _dbContext.CoinPricingCatalog.AddRange(toInsert);
+        if (toInsert.Count > 0)
+        {
+            _dbContext.CoinPricingCatalog.AddRange(toInsert);
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Seeded {Count} coin pricing entries.", toInsert.Count);
+        _logger.LogInformation(
+            "Seeded {AddedCount} coin pricing entries, updated {UpdatedCount} entries.",
+            toInsert.Count,
+            updatedCount);
     }
 
-    private static string Key(string actionType, string model, string? variant) =>
-        $"{actionType}:{model}:{variant ?? ""}";
+    private static bool ApplySeededValues(
+        CoinPricingCatalogEntry entry,
+        (string ActionType, string Model, string? Variant, string Unit, decimal Cost) row)
+    {
+        var changed = false;
+
+        if (!string.Equals(entry.Unit, row.Unit, StringComparison.Ordinal))
+        {
+            entry.Unit = row.Unit;
+            changed = true;
+        }
+
+        if (entry.UnitCostCoins != row.Cost)
+        {
+            entry.UnitCostCoins = row.Cost;
+            changed = true;
+        }
+
+        if (!entry.IsActive)
+        {
+            entry.IsActive = true;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            entry.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        }
+
+        return changed;
+    }
+
+    private static decimal UsdToCoins(decimal usd)
+    {
+        const decimal vndPerUsd = 26309m;
+        const decimal vndPerCoin = 10m;
+        return Math.Round(usd * (vndPerUsd / vndPerCoin), 2, MidpointRounding.AwayFromZero);
+    }
 }

@@ -136,25 +136,44 @@ public sealed class StripePaymentService : IStripePaymentService
         string currency,
         string description,
         IDictionary<string, string> metadata,
+        string? paymentMethodId = null,
         CancellationToken cancellationToken = default)
     {
         var currencyCode = ResolveCurrency();
 
-        var paymentIntent = await CreatePaymentIntentService().CreateAsync(
-            new PaymentIntentCreateOptions
+        var options = new PaymentIntentCreateOptions
+        {
+            Customer = stripeCustomerId,
+            Amount = ToMinorAmount(amount),
+            Currency = currencyCode,
+            Description = description,
+            ReceiptEmail = customerEmail,
+            Metadata = metadata.Count == 0 ? null : new Dictionary<string, string>(metadata)
+        };
+
+        if (!string.IsNullOrWhiteSpace(paymentMethodId))
+        {
+            options.PaymentMethod = paymentMethodId;
+            options.Confirm = true;
+            options.OffSession = true;
+        }
+        else
+        {
+            options.AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
             {
-                Customer = stripeCustomerId,
-                Amount = ToMinorAmount(amount),
-                Currency = currencyCode,
-                Description = description,
-                ReceiptEmail = customerEmail,
-                Metadata = metadata.Count == 0 ? null : new Dictionary<string, string>(metadata),
-                AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
-                {
-                    Enabled = true
-                }
-            },
-            cancellationToken: cancellationToken);
+                Enabled = true
+            };
+        }
+
+        PaymentIntent paymentIntent;
+        try
+        {
+            paymentIntent = await CreatePaymentIntentService().CreateAsync(options, cancellationToken: cancellationToken);
+        }
+        catch (StripeException ex) when (ex.StripeError?.PaymentIntent != null)
+        {
+            paymentIntent = ex.StripeError.PaymentIntent;
+        }
 
         return new StripeOneTimePaymentResult(
             paymentIntent.Id,
@@ -425,6 +444,14 @@ public sealed class StripePaymentService : IStripePaymentService
             updatedSubscription.CurrentPeriodEnd);
     }
 
+    public async Task<string?> GetCustomerDefaultPaymentMethodIdAsync(
+        string stripeCustomerId,
+        string? stripeSubscriptionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await ResolveDefaultPaymentMethodIdAsync(stripeCustomerId, stripeSubscriptionId, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<StripeCardResult>> GetCustomerCardsAsync(
         string stripeCustomerId,
         string? stripeSubscriptionId,
@@ -525,6 +552,111 @@ public sealed class StripePaymentService : IStripePaymentService
         return ToCardResult(paymentMethod, paymentMethodId);
     }
 
+    public async Task DeleteCardAsync(
+        string stripeCustomerId,
+        string paymentMethodId,
+        IEnumerable<string> stripeSubscriptionIds,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedPaymentMethodId = paymentMethodId.Trim();
+        var paymentMethodService = CreatePaymentMethodService();
+        var subscriptionService = CreateSubscriptionService();
+        var customerService = CreateCustomerService();
+
+        var paymentMethod = await paymentMethodService.GetAsync(
+            normalizedPaymentMethodId,
+            cancellationToken: cancellationToken);
+
+        if (!string.Equals(paymentMethod.CustomerId, stripeCustomerId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Payment method was not found for this Stripe customer.");
+        }
+
+        var paymentMethods = await paymentMethodService.ListAsync(
+            new PaymentMethodListOptions
+            {
+                Customer = stripeCustomerId,
+                Type = "card",
+                Limit = 100
+            },
+            cancellationToken: cancellationToken);
+
+        var cards = paymentMethods.Data
+            .Where(item => !string.IsNullOrWhiteSpace(item.Id))
+            .ToList();
+
+        if (cards.All(item => !string.Equals(item.Id, normalizedPaymentMethodId, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("Payment method was not found for this Stripe customer.");
+        }
+
+        if (cards.Count <= 1)
+        {
+            throw new InvalidOperationException("You must keep at least one card in your account.");
+        }
+
+        var fallbackCard = cards
+            .Where(item => !string.Equals(item.Id, normalizedPaymentMethodId, StringComparison.Ordinal))
+            .OrderBy(IsExpired)
+            .FirstOrDefault();
+
+        if (fallbackCard is null)
+        {
+            throw new InvalidOperationException("A replacement default card could not be selected.");
+        }
+
+        var customer = await customerService.GetAsync(
+            stripeCustomerId,
+            cancellationToken: cancellationToken);
+
+        var fallbackDefaultPaymentMethodId = fallbackCard.Id;
+        if (string.Equals(
+                customer.InvoiceSettings?.DefaultPaymentMethodId,
+                normalizedPaymentMethodId,
+                StringComparison.Ordinal))
+        {
+            await customerService.UpdateAsync(
+                stripeCustomerId,
+                new CustomerUpdateOptions
+                {
+                    InvoiceSettings = new CustomerInvoiceSettingsOptions
+                    {
+                        DefaultPaymentMethod = fallbackDefaultPaymentMethodId
+                    }
+                },
+                cancellationToken: cancellationToken);
+        }
+
+        foreach (var stripeSubscriptionId in stripeSubscriptionIds
+                     .Where(item => !string.IsNullOrWhiteSpace(item))
+                     .Distinct(StringComparer.Ordinal))
+        {
+            var subscription = await subscriptionService.GetAsync(
+                stripeSubscriptionId,
+                cancellationToken: cancellationToken);
+
+            if (!string.Equals(
+                    subscription.DefaultPaymentMethodId,
+                    normalizedPaymentMethodId,
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            await subscriptionService.UpdateAsync(
+                stripeSubscriptionId,
+                new SubscriptionUpdateOptions
+                {
+                    DefaultPaymentMethod = fallbackDefaultPaymentMethodId
+                },
+                cancellationToken: cancellationToken);
+        }
+
+        await paymentMethodService.DetachAsync(
+            normalizedPaymentMethodId,
+            cancellationToken: cancellationToken);
+    }
+
     private async Task<Price?> TryGetPriceAsync(string? stripePriceId, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(stripePriceId))
@@ -571,12 +703,63 @@ public sealed class StripePaymentService : IStripePaymentService
                 return subscription.DefaultPaymentMethodId;
             }
         }
+        else
+        {
+            try
+            {
+                var subscriptions = await CreateSubscriptionService().ListAsync(
+                    new SubscriptionListOptions
+                    {
+                        Customer = stripeCustomerId,
+                        Status = "all"
+                    },
+                    cancellationToken: cancellationToken);
+
+                var activeOrTrialingSub = subscriptions.Data
+                    .FirstOrDefault(s => (s.Status == "active" || s.Status == "trialing") && !string.IsNullOrWhiteSpace(s.DefaultPaymentMethodId));
+
+                if (activeOrTrialingSub != null)
+                {
+                    return activeOrTrialingSub.DefaultPaymentMethodId;
+                }
+            }
+            catch (Exception)
+            {
+                // Degrade gracefully if subscription listing fails
+            }
+        }
 
         var customer = await CreateCustomerService().GetAsync(
             stripeCustomerId,
             cancellationToken: cancellationToken);
 
-        return customer.InvoiceSettings?.DefaultPaymentMethodId;
+        if (!string.IsNullOrWhiteSpace(customer.InvoiceSettings?.DefaultPaymentMethodId))
+        {
+            return customer.InvoiceSettings.DefaultPaymentMethodId;
+        }
+
+        try
+        {
+            var paymentMethods = await CreatePaymentMethodService().ListAsync(
+                new PaymentMethodListOptions
+                {
+                    Customer = stripeCustomerId,
+                    Type = "card"
+                },
+                cancellationToken: cancellationToken);
+
+            var firstCard = paymentMethods.Data.FirstOrDefault();
+            if (firstCard != null)
+            {
+                return firstCard.Id;
+            }
+        }
+        catch (Exception)
+        {
+            // Degrade gracefully if payment methods listing fails
+        }
+
+        return null;
     }
 
     private StripeRecurringSubscriptionResult ToRecurringResult(Stripe.Subscription subscription)
@@ -711,6 +894,20 @@ public sealed class StripePaymentService : IStripePaymentService
             paymentMethod.BillingDetails?.Name,
             string.Equals(paymentMethod.Id, defaultPaymentMethodId, StringComparison.Ordinal),
             isExpired);
+    }
+
+    private static bool IsExpired(PaymentMethod paymentMethod)
+    {
+        var expMonth = paymentMethod.Card?.ExpMonth;
+        var expYear = paymentMethod.Card?.ExpYear;
+        if (!expMonth.HasValue || !expYear.HasValue)
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        return expYear.Value < now.Year ||
+               (expYear.Value == now.Year && expMonth.Value < now.Month);
     }
 
     private static string NormalizeCheckoutStatus(

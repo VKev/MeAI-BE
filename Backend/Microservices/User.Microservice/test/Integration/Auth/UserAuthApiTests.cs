@@ -155,6 +155,18 @@ public sealed class UserAuthApiTests(UserAuthApiFixture fixture) : IClassFixture
 
         await fixture.ExecuteDbContextAsync(async dbContext =>
         {
+            var otherUserId = Guid.NewGuid();
+            var otherUser = new Domain.Entities.User
+            {
+                Id = otherUserId,
+                Username = "otheruser_" + Guid.NewGuid().ToString("N")[..8],
+                Email = "other_" + Guid.NewGuid().ToString("N")[..8] + "@example.com",
+                PasswordHash = "hashed_dummy",
+                FullName = "Other User",
+                IsDeleted = false
+            };
+            dbContext.Users.Add(otherUser);
+
             dbContext.SocialMedias.AddRange(
                 new Domain.Entities.SocialMedia
                 {
@@ -173,7 +185,7 @@ public sealed class UserAuthApiTests(UserAuthApiFixture fixture) : IClassFixture
                 new Domain.Entities.SocialMedia
                 {
                     Id = Guid.NewGuid(),
-                    UserId = Guid.NewGuid(),
+                    UserId = otherUserId,
                     Type = "threads",
                     CreatedAt = DateTime.UtcNow
                 });

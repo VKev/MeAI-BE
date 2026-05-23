@@ -3,6 +3,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Application.Abstractions.Storage;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using StackExchange.Redis;
@@ -24,13 +25,16 @@ public sealed class S3ObjectStorageService : IObjectStorageService
     private readonly bool _forcePathStyle;
     private readonly bool _isConfigured;
     private readonly IDatabase? _cache;
+    private readonly ILogger<S3ObjectStorageService> _logger;
 
     public string? CurrentNamespace => _namespace;
 
     public S3ObjectStorageService(
         IConfiguration configuration,
-        IConnectionMultiplexer multiplexer)
+        IConnectionMultiplexer multiplexer,
+        ILogger<S3ObjectStorageService> logger)
     {
+        _logger = logger;
         _bucket = configuration["S3:Bucket"] ?? string.Empty;
         var accessKey = configuration["S3:AccessKey"];
         var secretKey = configuration["S3:SecretKey"];
@@ -107,13 +111,61 @@ public sealed class S3ObjectStorageService : IObjectStorageService
             var url = BuildUrl(key);
             return Result.Success(new StorageUploadResult(key, url, _bucket, _region, _namespace));
         }
+        catch (AmazonS3Exception ex) when (ex.ErrorCode == "NoSuchBucket")
+        {
+            try
+            {
+                _logger.LogInformation("Bucket '{Bucket}' does not exist. Attempting auto-creation in region '{Region}'...", _bucket, _region);
+                var putBucketRequest = new PutBucketRequest
+                {
+                    BucketName = _bucket,
+                    UseClientRegion = true
+                };
+                await _client.PutBucketAsync(putBucketRequest, cancellationToken);
+                _logger.LogInformation("Successfully created bucket '{Bucket}'. Retrying S3 upload...", _bucket);
+
+                // Reset stream position if possible, so retry can read from start
+                if (request.Content.CanSeek)
+                {
+                    request.Content.Position = 0;
+                }
+
+                var key = NormalizeKey(request.Key, applyNamespace: true);
+                var putRequest = new PutObjectRequest
+                {
+                    BucketName = _bucket,
+                    Key = key,
+                    InputStream = request.Content,
+                    ContentType = request.ContentType,
+                    AutoCloseStream = false
+                };
+
+                if (request.ContentLength > 0)
+                {
+                    putRequest.Headers.ContentLength = request.ContentLength;
+                }
+
+                await _client.PutObjectAsync(putRequest, cancellationToken);
+
+                var url = BuildUrl(key);
+                return Result.Success(new StorageUploadResult(key, url, _bucket, _region, _namespace));
+            }
+            catch (Exception retryEx)
+            {
+                _logger.LogError(retryEx, "Failed to auto-create S3 bucket '{Bucket}' or retry upload", _bucket);
+                return Result.Failure<StorageUploadResult>(
+                    new Error("S3.UploadFailed", $"Bucket auto-creation failed: {retryEx.Message}"));
+            }
+        }
         catch (AmazonS3Exception ex)
         {
+            _logger.LogError(ex, "S3 upload failed with AmazonS3Exception");
             return Result.Failure<StorageUploadResult>(
                 new Error("S3.UploadFailed", ex.Message));
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "S3 upload failed with general exception");
             return Result.Failure<StorageUploadResult>(
                 new Error("S3.UploadFailed", ex.Message));
         }
@@ -292,6 +344,91 @@ public sealed class S3ObjectStorageService : IObjectStorageService
         catch (Exception ex)
         {
             return Result.Failure<IReadOnlyList<StorageObjectInfo>>(new Error("S3.ListFailed", ex.Message));
+        }
+    }
+
+    public Result<PresignedUploadUrlResult> GetPresignedUploadUrl(string key, string contentType, TimeSpan? expiresIn = null)
+    {
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<PresignedUploadUrlResult>(
+                new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
+        try
+        {
+            var keyWithNamespace = NormalizeKey(key, applyNamespace: true);
+            if (string.IsNullOrWhiteSpace(keyWithNamespace))
+            {
+                return Result.Failure<PresignedUploadUrlResult>(
+                    new Error("S3.InvalidKey", "Storage key is missing"));
+            }
+
+            var ttl = NormalizePresignTtl(expiresIn);
+            var request = new GetPreSignedUrlRequest
+            {
+                BucketName = _bucket,
+                Key = keyWithNamespace,
+                Verb = HttpVerb.PUT,
+                ContentType = contentType,
+                Expires = DateTime.UtcNow.Add(ttl)
+            };
+
+            var url = BuildPublicPresignedUrl(_client.GetPreSignedURL(request));
+            return Result.Success(new PresignedUploadUrlResult(keyWithNamespace, url, _bucket, _region, _namespace));
+        }
+        catch (AmazonS3Exception ex)
+        {
+            return Result.Failure<PresignedUploadUrlResult>(new Error("S3.PresignFailed", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<PresignedUploadUrlResult>(new Error("S3.PresignFailed", ex.Message));
+        }
+    }
+
+    public async Task<Result<StorageObjectInfo>> GetObjectInfoAsync(string keyOrUrl, CancellationToken cancellationToken)
+    {
+        if (TryGetSeedMediaUrl(keyOrUrl, out _))
+        {
+            return Result.Failure<StorageObjectInfo>(
+                new Error("S3.SeedMedia", "Seed media metadata is not supported via S3."));
+        }
+
+        if (!_isConfigured || _client is null)
+        {
+            return Result.Failure<StorageObjectInfo>(
+                new Error("S3.NotConfigured", "S3 storage is not configured."));
+        }
+
+        try
+        {
+            var key = NormalizeKey(keyOrUrl, applyNamespace: false);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return Result.Failure<StorageObjectInfo>(
+                    new Error("S3.InvalidKey", "Storage key is missing"));
+            }
+
+            var metadata = await _client.GetObjectMetadataAsync(new GetObjectMetadataRequest
+            {
+                BucketName = _bucket,
+                Key = key
+            }, cancellationToken);
+
+            return Result.Success(new StorageObjectInfo(key, metadata.Headers.ContentLength, metadata.LastModified));
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return Result.Failure<StorageObjectInfo>(new Error("S3.ObjectNotFound", "Object not found in storage."));
+        }
+        catch (AmazonS3Exception ex)
+        {
+            return Result.Failure<StorageObjectInfo>(new Error("S3.HeadFailed", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return Result.Failure<StorageObjectInfo>(new Error("S3.HeadFailed", ex.Message));
         }
     }
 

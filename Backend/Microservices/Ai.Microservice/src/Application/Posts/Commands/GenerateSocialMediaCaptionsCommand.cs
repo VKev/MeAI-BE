@@ -179,7 +179,7 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
             TotalCoins = quoteResult.Value.TotalCoins,
             ReferenceType = CoinReferenceTypes.CaptionBatch,
             ReferenceId = batchReferenceId,
-            Status = AiSpendStatuses.Debited,
+            Status = AiSpendStatuses.Pending,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -209,6 +209,11 @@ public sealed class GenerateSocialMediaCaptionsCommandHandler
                 cancellationToken);
             return Result.Failure<GenerateSocialMediaCaptionsResponse>(captionsResult.Error);
         }
+
+        spendRecord.Status = AiSpendStatuses.Debited;
+        spendRecord.UpdatedAt = DateTime.UtcNow;
+        _aiSpendRecordRepository.Update(spendRecord);
+        await _aiSpendRecordRepository.SaveChangesAsync(cancellationToken);
 
         return Result.Success(new GenerateSocialMediaCaptionsResponse(
         [
@@ -576,6 +581,7 @@ You generate platform-ready social captions for MeAI.
 Use only the user's media, post details, and the supplied knowledge context.
 {{webSearchInstruction}}
 Do not use social-media post RAG data.
+Generated captions must fit the MeAI publish limit for the target platform, including hashtags, emojis, URLs, email, phone, and line breaks. Facebook: 2,200 characters. Instagram: 2,200 characters. TikTok: 2,200 characters. Threads: 500 characters.
 Return strict JSON only, with this schema:
 {"captions":[{"caption":"...","hashtags":["#..."],"trendingHashtags":["#..."],"callToAction":"..."}]}
 Generate exactly {{captionCount}} caption objects when the output token limit allows it.

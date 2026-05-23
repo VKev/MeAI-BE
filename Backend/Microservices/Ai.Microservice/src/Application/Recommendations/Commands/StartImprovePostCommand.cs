@@ -1,4 +1,7 @@
+using System.Text.Json;
+using Application.Abstractions.Billing;
 using Application.Abstractions.SocialMedias;
+using Application.Billing;
 using Application.Posts;
 using Application.Recommendations.Models;
 using Domain.Entities;
@@ -27,14 +30,19 @@ public sealed record StartImprovePostCommand(
     bool ImproveImage,
     string? Style = null,
     string? Platform = null,
+    Guid? SocialMediaId = null,
     string? UserInstruction = null) : IRequest<Result<RecommendPostTaskResponse>>;
 
 public sealed class StartImprovePostCommandHandler
     : IRequestHandler<StartImprovePostCommand, Result<RecommendPostTaskResponse>>
 {
+    private const string BillingModel = "openrouter/improve-post-v1";
+
     private readonly IPostRepository _postRepository;
     private readonly IRecommendPostRepository _recommendPostRepository;
     private readonly IUserSocialMediaService _userSocialMediaService;
+    private readonly IBillingClient _billingClient;
+    private readonly IAiSpendRecordRepository _aiSpendRecordRepository;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<StartImprovePostCommandHandler> _logger;
 
@@ -42,12 +50,16 @@ public sealed class StartImprovePostCommandHandler
         IPostRepository postRepository,
         IRecommendPostRepository recommendPostRepository,
         IUserSocialMediaService userSocialMediaService,
+        IBillingClient billingClient,
+        IAiSpendRecordRepository aiSpendRecordRepository,
         IPublishEndpoint publishEndpoint,
         ILogger<StartImprovePostCommandHandler> logger)
     {
         _postRepository = postRepository;
         _recommendPostRepository = recommendPostRepository;
         _userSocialMediaService = userSocialMediaService;
+        _billingClient = billingClient;
+        _aiSpendRecordRepository = aiSpendRecordRepository;
         _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
@@ -105,11 +117,18 @@ public sealed class StartImprovePostCommandHandler
             : validatedStyle;
         var postPlatform = NormalizePlatform(post.Platform);
         var platform = postPlatform ?? requestPlatform;
-        if (post.SocialMediaId.HasValue && post.SocialMediaId.Value != Guid.Empty)
+        var requestedSocialMediaId = request.SocialMediaId.HasValue && request.SocialMediaId.Value != Guid.Empty
+            ? request.SocialMediaId.Value
+            : (Guid?)null;
+        var originalSocialMediaId = post.SocialMediaId.HasValue && post.SocialMediaId.Value != Guid.Empty
+            ? post.SocialMediaId.Value
+            : (Guid?)null;
+        var contextSocialMediaId = requestedSocialMediaId ?? originalSocialMediaId;
+        if (contextSocialMediaId.HasValue)
         {
             var socialMediaResult = await _userSocialMediaService.GetSocialMediasAsync(
                 request.UserId,
-                new[] { post.SocialMediaId.Value },
+                new[] { contextSocialMediaId.Value },
                 cancellationToken);
 
             if (socialMediaResult.IsFailure)
@@ -121,7 +140,7 @@ public sealed class StartImprovePostCommandHandler
             if (socialMedia is null)
             {
                 return Result.Failure<RecommendPostTaskResponse>(
-                    new Error("SocialMedia.NotFound", "Social media account not found."));
+                    new Error("SocialMedia.NotFound", "Social media account not found or not accessible."));
             }
 
             platform = NormalizePlatform(socialMedia.Type) ?? postPlatform ?? requestPlatform;
@@ -160,7 +179,49 @@ public sealed class StartImprovePostCommandHandler
             UpdatedAt = now,
         };
 
+        var variant = ResolveBillingVariant(request.ImproveCaption, request.ImproveImage);
+        var requestedImageCount = request.ImproveImage
+            ? CountRequestedImages(post.Content?.ResourceList)
+            : 1;
+        var quote = GeneratedPostCoinCost.CreateQuote(
+            CoinActionTypes.PostEnhancement,
+            BillingModel,
+            variant,
+            requestedImageCount);
+
+        var debitResult = await _billingClient.DebitAsync(
+            request.UserId,
+            quote.TotalCoins,
+            CoinDebitReasons.PostEnhancementDebit,
+            CoinReferenceTypes.ImprovePost,
+            entity.Id.ToString(),
+            cancellationToken);
+        if (debitResult.IsFailure)
+        {
+            return Result.Failure<RecommendPostTaskResponse>(debitResult.Error);
+        }
+
         await _recommendPostRepository.AddAsync(entity, cancellationToken);
+        await _aiSpendRecordRepository.AddAsync(
+            new AiSpendRecord
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = request.UserId,
+                WorkspaceId = post.WorkspaceId,
+                Provider = AiSpendProviders.OpenRouter,
+                ActionType = CoinActionTypes.PostEnhancement,
+                Model = BillingModel,
+                Variant = variant,
+                Unit = quote.Unit,
+                Quantity = quote.Quantity,
+                UnitCostCoins = quote.UnitCostCoins,
+                TotalCoins = quote.TotalCoins,
+                ReferenceType = CoinReferenceTypes.ImprovePost,
+                ReferenceId = entity.Id.ToString(),
+                Status = AiSpendStatuses.Pending,
+                CreatedAt = now
+            },
+            cancellationToken);
 
         // Set the FK on the post AT submit time — the GET endpoint joins through
         // this so the FE can poll status while the consumer is still working.
@@ -183,6 +244,7 @@ public sealed class StartImprovePostCommandHandler
                 ImproveImage = request.ImproveImage,
                 Style = style,
                 Platform = platform,
+                SocialMediaId = contextSocialMediaId,
                 UserInstruction = trimmedInstruction,
                 StartedAt = now,
             },
@@ -208,10 +270,13 @@ public sealed class StartImprovePostCommandHandler
                     improveImage = entity.ImproveImage,
                     style = entity.Style,
                     platform = platform,
+                    socialMediaId = contextSocialMediaId,
                     userInstruction = entity.UserInstruction,
                     resultCaption = entity.ResultCaption,
                     resultResourceId = entity.ResultResourceId,
                     resultPresignedUrl = entity.ResultPresignedUrl,
+                    resultResourceIds = ParseResultResourceIds(entity),
+                    resultPresignedUrls = ParseResultPresignedUrls(entity),
                     errorCode = entity.ErrorCode,
                     errorMessage = entity.ErrorMessage,
                     createdAt = entity.CreatedAt,
@@ -222,20 +287,24 @@ public sealed class StartImprovePostCommandHandler
             cancellationToken);
 
         _logger.LogInformation(
-            "ImprovePost queued. CorrelationId={CorrelationId} UserId={UserId} PostId={PostId} ImproveCaption={Caption} ImproveImage={Image} Style={Style} Platform={Platform}",
+            "ImprovePost queued. CorrelationId={CorrelationId} UserId={UserId} PostId={PostId} ImproveCaption={Caption} ImproveImage={Image} Style={Style} Platform={Platform} SocialMediaId={SocialMediaId}",
             correlationId,
             request.UserId,
             post.Id,
             request.ImproveCaption,
             request.ImproveImage,
             style,
-            platform);
+            platform,
+            contextSocialMediaId);
 
         return Result.Success(MapToResponse(entity));
     }
 
     internal static RecommendPostTaskResponse MapToResponse(RecommendPost task)
     {
+        var resultResourceIds = ParseResultResourceIds(task);
+        var resultPresignedUrls = ParseResultPresignedUrls(task);
+
         return new RecommendPostTaskResponse(
             RecommendId: task.Id,
             CorrelationId: task.CorrelationId,
@@ -250,10 +319,75 @@ public sealed class StartImprovePostCommandHandler
             ResultCaption: task.ResultCaption,
             ResultResourceId: task.ResultResourceId,
             ResultPresignedUrl: task.ResultPresignedUrl,
+            ResultResourceIds: resultResourceIds,
+            ResultPresignedUrls: resultPresignedUrls,
             ErrorCode: task.ErrorCode,
             ErrorMessage: task.ErrorMessage,
             CreatedAt: task.CreatedAt,
             CompletedAt: task.CompletedAt);
+    }
+
+    public static IReadOnlyList<Guid> ParseResultResourceIds(RecommendPost task)
+    {
+        var parsed = ParseGuidArray(task.ResultResourceIdsJson);
+        if (parsed.Count > 0)
+        {
+            return parsed;
+        }
+
+        return task.ResultResourceId.HasValue
+            ? new[] { task.ResultResourceId.Value }
+            : Array.Empty<Guid>();
+    }
+
+    public static IReadOnlyList<string> ParseResultPresignedUrls(RecommendPost task)
+    {
+        var parsed = ParseStringArray(task.ResultPresignedUrlsJson);
+        if (parsed.Count > 0)
+        {
+            return parsed;
+        }
+
+        return string.IsNullOrWhiteSpace(task.ResultPresignedUrl)
+            ? Array.Empty<string>()
+            : new[] { task.ResultPresignedUrl };
+    }
+
+    private static IReadOnlyList<Guid> ParseGuidArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<Guid>();
+        }
+
+        try
+        {
+            var values = JsonSerializer.Deserialize<List<Guid>>(json);
+            return values is null ? Array.Empty<Guid>() : values;
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<Guid>();
+        }
+    }
+
+    private static IReadOnlyList<string> ParseStringArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            return (JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<string>();
+        }
     }
 
     private static string? NormalizePlatform(string? value)
@@ -271,5 +405,34 @@ public sealed class StartImprovePostCommandHandler
             "threads" or "thread" => "threads",
             _ => null,
         };
+    }
+
+    private static string ResolveBillingVariant(bool improveCaption, bool improveImage)
+    {
+        return (improveCaption, improveImage) switch
+        {
+            (true, true) => "caption_image",
+            (false, true) => "image",
+            _ => "caption",
+        };
+    }
+
+    private static int CountRequestedImages(IReadOnlyList<string>? resourceList)
+    {
+        if (resourceList is null || resourceList.Count == 0)
+        {
+            return 1;
+        }
+
+        var count = 0;
+        foreach (var value in resourceList)
+        {
+            if (Guid.TryParse(value, out var id) && id != Guid.Empty)
+            {
+                count++;
+            }
+        }
+
+        return Math.Max(1, count);
     }
 }

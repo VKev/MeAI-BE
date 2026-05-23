@@ -97,7 +97,7 @@ Generate response:
     "formulaKey": "launch-caption",
     "outputType": "caption",
     "renderedPrompt": "....",
-    "model": "gpt-5-4",
+    "model": "gpt-4o-mini",
     "outputs": [
       "variant 1",
       "variant 2",
@@ -139,7 +139,7 @@ Pricing:
 - thêm coin pricing catalog entry cho `formula_generation`
 
 Model:
-- mặc định `gpt-5-4`
+- mặc định `gpt-4o-mini`
 - cho phép override sau này, nhưng v1 không expose model override cho user
 
 ## Validation And Errors

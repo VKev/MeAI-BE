@@ -177,10 +177,14 @@ public sealed class AiUsageTimingResolverTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(videoTasks);
 
+        var draftPostTaskRepository = CreateEmptyDraftPostTaskRepository();
+        var recommendPostRepository = CreateEmptyRecommendPostRepository();
         var resolver = new AiUsageTimingResolver(
             chatRepository.Object,
             imageTaskRepository.Object,
-            videoTaskRepository.Object);
+            videoTaskRepository.Object,
+            draftPostTaskRepository.Object,
+            recommendPostRepository.Object);
 
         await resolver.ResolveAsync(records, CancellationToken.None);
 
@@ -212,7 +216,33 @@ public sealed class AiUsageTimingResolverTests
         return new AiUsageTimingResolver(
             chatRepository.Object,
             imageTaskRepository.Object,
-            videoTaskRepository.Object);
+            videoTaskRepository.Object,
+            CreateEmptyDraftPostTaskRepository().Object,
+            CreateEmptyRecommendPostRepository().Object);
+    }
+
+    private static Mock<IDraftPostTaskRepository> CreateEmptyDraftPostTaskRepository()
+    {
+        var repository = new Mock<IDraftPostTaskRepository>(MockBehavior.Strict);
+        repository
+            .Setup(item => item.GetByIdsAsync(
+                It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 0),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<DraftPostTask>());
+
+        return repository;
+    }
+
+    private static Mock<IRecommendPostRepository> CreateEmptyRecommendPostRepository()
+    {
+        var repository = new Mock<IRecommendPostRepository>(MockBehavior.Strict);
+        repository
+            .Setup(item => item.GetByIdsAsync(
+                It.Is<IReadOnlyList<Guid>>(ids => ids.Count == 0),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<RecommendPost>());
+
+        return repository;
     }
 
     private static AiSpendRecord CreateSpendRecord(Guid id, string referenceType, Guid chatId)

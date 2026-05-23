@@ -29,6 +29,7 @@ internal static class RecommendationsOpenApiTransformers
         {
           "userPrompt": "create content about DJI Osmo Mobile 7",
           "style": "marketing",
+          "imageCount": 2,
           "topK": 6,
           "maxReferenceImages": 3
         }
@@ -137,6 +138,12 @@ internal static class RecommendationsOpenApiTransformers
                     Type = JsonSchemaType.String | JsonSchemaType.Null,
                     Format = "uuid",
                     Description = "Optional workspace scope.",
+                },
+                ["imageCount"] = (IOpenApiSchema)new OpenApiSchema
+                {
+                    Type = JsonSchemaType.Integer | JsonSchemaType.Null,
+                    Description = "Number of generated images (1-4). Default 1.",
+                    Example = JsonValue.Create(1),
                 },
                 ["topK"] = (IOpenApiSchema)new OpenApiSchema
                 {

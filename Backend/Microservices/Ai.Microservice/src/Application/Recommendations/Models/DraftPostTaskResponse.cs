@@ -9,10 +9,13 @@ public sealed record DraftPostTaskResponse(
     string UserPrompt,
     bool IsAutoTopic,
     string Style,
+    int ImageCount,
     Guid? ResultPostBuilderId,
     Guid? ResultPostId,
     Guid? ResultResourceId,
     string? ResultPresignedUrl,
+    IReadOnlyList<Guid> ResultResourceIds,
+    IReadOnlyList<string> ResultPresignedUrls,
     string? ResultCaption,
     string? ErrorCode,
     string? ErrorMessage,
@@ -33,4 +36,6 @@ public sealed record StartDraftPostGenerationRequest(
     Guid? WorkspaceId = null,
     int? TopK = null,
     int? MaxReferenceImages = null,
-    int? MaxRagPosts = null);
+    int? MaxRagPosts = null,
+    /// <summary>Number of AI-generated images to create for the draft post. Default 1.</summary>
+    int? ImageCount = null);

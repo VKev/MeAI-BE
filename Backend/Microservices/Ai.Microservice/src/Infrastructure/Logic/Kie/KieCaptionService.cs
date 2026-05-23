@@ -1,9 +1,7 @@
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using Application.Abstractions.ApiCredentials;
 using Application.Abstractions.Gemini;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -11,22 +9,16 @@ using SharedLibrary.Common.ResponseModel;
 
 namespace Infrastructure.Logic.Kie;
 
-// Caption generator backed by Kie's GPT-5.4 Responses API (POST /codex/v1/responses).
+// Caption generator backed by OpenRouter via KieResponsesClient.
 // Implements IGeminiCaptionService so all existing Gemini* command/request records and
-// the GenerateSocialMediaCaptionsCommand handler keep working unchanged — only the DI
-// binding + the HTTP client behind the interface change. Replaces the old Mistral
-// integration which was getting rate-limited on the free tier.
+// the GenerateSocialMediaCaptionsCommand handler keep working unchanged.
 public sealed class KieCaptionService : IGeminiCaptionService
 {
-    private const string DefaultBaseUrl = "https://api.kie.ai";
-    private const string DefaultChatModel = "gpt-5-4";
-    private const string ResponsesPath = "/codex/v1/responses";
+    private const string DefaultChatModel = "gpt-4o-mini";
 
-    private readonly string _baseUrl;
     private readonly string _chatModel;
-    private readonly HttpClient _httpClient;
+    private readonly KieResponsesClient _responsesClient;
     private readonly ILogger<KieCaptionService> _logger;
-    private readonly IApiCredentialProvider _credentialProvider;
 
     private static readonly Regex HashtagSplitRegex = new(@"[\s,]+", RegexOptions.Compiled);
     private static readonly char[] SentenceTrimCharacters = [' ', '.', ',', ';', ':', '!', '?', '-', '"', '\''];
@@ -39,14 +31,11 @@ public sealed class KieCaptionService : IGeminiCaptionService
 
     public KieCaptionService(
         IConfiguration configuration,
-        IHttpClientFactory httpClientFactory,
-        IApiCredentialProvider credentialProvider,
+        KieResponsesClient responsesClient,
         ILogger<KieCaptionService> logger)
     {
-        _baseUrl = (configuration["Kie:BaseUrl"] ?? configuration["Kie__BaseUrl"] ?? DefaultBaseUrl).TrimEnd('/');
         _chatModel = configuration["Kie:ChatModel"] ?? configuration["Kie__ChatModel"] ?? DefaultChatModel;
-        _httpClient = httpClientFactory.CreateClient("KieChat");
-        _credentialProvider = credentialProvider;
+        _responsesClient = responsesClient;
         _logger = logger;
     }
 
@@ -61,18 +50,15 @@ public sealed class KieCaptionService : IGeminiCaptionService
         }
 
         var prompt = BuildPrompt(request.PostType, request.LanguageHint, request.Instruction);
-        var input = new List<ResponsesInputItem>
+        var input = new List<KieResponsesInputItem>
         {
             BuildUserInput(prompt, request.Resources.Select(r => r.FileUri))
         };
 
-        var responseResult = await SendResponsesAsync(
-            new ResponsesRequest
-            {
-                Model = ResolveModel(request.PreferredModel),
-                Stream = false,
-                Input = input
-            },
+        var responseResult = await _responsesClient.GetTextResponseAsync(
+            ResolveModel(request.PreferredModel),
+            input,
+            "Kie.CaptionGenerationFailed",
             "Kie caption generation failed.",
             cancellationToken);
 
@@ -112,7 +98,7 @@ public sealed class KieCaptionService : IGeminiCaptionService
             request.Instruction,
             hasImages: hasInlineTemplate || hasResources);
 
-        var contentParts = new List<ResponsesContentPart>
+        var contentParts = new List<KieResponsesContentPart>
         {
             new() { Type = "input_text", Text = prompt }
         };
@@ -123,7 +109,7 @@ public sealed class KieCaptionService : IGeminiCaptionService
                 ? "application/octet-stream"
                 : request.InlineTemplateResource.MimeType.Trim();
             var base64 = Convert.ToBase64String(request.InlineTemplateResource.Content);
-            contentParts.Add(new ResponsesContentPart
+            contentParts.Add(new KieResponsesContentPart
             {
                 Type = "input_image",
                 ImageUrl = $"data:{mime};base64,{base64}"
@@ -132,27 +118,22 @@ public sealed class KieCaptionService : IGeminiCaptionService
 
         foreach (var resource in request.Resources)
         {
-            // GPT-5.4 Responses API accepts `input_image.image_url` as a plain STRING
-            // (not an object), unlike Chat Completions. Presigned S3 URLs work as-is.
-            contentParts.Add(new ResponsesContentPart
+            contentParts.Add(new KieResponsesContentPart
             {
                 Type = "input_image",
                 ImageUrl = resource.FileUri
             });
         }
 
-        var input = new List<ResponsesInputItem>
+        var input = new List<KieResponsesInputItem>
         {
             new() { Role = "user", Content = contentParts }
         };
 
-        var responseResult = await SendResponsesAsync(
-            new ResponsesRequest
-            {
-                Model = ResolveModel(request.PreferredModel),
-                Stream = false,
-                Input = input
-            },
+        var responseResult = await _responsesClient.GetTextResponseAsync(
+            ResolveModel(request.PreferredModel),
+            input,
+            "Kie.CaptionGenerationFailed",
             "Kie caption generation failed.",
             cancellationToken);
 
@@ -184,25 +165,22 @@ public sealed class KieCaptionService : IGeminiCaptionService
         }
 
         var prompt = BuildTitlePrompt(request.Content, request.LanguageHint);
-        var input = new List<ResponsesInputItem>
+        var input = new List<KieResponsesInputItem>
         {
             new()
             {
                 Role = "user",
-                Content = new List<ResponsesContentPart>
+                Content = new List<KieResponsesContentPart>
                 {
                     new() { Type = "input_text", Text = prompt }
                 }
             }
         };
 
-        var responseResult = await SendResponsesAsync(
-            new ResponsesRequest
-            {
-                Model = ResolveModel(request.PreferredModel),
-                Stream = false,
-                Input = input
-            },
+        var responseResult = await _responsesClient.GetTextResponseAsync(
+            ResolveModel(request.PreferredModel),
+            input,
+            "Kie.TitleGenerationFailed",
             "Kie title generation failed.",
             cancellationToken);
 
@@ -220,102 +198,14 @@ public sealed class KieCaptionService : IGeminiCaptionService
         return _chatModel;
     }
 
-    private async Task<Result<string>> SendResponsesAsync(
-        ResponsesRequest payload,
-        string defaultFailureMessage,
-        CancellationToken cancellationToken)
+    private static KieResponsesInputItem BuildUserInput(string prompt, IEnumerable<string> imageUrls)
     {
-        var json = JsonSerializer.Serialize(payload, JsonOptions);
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}{ResponsesPath}")
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
-        };
-        requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _credentialProvider.GetRequiredValue("Kie", "ApiKey"));
-
-        HttpResponseMessage response;
-        try
-        {
-            response = await _httpClient.SendAsync(requestMessage, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Kie request failed.");
-            return Result.Failure<string>(new Error("Kie.NetworkError", ex.Message));
-        }
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            return Result.Failure<string>(
-                new Error("Kie.RequestFailed", $"{defaultFailureMessage} Status={(int)response.StatusCode}: {body}"));
-        }
-
-        try
-        {
-            var text = ExtractOutputText(body);
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return Result.Failure<string>(new Error("Kie.EmptyResponse", "Kie returned an empty response."));
-            }
-            return Result.Success(text.Trim());
-        }
-        catch (JsonException ex)
-        {
-            return Result.Failure<string>(new Error("Kie.ParseError", ex.Message));
-        }
-    }
-
-    // Walk the Responses-API output array and concatenate every `output_text` fragment.
-    // Shape: { output: [ {type:"message", content:[{type:"output_text", text:"..."}]}, ... ] }
-    // Skips `reasoning` items (they exist but have empty user-visible content).
-    private static string ExtractOutputText(string body)
-    {
-        using var document = JsonDocument.Parse(body);
-        if (!document.RootElement.TryGetProperty("output", out var output) ||
-            output.ValueKind != JsonValueKind.Array)
-        {
-            return string.Empty;
-        }
-
-        var buffer = new StringBuilder();
-        foreach (var item in output.EnumerateArray())
-        {
-            if (!item.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
-            {
-                continue;
-            }
-
-            foreach (var part in content.EnumerateArray())
-            {
-                if (!part.TryGetProperty("type", out var typeProp) || typeProp.ValueKind != JsonValueKind.String)
-                {
-                    continue;
-                }
-
-                var type = typeProp.GetString();
-                if (type is not ("output_text" or "text"))
-                {
-                    continue;
-                }
-
-                if (part.TryGetProperty("text", out var textProp) && textProp.ValueKind == JsonValueKind.String)
-                {
-                    buffer.Append(textProp.GetString());
-                }
-            }
-        }
-
-        return buffer.ToString();
-    }
-
-    private static ResponsesInputItem BuildUserInput(string prompt, IEnumerable<string> imageUrls)
-    {
-        var parts = new List<ResponsesContentPart> { new() { Type = "input_text", Text = prompt } };
+        var parts = new List<KieResponsesContentPart> { new() { Type = "input_text", Text = prompt } };
         foreach (var url in imageUrls)
         {
-            parts.Add(new ResponsesContentPart { Type = "input_image", ImageUrl = url });
+            parts.Add(new KieResponsesContentPart { Type = "input_image", ImageUrl = url });
         }
-        return new ResponsesInputItem { Role = "user", Content = parts };
+        return new KieResponsesInputItem { Role = "user", Content = parts };
     }
 
     private static string BuildPrompt(string postType, string? languageHint, string? instruction)
@@ -349,8 +239,6 @@ public sealed class KieCaptionService : IGeminiCaptionService
         var builder = new StringBuilder();
         if (hasImages)
         {
-            // Explicitly tell GPT-5.4 to actually LOOK at the attached images — otherwise
-            // it sometimes hallucinates generic copy without referencing visible content.
             builder.AppendLine(
                 "You are writing social-media captions for the images attached in this message.");
             builder.AppendLine(
@@ -459,8 +347,6 @@ public sealed class KieCaptionService : IGeminiCaptionService
 
     private static Result<IReadOnlyList<GeminiGeneratedCaption>> ParseSocialMediaCaptions(string text, int expected)
     {
-        // GPT-5.4 usually obeys the JSON-only instruction but occasionally wraps it in
-        // fences — strip markdown fences defensively before parsing.
         var trimmed = StripMarkdownFence(text);
 
         try
@@ -548,30 +434,6 @@ public sealed class KieCaptionService : IGeminiCaptionService
                 Array.Empty<string>(),
                 "Tap to learn more"))
             .ToList();
-    }
-
-    // --- DTOs for the Kie Responses API ---
-
-    private sealed class ResponsesRequest
-    {
-        [JsonPropertyName("model")] public string Model { get; set; } = default!;
-        [JsonPropertyName("stream")] public bool Stream { get; set; }
-        [JsonPropertyName("input")] public IReadOnlyList<ResponsesInputItem> Input { get; set; } = Array.Empty<ResponsesInputItem>();
-    }
-
-    private sealed class ResponsesInputItem
-    {
-        [JsonPropertyName("role")] public string Role { get; set; } = "user";
-        [JsonPropertyName("content")] public IReadOnlyList<ResponsesContentPart> Content { get; set; } = Array.Empty<ResponsesContentPart>();
-    }
-
-    private sealed class ResponsesContentPart
-    {
-        [JsonPropertyName("type")] public string Type { get; set; } = "input_text";
-        [JsonPropertyName("text")] public string? Text { get; set; }
-        // GPT-5.4 expects `image_url` as a plain string, not an object. Serializer emits
-        // it as `"image_url": "https://..."` when set, or omits it when null.
-        [JsonPropertyName("image_url")] public string? ImageUrl { get; set; }
     }
 
     private sealed class CaptionPayload

@@ -7,6 +7,7 @@ using Application.Posts;
 using Application.Posts.Models;
 using Application.Posts.Queries;
 using Application.Recommendations.Models;
+using Domain.Entities;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
@@ -19,16 +20,22 @@ public sealed record IndexSocialAccountPostsCommand(
     int? MaxPosts = null,
     Func<IndexSocialAccountIngestFailureBatch, CancellationToken, Task>? OnIngestFailures = null,
     Func<IndexSocialAccountReadBatch, CancellationToken, Task>? OnReadBatch = null,
-    bool StopOnProviderCreditFailure = false)
+    bool StopOnProviderCreditFailure = false,
+    Func<IndexSocialAccountIngestProgress, CancellationToken, Task>? OnIngestProgress = null,
+    bool BackfillMissingMediaDocuments = true)
     : IRequest<Result<IndexSocialAccountPostsResponse>>;
 
 public sealed class IndexSocialAccountPostsCommandHandler
     : IRequestHandler<IndexSocialAccountPostsCommand, Result<IndexSocialAccountPostsResponse>>
 {
+#pragma warning disable CS0169
+    private readonly RecommendPost? _domainDependency;
+#pragma warning restore CS0169
     private const int PageSize = 25;
     private const int DefaultMaxPosts = 200;
     private const int HardCapPosts = 2000;
     private const int RagIngestBatchSize = 3;
+    private const string MediaFingerprintVersionPrefix = "media-v2:";
 
     private const string ImageDescribePrompt =
         "Describe this social media post image so it can be retrieved by semantic search and used " +
@@ -122,6 +129,7 @@ public sealed class IndexSocialAccountPostsCommandHandler
         var queuedVideo = 0;
         var queuedProfile = 0;
         var failedIngestDocuments = new List<IndexSocialAccountIngestFailure>();
+        var indexedReadDocumentIds = new List<string>();
         var readItemsByDocumentId = new Dictionary<string, IndexSocialAccountPostReadItem>(StringComparer.Ordinal);
 
         // Page profile (the "Giới thiệu" / About section + category + website + location).
@@ -178,6 +186,9 @@ public sealed class IndexSocialAccountPostsCommandHandler
                 queuedText++;
             }
 
+            var allowLegacyMediaUpdate =
+                textStatus != DocStatus.Unchanged || request.BackfillMissingMediaDocuments;
+
             var imageUrl = SelectImageUrl(post);
             if (!string.IsNullOrWhiteSpace(imageUrl))
             {
@@ -185,10 +196,17 @@ public sealed class IndexSocialAccountPostsCommandHandler
 
                 // Path 1: vision-LLM describe-then-text-embed (for the LLM context).
                 var imageDocId = $"{prefix}{post.PlatformPostId}:img:0";
-                var imageFingerprint = ComputeFingerprint(imageUrl!);
-                var imageStatus = Classify(existing, imageDocId, imageFingerprint);
+                var imageFingerprint = ComputeMediaFingerprint(
+                    "image-description",
+                    post,
+                    imageUrl,
+                    caption);
 
-                if (imageStatus != DocStatus.Unchanged)
+                if (ShouldQueueMediaDocument(
+                        existing,
+                        imageDocId,
+                        imageFingerprint,
+                        allowLegacyMediaUpdate))
                 {
                     docsToQueue.Add(new RagIngestMessage
                     {
@@ -207,11 +225,17 @@ public sealed class IndexSocialAccountPostsCommandHandler
                 // in the same space) so text queries can retrieve the image directly.
                 // Suffix v2 = Gemini Embedding 2 Preview (3072-dim) collection.
                 var visualDocId = $"{prefix}{post.PlatformPostId}:vis2:0";
-                var visualFingerprint = ComputeFingerprint(
-                    string.Concat(imageUrl, "|", caption ?? string.Empty));
-                var visualStatus = Classify(existing, visualDocId, visualFingerprint);
+                var visualFingerprint = ComputeMediaFingerprint(
+                    "image-native",
+                    post,
+                    imageUrl,
+                    caption);
 
-                if (visualStatus != DocStatus.Unchanged)
+                if (ShouldQueueMediaDocument(
+                        existing,
+                        visualDocId,
+                        visualFingerprint,
+                        allowLegacyMediaUpdate))
                 {
                     docsToQueue.Add(new RagIngestMessage
                     {
@@ -235,16 +259,17 @@ public sealed class IndexSocialAccountPostsCommandHandler
             if (videoUrl is not null)
             {
                 var videoDocId = $"{prefix}{post.PlatformPostId}:vid:0";
-                var videoFingerprint = ComputeFingerprint(
-                    string.Concat(
-                        post.PlatformPostId,
-                        "|",
-                        post.MediaType,
-                        "|",
-                        post.PublishedAt?.ToUnixTimeSeconds()));
-                var videoStatus = Classify(existing, videoDocId, videoFingerprint);
+                var videoFingerprint = ComputeMediaFingerprint(
+                    "video",
+                    post,
+                    videoUrl,
+                    caption: null);
 
-                if (videoStatus != DocStatus.Unchanged)
+                if (ShouldQueueMediaDocument(
+                        existing,
+                        videoDocId,
+                        videoFingerprint,
+                        allowLegacyMediaUpdate))
                 {
                     docsToQueue.Add(new RagIngestMessage
                     {
@@ -280,34 +305,28 @@ public sealed class IndexSocialAccountPostsCommandHandler
                 queuedVideo,
                 queuedProfile);
 
-            var ingested = 0; var unchanged = 0; var failed = 0;
+            var ingested = 0; var unchanged = 0; var failed = 0; var completed = 0;
+            var totalDocuments = docsToQueue.Count;
             foreach (var batch in docsToQueue.Chunk(RagIngestBatchSize))
             {
-                if (request.OnReadBatch is not null)
-                {
-                    var postsInBatch = BuildReadBatchItems(batch, readItemsByDocumentId);
-                    if (postsInBatch.Count > 0)
-                    {
-                        await request.OnReadBatch(
-                            new IndexSocialAccountReadBatch(
-                                request.SocialMediaId,
-                                platform,
-                                prefix,
-                                postsInBatch),
-                            cancellationToken);
-                    }
-                }
-
+                var currentBatchStart = completed + 1;
                 var ingestResults = await _ragClient.IngestBatchSyncAsync(batch, cancellationToken);
                 var batchFailures = new List<IndexSocialAccountIngestFailure>();
 
                 foreach (var r in ingestResults)
                 {
+                    completed++;
                     switch ((r.Status ?? string.Empty).ToLowerInvariant())
                     {
                         case "ingested":
-                        case "updated":  ingested++; break;
-                        case "unchanged": unchanged++; break;
+                        case "updated":
+                            ingested++;
+                            indexedReadDocumentIds.Add(r.DocumentId);
+                            break;
+                        case "unchanged":
+                            unchanged++;
+                            indexedReadDocumentIds.Add(r.DocumentId);
+                            break;
                         case "failed":
                             failed++;
                             var failure = new IndexSocialAccountIngestFailure(r.DocumentId, r.Error);
@@ -317,6 +336,23 @@ public sealed class IndexSocialAccountPostsCommandHandler
                                 "RAG ingest failed for {DocId}: {Error}", r.DocumentId, r.Error);
                             break;
                     }
+                }
+
+                if (request.OnIngestProgress is not null)
+                {
+                    await request.OnIngestProgress(
+                        new IndexSocialAccountIngestProgress(
+                            request.SocialMediaId,
+                            platform,
+                            prefix,
+                            completed,
+                            totalDocuments,
+                            currentBatchStart,
+                            Math.Min(completed, totalDocuments),
+                            ingested,
+                            unchanged,
+                            failed),
+                        cancellationToken);
                 }
 
                 if (batchFailures.Count > 0 && request.OnIngestFailures is not null)
@@ -362,7 +398,8 @@ public sealed class IndexSocialAccountPostsCommandHandler
             QueuedImageDocuments: queuedImage,
             QueuedVideoDocuments: queuedVideo,
             QueuedProfileDocuments: queuedProfile,
-            FailedIngestDocuments: failedIngestDocuments));
+            FailedIngestDocuments: failedIngestDocuments,
+            IndexedKnowledgeItems: BuildReadItemsByDocumentIds(indexedReadDocumentIds, readItemsByDocumentId)));
     }
 
     /// <summary>
@@ -502,15 +539,15 @@ public sealed class IndexSocialAccountPostsCommandHandler
             DocumentKinds: new[] { documentKind });
     }
 
-    private static IReadOnlyList<IndexSocialAccountPostReadItem> BuildReadBatchItems(
-        IEnumerable<RagIngestMessage> batch,
+    private static IReadOnlyList<IndexSocialAccountPostReadItem> BuildReadItemsByDocumentIds(
+        IEnumerable<string> documentIds,
         IReadOnlyDictionary<string, IndexSocialAccountPostReadItem> readItemsByDocumentId)
     {
         var posts = new Dictionary<string, IndexSocialAccountPostReadItem>(StringComparer.Ordinal);
 
-        foreach (var doc in batch)
+        foreach (var documentId in documentIds)
         {
-            if (!readItemsByDocumentId.TryGetValue(doc.DocumentId, out var item))
+            if (!readItemsByDocumentId.TryGetValue(documentId, out var item))
             {
                 continue;
             }
@@ -623,7 +660,23 @@ public sealed class IndexSocialAccountPostsCommandHandler
         }
 
         var content = sb.ToString();
-        return (content, ComputeFingerprint(content));
+
+        // Do not include volatile engagement counters in the fingerprint. A likes/views
+        // drift should not trigger paid RAG embedding on every recommendation call.
+        var fingerprintSource = string.Join(
+            '\n',
+            platform,
+            post.PlatformPostId,
+            post.Title,
+            post.Text,
+            post.Description,
+            post.MediaType,
+            post.PublishedAt?.ToUnixTimeSeconds().ToString(),
+            post.Permalink,
+            post.ShareUrl,
+            post.EmbedUrl);
+
+        return (content, ComputeFingerprint(fingerprintSource));
     }
 
     private static string? SelectImageUrl(SocialPlatformPostSummaryResponse post)
@@ -697,10 +750,68 @@ public sealed class IndexSocialAccountPostsCommandHandler
             : DocStatus.Updated;
     }
 
+    private static bool ShouldQueueMediaDocument(
+        IReadOnlyDictionary<string, string> existing,
+        string documentId,
+        string fingerprint,
+        bool allowLegacyUpdate)
+    {
+        if (!existing.TryGetValue(documentId, out var existingFingerprint))
+        {
+            return true;
+        }
+
+        if (string.Equals(existingFingerprint, fingerprint, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // Legacy media fingerprints used the full signed CDN URL. Those URLs can
+        // rotate without any post/account change, so normal recommendation runs do
+        // not spend RAG work just to migrate that fingerprint. Once a media-v2
+        // fingerprint exists, a mismatch means the stable media identity changed.
+        return existingFingerprint.StartsWith(MediaFingerprintVersionPrefix, StringComparison.Ordinal)
+               || allowLegacyUpdate;
+    }
+
     private static string ComputeFingerprint(string input)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static string ComputeMediaFingerprint(
+        string kind,
+        SocialPlatformPostSummaryResponse post,
+        string mediaUrl,
+        string? caption)
+    {
+        var source = string.Join(
+            '\n',
+            kind,
+            post.PlatformPostId,
+            post.MediaType,
+            post.PublishedAt?.ToUnixTimeSeconds().ToString(),
+            NormalizeMediaFingerprintUrl(mediaUrl),
+            caption);
+
+        return MediaFingerprintVersionPrefix + ComputeFingerprint(source);
+    }
+
+    private static string NormalizeMediaFingerprintUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return url.Trim();
+        }
+
+        var port = uri.IsDefaultPort ? string.Empty : $":{uri.Port}";
+        return string.Concat(
+            uri.Scheme.ToLowerInvariant(),
+            "://",
+            uri.Host.ToLowerInvariant(),
+            port,
+            uri.AbsolutePath);
     }
 
     private enum DocStatus

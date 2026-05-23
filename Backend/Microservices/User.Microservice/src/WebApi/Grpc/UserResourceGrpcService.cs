@@ -1,4 +1,5 @@
 using Application.Resources.Commands;
+using Application.Resources;
 using Application.Resources.Queries;
 using Application.Configs.Queries;
 using Application.Users.Queries;
@@ -210,7 +211,7 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
             var result = await _mediator.Send(
                 new UploadResourceFromUrlCommand(userId, url, status, resourceType, workspaceId, provenance with
                 {
-                    OriginSourceUrl = url
+                    OriginSourceUrl = ResourceOriginSource.NormalizeForStorage(url)
                 }),
                 context.CancellationToken);
 
@@ -226,7 +227,7 @@ public sealed class UserResourceGrpcService : UserResourceService.UserResourceSe
                 ContentType = result.Value.ContentType ?? string.Empty,
                 ResourceType = result.Value.ResourceType ?? string.Empty,
                 OriginKind = result.Value.OriginKind ?? string.Empty,
-                OriginSourceUrl = result.Value.OriginSourceUrl ?? string.Empty,
+                OriginSourceUrl = ResourceOriginSource.NormalizeForResponse(result.Value.OriginSourceUrl) ?? string.Empty,
                 OriginChatSessionId = result.Value.OriginChatSessionId?.ToString() ?? string.Empty,
                 OriginChatId = result.Value.OriginChatId?.ToString() ?? string.Empty
             });

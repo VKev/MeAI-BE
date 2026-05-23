@@ -25,6 +25,18 @@ public sealed record IndexSocialAccountReadBatch(
     string DocumentIdPrefix,
     IReadOnlyList<IndexSocialAccountPostReadItem> Posts);
 
+public sealed record IndexSocialAccountIngestProgress(
+    Guid SocialMediaId,
+    string Platform,
+    string DocumentIdPrefix,
+    int CompletedDocuments,
+    int TotalDocuments,
+    int CurrentBatchStart,
+    int CurrentBatchEnd,
+    int IngestedDocuments,
+    int UnchangedDocuments,
+    int FailedDocuments);
+
 public sealed record IndexSocialAccountPostsResponse(
     Guid SocialMediaId,
     string Platform,
@@ -45,4 +57,9 @@ public sealed record IndexSocialAccountPostsResponse(
     /// Per-document RAG ingest failures. Non-empty means indexing continued with the
     /// documents that did succeed, but the caller should surface the partial failure.
     /// </summary>
-    IReadOnlyList<IndexSocialAccountIngestFailure>? FailedIngestDocuments = null);
+    IReadOnlyList<IndexSocialAccountIngestFailure>? FailedIngestDocuments = null,
+    /// <summary>
+    /// Post-level summary of documents that were actually accepted by RAG in this run.
+    /// Multiple text/image/video docs for the same platform post are merged into one item.
+    /// </summary>
+    IReadOnlyList<IndexSocialAccountPostReadItem>? IndexedKnowledgeItems = null);
