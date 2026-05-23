@@ -4,68 +4,77 @@ skinparam shadowing false
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
 hide empty members
-package "Frontend" {
-class "Post Builder Screen" as FE1 <<Frontend>> {
-  +runMainAction()
-  +refreshVisibleState()
-  -localState
-  -validationState
+
+package "Frontend Post Builder Component" {
+class "PostBuilderLayout Screen" as FE1 <<Frontend>> {
+  +id: string (postBuilderId)
+  +workspaceId: string
+  +resetPostBuilder()
+  +clearMediaResources()
 }
-class "Post Builder Hydration Hook" as FE2 <<Frontend>> {
-  +runMainAction()
-  +refreshVisibleState()
-  -localState
-  -validationState
+class "PostBuilderHeader Component" as FE2 <<Frontend>> {
+  +coinBalance: number
+  +isPublishDisabled: boolean
+  +handlePublish()
 }
-class "Auto Save Hook" as FE3 <<Frontend>> {
-  +runMainAction()
-  +refreshVisibleState()
-  -localState
-  -validationState
+class "ContentCreation Component" as FE3 <<Frontend>> {
+  +captionLanguage: 'vn' | 'en' | 'auto'
+  +captionStyle: 'creative' | 'branded' | 'marketing'
+  +maxTokensInput: string (min 100)
+  +useWebSearch: boolean
+  +isGenerating: boolean
+  +copied: boolean
+  +handleCopyContent()
+  +handleGenerate()
+}
+class "MediaSelection Component" as FE4 <<Frontend>> {
+  +selectedIds: string[]
+  +allowedTypes: string[]
+  +maxSelected: number
+  +mutuallyExclusiveTypes: boolean (XOR image vs video)
+  +handleToggle(item: TMediaResource)
+  +handleImportConfirm(picked: ImportedMedia[])
+}
+class "Auto Save Hook" as FE5 <<Frontend>> {
+  +debounceMs: 500
+  +triggerAutoSave(bucketState)
 }
 }
+
 package "Backend Services" {
-class "AI Post Builder Controller" as BE1 <<Backend>> {
-  +handleRequest()
-  +coordinateFlow()
-  -domainRules
-  -integrationPorts
+class "Post Builder Controller" as BE1 <<Backend>> {
+  +getPostBuilder(id: string)
+  +addPostBuilderResources(id: string, resourceIds: string[])
 }
-class "AI Post Controller" as BE2 <<Backend>> {
-  +handleRequest()
-  +coordinateFlow()
-  -domainRules
-  -integrationPorts
+class "Post Prepare Controller" as BE2 <<Backend>> {
+  +createPostCaption(payload: TCreateCaptionPayload)
 }
-class "Resource Hydration Flow" as BE3 <<Backend>> {
-  +handleRequest()
-  +coordinateFlow()
-  -domainRules
-  -integrationPorts
+class "Post Controller" as BE3 <<Backend>> {
+  +updatePost(postId: string, payload: UpdatePostPayload)
 }
 }
-package "External Systems And Storage" {
-class "User Resource gRPC" as INT1 <<Integration>> {
-  +sendOrReceive()
-  +returnResult()
-  -transportConfig
-  -retryRules
+
+package "Integrations And Storage" {
+class "User Media Store" as INT1 <<Integration>> {
+  +mediaResources: Array
+  +setMediaResources()
 }
-class "AI Database" as INT2 <<Integration>> {
-  +sendOrReceive()
-  +returnResult()
-  -transportConfig
-  -retryRules
+class "Client API & Query Invalidation" as INT2 <<Integration>> {
+  +clientFetch()
+  +invalidateQueries(queryKey)
 }
 }
+
 FE1 --> FE2
-FE2 --> FE3
-FE1 --> BE1
-BE1 --> BE2
-BE2 --> BE3
-BE1 --> INT1
+FE1 --> FE3
+FE1 --> FE4
+FE1 --> FE5
+FE3 --> BE2
+FE4 --> BE1
+FE4 --> INT1
+FE5 --> BE3
 BE2 --> INT2
-INT1 --> INT2
+BE3 --> INT2
 @enduml
 
 @startuml
@@ -73,51 +82,150 @@ title User Edits A Post Builder And Auto Save Keeps Every Draft Bucket In Sync
 autonumber
 skinparam shadowing false
 skinparam sequenceMessageAlign center
+
 actor User
-box "Frontend" #E8F0FE
-participant "Visible Screen" as Screen
-participant "Route Action Or Hook" as Hook
-participant "Frontend Store And Query Cache" as Store
-end box
-box "Gateway And Backend" #FFF4E5
-participant "API Gateway" as Gateway
-participant "Primary Service" as PrimaryService
-participant "Supporting Service" as SupportingService
-participant "Persistence And Domain Rules" as DomainLayer
+box "Frontend Post Builder" #E8F0FE
+participant "Visible Layout" as Layout
+participant "PostBuilderHeader" as Header
+participant "ContentCreation" as Editor
+participant "MediaSelection" as MediaPicker
+participant "AutoSave Hook" as AutoSaver
 end box
 
-User -> Screen : open a post-builder from the workspace
-Screen -> Hook : fetch builder detail and workspace detail
-Hook -> Gateway : GET /api/Ai/post-builders/{id} and workspace detail
-Gateway -> PrimaryService : load post-builder
-PrimaryService -> SupportingService : call user-resource service for hydrated presigned media
-SupportingService --> PrimaryService : hydrated media and builder resources
-PrimaryService -> DomainLayer : assemble per-platform and per-mode draft state
-DomainLayer --> PrimaryService : post-builder detail model
-PrimaryService --> Gateway : builder response
-Gateway --> Hook : builder payload
-Hook -> Store : hydrate captions, media buckets and publish states
-Store --> Screen : render content editor and previews
-group User changes text or media
-  User -> Screen : edit caption, switch mode or select media
-  Screen -> Store : update in-memory platform bucket state
-  Store -> Hook : debounce auto-save over changed buckets
-  group Auto-save evaluates each changed bucket
-    Hook -> Gateway : POST create draft or PUT update existing draft
-    Gateway -> PrimaryService : save one platform and mode bucket
-    PrimaryService -> DomainLayer : skip buckets that are already published or in-flight
-    alt bucket is new
-      DomainLayer -> SupportingService : create child post bound to the post-builder
-      SupportingService --> DomainLayer : new post id
-    else bucket already exists
-      DomainLayer -> SupportingService : update content, post type and resource list
-      SupportingService --> DomainLayer : draft updated
-    end
-    DomainLayer --> PrimaryService : latest snapshot key saved
-    PrimaryService --> Gateway : draft save success
-    Gateway --> Hook : save completed
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "PostBuilder Controller" as BuilderSvc
+participant "PostPrepare Controller" as PrepareSvc
+participant "Post Controller" as PostSvc
+end box
+
+box "Database & Storage" #E8F5E9
+participant "Database" as DB
+end box
+
+group Initialization & Hydration
+  User -> Layout : open a post-builder from the workspace
+  Layout -> Gateway : GET /api/Ai/post-builders/{id}
+  Gateway -> BuilderSvc : getPostBuilder(id)
+  BuilderSvc -> DB : read builder schema & child posts
+  DB --> BuilderSvc : builder data
+  BuilderSvc --> Gateway : builder payload
+  Gateway --> Layout : builder payload
+  Layout -> Editor : seed saved captions and properties
+  Layout -> MediaPicker : mount active media items
+end
+
+group Lock States Banner Overlays
+  alt active target mode is in-flight publishing
+    Layout -> Layout : show warning banner ("Target is publishing — editing is locked")
+    Layout -> Editor : disable text input, disable Generate button
+    Layout -> MediaPicker : disable media item toggles and library import
+  else active target mode is in-flight unpublishing
+    Layout -> Layout : show warning banner ("Target is being removed — editing is locked")
+    Layout -> Editor : disable inputs
+  else active target mode is already published
+    Layout -> Layout : show success lock banner with link to detail page
+    Layout -> Editor : lock inputs
   end
-  Hook -> Store : mark snapshot as saved and keep editing available
-  Store --> Screen : preserve a continuous editing flow without a blocking reload
+end
+
+group Copy Caption To Clipboard
+  User -> Editor : click "Copy" button in header
+  Editor -> Editor : copy active platform draft caption to clipboard via navigator.clipboard
+  Editor -> Editor : toggle state copied = true, show "Copied" check icon
+  Editor -> Editor : start 2-second timeout timer
+  alt timeout expires
+    Editor -> Editor : toggle state copied = false, show "Copy" icon again
+  end
+end
+
+group Media Selection Controls & XOR Rules
+  group Toggle Media Item
+    User -> MediaPicker : click a media item card
+    alt mutuallyExclusiveTypes is true (e.g. FB/IG Post)
+      MediaPicker -> MediaPicker : check if toggling item changes the media type (image vs video)
+      alt item has a different type than current selections
+        MediaPicker -> MediaPicker : drop all current selections (prevent mixed-media publish failures)
+      end
+    end
+    MediaPicker -> MediaPicker : toggle item selection, update selectedIds
+    MediaPicker -> AutoSaver : trigger debounced auto-save with selected resourceIds
+  end
+
+  group Import Media from User Cloud Library
+    User -> MediaPicker : click "Import from your library" button
+    MediaPicker -> Layout : open DialogImportUserMedia modal
+    Layout -> Gateway : GET /api/resources
+    Gateway --> Layout : user cloud assets array
+    Layout --> User : show grid of cloud resources
+    User -> Layout : select up to 5 resources, click Import
+    Layout -> MediaPicker : handleImportConfirm(pickedResources)
+    
+    opt Attach imported resources to post-builder
+      MediaPicker -> Gateway : POST /api/Ai/post-builders/{id}/resources (resourceIds)
+      Gateway -> BuilderSvc : addPostBuilderResources(id, resourceIds)
+      BuilderSvc -> DB : update association
+      DB --> BuilderSvc : updated
+      BuilderSvc --> Gateway : success
+      Gateway --> MediaPicker : attach success
+      MediaPicker -> MediaPicker : invalidate query cache to sync data
+    end
+    
+    MediaPicker -> MediaPicker : update selectedIds list (auto-select imported items)
+    MediaPicker -> AutoSaver : trigger debounced auto-save
+  end
+end
+
+group AI Caption Generation
+  User -> Editor : choose Language (Auto/EN/VN), Style (Creative/Branded/Marketing)
+  User -> Editor : toggle Web Search checkbox (useWebSearch = true)
+  User -> Editor : input Max Coins slider (maxTokensInput >= 100)
+  
+  alt Max Coins > user coin balance
+    User -> Editor : click Generate button
+    Editor --> User : show DialogInsufficientCoins modal
+  else Max Coins is valid
+    User -> Editor : click Generate button
+    Editor -> Editor : set isGenerating = true, isCaptionGenerating = true (Header publish buttons locked)
+    Editor -> Editor : optimistically debit maxCoins from local Store balance in Header
+    
+    Editor -> Gateway : POST /api/PostPrepare/caption (language, style, maxTokens, webSearch, postId, platform, resourceIds)
+    Gateway -> PrepareSvc : createPostCaption
+    PrepareSvc -> PrepareSvc : validate balance and execute AI generation pipeline
+    PrepareSvc --> Gateway : caption response (captionText, hashtags, trendingHashtags)
+    Gateway --> Editor : caption payload
+    
+    alt generation failed or insufficient funds database check
+      Gateway --> Editor : error response
+      Editor -> Editor : rollback optimistic coins debit in Header
+      Editor -> Editor : show Insufficient Coins modal or error toast
+    else generation success
+      Editor -> Editor : update platformContent editor state with generated caption & hashtags
+      Editor -> Gateway : PUT /api/posts/{postId} (update post content & resource list)
+      Gateway -> PostSvc : updatePost(postId, payload)
+      PostSvc -> DB : persist post content
+      DB --> PostSvc : saved
+      PostSvc --> Gateway : success response
+      Gateway --> Editor : update success
+      Editor -> Editor : invalidate query cache, refetch user profile to reconcile coins
+      Editor --> User : show success toast, reveal active generated caption
+    end
+    Editor -> Editor : set isGenerating = false, isCaptionGenerating = false
+  end
+end
+
+group Debounced Auto-Save Flow
+  User -> Editor : type in caption editor textarea
+  Editor -> Layout : update content state
+  Layout -> AutoSaver : trigger auto-save (debounce 500ms)
+  alt debounce timer expires
+    AutoSaver -> Gateway : PUT /api/posts/{postId} (update content, hashtags & resource list)
+    Gateway -> PostSvc : updatePost
+    PostSvc -> DB : save draft post content
+    DB --> PostSvc : saved
+    PostSvc --> Gateway : success response
+    Gateway --> AutoSaver : save success
+    AutoSaver -> Layout : mark snapshot state as saved (Header shows saved status)
+  end
 end
 @enduml

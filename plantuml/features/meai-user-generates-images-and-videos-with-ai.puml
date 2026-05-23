@@ -4,68 +4,84 @@ skinparam shadowing false
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
 hide empty members
-package "Frontend" {
-class "AI Generation Screen" as FE1 <<Frontend>> {
-  +runMainAction()
-  +refreshVisibleState()
-  -localState
-  -validationState
+
+package "Frontend AI Generation Workspace" {
+class "Workspace Builder Screen" as FE1 <<Frontend>> {
+  +promptInput: string
+  +generationMode: 'image' | 'video'
+  +resourceTypeFilter: 'ALL' | 'IMAGE' | 'VIDEO'
+  +handleGenerate(resourceIds: string[])
+  +handleReusePrompt(text: string)
+  +handleDeleteRequest(itemId: string)
+  +handleConfirmDelete()
+  +handleTabChange(value: 'image' | 'video')
 }
-class "Generation Hook" as FE2 <<Frontend>> {
-  +runMainAction()
-  +refreshVisibleState()
-  -localState
-  -validationState
+class "Workspace Image Sidebar" as FE2 <<Frontend>> {
+  +selectedModel: ImageModel
+  +aspectRatio: Ratio (1:1, 16:9, 9:16, etc.)
+  +socialTargets: SocialTarget[]
+  +imageQuality: Quality (Standard, High, Ultra)
+  +onConfigChange(nextConfig: Partial<ImageGenerationConfig>)
 }
-class "Notification Hub Hook" as FE3 <<Frontend>> {
-  +runMainAction()
-  +refreshVisibleState()
-  -localState
-  -validationState
+class "Workspace Video Sidebar" as FE3 <<Frontend>> {
+  +selectedModel: VideoModel
+  +videoDimension: VideoDimension (9:16, 16:9, etc.)
+  +watermarkText: string
+  +onConfigChange(nextConfig: Partial<VideoGenerationConfig>)
+}
+class "Prompt & Reference Input" as FE4 <<Frontend>> {
+  +promptText: string
+  +referenceResourceIds: string[]
+  +onPromptChange(text: string)
+  +onReferenceChange(ids: string[])
+}
+class "Optimistic Coins Debit Hook" as FE5 <<Frontend>> {
+  +onMutate(cost: number): context
+  +onSuccess()
+  +onError(context)
 }
 }
+
 package "Backend Services" {
 class "AI Chat Controller" as BE1 <<Backend>> {
-  +handleRequest()
-  +coordinateFlow()
-  -domainRules
-  -integrationPorts
+  +createImageChat(payload: TCreateImageChat)
+  +createVideoChat(payload: TCreateVideoChat)
+  +deleteChatById(chatId: string)
+  +getAllChatByChatSessionId(sessionId: string)
 }
-class "AI Generation Application Flow" as BE2 <<Backend>> {
-  +handleRequest()
-  +coordinateFlow()
-  -domainRules
-  -integrationPorts
+class "Coin Pricing Controller" as BE2 <<Backend>> {
+  +estimateCoinCost(payload: EstimateInput)
+  +estimateCoinCostByReferenceImages(payload: RefEstimateInput)
 }
-class "Coin Debit Flow" as BE3 <<Backend>> {
-  +handleRequest()
-  +coordinateFlow()
-  -domainRules
-  -integrationPorts
+class "User Billing Flow" as BE3 <<Backend>> {
+  +debitUserCoins(userId: string, amount: number)
 }
 }
-package "Integrations And Delivery" {
-class "RabbitMQ Generation Queue" as INT1 <<Integration>> {
-  +sendOrReceive()
-  +returnResult()
-  -transportConfig
-  -retryRules
+
+package "Integrations And Storage" {
+class "AI Database & OPFS" as INT1 <<Integration>> {
+  +chats: Table
+  +chatSessions: Table
 }
-class "Notification Hub" as INT2 <<Integration>> {
-  +sendOrReceive()
-  +returnResult()
-  -transportConfig
-  -retryRules
+class "RabbitMQ AI Generation Queue" as INT2 <<Integration>> {
+  +enqueueImageGeneration(chatId: string)
+  +enqueueVideoGeneration(chatId: string)
+}
+class "SignalR Notification Hub" as INT3 <<Integration>> {
+  +pushNotification(userId: string, payload: object)
 }
 }
+
 FE1 --> FE2
-FE2 --> FE3
+FE1 --> FE3
+FE1 --> FE4
+FE1 --> FE5
 FE1 --> BE1
-BE1 --> BE2
-BE2 --> BE3
+FE1 --> BE2
+BE1 --> BE3
 BE1 --> INT1
-BE2 --> INT2
-INT1 --> INT2
+BE1 --> INT2
+INT2 --> INT3
 @enduml
 
 @startuml
@@ -73,68 +89,136 @@ title User Generates Images Or Videos From The AI Workspace
 autonumber
 skinparam shadowing false
 skinparam sequenceMessageAlign center
+
 actor User
-box "Frontend" #E8F0FE
-participant "Visible Screen" as Screen
-participant "Route Action Or Hook" as Hook
-participant "Frontend Store And Query Cache" as Store
-end box
-box "Gateway And Backend" #FFF4E5
-participant "API Gateway" as Gateway
-participant "Primary Service" as PrimaryService
-participant "Supporting Service" as SupportingService
-participant "Persistence And Domain Rules" as DomainLayer
-end box
-box "Async And Delivery" #E8F5E9
-participant "gRPC Or RabbitMQ Channel" as AsyncBus
-participant "Notification Service And Hub" as NotificationHub
+box "Frontend AI Workspace" #E8F0FE
+participant "Visible Layout" as Layout
+participant "Image / Video Sidebar" as Sidebar
+participant "Prompt & Reference Input" as PromptBox
+participant "Optimistic Coins Store" as Store
 end box
 
-User -> Screen : open the AI generation workspace
-Screen -> Hook : fetch default configuration for model and aspect ratio
-Hook -> Gateway : GET /api/User/config
-Gateway -> SupportingService : load active user configuration
-SupportingService --> Gateway : config payload
-Gateway --> Hook : config response
-Hook -> Store : initialize prompt and media options
-Store --> Screen : show image or video controls
-group Submit a generation request
-  User -> Screen : write prompt and choose model settings
-  Screen -> Hook : submit create image or create video chat
-  Hook -> Gateway : POST /api/Ai/chats/image or /api/Ai/chats/video
-  Gateway -> PrimaryService : create generation chat
-  PrimaryService -> SupportingService : debit coins through user billing
-  alt coin balance is insufficient
-    SupportingService --> PrimaryService : reject debit
-    PrimaryService --> Gateway : business failure
-    Gateway --> Hook : generation rejected
-    Hook --> Screen : show payment or balance error
-  else coins debited
-    SupportingService --> PrimaryService : debit accepted
-    PrimaryService -> DomainLayer : persist chat and enqueue generation work
-    DomainLayer -> AsyncBus : publish generation-started message
-    AsyncBus --> DomainLayer : accepted
-    PrimaryService --> Gateway : accepted response with chat correlation
-    Gateway --> Hook : request accepted
-    Hook -> Store : place pending item into the visible workspace chat list
-    Store --> Screen : show pending skeleton immediately
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Chat Controller" as ChatSvc
+participant "Coin Pricing Service" as PricingSvc
+participant "Billing & Coin Store" as BillingSvc
+end box
+
+box "Async Systems & Database" #E8F5E9
+participant "RabbitMQ Queue" as Queue
+participant "SignalR Hub" as SignalR
+participant "Database" as DB
+end box
+
+group Initialization & Live Cost Preview
+  User -> Layout : open AI workspace session
+  Layout -> Gateway : GET /api/Ai/chats?chatSessionId={sessionId}
+  Gateway -> ChatSvc : load active chats in session
+  ChatSvc -> DB : read chats table
+  DB --> ChatSvc : chats rows
+  ChatSvc --> Gateway : chats list
+  Gateway --> Layout : render chat history
+  Layout -> Sidebar : mount active image/video options
+
+  opt User changes model, dimension, quality, watermark or social targets
+    User -> Sidebar : select new model, aspect ratio, quality level or watermark text
+    Sidebar -> Layout : update configuration state
+    Layout -> Gateway : POST /api/CoinPricing/estimate (action, model, quality, quantity)
+    alt user attached reference images (Image-to-Image / Reframe)
+      Layout -> Gateway : POST /api/CoinPricing/estimate-by-reference (resourceIds)
+    end
+    Gateway -> PricingSvc : calculate cost quote based on variant pricing rules
+    PricingSvc --> Gateway : quote response (totalCoins, unitPrice)
+    Gateway --> Layout : update "Generate" button coin badge (e.g. "Generate - 100 coins")
   end
 end
-group Background completion returns to the same frontend
-  AsyncBus -> PrimaryService : generation completed or failed event
-  PrimaryService -> SupportingService : persist generated resources or failure metadata
-  SupportingService -> NotificationHub : push notification request
-  NotificationHub --> Store : SignalR NotificationReceived event
-  alt generation failed
-    Store --> Screen : show failure toast and stop the pending spinner
-  else generation completed
-    Store -> Hook : invalidate workspace chats
-    Hook -> Gateway : GET refreshed chat history and resources
-    Gateway -> PrimaryService : reload chat session
-    PrimaryService --> Gateway : updated chat and resource payload
-    Gateway --> Hook : refreshed data
-    Hook -> Store : replace pending state with the final media result
-    Store --> Screen : show the generated image or video in place
+
+group Chat Management: Reuse Prompt & Delete Chat
+  opt User clicks "Reuse Prompt" on a history item card
+    User -> Layout : click Reuse Prompt
+    Layout -> PromptBox : copy prompt text to editor input
+  end
+
+  opt User clicks "Delete Chat" on a history item card
+    User -> Layout : click Delete Chat
+    Layout --> User : prompt DialogConfirmDelete modal
+    User -> Layout : confirm delete
+    Layout -> Gateway : DELETE /api/Ai/chats/{chatId}
+    Gateway -> ChatSvc : deleteChatById(chatId)
+    ChatSvc -> DB : delete chat record & mark attached files detached
+    DB --> ChatSvc : deleted
+    ChatSvc --> Gateway : success response
+    Gateway --> Layout : invalidate queries & toast success
+    Layout -> Layout : remove chat card from screen smoothly
+  end
+end
+
+group Submit a Generation Request
+  User -> PromptBox : write prompt, upload reference resources
+  PromptBox -> Layout : promptText, referenceResourceIds ready
+  
+  alt user enters max coins and balance checks
+    User -> Layout : specify Max Coins limit (maxTokensInput)
+    alt Max Coins > current coin balance
+      Layout --> User : show DialogInsufficientCoins modal
+    else Max Coins is valid
+      User -> Layout : click Generate button (with cost coin badge)
+      
+      Layout -> Store : optimistically debit totalCoins from user's local balance
+      Store --> Layout : update visible balance instantly in Header
+      
+      alt Video Mode
+        Layout -> Gateway : POST /api/Ai/chats/video (chatSessionId, prompt, model, aspectRatio, watermark, resourceIds)
+      else Image Mode
+        Layout -> Gateway : POST /api/Ai/chats/image (chatSessionId, prompt, model, aspectRatio, resolution, socialTargets, resourceIds)
+      end
+      
+      Gateway -> ChatSvc : create video or image chat
+      ChatSvc -> BillingSvc : debit coins from database billing balance
+      
+      alt Database check: insufficient funds
+        BillingSvc --> ChatSvc : reject debit
+        ChatSvc --> Gateway : billing validation error
+        Gateway --> Layout : billing failure response
+        Layout -> Store : rollback optimistic coins debit
+        Layout --> User : show DialogInsufficientCoins modal
+      else Debit accepted
+        BillingSvc --> ChatSvc : debit confirmed
+        ChatSvc -> DB : insert chat in pending state
+        ChatSvc -> Queue : enqueue generation task (RabbitMQ queue)
+        Queue --> ChatSvc : enqueued
+        ChatSvc --> Gateway : chat accepted response
+        Gateway --> Layout : chat created payload
+        Layout -> Layout : clear prompt input, refetch user profile
+        Layout -> Layout : show pending skeleton card immediately in feed
+      end
+    end
+  end
+end
+
+group Background Task Delivery & SignalR Refreshes
+  Queue -> Queue : execute model inference (image generation, depth reframe or video generation)
+  alt inference completed successfully
+    Queue -> DB : save generated resource records, update chat status to "completed"
+    Queue -> SignalR : publish 'ai.chat.completed' notification event
+  else inference failed
+    Queue -> DB : save error message, update chat status to "failed"
+    Queue -> SignalR : publish 'ai.chat.failed' notification event
+  end
+  
+  SignalR --> Layout : SignalR push notification received
+  Layout -> Gateway : GET /api/Ai/chats?chatSessionId={sessionId}
+  Gateway -> ChatSvc : reload chats
+  ChatSvc -> DB : read chats
+  DB --> ChatSvc : chats payload
+  ChatSvc --> Gateway : chats payload
+  Gateway --> Layout : updated chats
+  
+  alt task completed
+    Layout -> Layout : replace pending skeleton card with completed generated media, show success toast
+  else task failed
+    Layout -> Layout : remove skeleton card, show failure toast detailing error
   end
 end
 @enduml

@@ -18,6 +18,6 @@ This folder contains end-to-end frontend feature diagrams derived from the curre
 
 ## Diagram Inventory
 
-- Frontend feature diagrams: `30`
+- Frontend feature diagrams: `31`
 - Excluded UI-only or placeholder surfaces: `5`
 - Tracker: [frontend-feature-diagram-tracker.md](/home/vinhdo/Documents/GitHub/MeAI-BE/plans/frontend-feature-diagram-tracker.md:1)

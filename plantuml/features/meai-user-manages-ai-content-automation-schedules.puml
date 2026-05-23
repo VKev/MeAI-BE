@@ -4,71 +4,74 @@ skinparam shadowing false
 skinparam classAttributeIconSize 0
 skinparam packageStyle rectangle
 hide empty members
-package "Frontend" {
+package "Frontend AI Content Automation" {
 class "AI Auto Publishing Screen" as FE1 <<Frontend>> {
-  +runMainAction()
-  +refreshVisibleState()
-  -localState
-  -validationState
+  +pageView: 'dashboard' | 'create'
+  +schedules: AiSchedule[]
+  +accounts: SocialMedia[]
+  +workflowState: 'idle' | 'ready'
+  +fetchInitialData()
+  +handleNewRequest()
+  +handleBackToDashboard()
+  +handleCreateAutomation()
 }
 class "Schedule Composer" as FE2 <<Frontend>> {
-  +runMainAction()
-  +refreshVisibleState()
-  -localState
-  -validationState
+  +instruction: string
+  +automationName: string
+  +scheduledDate: Date
+  +scheduledTime: string
+  +selectedAccounts: string[]
+  +executeImmediately: boolean
+  +handleNextStep()
 }
 class "Schedule Overview Board" as FE3 <<Frontend>> {
-  +runMainAction()
-  +refreshVisibleState()
-  -localState
-  -validationState
+  +filter: 'all' | 'active' | 'published' | 'cancelled' | 'failed'
+  +stats: object
+  +handleEditLog(item: AiSchedule)
+  +handleCancelLog(id: string)
+  +handleActivateLog(id: string)
+}
+class "RescheduleDialog Component" as FE4 <<Frontend>> {
+  +isOpen: boolean
+  +reschedDate: Date
+  +reschedTime: string
+  +reschedImmediately: boolean
+  +executeRescheduleAction()
 }
 }
 package "Backend Services" {
 class "AI Schedule Controller" as BE1 <<Backend>> {
-  +handleRequest()
-  +coordinateFlow()
-  -domainRules
-  -integrationPorts
+  +fetchSchedules(workspaceId)
+  +fetchScheduleById(id)
+  +updateSchedule(id, payload)
+  +cancelSchedule(id)
+  +activateSchedule(id)
 }
 class "AI Agent Session Flow" as BE2 <<Backend>> {
-  +handleRequest()
-  +coordinateFlow()
-  -domainRules
-  -integrationPorts
+  +sendAgentMessage(sessionId, payload)
 }
 class "Schedule Runtime Flow" as BE3 <<Backend>> {
-  +handleRequest()
-  +coordinateFlow()
-  -domainRules
-  -integrationPorts
+  +executeScheduledPublishing()
 }
 }
 package "External Systems And Storage" {
 class "Schedule Database" as INT1 <<Integration>> {
-  +sendOrReceive()
-  +returnResult()
-  -transportConfig
-  -retryRules
+  +schedules: Table
+  +chatSessions: Table
 }
 class "Workspace Social Media Store" as INT2 <<Integration>> {
-  +sendOrReceive()
-  +returnResult()
-  -transportConfig
-  -retryRules
+  +socialMediaAccounts: Table
 }
 class "Agent Runtime And Notifications" as INT3 <<Integration>> {
-  +sendOrReceive()
-  +returnResult()
-  -transportConfig
-  -retryRules
+  +SignalR Hub
+  +Agent Worker
 }
 }
 FE1 --> FE2
-FE2 --> FE3
+FE1 --> FE3
+FE1 --> FE4
 FE1 --> BE1
-BE1 --> BE2
-BE2 --> BE3
+FE1 --> BE2
 BE1 --> INT1
 BE2 --> INT2
 BE3 --> INT3
@@ -151,16 +154,37 @@ group User reviews or toggles existing schedules
     Hook -> Store : update cached status or refetch list
     Store --> Screen : show cancelled badge
   else reactivate one cancelled schedule
-    User -> Screen : confirm activate
-    Screen -> Hook : call activate mutation
-    Hook -> Gateway : POST /api/Ai/schedules/{id}/activate
-    Gateway -> PrimaryService : reactivate schedule
-    PrimaryService -> DomainLayer : persist active status
-    DomainLayer --> PrimaryService : schedule updated
-    PrimaryService --> Gateway : success
-    Gateway --> Hook : mutation success
-    Hook -> Store : update cached status or refetch list
-    Store --> Screen : show active badge again
+    alt schedule execution time is in the future
+      User -> Screen : confirm activate
+      Screen -> Hook : call activate mutation
+      Hook -> Gateway : POST /api/Ai/schedules/{id}/activate
+      Gateway -> PrimaryService : reactivate schedule
+      PrimaryService -> DomainLayer : persist active status
+      DomainLayer --> PrimaryService : schedule updated
+      PrimaryService --> Gateway : success
+      Gateway --> Hook : mutation success
+      Hook -> Store : update cached status or refetch list
+      Store --> Screen : show active badge again
+    else schedule execution time is in the past
+      User -> Screen : confirm activate
+      Screen --> User : open Reschedule & Reactivate Dialog
+      User -> Screen : select new execution date/time (or select immediate execution)
+      Screen -> Hook : confirm reschedule action
+      Hook -> Gateway : PUT /api/Ai/schedules/{id} (new executeAtUtc)
+      Gateway -> PrimaryService : update schedule timestamp
+      PrimaryService -> DomainLayer : persist new execution time
+      DomainLayer --> PrimaryService : schedule updated
+      PrimaryService --> Gateway : success
+      Gateway --> Hook : update success
+      Hook -> Gateway : POST /api/Ai/schedules/{id}/activate
+      Gateway -> PrimaryService : reactivate schedule
+      PrimaryService -> DomainLayer : persist active status
+      DomainLayer --> PrimaryService : schedule updated
+      PrimaryService --> Gateway : success
+      Gateway --> Hook : activation success
+      Hook -> Store : update cached status & executeAtUtc or refetch list
+      Store --> Screen : show active badge with new schedule timestamp
+    end
   end
 end
 opt Runtime later publishes or fails in the background

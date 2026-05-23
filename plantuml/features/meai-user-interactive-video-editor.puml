@@ -1,0 +1,212 @@
+@startuml
+title User Interacts With The WebGL & WebAssembly Video Editor Workspace
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+
+package "Frontend Editor Application" {
+class "Editor Screen" as FE1 <<Frontend>> {
+  +renderLayout()
+  +handleLayoutResize()
+  -timelineHeight
+  -assetsWidth
+  -inspectorWidth
+}
+class "Project Store" as FE2 <<Frontend>> {
+  +createNewProject()
+  +loadProject()
+  +importMedia()
+  +addTrack()
+  +addClip()
+  +trimClip()
+  +splitClip()
+  +addClipTransition()
+  +createTextClip()
+  +applyTextAnimationPreset()
+  +addSubtitle()
+  +addVideoEffect()
+  +updateColorGrading()
+  +addAudioEffect()
+  +undo()
+  +redo()
+  -projectState
+}
+class "Engine Store" as FE3 <<Frontend>> {
+  +initialize()
+  -initializedState
+}
+class "Bridges (Media, Playback, Render, Effects, Transition)" as FE4 <<Frontend>> {
+  +initializeBridges()
+  +disposeBridges()
+}
+}
+
+package "Backend Services" {
+class "Profile Controller" as BE1 <<Backend>> {
+  +getMe()
+}
+class "Resource Controller" as BE2 <<Backend>> {
+  +uploadResource()
+  +fetchUserResources()
+}
+}
+
+package "External Browsers, Engines & APIs" {
+class "IndexedDB Storage" as EXT1 <<External>> {
+  +get()
+  +set()
+}
+class "Three.js WebGL Engine" as EXT2 <<External>> {
+  +renderPreview()
+}
+class "WebAssembly FFmpeg Transcoder" as EXT3 <<External>> {
+  +initialize()
+  +exportVideo()
+  +cancel()
+}
+class "FileSystem File Picker API" as EXT4 <<External>> {
+  +showSaveFilePicker()
+}
+}
+
+FE1 --> FE2
+FE1 --> FE3
+FE3 --> FE4
+FE1 --> BE1
+FE2 --> BE2
+FE2 --> EXT1
+FE4 --> EXT2
+FE1 --> EXT3
+EXT3 --> EXT4
+@enduml
+
+@startuml
+title User Interacts With The WebGL & WebAssembly Video Editor Workspace
+autonumber
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+
+actor User
+box "Frontend Video Editor" #E8F0FE
+participant "Visible Workspace" as Workspace
+participant "Project / UI Store" as Store
+participant "Engine Store & Bridges" as Engine
+end box
+
+box "Gateway And Backend" #FFF4E5
+participant "API Gateway" as Gateway
+participant "Profile Service" as ProfileSvc
+participant "Resource Service" as ResourceSvc
+end box
+
+box "Local & Browser Engines" #E8F5E9
+participant "IndexedDB" as DB
+participant "WebGL / Three.js Canvas" as Canvas
+participant "Wasm FFmpeg" as FFmpeg
+end box
+
+group Access Check & Environment Block
+  User -> Workspace : navigate to /editor
+  Workspace -> Workspace : block mobile view via MobileBlocker if screen size too small
+  Workspace -> Gateway : GET /api/profile/me
+  Gateway -> ProfileSvc : load active user profile
+  ProfileSvc --> Gateway : profile data (meAiCoin)
+  Gateway --> Workspace : profile payload
+  alt meAiCoin === 0
+    Workspace --> User : show DialogError (Insufficient Coins) and block workspace access
+  else meAiCoin > 0
+    Workspace -> Engine : initialize engine and bridges (media, playback, render, effects, transition)
+    Engine -> Canvas : setup Three.js viewport and canvas webgl context
+    Engine --> Workspace : environment ready
+  end
+end
+
+group Loading Project & Fetching Assets
+  Workspace -> Store : fetch user resources and recovery backups
+  Store -> DB : check local database for unsaved auto-save crash recoveries
+  DB --> Store : recovery array
+  Store -> Gateway : GET /api/resources
+  Gateway -> ResourceSvc : list user resources
+  ResourceSvc --> Gateway : resources list
+  Gateway --> Store : user assets payload
+  Store --> Workspace : show available assets panel, active templates, and timeline tracks
+end
+
+group Multi-track Editing, Autosaver & History
+  User -> Workspace : import local file or drag asset to Timeline
+  Workspace -> Store : importMedia(file) or addClip(trackId, mediaId, startTime)
+  Store -> Canvas : draw clip bounding boxes and setup GSAP animations
+  Canvas --> Workspace : live preview
+  
+  opt Periodic Auto-Save
+    Store -> DB : save current project JSON state to IndexedDB periodically
+    DB --> Store : saved successfully
+  end
+  
+  group Clip Modification Operations
+    User -> Workspace : split clip at playhead, trim points, or slide/slip clips
+    Workspace -> Store : splitClip() or trimClip()
+    Store -> Store : record action into ActionHistory stack
+    Store -> Canvas : update active clip parameters in Three.js renderer
+  end
+  
+  group Clip Transitions & Transform
+    User -> Workspace : add transition between clips, or resize/reposition in Preview
+    Workspace -> Store : addClipTransition() or updateClipTransform()
+    Store -> Engine : update transition-bridge parameters (type, duration)
+    Store -> Store : record action into ActionHistory stack
+  end
+
+  group Advanced Inspector Adjustments
+    User -> Workspace : adjust Color Grading (HSL / Curves), load custom 3D LUT
+    Workspace -> Store : updateColorGrading()
+    Store -> Engine : update effects-bridge color matrices and shader parameters
+    
+    User -> Workspace : adjust Audio parameters, enable Auto-Ducking
+    Workspace -> Store : updateAudioEffect() or setClipAudioDucking()
+    Store -> Engine : update playback-bridge audio processing nodes
+
+    User -> Workspace : add text, shape, or apply AI video effects (Background removal, auto-reframe)
+    Workspace -> Store : createTextClip(), applyTextAnimationPreset(), or addVideoEffect()
+    Store -> Engine : update depth shader for "Behind Subject" text and vision models
+  end
+
+  group Undo & Redo
+    User -> Workspace : trigger Undo (Ctrl+Z) or Redo (Ctrl+Y)
+    Workspace -> Store : undo() / redo()
+    Store -> Store : pop from ActionHistory stack and apply reverse action
+    Store -> Canvas : redraw updated scene
+  end
+end
+
+group Export, Transcoding & Delivery Pipeline
+  User -> Workspace : click Export on Toolbar, choose format preset (MP4/WAV/ProRes/GIF)
+  Workspace -> Workspace : prompt Export Dialog (Download locally or Upload to Server)
+  User -> Workspace : select export delivery mode and settings
+  Workspace -> FFmpeg : initialize WebAssembly transcoder runtime
+  FFmpeg --> Workspace : transcoder initialized
+  Workspace -> FFmpeg : exportVideo(projectState, exportSettings)
+  loop Transcoding Frames
+    FFmpeg -> Canvas : grab WebGL frames & canvas pixels
+    Canvas --> FFmpeg : pixel data
+    FFmpeg -> FFmpeg : transcode frame using in-browser WebAssembly FFmpeg
+    FFmpeg --> Workspace : report export progress percentage & phase
+    Workspace --> User : show real-time progress bar on Toolbar
+  end
+  FFmpeg --> Workspace : transcoding completed successfully
+
+  alt Delivery Option: Download locally
+    Workspace -> Workspace : request local file handler via showSaveFilePicker API (or standard blob)
+    Workspace -> User : save completed file directly to user's local disk
+  else Delivery Option: Upload to Server
+    Workspace -> Store : upload completed transcode blob as new resource
+    Store -> Gateway : POST /api/resources (uploadResource)
+    Gateway -> ResourceSvc : save video to cloud storage & resource library
+    ResourceSvc --> Gateway : upload success
+    Gateway --> Store : upload success response
+    Store -> Store : refresh user resources catalog
+    Store --> Workspace : show success toast, reload library, and redirect to user library view
+  end
+end
+@enduml
