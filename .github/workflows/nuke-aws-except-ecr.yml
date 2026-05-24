@@ -493,10 +493,12 @@ jobs:
           TMP_DIR="$(mktemp -d)"
           git clone --depth 1 https://github.com/VKev/Cloudflare-Nuke.git "$TMP_DIR"
           rm -f "$TMP_DIR/resources/r2.go"
-          if [ -n "${CF_API_TOKEN:-}" ]; then
-            # AccountToken is protected in the config and token auth often cannot list
-            # account tokens unless the token also has token-management privileges.
+          if [ -n "${CF_API_TOKEN:-}" ] && { [ -z "${CF_GLOBAL_API_KEY:-}" ] || [ -z "${CF_USER_EMAIL:-}" ]; }; then
+            # Token fallback usually has narrower permissions than the global key.
+            # Keep this build usable by dropping protected/optional collectors that
+            # commonly fail before config filters can run.
             rm -f "$TMP_DIR/resources/accountToken.go"
+            rm -f "$TMP_DIR/resources/aiGateway.go"
           fi
           (cd "$TMP_DIR" && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$OLDPWD/cf-nuke-linux-amd64" .)
           chmod +x cf-nuke-linux-amd64
@@ -510,25 +512,25 @@ jobs:
             exit 1
           fi
 
-          if [ -n "${CF_API_TOKEN:-}" ]; then
-            printf 'yes\n' | ./cf-nuke-linux-amd64 nuke \
-              --mode token \
-              -c cloudflare_nuke/nuke-config.final.yaml \
-              -a "$CF_ACCOUNT_ID" \
-              -k "$CF_API_TOKEN" \
-              --no-dry-run
-          else
-            if [ -z "${CF_GLOBAL_API_KEY:-}" ] || [ -z "${CF_USER_EMAIL:-}" ]; then
-              echo "::error::Missing Cloudflare Global API Key or user email for account-mode cf-nuke" >&2
-              exit 1
-            fi
-
+          if [ -n "${CF_GLOBAL_API_KEY:-}" ] && [ -n "${CF_USER_EMAIL:-}" ]; then
             printf 'yes\n' | ./cf-nuke-linux-amd64 nuke \
               --mode account \
               -c cloudflare_nuke/nuke-config.final.yaml \
               -a "$CF_ACCOUNT_ID" \
               -k "$CF_GLOBAL_API_KEY" \
               -u "$CF_USER_EMAIL" \
+              --no-dry-run
+          else
+            if [ -z "${CF_API_TOKEN:-}" ]; then
+              echo "::error::Missing Cloudflare API token for token-mode cf-nuke" >&2
+              exit 1
+            fi
+
+            printf 'yes\n' | ./cf-nuke-linux-amd64 nuke \
+              --mode token \
+              -c cloudflare_nuke/nuke-config.final.yaml \
+              -a "$CF_ACCOUNT_ID" \
+              -k "$CF_API_TOKEN" \
               --no-dry-run
           fi
 

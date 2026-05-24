@@ -42,6 +42,10 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<CoinPricingCatalogEntry> CoinPricingCatalog { get; set; }
 
+    public virtual DbSet<GenerationModelOption> GenerationModelOptions { get; set; }
+
+    public virtual DbSet<GenerationSocialPreset> GenerationSocialPresets { get; set; }
+
     public virtual DbSet<AiSpendRecord> AiSpendRecords { get; set; }
 
     public virtual DbSet<PromptFormulaTemplate> PromptFormulaTemplates { get; set; }
