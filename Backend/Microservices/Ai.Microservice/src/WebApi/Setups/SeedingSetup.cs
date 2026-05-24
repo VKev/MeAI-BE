@@ -38,5 +38,15 @@ public static class SeedingSetup
         {
             app.Logger.LogError(ex, "Failed to seed coin pricing catalog at startup.");
         }
+
+        try
+        {
+            var generationOptionsSeeder = scope.ServiceProvider.GetRequiredService<GenerationOptionsSeeder>();
+            await generationOptionsSeeder.SeedAsync();
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Failed to seed generation options catalog at startup.");
+        }
     }
 }

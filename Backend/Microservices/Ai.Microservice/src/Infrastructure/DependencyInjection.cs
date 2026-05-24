@@ -391,6 +391,7 @@ namespace Infrastructure
             services.AddScoped<IChatRepository, ChatRepository>();
             services.AddScoped<SampleDataSeeder>();
             services.AddScoped<CoinPricingSeeder>();
+            services.AddScoped<GenerationOptionsSeeder>();
             services.AddScoped<Application.Billing.ICoinPricingService, Infrastructure.Logic.Billing.CoinPricingService>();
             services.AddScoped<IPostBuilderRepository, PostBuilderRepository>();
             services.AddScoped<IPostRepository, PostRepository>();
