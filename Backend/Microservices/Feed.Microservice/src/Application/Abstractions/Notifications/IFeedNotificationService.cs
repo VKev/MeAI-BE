@@ -33,4 +33,18 @@ public interface IFeedNotificationService
         Guid commentId,
         string preview,
         CancellationToken cancellationToken);
+
+    Task NotifyModerationActionAsync(
+        Guid adminUserId,
+        Guid targetOwnerUserId,
+        Guid? reportId,
+        string targetType,
+        Guid targetId,
+        Guid? postId,
+        Guid? commentId,
+        string status,
+        string action,
+        string? resolutionNote,
+        string? preview,
+        CancellationToken cancellationToken);
 }

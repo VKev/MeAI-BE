@@ -14,6 +14,7 @@ internal static class FeedModerationSupport
 
     public const string NoAction = "None";
     public const string DeleteTargetPostAction = "DeleteTargetPost";
+    public const string DeleteTargetCommentAction = "DeleteTargetComment";
 
     public static string? NormalizeUsername(string? username)
     {
@@ -71,6 +72,7 @@ internal static class FeedModerationSupport
         {
             "none" => NoAction,
             "deletetargetpost" => DeleteTargetPostAction,
+            "deletetargetcomment" => DeleteTargetCommentAction,
             _ => string.Empty
         };
     }
