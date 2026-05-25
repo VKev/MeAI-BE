@@ -1,5 +1,6 @@
 using Application.Abstractions.Ai;
 using Application.Abstractions.Data;
+using Application.Abstractions.Notifications;
 using Application.Abstractions.Resources;
 using Application.Common;
 using Domain.Entities;
@@ -20,15 +21,18 @@ public sealed class DeletePostCommandHandler : ICommandHandler<DeletePostCommand
     private readonly IUnitOfWork _unitOfWork;
     private readonly IUserResourceService _userResourceService;
     private readonly IAiFeedPostService _aiFeedPostService;
+    private readonly IFeedNotificationService _feedNotificationService;
 
     public DeletePostCommandHandler(
         IUnitOfWork unitOfWork,
         IUserResourceService userResourceService,
-        IAiFeedPostService aiFeedPostService)
+        IAiFeedPostService aiFeedPostService,
+        IFeedNotificationService feedNotificationService)
     {
         _unitOfWork = unitOfWork;
         _userResourceService = userResourceService;
         _aiFeedPostService = aiFeedPostService;
+        _feedNotificationService = feedNotificationService;
     }
 
     public async Task<Result<bool>> Handle(DeletePostCommand request, CancellationToken cancellationToken)
@@ -77,6 +81,23 @@ public sealed class DeletePostCommandHandler : ICommandHandler<DeletePostCommand
             {
                 return Result.Failure<bool>(deleteMirrorResult.Error);
             }
+        }
+
+        if (request.IsAdmin && request.UserId != post.UserId)
+        {
+            await _feedNotificationService.NotifyModerationActionAsync(
+                request.UserId,
+                post.UserId,
+                null,
+                "Post",
+                post.Id,
+                post.Id,
+                null,
+                FeedModerationSupport.ResolvedStatus,
+                FeedModerationSupport.DeleteTargetPostAction,
+                null,
+                FeedPostSupport.BuildPreview(post.Content),
+                cancellationToken);
         }
 
         return Result.Success(true);

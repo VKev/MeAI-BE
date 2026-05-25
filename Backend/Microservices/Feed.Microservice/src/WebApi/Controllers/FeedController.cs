@@ -358,7 +358,8 @@ public sealed class FeedController : ApiController
             return Unauthorized(new MessageResponse("Unauthorized"));
         }
 
-        var result = await _mediator.Send(new DeleteCommentCommand(userId, id), cancellationToken);
+        var isAdmin = IsAdmin();
+        var result = await _mediator.Send(new DeleteCommentCommand(userId, id, isAdmin), cancellationToken);
         if (result.IsFailure)
         {
             return HandleFailure(result);

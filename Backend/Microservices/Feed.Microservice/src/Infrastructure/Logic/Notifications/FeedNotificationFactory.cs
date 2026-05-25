@@ -134,4 +134,47 @@ public sealed class FeedNotificationFactory
             DateTime.UtcNow,
             NotificationSourceConstants.Social);
     }
+
+    public NotificationRequestedEvent CreateModerationAction(
+        Guid adminUserId,
+        Guid targetOwnerUserId,
+        Guid? reportId,
+        string targetType,
+        Guid targetId,
+        Guid? postId,
+        Guid? commentId,
+        string status,
+        string action,
+        string? resolutionNote,
+        string? preview)
+    {
+        var message = action switch
+        {
+            "DeleteTargetPost" => "Your post was removed by moderation.",
+            "DeleteTargetComment" => "Your comment was removed by moderation.",
+            _ => "A moderation decision was made on your feed content."
+        };
+
+        return NotificationRequestedEventFactory.CreateForUser(
+            targetOwnerUserId,
+            "Feed.ModerationAction",
+            "Feed moderation update",
+            message,
+            new
+            {
+                adminUserId,
+                reportId,
+                targetType,
+                targetId,
+                postId,
+                commentId,
+                status,
+                action,
+                resolutionNote,
+                preview
+            },
+            adminUserId,
+            DateTime.UtcNow,
+            NotificationSourceConstants.Social);
+    }
 }

@@ -65,7 +65,8 @@ public sealed class CommentOwnershipTests
         await dbContext.Comments.AddRangeAsync(rootComment, reply);
         await dbContext.SaveChangesAsync();
 
-        var handler = new DeleteCommentCommandHandler(unitOfWork);
+        var notificationService = new Mock<IFeedNotificationService>(MockBehavior.Strict);
+        var handler = new DeleteCommentCommandHandler(unitOfWork, notificationService.Object);
 
         var result = await handler.Handle(new DeleteCommentCommand(commentOwnerId, rootComment.Id), CancellationToken.None);
 
@@ -78,6 +79,90 @@ public sealed class CommentOwnershipTests
         savedPost.CommentsCount.Should().Be(0);
         savedComments.Should().OnlyContain(item => item.IsDeleted);
         savedComments.Should().OnlyContain(item => item.DeletedAt.HasValue);
+    }
+
+    [Fact]
+    public async Task DeleteComment_Should_AllowAdminToDeleteThreadAndNotifyCommentOwner()
+    {
+        await using var dbContext = CreateDbContext();
+        using var unitOfWork = new UnitOfWork(dbContext);
+
+        var adminUserId = Guid.NewGuid();
+        var postOwnerId = Guid.NewGuid();
+        var commentOwnerId = Guid.NewGuid();
+        var replyOwnerId = Guid.NewGuid();
+        var now = new DateTime(2026, 4, 20, 15, 30, 0, DateTimeKind.Utc);
+
+        var post = new Post
+        {
+            Id = Guid.NewGuid(),
+            UserId = postOwnerId,
+            Content = "Feed post",
+            CommentsCount = 2,
+            CreatedAt = now.AddHours(-2),
+            UpdatedAt = now.AddHours(-2),
+            IsDeleted = false
+        };
+
+        var rootComment = new Comment
+        {
+            Id = Guid.NewGuid(),
+            PostId = post.Id,
+            UserId = commentOwnerId,
+            Content = "Admin removed comment",
+            RepliesCount = 1,
+            CreatedAt = now.AddHours(-1),
+            UpdatedAt = now.AddHours(-1),
+            IsDeleted = false
+        };
+
+        var reply = new Comment
+        {
+            Id = Guid.NewGuid(),
+            PostId = post.Id,
+            UserId = replyOwnerId,
+            ParentCommentId = rootComment.Id,
+            Content = "Reply",
+            CreatedAt = now.AddMinutes(-30),
+            UpdatedAt = now.AddMinutes(-30),
+            IsDeleted = false
+        };
+
+        await dbContext.Posts.AddAsync(post);
+        await dbContext.Comments.AddRangeAsync(rootComment, reply);
+        await dbContext.SaveChangesAsync();
+
+        var notificationService = new Mock<IFeedNotificationService>(MockBehavior.Strict);
+        notificationService
+            .Setup(service => service.NotifyModerationActionAsync(
+                adminUserId,
+                commentOwnerId,
+                null,
+                "Comment",
+                rootComment.Id,
+                post.Id,
+                rootComment.Id,
+                "Resolved",
+                "DeleteTargetComment",
+                null,
+                "Admin removed comment",
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var handler = new DeleteCommentCommandHandler(unitOfWork, notificationService.Object);
+
+        var result = await handler.Handle(new DeleteCommentCommand(adminUserId, rootComment.Id, true), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        await unitOfWork.SaveChangesAsync(CancellationToken.None);
+
+        var savedPost = await dbContext.Posts.SingleAsync();
+        var savedComments = await dbContext.Comments.OrderBy(item => item.CreatedAt).ToListAsync();
+
+        savedPost.CommentsCount.Should().Be(0);
+        savedComments.Should().OnlyContain(item => item.IsDeleted);
+        savedComments.Should().OnlyContain(item => item.DeletedAt.HasValue);
+        notificationService.VerifyAll();
     }
 
     [Fact]
