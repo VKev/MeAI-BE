@@ -148,17 +148,17 @@ public sealed class FeedNotificationFactory
         string? resolutionNote,
         string? preview)
     {
-        var message = action switch
+        var (title, message) = action switch
         {
-            "DeleteTargetPost" => "Your post was removed by moderation.",
-            "DeleteTargetComment" => "Your comment was removed by moderation.",
-            _ => "A moderation decision was made on your feed content."
+            "DeleteTargetPost" => ("Post removed", "Your post was removed for violating community guidelines."),
+            "DeleteTargetComment" => ("Comment removed", "Your comment was removed for violating community guidelines."),
+            _ => ("Feed moderation update", "A moderation decision was made on your feed content.")
         };
 
         return NotificationRequestedEventFactory.CreateForUser(
             targetOwnerUserId,
             "Feed.ModerationAction",
-            "Feed moderation update",
+            title,
             message,
             new
             {
