@@ -54,6 +54,8 @@ namespace Infrastructure
 {
     public static class DependencyInjection
     {
+        private const int MaxUserResourceGrpcMessageSizeBytes = 64 * 1024 * 1024;
+
         public static IServiceCollection AddInfrastructure(this IServiceCollection services)
         {
             services.AddMemoryCache();
@@ -325,6 +327,11 @@ namespace Infrastructure
                               ?? configuration["UserService__GrpcUrl"]
                               ?? "http://user-microservice:5004";
                 options.Address = new Uri(grpcUrl);
+            })
+            .ConfigureChannel(options =>
+            {
+                options.MaxReceiveMessageSize = MaxUserResourceGrpcMessageSizeBytes;
+                options.MaxSendMessageSize = MaxUserResourceGrpcMessageSizeBytes;
             });
             services.AddScoped<IUserResourceService, UserResourceGrpcService>();
             services.AddScoped<IAiGenerationStorageEstimator, AiGenerationStorageEstimator>();

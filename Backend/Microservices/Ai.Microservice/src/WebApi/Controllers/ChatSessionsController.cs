@@ -134,6 +134,6 @@ public sealed class ChatSessionsController : ApiController
     }
 }
 
-public sealed record CreateChatSessionRequest(Guid WorkspaceId, string? SessionName);
+public sealed record CreateChatSessionRequest(Guid? WorkspaceId, string? SessionName);
 
 public sealed record UpdateChatSessionRequest(string? SessionName);

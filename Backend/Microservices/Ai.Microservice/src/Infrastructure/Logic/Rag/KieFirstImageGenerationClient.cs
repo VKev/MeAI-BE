@@ -21,7 +21,6 @@ public sealed partial class KieFirstImageGenerationClient : IImageGenerationClie
 
     private readonly IKieImageService _kieImageService;
     private readonly OpenRouterImageGenerationClient _openRouterFallback;
-    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<KieFirstImageGenerationClient> _logger;
     private readonly string _textToImageModel;
     private readonly string _imageToImageModel;
@@ -31,13 +30,11 @@ public sealed partial class KieFirstImageGenerationClient : IImageGenerationClie
     public KieFirstImageGenerationClient(
         IKieImageService kieImageService,
         OpenRouterImageGenerationClient openRouterFallback,
-        IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
         ILogger<KieFirstImageGenerationClient> logger)
     {
         _kieImageService = kieImageService;
         _openRouterFallback = openRouterFallback;
-        _httpClientFactory = httpClientFactory;
         _logger = logger;
         _textToImageModel = configuration["Rag:KieImageGenTextModel"]
                             ?? configuration["RAG_KIE_IMAGE_GEN_TEXT_MODEL"]
@@ -125,18 +122,17 @@ public sealed partial class KieFirstImageGenerationClient : IImageGenerationClie
                 $"KIE GPT Image 2 completed without result URLs. TaskId={submit.TaskId}");
         }
 
-        var (dataUrl, mimeType) = await DownloadAsDataUrlAsync(
-            resultUrls[0],
-            cancellationToken).ConfigureAwait(false);
+        var (resultUrl, mimeType) = BuildResultUrl(resultUrls[0]);
 
         _logger.LogInformation(
-            "KIE GPT Image 2 image-gen completed: taskId={TaskId} mime={MimeType} dataUrlLen={Length}",
+            "KIE GPT Image 2 image-gen completed: taskId={TaskId} mime={MimeType} urlLen={Length} inlineData={InlineData}",
             submit.TaskId,
             mimeType,
-            dataUrl.Length);
+            resultUrl.Length,
+            resultUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase));
 
         return new ImageGenerationResult(
-            DataUrl: dataUrl,
+            Url: resultUrl,
             MimeType: mimeType,
             PromptTokens: null,
             CompletionTokens: null,
@@ -190,32 +186,15 @@ public sealed partial class KieFirstImageGenerationClient : IImageGenerationClie
             $"KIE GPT Image 2 task did not complete within {_pollTimeout.TotalSeconds:N0}s. TaskId={taskId}");
     }
 
-    private async Task<(string DataUrl, string MimeType)> DownloadAsDataUrlAsync(
-        string imageUrl,
-        CancellationToken cancellationToken)
+    private static (string Url, string MimeType) BuildResultUrl(string imageUrl)
     {
-        if (imageUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+        var trimmedUrl = imageUrl.Trim();
+        if (trimmedUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
         {
-            return (imageUrl, ExtractMimeTypeFromDataUrl(imageUrl) ?? "image/png");
+            return (trimmedUrl, ExtractMimeTypeFromDataUrl(trimmedUrl) ?? "image/png");
         }
 
-        var http = _httpClientFactory.CreateClient();
-        using var response = await http.GetAsync(imageUrl, cancellationToken).ConfigureAwait(false);
-        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new HttpRequestException(
-                $"KIE result image download failed: HTTP {(int)response.StatusCode}");
-        }
-
-        var mimeType = response.Content.Headers.ContentType?.MediaType;
-        if (string.IsNullOrWhiteSpace(mimeType) ||
-            !mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-        {
-            mimeType = "image/png";
-        }
-
-        return ($"data:{mimeType};base64,{Convert.ToBase64String(bytes)}", mimeType);
+        return (trimmedUrl, GuessMimeTypeFromUrl(trimmedUrl) ?? "image/png");
     }
 
     private static IReadOnlyList<string> ExtractResultUrls(string? resultJson)
@@ -298,6 +277,23 @@ public sealed partial class KieFirstImageGenerationClient : IImageGenerationClie
     {
         var separator = dataUrl.IndexOf(';');
         return separator > "data:".Length ? dataUrl["data:".Length..separator] : null;
+    }
+
+    private static string? GuessMimeTypeFromUrl(string imageUrl)
+    {
+        if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        return Path.GetExtension(uri.AbsolutePath).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            ".png" => "image/png",
+            _ => null
+        };
     }
 
     private static bool IsSuccessState(string state)

@@ -35,7 +35,7 @@ public sealed class GetUserPublishingSchedulesQueryHandler
         GetUserPublishingSchedulesQuery request,
         CancellationToken cancellationToken)
     {
-        if (request.WorkspaceId.HasValue)
+        if (request.WorkspaceId.HasValue && request.WorkspaceId.Value != Guid.Empty)
         {
             var exists = await _workspaceRepository.ExistsForUserAsync(
                 request.WorkspaceId.Value,
