@@ -9,7 +9,7 @@ namespace Application.ChatSessions.Commands;
 
 public sealed record CreateChatSessionCommand(
     Guid UserId,
-    Guid WorkspaceId,
+    Guid? WorkspaceId,
     string? SessionName) : IRequest<Result<ChatSessionResponse>>;
 
 public sealed class CreateChatSessionCommandHandler
@@ -30,10 +30,13 @@ public sealed class CreateChatSessionCommandHandler
         CreateChatSessionCommand request,
         CancellationToken cancellationToken)
     {
-        var workspaceExists = await _workspaceRepository.ExistsForUserAsync(
-            request.WorkspaceId,
-            request.UserId,
-            cancellationToken);
+        var workspaceId = request.WorkspaceId.GetValueOrDefault();
+        var isGlobalSession = workspaceId == Guid.Empty;
+        var workspaceExists = isGlobalSession ||
+                              await _workspaceRepository.ExistsForUserAsync(
+                                  workspaceId,
+                                  request.UserId,
+                                  cancellationToken);
 
         if (!workspaceExists)
         {
@@ -44,7 +47,7 @@ public sealed class CreateChatSessionCommandHandler
         {
             Id = Guid.CreateVersion7(),
             UserId = request.UserId,
-            WorkspaceId = request.WorkspaceId,
+            WorkspaceId = workspaceId,
             SessionName = NormalizeString(request.SessionName),
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };

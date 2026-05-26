@@ -1393,9 +1393,9 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             foreach (var generatedImage in generatedImages)
             {
                 _logger.LogInformation(
-                    "IMAGEGEN OUTPUT for DraftPost {Id} Media={Ordinal}/{Total}: mime={MimeType}, dataUrlLen={Len}, promptTokens={Pt}, completionTokens={Ct}, costUsd={Cost}",
+                    "IMAGEGEN OUTPUT for DraftPost {Id} Media={Ordinal}/{Total}: mime={MimeType}, urlLen={Len}, inlineData={InlineData}, promptTokens={Pt}, completionTokens={Ct}, costUsd={Cost}",
                     task.Id, generatedImage.Ordinal, generatedImage.Total, generatedImage.Result.MimeType,
-                    generatedImage.Result.DataUrl.Length, generatedImage.Result.PromptTokens,
+                    generatedImage.Result.Url.Length, generatedImage.Result.IsDataUrl, generatedImage.Result.PromptTokens,
                     generatedImage.Result.CompletionTokens, generatedImage.Result.CostUsd);
                 await PublishThinkingAsync(
                     context,
@@ -1408,7 +1408,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     new
                     {
                         generatedImage.Result.MimeType,
-                        dataUrlLength = generatedImage.Result.DataUrl.Length,
+                        urlLength = generatedImage.Result.Url.Length,
+                        generatedImage.Result.IsDataUrl,
                         generatedImage.Result.PromptTokens,
                         generatedImage.Result.CompletionTokens,
                         generatedImage.Result.CostUsd,
@@ -1419,8 +1420,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     phaseStatus: "completed");
             }
 
-            // Step 5 — upload generated image to S3. The User microservice's
-            // CreateResourcesFromUrlsAsync handles `data:` URLs by decoding base64 server-side.
+            // Step 5 — upload generated image to S3. KIE results stay as provider URLs;
+            // providers that only return inline bytes still flow through as `data:` URLs.
             _logger.LogDebug("DraftPost {Id}: uploading {Count} generated image(s) to S3...", task.Id, generatedImages.Count);
             await PublishThinkingAsync(
                 context,
@@ -1442,7 +1443,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 ct);
             var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
                 userId: msg.UserId,
-                urls: generatedImages.Select(image => image.Result.DataUrl).ToArray(),
+                urls: generatedImages.Select(image => image.Result.Url).ToArray(),
                 status: "generated",
                 resourceType: "image",
                 cancellationToken: ct,

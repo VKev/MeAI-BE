@@ -11,6 +11,8 @@ using WebApi.Grpc;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using WebApi.Setups;
 
+const int MaxGrpcMessageSizeBytes = 64 * 1024 * 1024;
+
 var builder = WebApplication.CreateBuilder(args);
 var shouldAutoApplyMigrations = builder.ConfigureAutoMigrations();
 
@@ -29,7 +31,11 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddAuthorization();
-builder.Services.AddGrpc();
+builder.Services.AddGrpc(options =>
+{
+    options.MaxReceiveMessageSize = MaxGrpcMessageSizeBytes;
+    options.MaxSendMessageSize = MaxGrpcMessageSizeBytes;
+});
 builder.Services.AddOpenApi(options =>
 {
     options.AddSchemaTransformer<FileUploadSchemaTransformer>();

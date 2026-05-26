@@ -813,6 +813,14 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("stripe_customer_id");
 
+                    b.Property<DateTime?>("TutorialStep1CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("tutorial_step1_completed_at");
+
+                    b.Property<DateTime?>("TutorialStep2CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("tutorial_step2_completed_at");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");

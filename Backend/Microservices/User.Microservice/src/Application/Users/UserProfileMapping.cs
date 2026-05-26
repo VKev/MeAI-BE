@@ -21,6 +21,9 @@ internal static class UserProfileMapping
             user.MeAiCoin,
             user.CreatedAt,
             user.UpdatedAt,
+            user.TutorialStep1CompletedAt.HasValue,
+            user.TutorialStep2CompletedAt.HasValue,
+            user.TutorialStep1CompletedAt,
+            user.TutorialStep2CompletedAt,
             roles);
 }
-

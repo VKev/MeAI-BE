@@ -269,6 +269,31 @@ public sealed class AuthController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("tutorial")]
+    [Authorize]
+    [ProducesResponseType(typeof(Result<UserProfileResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CompleteTutorialStep(
+        [FromBody] CompleteTutorialStepRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new CompleteTutorialStepCommand(userId, request.Step),
+            cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     private void SetAuthCookies(LoginResponse response)
     {
         var secure = Request.IsHttps;
@@ -384,3 +409,4 @@ public sealed record EditProfileRequest(
     string? Address,
     DateTime? Birthday);
 
+public sealed record CompleteTutorialStepRequest(int Step);

@@ -51,7 +51,8 @@ internal sealed class PublishingScheduleCommandSupport
             return Result.Failure<ValidatedPublishingScheduleData>(PublishingScheduleErrors.NameRequired);
         }
 
-        if (!await _workspaceRepository.ExistsForUserAsync(workspaceId, userId, cancellationToken))
+        if (workspaceId != Guid.Empty &&
+            !await _workspaceRepository.ExistsForUserAsync(workspaceId, userId, cancellationToken))
         {
             return Result.Failure<ValidatedPublishingScheduleData>(PublishingScheduleErrors.WorkspaceNotFound);
         }

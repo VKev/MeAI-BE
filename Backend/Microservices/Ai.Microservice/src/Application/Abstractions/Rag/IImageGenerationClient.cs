@@ -4,8 +4,8 @@ public interface IImageGenerationClient
 {
     /// <summary>
     /// Generate an image with optional reference images for visual style.
-    /// Returns a data URL (e.g. data:image/png;base64,...) suitable for handing to
-    /// IUserResourceService.CreateResourcesFromUrlsAsync, plus the underlying mime type.
+    /// Returns a provider URL when available, or a data URL when the provider only returns
+    /// inline image bytes. Both forms are suitable for IUserResourceService.CreateResourcesFromUrlsAsync.
     /// </summary>
     Task<ImageGenerationResult> GenerateImageAsync(
         ImageGenerationRequest request,
@@ -18,8 +18,13 @@ public sealed record ImageGenerationRequest(
     string? SystemPrompt = null);
 
 public sealed record ImageGenerationResult(
-    string DataUrl,
+    string Url,
     string MimeType,
     int? PromptTokens,
     int? CompletionTokens,
-    decimal? CostUsd);
+    decimal? CostUsd)
+{
+    public string DataUrl => Url;
+
+    public bool IsDataUrl => Url.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
+}
