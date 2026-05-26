@@ -37,6 +37,12 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasDefaultValue(0m);
         entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.UpdatedAt).HasColumnName("updated_at").HasColumnType("timestamp with time zone");
+        entity.Property(e => e.TutorialStep1CompletedAt)
+            .HasColumnName("tutorial_step1_completed_at")
+            .HasColumnType("timestamp with time zone");
+        entity.Property(e => e.TutorialStep2CompletedAt)
+            .HasColumnName("tutorial_step2_completed_at")
+            .HasColumnType("timestamp with time zone");
         entity.Property(e => e.DeletedAt).HasColumnName("deleted_at").HasColumnType("timestamp with time zone");
         entity.Property(e => e.IsDeleted).HasColumnName("is_deleted");
     }

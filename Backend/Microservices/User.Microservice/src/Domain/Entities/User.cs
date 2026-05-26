@@ -41,6 +41,12 @@ public sealed class User
     public DateTime? UpdatedAt { get; set; }
 
     [Column(TypeName = "timestamp with time zone")]
+    public DateTime? TutorialStep1CompletedAt { get; set; }
+
+    [Column(TypeName = "timestamp with time zone")]
+    public DateTime? TutorialStep2CompletedAt { get; set; }
+
+    [Column(TypeName = "timestamp with time zone")]
     public DateTime? DeletedAt { get; set; }
 
     public bool IsDeleted { get; set; }

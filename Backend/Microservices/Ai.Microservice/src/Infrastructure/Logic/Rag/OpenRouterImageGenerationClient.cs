@@ -142,15 +142,15 @@ public sealed class OpenRouterImageGenerationClient : IImageGenerationClient
             $"Image gen response had no image in choices[0].message. Raw: {Truncate(raw)}");
     }
 
-    private static ImageGenerationResult BuildResult(string dataUrl, JsonElement root)
+    private static ImageGenerationResult BuildResult(string imageUrl, JsonElement root)
     {
         var mime = "image/png";
-        if (dataUrl.StartsWith("data:", StringComparison.Ordinal))
+        if (imageUrl.StartsWith("data:", StringComparison.Ordinal))
         {
-            var semi = dataUrl.IndexOf(';');
+            var semi = imageUrl.IndexOf(';');
             if (semi > 5)
             {
-                mime = dataUrl.Substring(5, semi - 5);
+                mime = imageUrl.Substring(5, semi - 5);
             }
         }
 
@@ -167,7 +167,7 @@ public sealed class OpenRouterImageGenerationClient : IImageGenerationClient
                 cost = c.GetDecimal();
         }
 
-        return new ImageGenerationResult(dataUrl, mime, promptTokens, completionTokens, cost);
+        return new ImageGenerationResult(imageUrl, mime, promptTokens, completionTokens, cost);
     }
 
     private static string Truncate(string value)

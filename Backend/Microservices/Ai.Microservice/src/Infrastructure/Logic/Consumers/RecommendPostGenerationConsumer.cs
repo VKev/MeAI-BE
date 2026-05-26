@@ -887,9 +887,10 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                 foreach (var generatedImage in generatedImages)
                 {
                     _logger.LogInformation(
-                        "IMAGEGEN OUTPUT for ImprovePost {Id} Media={Ordinal}/{Total}: mime={MimeType}, dataUrlLen={Len}, costUsd={Cost}",
+                        "IMAGEGEN OUTPUT for ImprovePost {Id} Media={Ordinal}/{Total}: mime={MimeType}, urlLen={Len}, inlineData={InlineData}, costUsd={Cost}",
                         task.Id, generatedImage.Ordinal, generatedImage.Total,
-                        generatedImage.Result.MimeType, generatedImage.Result.DataUrl.Length, generatedImage.Result.CostUsd);
+                        generatedImage.Result.MimeType, generatedImage.Result.Url.Length,
+                        generatedImage.Result.IsDataUrl, generatedImage.Result.CostUsd);
                     await PublishThinkingAsync(
                         context,
                         task,
@@ -899,7 +900,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                         new
                         {
                             generatedImage.Result.MimeType,
-                            dataUrlLength = generatedImage.Result.DataUrl.Length,
+                            urlLength = generatedImage.Result.Url.Length,
+                            generatedImage.Result.IsDataUrl,
                             generatedImage.Result.PromptTokens,
                             generatedImage.Result.CompletionTokens,
                             generatedImage.Result.CostUsd,
@@ -931,7 +933,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     ct);
                 var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
                     userId: msg.UserId,
-                    urls: generatedImages.Select(image => image.Result.DataUrl).ToArray(),
+                    urls: generatedImages.Select(image => image.Result.Url).ToArray(),
                     status: "generated",
                     resourceType: "image",
                     cancellationToken: ct,

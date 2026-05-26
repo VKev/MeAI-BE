@@ -889,10 +889,10 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 new ImageGenerationRequest(finalPrompt, referenceUrls),
                 cancellationToken);
 
-            // Upload the data URL into the user resource system
+            // Upload the generated provider URL or inline data URL into the user resource system.
             var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
                 request.UserId.Value,
-                new[] { genResult.DataUrl },
+                new[] { genResult.Url },
                 status: "ready",
                 resourceType: "image",
                 cancellationToken,
