@@ -78,6 +78,57 @@ public sealed class RecommendationsController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("{socialMediaId:guid}/analysis-suggest")]
+    [ProducesResponseType(typeof(Result<AnalysisSuggestionStatusResponse>), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SuggestFromAnalysis(
+        Guid socialMediaId,
+        [FromBody] AnalysisSuggestionRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new StartAnalysisSuggestionCommand(userId, socialMediaId, request),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return StatusCode(StatusCodes.Status202Accepted, result);
+    }
+
+    [HttpGet("{socialMediaId:guid}/analysis-suggest")]
+    [ProducesResponseType(typeof(Result<AnalysisSuggestionStatusResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetAnalysisSuggestionStatus(
+        Guid socialMediaId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new GetAnalysisSuggestionStatusQuery(userId, socialMediaId),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     /// <summary>
     /// Async draft-post generation. Indexes the account's recent posts (skip-if-unchanged),
     /// queries RAG, generates a caption + image grounded in the account's voice and visual style,

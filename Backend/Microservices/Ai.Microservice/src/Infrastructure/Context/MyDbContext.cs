@@ -56,6 +56,8 @@ public partial class MyDbContext : DbContext
 
     public virtual DbSet<RecommendPost> RecommendPosts { get; set; }
 
+    public virtual DbSet<SocialAccountAnalysisSuggestion> SocialAccountAnalysisSuggestions { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MyDbContext).Assembly);

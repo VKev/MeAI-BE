@@ -314,6 +314,7 @@ namespace Infrastructure
 
             services.AddScoped<IDraftPostTaskRepository, DraftPostTaskRepository>();
             services.AddScoped<IRecommendPostRepository, RecommendPostRepository>();
+            services.AddScoped<ISocialAccountAnalysisSuggestionRepository, SocialAccountAnalysisSuggestionRepository>();
 
             // Query rewriter (single LLM call up-front; outputs feed every retrieval +
             // rerank query downstream). See `Application/Recommendations/Services/QueryRewriter`.
@@ -458,6 +459,10 @@ namespace Infrastructure
                 // Async improve-existing-post generation: anchored on the original post,
                 // conditional caption / image regen, persists to RecommendPost row only.
                 x.AddConsumer<RecommendPostGenerationConsumer>();
+
+                // Async account analysis suggestions: dashboard starts the job quickly,
+                // this consumer performs RAG + LLM work and publishes realtime status.
+                x.AddConsumer<AnalysisSuggestionConsumer>();
 
                 x.AddSagaStateMachine<VideoTaskStateMachine, VideoTaskState>()
                     .RedisRepository(r =>
