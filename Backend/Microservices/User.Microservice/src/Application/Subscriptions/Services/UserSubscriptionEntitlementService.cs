@@ -11,7 +11,6 @@ public sealed class UserSubscriptionEntitlementService : IUserSubscriptionEntitl
     private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IRepository<Subscription> _subscriptionRepository;
     private readonly IUserSubscriptionStateService _userSubscriptionStateService;
-    private readonly IRepository<Workspace> _workspaceRepository;
 
     public UserSubscriptionEntitlementService(
         IUnitOfWork unitOfWork,
@@ -20,7 +19,6 @@ public sealed class UserSubscriptionEntitlementService : IUserSubscriptionEntitl
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _subscriptionRepository = unitOfWork.Repository<Subscription>();
         _userSubscriptionStateService = userSubscriptionStateService;
-        _workspaceRepository = unitOfWork.Repository<Workspace>();
     }
 
     public async Task<UserSubscriptionEntitlement> GetCurrentEntitlementAsync(
@@ -48,27 +46,6 @@ public sealed class UserSubscriptionEntitlementService : IUserSubscriptionEntitl
         CancellationToken cancellationToken)
     {
         var entitlement = await GetCurrentEntitlementAsync(userId, cancellationToken);
-
-        if (entitlement.MaxWorkspaces <= 0)
-        {
-            return Result.Failure<UserSubscriptionEntitlement>(
-                new Error("Workspace.LimitUnavailable", "Your current plan does not include workspace access."));
-        }
-
-        var currentWorkspaceCount = await _workspaceRepository.GetAll()
-            .AsNoTracking()
-            .CountAsync(
-                item => item.UserId == userId && !item.IsDeleted,
-                cancellationToken);
-
-        if (currentWorkspaceCount >= entitlement.MaxWorkspaces)
-        {
-            return Result.Failure<UserSubscriptionEntitlement>(
-                new Error(
-                    "Workspace.LimitExceeded",
-                    $"Your current plan allows up to {entitlement.MaxWorkspaces} workspace(s). Upgrade to create more."));
-        }
-
         return Result.Success(entitlement);
     }
 

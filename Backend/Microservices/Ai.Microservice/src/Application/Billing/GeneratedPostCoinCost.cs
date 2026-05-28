@@ -2,8 +2,8 @@ namespace Application.Billing;
 
 public static class GeneratedPostCoinCost
 {
-    public const decimal BaseCoins = 100m;
-    public const decimal ExtraImageCoins = 50m;
+    public const decimal BaseCoins = 20m;
+    public const decimal ExtraImageCoins = 0m;
 
     public static decimal Calculate(int requestedImageCount)
     {

@@ -10,9 +10,9 @@ namespace Infrastructure.Logic.Seeding;
 public sealed class CoinPricingSeeder
 {
     // Billing baseline:
-    //   - 1 coin = 10 VND
+    //   - 1 coin ~= 1,000 VND
     //   - 1 USD ~= 26,309 VND (reference snapshot used for seed calibration)
-    //   - therefore 1 USD ~= 2,630.90 coins
+    //   - therefore 1 USD ~= 26.31 coins
     //
     // Kie-backed image/video entries keep the existing product markup assumptions, but are
     // now converted into the real coin currency instead of the old "$0.01 per coin" scheme.
@@ -48,8 +48,8 @@ public sealed class CoinPricingSeeder
         (CoinActionTypes.PostEnhancement, "gpt-4o-mini", null, "per_platform", UsdToCoins(0.0008m)),
         (CoinActionTypes.PostEnhancement, "gpt-5-2", null, "per_platform", UsdToCoins(0.0010m)),
         // Recommendation draft and improve flows use fixed product pricing in the start
-        // command handlers: 100 coins for the request plus 50 for each generated image
-        // after the first. Keep the catalog base rows aligned for admin visibility.
+        // command handlers: 20 coins per request. Keep the catalog rows aligned for
+        // admin visibility.
         (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "caption", "per_request", GeneratedPostCoinCost.BaseCoins),
         (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "image", "per_request", GeneratedPostCoinCost.BaseCoins),
         (CoinActionTypes.PostEnhancement, "openrouter/improve-post-v1", "caption_image", "per_request", GeneratedPostCoinCost.BaseCoins),
@@ -159,7 +159,7 @@ public sealed class CoinPricingSeeder
     private static decimal UsdToCoins(decimal usd)
     {
         const decimal vndPerUsd = 26309m;
-        const decimal vndPerCoin = 10m;
+        const decimal vndPerCoin = 1000m;
         return Math.Round(usd * (vndPerUsd / vndPerCoin), 2, MidpointRounding.AwayFromZero);
     }
 }

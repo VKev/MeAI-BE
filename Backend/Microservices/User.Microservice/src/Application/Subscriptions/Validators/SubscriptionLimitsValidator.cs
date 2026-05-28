@@ -28,7 +28,7 @@ internal sealed class SubscriptionLimitsValidator : AbstractValidator<Subscripti
             .When(x => x.StorageQuotaBytes.HasValue);
 
         RuleFor(x => x.MaxUploadFileBytes)
-            .GreaterThan(0)
+            .GreaterThanOrEqualTo(0)
             .When(x => x.MaxUploadFileBytes.HasValue);
 
         RuleFor(x => x.RetentionDaysAfterDelete)

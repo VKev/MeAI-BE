@@ -14,6 +14,8 @@ public sealed record CreateSubscriptionCommand(
     float? Cost,
     int DurationMonths,
     decimal? MeAiCoin,
+    string? StripeProductId,
+    string? StripePriceId,
     SubscriptionLimits? Limits) : IRequest<Result<Subscription>>;
 
 public sealed class CreateSubscriptionCommandHandler
@@ -40,6 +42,11 @@ public sealed class CreateSubscriptionCommandHandler
         var now = DateTime.UtcNow;
         var name = SubscriptionHelpers.NormalizeName(request.Name);
         var cost = request.Cost ?? 0;
+        var requestedStripeProductId = NormalizeStripeId(request.StripeProductId);
+        var requestedStripePriceId = NormalizeStripeId(request.StripePriceId);
+        var manuallyProvidedStripeIds =
+            requestedStripeProductId != null ||
+            requestedStripePriceId != null;
 
         var subscription = new Subscription
         {
@@ -59,8 +66,8 @@ public sealed class CreateSubscriptionCommandHandler
             try
             {
                 var stripeResult = await _stripePaymentService.EnsureRecurringPriceAsync(
-                    null,
-                    null,
+                    requestedStripeProductId,
+                    requestedStripePriceId,
                     (decimal)cost,
                     request.DurationMonths,
                     name,
@@ -74,11 +81,27 @@ public sealed class CreateSubscriptionCommandHandler
                 _logger.LogWarning(ex,
                     "Failed to create Stripe product/price for subscription '{Name}'. Continuing without Stripe integration.",
                     name);
+
+                if (manuallyProvidedStripeIds)
+                {
+                    return Result.Failure<Subscription>(
+                        new Error("Stripe.CatalogSyncFailed", "Failed to sync the provided Stripe product or price ID."));
+                }
             }
+        }
+        else
+        {
+            subscription.StripeProductId = requestedStripeProductId;
+            subscription.StripePriceId = requestedStripePriceId;
         }
 
         await _repository.AddAsync(subscription, cancellationToken);
 
         return Result.Success(subscription);
+    }
+
+    private static string? NormalizeStripeId(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }

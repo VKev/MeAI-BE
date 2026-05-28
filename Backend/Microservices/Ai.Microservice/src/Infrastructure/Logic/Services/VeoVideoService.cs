@@ -73,11 +73,7 @@ public sealed class VeoVideoService : IVeoVideoService
         {
             // Market models use the unified createTask endpoint
             endpoint = "/api/v1/jobs/createTask";
-            var input = new Dictionary<string, object?> { ["prompt"] = request.Prompt };
-            if (!string.IsNullOrWhiteSpace(request.AspectRatio))
-                input["aspect_ratio"] = request.AspectRatio;
-            if (request.ImageUrls is { Count: > 0 })
-                input["image_url"] = request.ImageUrls[0];
+            var input = BuildMarketVideoInput(request);
             payload = new { model = request.Model, input, callBackUrl = callbackUrl };
         }
 
@@ -355,6 +351,312 @@ public sealed class VeoVideoService : IVeoVideoService
         return aspectRatio.Equals("auto", StringComparison.OrdinalIgnoreCase)
             ? "Auto"
             : aspectRatio;
+    }
+
+    private static Dictionary<string, object?> BuildMarketVideoInput(VeoGenerateRequest request)
+    {
+        var model = request.Model;
+        var input = new Dictionary<string, object?> { ["prompt"] = request.Prompt };
+
+        if (model.StartsWith("sora-2", StringComparison.OrdinalIgnoreCase))
+        {
+            input["aspect_ratio"] = request.AspectRatio == "9:16" ? "portrait" : "landscape";
+            input["n_frames"] = "10";
+            input["remove_watermark"] = true;
+            input["upload_method"] = "s3";
+            AddProviderVideoImages(input, request.ImageUrls, "image_urls");
+            return input;
+        }
+
+        if (model.StartsWith("grok-imagine/", StringComparison.OrdinalIgnoreCase))
+        {
+            input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "2:3", "3:2", "1:1", "16:9", "9:16");
+            input["resolution"] = "720p";
+            input["duration"] = 5;
+            input["mode"] = "normal";
+            input["nsfw_checker"] = false;
+            AddProviderVideoImages(input, request.ImageUrls, "image_urls");
+            return input;
+        }
+
+        if (model.StartsWith("kling-3.0", StringComparison.OrdinalIgnoreCase))
+        {
+            input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16", "1:1");
+            input["duration"] = 5;
+            input["sound"] = false;
+            input["mode"] = "std";
+            input["multi_shots"] = false;
+            AddProviderVideoImages(input, request.ImageUrls, "image_urls");
+            return input;
+        }
+
+        if (model.StartsWith("kling-2.6", StringComparison.OrdinalIgnoreCase))
+        {
+            input["duration"] = 5;
+            input["sound"] = false;
+            if (model.EndsWith("/text-to-video", StringComparison.OrdinalIgnoreCase))
+            {
+                input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "1:1", "16:9", "9:16");
+            }
+            AddProviderVideoImages(input, request.ImageUrls, "image_urls");
+            return input;
+        }
+
+        if (model.StartsWith("kling/v2-", StringComparison.OrdinalIgnoreCase))
+        {
+            input["duration"] = 5;
+            input["cfg_scale"] = 0.5;
+            input["negative_prompt"] = string.Empty;
+            if (model.Contains("text-to-video", StringComparison.OrdinalIgnoreCase))
+            {
+                input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16", "1:1");
+            }
+            else
+            {
+                AddProviderVideoFirstImage(input, request.ImageUrls, "image_url");
+            }
+            return input;
+        }
+
+        if (model.StartsWith("bytedance/seedance", StringComparison.OrdinalIgnoreCase))
+        {
+            input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "1:1", "4:3", "3:4", "16:9", "9:16", "21:9");
+            input["resolution"] = "720p";
+            input["duration"] = 5;
+            input["generate_audio"] = false;
+            input["nsfw_checker"] = false;
+            if (model.StartsWith("bytedance/seedance-1.5", StringComparison.OrdinalIgnoreCase))
+            {
+                input["fixed_lens"] = false;
+                AddProviderVideoImages(input, request.ImageUrls, "input_urls");
+            }
+            else
+            {
+                input["return_last_frame"] = false;
+                input["web_search"] = false;
+                AddProviderVideoImages(input, request.ImageUrls, "reference_image_urls");
+                AddProviderVideoFirstImage(input, request.ImageUrls, "first_frame_url");
+            }
+            return input;
+        }
+
+        if (model.StartsWith("bytedance/v1-", StringComparison.OrdinalIgnoreCase))
+        {
+            input["duration"] = 5;
+            input["resolution"] = "720p";
+            input["camera_fixed"] = false;
+            input["enable_safety_checker"] = true;
+            input["nsfw_checker"] = false;
+            if (model.Contains("text-to-video", StringComparison.OrdinalIgnoreCase))
+            {
+                input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16");
+            }
+            else
+            {
+                AddProviderVideoFirstImage(input, request.ImageUrls, "image_url");
+            }
+            AddProviderVideoSeed(input, request.Seeds);
+            return input;
+        }
+
+        if (model.StartsWith("hailuo/", StringComparison.OrdinalIgnoreCase))
+        {
+            input["prompt_optimizer"] = true;
+            input["nsfw_checker"] = false;
+            if (model.Contains("image-to-video", StringComparison.OrdinalIgnoreCase))
+            {
+                AddProviderVideoFirstImage(input, request.ImageUrls, "image_url");
+                if (model.Contains("2-3-", StringComparison.OrdinalIgnoreCase))
+                {
+                    input["duration"] = 6;
+                    input["resolution"] = "768P";
+                }
+            }
+            else if (model.Contains("standard", StringComparison.OrdinalIgnoreCase))
+            {
+                input["duration"] = 6;
+            }
+            return input;
+        }
+
+        if (model.StartsWith("wan/", StringComparison.OrdinalIgnoreCase))
+        {
+            input["duration"] = 5;
+            input["resolution"] = "1080p";
+            input["nsfw_checker"] = false;
+
+            if (model.StartsWith("wan/2-7-text", StringComparison.OrdinalIgnoreCase))
+            {
+                input["ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16", "1:1", "4:3", "3:4");
+                input["prompt_extend"] = true;
+                input["watermark"] = false;
+                AddProviderVideoSeed(input, request.Seeds);
+                return input;
+            }
+
+            if (model.StartsWith("wan/2-7-image", StringComparison.OrdinalIgnoreCase))
+            {
+                input["prompt_extend"] = true;
+                input["watermark"] = false;
+                AddProviderVideoFirstImage(input, request.ImageUrls, "first_frame_url");
+                AddProviderVideoSeed(input, request.Seeds);
+                return input;
+            }
+
+            if (model.StartsWith("wan/2-7-r2v", StringComparison.OrdinalIgnoreCase))
+            {
+                input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16", "1:1", "4:3", "3:4");
+                input["prompt_extend"] = true;
+                input["watermark"] = false;
+                AddProviderVideoFirstImage(input, request.ImageUrls, "reference_image");
+                AddProviderVideoSeed(input, request.Seeds);
+                return input;
+            }
+
+            if (model.StartsWith("wan/2-6", StringComparison.OrdinalIgnoreCase))
+            {
+                AddProviderVideoImages(input, request.ImageUrls, "image_urls");
+                return input;
+            }
+
+            if (model.StartsWith("wan/2-5", StringComparison.OrdinalIgnoreCase))
+            {
+                input["enable_prompt_expansion"] = true;
+                input["negative_prompt"] = string.Empty;
+                input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16", "1:1");
+                AddProviderVideoFirstImage(input, request.ImageUrls, "image_url");
+                AddProviderVideoSeed(input, request.Seeds);
+                return input;
+            }
+
+            if (model.StartsWith("wan/2-2", StringComparison.OrdinalIgnoreCase))
+            {
+                input["resolution"] = "720p";
+                input["enable_prompt_expansion"] = true;
+                input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16");
+                AddProviderVideoFirstImage(input, request.ImageUrls, "image_url");
+                AddProviderVideoSeed(input, request.Seeds);
+                return input;
+            }
+        }
+
+        if (model.StartsWith("happyhorse/", StringComparison.OrdinalIgnoreCase))
+        {
+            input["duration"] = 5;
+            input["resolution"] = "1080p";
+            input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16", "1:1", "4:3", "3:4");
+            AddProviderVideoFirstImage(input, request.ImageUrls, "first_frame");
+            AddProviderVideoFirstImage(input, request.ImageUrls, "reference_image");
+            AddProviderVideoSeed(input, request.Seeds);
+            return input;
+        }
+
+        if (string.Equals(model, "gemini-omni-video", StringComparison.OrdinalIgnoreCase))
+        {
+            input["duration"] = 5;
+            input["resolution"] = "720p";
+            input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16");
+            AddProviderVideoImages(input, request.ImageUrls, "image_urls");
+            AddProviderVideoSeed(input, request.Seeds);
+            return input;
+        }
+
+        input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16", "1:1");
+        AddProviderVideoFirstImage(input, request.ImageUrls, "image_url");
+        return input;
+    }
+
+    private static void AddProviderVideoFirstImage(
+        Dictionary<string, object?> input,
+        IReadOnlyList<string>? imageUrls,
+        string fieldName)
+    {
+        var first = imageUrls?.FirstOrDefault(url => !string.IsNullOrWhiteSpace(url));
+        if (!string.IsNullOrWhiteSpace(first))
+        {
+            input[fieldName] = first;
+        }
+    }
+
+    private static void AddProviderVideoImages(
+        Dictionary<string, object?> input,
+        IReadOnlyList<string>? imageUrls,
+        string fieldName)
+    {
+        var urls = imageUrls?
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (urls is { Count: > 0 })
+        {
+            input[fieldName] = urls;
+        }
+    }
+
+    private static void AddProviderVideoSeed(Dictionary<string, object?> input, int? seed)
+    {
+        if (seed.HasValue)
+        {
+            input["seed"] = seed.Value;
+        }
+    }
+
+    private static string NormalizeProviderVideoRatio(string? aspectRatio, string fallback, params string[] supported)
+    {
+        var normalized = string.IsNullOrWhiteSpace(aspectRatio) || aspectRatio.Equals("auto", StringComparison.OrdinalIgnoreCase)
+            ? fallback
+            : aspectRatio.Trim();
+
+        if (supported.Any(item => item.Equals(normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            return supported.First(item => item.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var mapped = normalized switch
+        {
+            "21:9" => supported.Contains("21:9") ? "21:9" : "16:9",
+            "4:5" => supported.Contains("3:4") ? "3:4" : "9:16",
+            "5:4" => supported.Contains("4:3") ? "4:3" : "16:9",
+            "2:3" => supported.Contains("2:3") ? "2:3" : "9:16",
+            "3:2" => supported.Contains("3:2") ? "3:2" : "16:9",
+            _ => fallback
+        };
+
+        return supported.Any(item => item.Equals(mapped, StringComparison.OrdinalIgnoreCase))
+            ? supported.First(item => item.Equals(mapped, StringComparison.OrdinalIgnoreCase))
+            : fallback;
+    }
+
+    private static void AddImageUrls(
+        Dictionary<string, object?> input,
+        IReadOnlyList<string>? imageUrls,
+        string fieldName)
+    {
+        if (imageUrls is not { Count: > 0 })
+        {
+            return;
+        }
+
+        input[fieldName] = fieldName.EndsWith("urls", StringComparison.OrdinalIgnoreCase)
+            ? imageUrls
+            : imageUrls[0];
+    }
+
+    private static string NormalizeMarketAspectRatio(string? aspectRatio)
+    {
+        return string.IsNullOrWhiteSpace(aspectRatio) || aspectRatio.Equals("auto", StringComparison.OrdinalIgnoreCase)
+            ? "16:9"
+            : aspectRatio;
+    }
+
+    private static string MapSoraAspectRatio(string? aspectRatio)
+    {
+        return aspectRatio switch
+        {
+            "9:16" => "portrait",
+            _ => "landscape"
+        };
     }
 
     private sealed class VeoApiRequest

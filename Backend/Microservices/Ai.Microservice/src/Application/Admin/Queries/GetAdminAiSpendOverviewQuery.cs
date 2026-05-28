@@ -15,7 +15,7 @@ public sealed record GetAdminAiSpendOverviewQuery(string? Period)
 public sealed class GetAdminAiSpendOverviewQueryHandler
     : IRequestHandler<GetAdminAiSpendOverviewQuery, Result<AdminAiSpendOverviewResponse>>
 {
-    private const decimal CoinUsdRate = 0.01m;
+    private const decimal CoinUsdRate = 1000m / 26309m;
     private const string Source = "local_ai_spend_records_with_legacy_chat_estimates";
 
     private static readonly IReadOnlyList<(string Key, string Label)> ActionOrder =

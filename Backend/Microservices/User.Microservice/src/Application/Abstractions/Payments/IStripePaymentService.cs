@@ -16,6 +16,12 @@ public interface IStripePaymentService
         string? subscriptionName,
         CancellationToken cancellationToken = default);
 
+    Task SetCatalogActiveAsync(
+        string? stripeProductId,
+        string? stripePriceId,
+        bool active,
+        CancellationToken cancellationToken = default);
+
     Task<StripeRecurringSubscriptionResult> CreateSubscriptionAsync(
         string stripePriceId,
         string? stripeCustomerId,
