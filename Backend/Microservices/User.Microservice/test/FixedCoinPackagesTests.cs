@@ -389,7 +389,7 @@ public sealed class FixedCoinPackagesTests : IDisposable
             "Plus Coins",
             "Pro Coins",
             "Pro Max");
-        packages.Select(item => item.CoinAmount).Should().ContainInOrder(10000m, 15000m, 20000m);
+        packages.Select(item => item.CoinAmount).Should().ContainInOrder(100m, 160m, 220m);
         packages.Select(item => item.Price).Should().ContainInOrder(100000m, 150000m, 200000m);
         packages.Should().OnlyContain(item => item.Currency == "vnd");
     }

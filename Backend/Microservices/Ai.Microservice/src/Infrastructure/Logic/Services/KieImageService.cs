@@ -246,73 +246,338 @@ public sealed class KieImageService : IKieImageService
 
     private static Dictionary<string, object?> BuildInputParams(string model, KieGenerateRequest request)
     {
-        if (model.StartsWith("gpt-image-2-", StringComparison.OrdinalIgnoreCase))
-        {
-            var gptImageInput = new Dictionary<string, object?>
-            {
-                ["prompt"] = request.Prompt,
-                ["aspect_ratio"] = string.IsNullOrWhiteSpace(request.AspectRatio)
-                    ? "auto"
-                    : request.AspectRatio
-            };
-
-            if (string.Equals(model, "gpt-image-2-image-to-image", StringComparison.OrdinalIgnoreCase) &&
-                request.ImageInput is { Count: > 0 })
-            {
-                gptImageInput["input_urls"] = request.ImageInput;
-            }
-
-            return gptImageInput;
-        }
-
-        // Ideogram V3 Reframe: resizes an existing image into a different aspect ratio.
-        // Needs image_url (single string) + image_size — no prompt, no image_input.
-        // Explicit rendering_speed=TURBO for fast reframe turnaround.
         if (string.Equals(model, "ideogram/v3-reframe", StringComparison.OrdinalIgnoreCase))
         {
-            var sourceUrl = request.ImageInput is { Count: > 0 } ? request.ImageInput[0] : null;
             return new Dictionary<string, object?>
             {
-                ["image_url"] = sourceUrl,
-                ["image_size"] = MapAspectRatioToIdeogramSize(request.AspectRatio),
+                ["image_url"] = FirstProviderImage(request.ImageInput),
+                ["image_size"] = MapAspectRatioToProviderImageSize(request.AspectRatio, allowThreeTwo: false, allowTwentyOneNine: false),
                 ["rendering_speed"] = "TURBO",
                 ["num_images"] = "1",
                 ["style"] = "AUTO"
             };
         }
 
-        var input = new Dictionary<string, object?> { ["prompt"] = request.Prompt };
-
-        if (request.ImageInput is { Count: > 0 })
+        if (model.StartsWith("gpt-image/1.5-", StringComparison.OrdinalIgnoreCase))
         {
-            input["image_input"] = request.ImageInput;
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["aspect_ratio"] = NormalizeProviderRatio(request.AspectRatio, "1:1", "1:1", "2:3", "3:2"),
+                ["quality"] = NormalizeProviderValue(request.Resolution, "medium", "medium", "high")
+            };
+            AddProviderImageList(input, request.ImageInput, "input_urls");
+            return input;
         }
 
-        // Ideogram uses image_size with different value format (e.g. square, landscape_16_9)
-        if (model.StartsWith("ideogram/", StringComparison.OrdinalIgnoreCase))
+        if (model.StartsWith("gpt-image-2-", StringComparison.OrdinalIgnoreCase))
         {
-            input["image_size"] = MapAspectRatioToIdeogramSize(request.AspectRatio);
-        }
-        else if (!string.IsNullOrWhiteSpace(request.AspectRatio))
-        {
-            input["aspect_ratio"] = NormalizeAspectRatioForModel(model, request.AspectRatio);
-        }
-
-        // nano-banana-pro specific params
-        if (model is "nano-banana-pro")
-        {
-            input["resolution"] = request.Resolution;
-            input["output_format"] = request.OutputFormat;
-            input["number_of_variances"] = request.NumberOfVariances;
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["aspect_ratio"] = NormalizeProviderRatio(request.AspectRatio, "auto", "auto", "1:1", "9:16", "16:9", "4:3", "3:4"),
+                ["resolution"] = NormalizeProviderValue(request.Resolution, "1K", "1K", "2K", "4K")
+            };
+            AddProviderImageList(input, request.ImageInput, "input_urls");
+            return input;
         }
 
-        // flux-2 supports resolution
+        if (string.Equals(model, "nano-banana-pro", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(model, "nano-banana-2", StringComparison.OrdinalIgnoreCase))
+        {
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["aspect_ratio"] = NormalizeProviderRatio(request.AspectRatio, "1:1", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "auto"),
+                ["resolution"] = NormalizeProviderValue(request.Resolution, "1K", "1K", "2K", "4K"),
+                ["output_format"] = NormalizeProviderOutputFormat(request.OutputFormat),
+                ["number_of_variances"] = request.NumberOfVariances
+            };
+            AddProviderImageList(input, request.ImageInput, "image_input");
+            return input;
+        }
+
+        if (model.StartsWith("google/nano-banana", StringComparison.OrdinalIgnoreCase))
+        {
+            var ratio = NormalizeProviderRatio(request.AspectRatio, "1:1", "1:1", "9:16", "16:9", "3:4", "4:3", "3:2", "2:3", "5:4", "4:5", "21:9", "auto");
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["aspect_ratio"] = ratio,
+                ["image_size"] = ratio,
+                ["output_format"] = NormalizeProviderOutputFormat(request.OutputFormat)
+            };
+            AddProviderImageList(input, request.ImageInput, "image_urls");
+            return input;
+        }
+
+        if (model.StartsWith("google/imagen4", StringComparison.OrdinalIgnoreCase))
+        {
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["negative_prompt"] = string.Empty,
+                ["aspect_ratio"] = NormalizeProviderRatio(request.AspectRatio, "1:1", "1:1", "16:9", "9:16", "3:4", "4:3")
+            };
+            if (!model.EndsWith("-ultra", StringComparison.OrdinalIgnoreCase))
+            {
+                input["num_images"] = "1";
+            }
+            return input;
+        }
+
+        if (model.StartsWith("bytedance/seedream-v4-", StringComparison.OrdinalIgnoreCase))
+        {
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["image_size"] = MapAspectRatioToProviderImageSize(request.AspectRatio, allowThreeTwo: true, allowTwentyOneNine: true),
+                ["image_resolution"] = NormalizeProviderValue(request.Resolution, "1K", "1K", "2K", "4K"),
+                ["max_images"] = 1,
+                ["nsfw_checker"] = false
+            };
+            AddProviderImageList(input, request.ImageInput, "image_urls");
+            return input;
+        }
+
+        if (string.Equals(model, "bytedance/seedream", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["image_size"] = MapAspectRatioToProviderImageSize(request.AspectRatio, allowThreeTwo: false, allowTwentyOneNine: false),
+                ["guidance_scale"] = 2.5
+            };
+        }
+
+        if (model.StartsWith("seedream/4.5-", StringComparison.OrdinalIgnoreCase) ||
+            model.StartsWith("seedream/5-", StringComparison.OrdinalIgnoreCase))
+        {
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["aspect_ratio"] = NormalizeProviderRatio(request.AspectRatio, "1:1", "1:1", "4:3", "3:4", "16:9", "9:16", "2:3", "3:2", "21:9"),
+                ["quality"] = NormalizeProviderValue(request.Resolution, "basic", "basic", "high"),
+                ["nsfw_checker"] = false
+            };
+            AddProviderImageList(input, request.ImageInput, "image_urls");
+            return input;
+        }
+
         if (model.StartsWith("flux-2/", StringComparison.OrdinalIgnoreCase))
         {
-            input["resolution"] = request.Resolution;
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["aspect_ratio"] = NormalizeProviderRatio(request.AspectRatio, "1:1", "1:1", "4:3", "3:4", "16:9", "9:16", "3:2", "2:3"),
+                ["resolution"] = NormalizeProviderValue(request.Resolution, "1K", "1K", "2K"),
+                ["nsfw_checker"] = false
+            };
+            AddProviderImageList(input, request.ImageInput, "input_urls");
+            return input;
         }
 
-        return input;
+        if (model.StartsWith("grok-imagine/", StringComparison.OrdinalIgnoreCase))
+        {
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["aspect_ratio"] = NormalizeProviderRatio(request.AspectRatio, "1:1", "2:3", "3:2", "1:1", "16:9", "9:16"),
+                ["enable_pro"] = false,
+                ["nsfw_checker"] = false
+            };
+            AddProviderImageList(input, request.ImageInput, "image_urls");
+            return input;
+        }
+
+        if (model.StartsWith("ideogram/", StringComparison.OrdinalIgnoreCase))
+        {
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["image_size"] = MapAspectRatioToProviderImageSize(request.AspectRatio, allowThreeTwo: false, allowTwentyOneNine: false),
+                ["rendering_speed"] = "TURBO",
+                ["style"] = "AUTO",
+                ["negative_prompt"] = string.Empty,
+                ["expand_prompt"] = true
+            };
+            AddProviderFirstImage(input, request.ImageInput, "image_url");
+            if (model.EndsWith("/v3-remix", StringComparison.OrdinalIgnoreCase))
+            {
+                input["strength"] = 0.5;
+                input["num_images"] = "1";
+            }
+            return input;
+        }
+
+        if (model.StartsWith("qwen/", StringComparison.OrdinalIgnoreCase))
+        {
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["image_size"] = MapAspectRatioToProviderImageSize(request.AspectRatio, allowThreeTwo: false, allowTwentyOneNine: false),
+                ["output_format"] = NormalizeProviderOutputFormat(request.OutputFormat),
+                ["negative_prompt"] = string.Empty,
+                ["acceleration"] = "regular",
+                ["guidance_scale"] = 2.5,
+                ["num_inference_steps"] = 30,
+                ["enable_safety_checker"] = true,
+                ["nsfw_checker"] = false
+            };
+            AddProviderFirstImage(input, request.ImageInput, "image_url");
+            if (model.EndsWith("/image-to-image", StringComparison.OrdinalIgnoreCase))
+            {
+                input.Remove("image_size");
+                input["strength"] = 0.7;
+            }
+            else if (model.EndsWith("/image-edit", StringComparison.OrdinalIgnoreCase))
+            {
+                input["num_images"] = "1";
+                input["sync_mode"] = false;
+            }
+            return input;
+        }
+
+        if (model.StartsWith("qwen2/", StringComparison.OrdinalIgnoreCase))
+        {
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["image_size"] = NormalizeProviderRatio(request.AspectRatio, "1:1", "1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"),
+                ["output_format"] = NormalizeProviderOutputFormat(request.OutputFormat),
+                ["nsfw_checker"] = false
+            };
+            AddProviderFirstImage(input, request.ImageInput, "image_url");
+            return input;
+        }
+
+        if (model.StartsWith("wan/2-7-image", StringComparison.OrdinalIgnoreCase))
+        {
+            var input = new Dictionary<string, object?>
+            {
+                ["prompt"] = request.Prompt,
+                ["aspect_ratio"] = NormalizeProviderRatio(request.AspectRatio, "1:1", "1:1", "16:9", "4:3", "21:9", "3:4", "9:16", "8:1", "1:8"),
+                ["resolution"] = NormalizeProviderValue(request.Resolution, "2K", "1K", "2K", "4K"),
+                ["n"] = 1,
+                ["watermark"] = false,
+                ["nsfw_checker"] = false
+            };
+            AddProviderImageList(input, request.ImageInput, "input_urls");
+            return input;
+        }
+
+        var fallbackInput = new Dictionary<string, object?> { ["prompt"] = request.Prompt };
+        AddProviderImageList(fallbackInput, request.ImageInput, "image_input");
+        fallbackInput["aspect_ratio"] = NormalizeProviderRatio(request.AspectRatio, "1:1", "1:1", "4:3", "3:4", "16:9", "9:16");
+        fallbackInput["output_format"] = NormalizeProviderOutputFormat(request.OutputFormat);
+        return fallbackInput;
+    }
+
+    private static string? FirstProviderImage(IReadOnlyList<string>? imageUrls)
+        => imageUrls?.FirstOrDefault(url => !string.IsNullOrWhiteSpace(url));
+
+    private static void AddProviderFirstImage(Dictionary<string, object?> input, IReadOnlyList<string>? imageUrls, string fieldName)
+    {
+        var first = FirstProviderImage(imageUrls);
+        if (!string.IsNullOrWhiteSpace(first))
+        {
+            input[fieldName] = first;
+        }
+    }
+
+    private static void AddProviderImageList(Dictionary<string, object?> input, IReadOnlyList<string>? imageUrls, string fieldName)
+    {
+        var urls = imageUrls?
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (urls is { Count: > 0 })
+        {
+            input[fieldName] = urls;
+        }
+    }
+
+    private static string NormalizeProviderValue(string? value, string fallback, params string[] supported)
+    {
+        if (!string.IsNullOrWhiteSpace(value) &&
+            supported.Any(item => item.Equals(value, StringComparison.OrdinalIgnoreCase)))
+        {
+            return supported.First(item => item.Equals(value, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return fallback;
+    }
+
+    private static string NormalizeProviderOutputFormat(string? value)
+        => value?.Trim().Equals("jpeg", StringComparison.OrdinalIgnoreCase) == true ||
+           value?.Trim().Equals("jpg", StringComparison.OrdinalIgnoreCase) == true
+            ? "jpeg"
+            : "png";
+
+    private static string NormalizeProviderRatio(string? aspectRatio, string fallback, params string[] supported)
+    {
+        var normalized = string.IsNullOrWhiteSpace(aspectRatio)
+            ? fallback
+            : aspectRatio.Trim().ToLowerInvariant();
+
+        if (supported.Any(item => item.Equals(normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            return supported.First(item => item.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var mapped = normalized switch
+        {
+            "5:4" => "4:3",
+            "4:5" => "3:4",
+            "21:9" or "4:1" or "8:1" => "16:9",
+            "1:4" or "1:8" => "9:16",
+            "3:2" => supported.Contains("3:2") ? "3:2" : "4:3",
+            "2:3" => supported.Contains("2:3") ? "2:3" : "3:4",
+            "auto" => supported.Contains("auto") ? "auto" : fallback,
+            _ => fallback
+        };
+
+        return supported.Any(item => item.Equals(mapped, StringComparison.OrdinalIgnoreCase))
+            ? supported.First(item => item.Equals(mapped, StringComparison.OrdinalIgnoreCase))
+            : fallback;
+    }
+
+    private static string MapAspectRatioToProviderImageSize(
+        string? aspectRatio,
+        bool allowThreeTwo,
+        bool allowTwentyOneNine)
+    {
+        return aspectRatio switch
+        {
+            "1:1" => "square_hd",
+            "16:9" => "landscape_16_9",
+            "9:16" => "portrait_16_9",
+            "4:3" => "landscape_4_3",
+            "3:4" => "portrait_4_3",
+            "3:2" => allowThreeTwo ? "landscape_3_2" : "landscape_4_3",
+            "2:3" => allowThreeTwo ? "portrait_3_2" : "portrait_4_3",
+            "5:4" => "landscape_4_3",
+            "4:5" => "portrait_4_3",
+            "21:9" => allowTwentyOneNine ? "landscape_21_9" : "landscape_16_9",
+            _ => "square_hd"
+        };
+    }
+
+    private static string NormalizeQuality(string? value, string fallback)
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    private static string NormalizeImageResolution(string? value)
+    {
+        return value?.ToUpperInvariant() switch
+        {
+            "1K" => "1K",
+            "2K" => "2K",
+            "4K" => "4K",
+            _ => "1K"
+        };
     }
 
     private static string NormalizeAspectRatioForModel(string model, string aspectRatio)

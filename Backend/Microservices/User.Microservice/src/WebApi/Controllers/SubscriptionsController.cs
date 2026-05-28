@@ -202,6 +202,8 @@ public sealed record CreateSubscriptionRequest(
     float? Cost,
     int DurationMonths,
     decimal? MeAiCoin,
+    string? StripeProductId,
+    string? StripePriceId,
     SubscriptionLimits? Limits);
 
 public sealed record UpdateSubscriptionRequest(
@@ -209,6 +211,8 @@ public sealed record UpdateSubscriptionRequest(
     float? Cost,
     int DurationMonths,
     decimal? MeAiCoin,
+    string? StripeProductId,
+    string? StripePriceId,
     SubscriptionLimits? Limits);
 
 public sealed record PatchSubscriptionRequest(
@@ -216,6 +220,8 @@ public sealed record PatchSubscriptionRequest(
     float? Cost,
     int? DurationMonths,
     decimal? MeAiCoin,
+    string? StripeProductId,
+    string? StripePriceId,
     SubscriptionLimits? Limits);
 
 public sealed record PurchaseSubscriptionRequest(string? PaymentMethodId, bool Renew);

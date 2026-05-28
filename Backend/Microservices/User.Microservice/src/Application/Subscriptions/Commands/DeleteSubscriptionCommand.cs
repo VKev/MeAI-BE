@@ -1,7 +1,9 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Payments;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
@@ -14,11 +16,18 @@ public sealed class DeleteSubscriptionCommandHandler : IRequestHandler<DeleteSub
 {
     private readonly IRepository<Subscription> _subscriptionRepository;
     private readonly IRepository<UserSubscription> _userSubscriptionRepository;
+    private readonly IStripePaymentService _stripePaymentService;
+    private readonly ILogger<DeleteSubscriptionCommandHandler> _logger;
 
-    public DeleteSubscriptionCommandHandler(IUnitOfWork unitOfWork)
+    public DeleteSubscriptionCommandHandler(
+        IUnitOfWork unitOfWork,
+        IStripePaymentService stripePaymentService,
+        ILogger<DeleteSubscriptionCommandHandler> logger)
     {
         _subscriptionRepository = unitOfWork.Repository<Subscription>();
         _userSubscriptionRepository = unitOfWork.Repository<UserSubscription>();
+        _stripePaymentService = stripePaymentService;
+        _logger = logger;
     }
 
     public async Task<Result<bool>> Handle(DeleteSubscriptionCommand request, CancellationToken cancellationToken)
@@ -36,6 +45,25 @@ public sealed class DeleteSubscriptionCommandHandler : IRequestHandler<DeleteSub
         subscription.DeletedAt = now;
         subscription.UpdatedAt = now;
         _subscriptionRepository.Update(subscription);
+
+        if (!string.IsNullOrWhiteSpace(subscription.StripeProductId) ||
+            !string.IsNullOrWhiteSpace(subscription.StripePriceId))
+        {
+            try
+            {
+                await _stripePaymentService.SetCatalogActiveAsync(
+                    subscription.StripeProductId,
+                    subscription.StripePriceId,
+                    false,
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to archive Stripe catalog for deleted subscription {SubscriptionId}.",
+                    request.Id);
+            }
+        }
 
         var currentUserSubscriptions = await _userSubscriptionRepository.GetAll()
             .Where(item =>

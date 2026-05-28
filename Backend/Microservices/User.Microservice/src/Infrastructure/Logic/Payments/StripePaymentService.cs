@@ -52,7 +52,17 @@ public sealed class StripePaymentService : IStripePaymentService
 
         if (existingPrice != null && PriceMatches(existingPrice, amountMinor, currency, durationMonths))
         {
+            if (!string.IsNullOrWhiteSpace(existingPrice.ProductId))
+            {
+                await UpdateProductNameAsync(existingPrice.ProductId, subscriptionName, cancellationToken);
+            }
+
             return new StripeCatalogPriceResult(existingPrice.ProductId ?? productId ?? string.Empty, existingPrice.Id);
+        }
+
+        if (string.IsNullOrWhiteSpace(productId) && !string.IsNullOrWhiteSpace(existingPrice?.ProductId))
+        {
+            productId = existingPrice.ProductId;
         }
 
         if (string.IsNullOrWhiteSpace(productId))
@@ -65,6 +75,10 @@ public sealed class StripePaymentService : IStripePaymentService
                 cancellationToken: cancellationToken);
 
             productId = product.Id;
+        }
+        else
+        {
+            await UpdateProductNameAsync(productId, subscriptionName, cancellationToken);
         }
 
         var price = await CreatePriceService().CreateAsync(
@@ -81,7 +95,41 @@ public sealed class StripePaymentService : IStripePaymentService
             },
             cancellationToken: cancellationToken);
 
+        if (!string.IsNullOrWhiteSpace(existingPrice?.Id) &&
+            !string.Equals(existingPrice.Id, price.Id, StringComparison.Ordinal))
+        {
+            await SetPriceActiveAsync(existingPrice.Id, false, cancellationToken);
+        }
+
         return new StripeCatalogPriceResult(productId, price.Id);
+    }
+
+    public async Task SetCatalogActiveAsync(
+        string? stripeProductId,
+        string? stripePriceId,
+        bool active,
+        CancellationToken cancellationToken = default)
+    {
+        if (active && !string.IsNullOrWhiteSpace(stripeProductId))
+        {
+            await CreateProductService().UpdateAsync(
+                stripeProductId.Trim(),
+                new ProductUpdateOptions { Active = true },
+                cancellationToken: cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(stripePriceId))
+        {
+            await SetPriceActiveAsync(stripePriceId, active, cancellationToken);
+        }
+
+        if (!active && !string.IsNullOrWhiteSpace(stripeProductId))
+        {
+            await CreateProductService().UpdateAsync(
+                stripeProductId.Trim(),
+                new ProductUpdateOptions { Active = false },
+                cancellationToken: cancellationToken);
+        }
     }
 
     public async Task<StripeRecurringSubscriptionResult> CreateSubscriptionAsync(
@@ -672,6 +720,35 @@ public sealed class StripePaymentService : IStripePaymentService
         {
             return null;
         }
+    }
+
+    private async Task UpdateProductNameAsync(
+        string stripeProductId,
+        string? subscriptionName,
+        CancellationToken cancellationToken)
+    {
+        var options = new ProductUpdateOptions { Active = true };
+
+        if (!string.IsNullOrWhiteSpace(subscriptionName))
+        {
+            options.Name = subscriptionName.Trim();
+        }
+
+        await CreateProductService().UpdateAsync(
+            stripeProductId.Trim(),
+            options,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task SetPriceActiveAsync(
+        string stripePriceId,
+        bool active,
+        CancellationToken cancellationToken)
+    {
+        await CreatePriceService().UpdateAsync(
+            stripePriceId.Trim(),
+            new PriceUpdateOptions { Active = active },
+            cancellationToken: cancellationToken);
     }
 
     private async Task<Stripe.Subscription> GetSubscriptionWithInvoiceAsync(

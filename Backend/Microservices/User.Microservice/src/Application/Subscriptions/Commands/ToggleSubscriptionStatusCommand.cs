@@ -1,7 +1,9 @@
 using Application.Abstractions.Data;
+using Application.Abstractions.Payments;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
@@ -18,12 +20,19 @@ public sealed class ToggleSubscriptionStatusCommandHandler
     private readonly IUnitOfWork _unitOfWork;
     private readonly IRepository<Subscription> _subscriptionRepository;
     private readonly IRepository<UserSubscription> _userSubscriptionRepository;
+    private readonly IStripePaymentService _stripePaymentService;
+    private readonly ILogger<ToggleSubscriptionStatusCommandHandler> _logger;
 
-    public ToggleSubscriptionStatusCommandHandler(IUnitOfWork unitOfWork)
+    public ToggleSubscriptionStatusCommandHandler(
+        IUnitOfWork unitOfWork,
+        IStripePaymentService stripePaymentService,
+        ILogger<ToggleSubscriptionStatusCommandHandler> logger)
     {
         _unitOfWork = unitOfWork;
         _subscriptionRepository = unitOfWork.Repository<Subscription>();
         _userSubscriptionRepository = unitOfWork.Repository<UserSubscription>();
+        _stripePaymentService = stripePaymentService;
+        _logger = logger;
     }
 
     public async Task<Result<Subscription>> Handle(
@@ -40,6 +49,26 @@ public sealed class ToggleSubscriptionStatusCommandHandler
         subscription.IsActive = request.IsActive;
         subscription.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
         _subscriptionRepository.Update(subscription);
+
+        if (!string.IsNullOrWhiteSpace(subscription.StripeProductId) ||
+            !string.IsNullOrWhiteSpace(subscription.StripePriceId))
+        {
+            try
+            {
+                await _stripePaymentService.SetCatalogActiveAsync(
+                    subscription.StripeProductId,
+                    subscription.StripePriceId,
+                    request.IsActive,
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to set Stripe catalog active={Active} for subscription {SubscriptionId}.",
+                    request.IsActive,
+                    request.Id);
+            }
+        }
 
         // When deactivating a plan, disable recurring for all active subscribers
         // so they only keep the plan until their current period ends

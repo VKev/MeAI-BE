@@ -39,7 +39,12 @@ public sealed class PatchSubscriptionCommandValidator : AbstractValidator<PatchS
 
     private static bool HasAnyChanges(PatchSubscriptionCommand command)
     {
-        if (command.Name != null || command.Cost.HasValue || command.DurationMonths.HasValue || command.MeAiCoin.HasValue)
+        if (command.Name != null ||
+            command.Cost.HasValue ||
+            command.DurationMonths.HasValue ||
+            command.MeAiCoin.HasValue ||
+            command.StripeProductId != null ||
+            command.StripePriceId != null)
         {
             return true;
         }

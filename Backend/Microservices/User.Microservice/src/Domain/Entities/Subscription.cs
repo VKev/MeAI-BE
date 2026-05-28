@@ -24,10 +24,8 @@ public sealed class Subscription
 
     public bool IsActive { get; set; } = true;
 
-    [JsonIgnore]
     public string? StripeProductId { get; set; }
 
-    [JsonIgnore]
     public string? StripePriceId { get; set; }
 
     [Column(TypeName = "timestamp with time zone")]

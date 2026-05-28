@@ -15,6 +15,8 @@ public sealed record UpdateSubscriptionCommand(
     float? Cost,
     int DurationMonths,
     decimal? MeAiCoin,
+    string? StripeProductId,
+    string? StripePriceId,
     SubscriptionLimits? Limits) : IRequest<Result<Subscription>>;
 
 public sealed class UpdateSubscriptionCommandHandler
@@ -49,6 +51,13 @@ public sealed class UpdateSubscriptionCommandHandler
         var cost = request.Cost ?? 0;
         var costChanged = subscription.Cost != request.Cost;
         var durationChanged = subscription.DurationMonths != request.DurationMonths;
+        var requestedStripeProductId = NormalizeStripeId(request.StripeProductId);
+        var requestedStripePriceId = NormalizeStripeId(request.StripePriceId);
+        var productChanged = !string.Equals(subscription.StripeProductId, requestedStripeProductId, StringComparison.Ordinal);
+        var priceChanged = !string.Equals(subscription.StripePriceId, requestedStripePriceId, StringComparison.Ordinal);
+        var manuallyProvidedStripeIds =
+            requestedStripeProductId != null ||
+            requestedStripePriceId != null;
 
         subscription.Name = name;
         subscription.Cost = request.Cost;
@@ -58,13 +67,13 @@ public sealed class UpdateSubscriptionCommandHandler
         subscription.UpdatedAt = DateTime.UtcNow;
 
         // Re-create Stripe price if cost or duration changed
-        if (cost > 0 && (costChanged || durationChanged || string.IsNullOrEmpty(subscription.StripePriceId)))
+        if (cost > 0 && (costChanged || durationChanged || productChanged || priceChanged || string.IsNullOrEmpty(subscription.StripePriceId)))
         {
             try
             {
                 var stripeResult = await _stripePaymentService.EnsureRecurringPriceAsync(
-                    subscription.StripeProductId,
-                    null,
+                    requestedStripeProductId ?? subscription.StripeProductId,
+                    requestedStripePriceId,
                     (decimal)cost,
                     request.DurationMonths,
                     name,
@@ -78,9 +87,25 @@ public sealed class UpdateSubscriptionCommandHandler
                 _logger.LogWarning(ex,
                     "Failed to update Stripe product/price for subscription '{Name}'. Continuing without Stripe update.",
                     name);
+
+                if (manuallyProvidedStripeIds)
+                {
+                    return Result.Failure<Subscription>(
+                        new Error("Stripe.CatalogSyncFailed", "Failed to sync the provided Stripe product or price ID."));
+                }
             }
+        }
+        else
+        {
+            subscription.StripeProductId = requestedStripeProductId;
+            subscription.StripePriceId = requestedStripePriceId;
         }
 
         return Result.Success(subscription);
+    }
+
+    private static string? NormalizeStripeId(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }

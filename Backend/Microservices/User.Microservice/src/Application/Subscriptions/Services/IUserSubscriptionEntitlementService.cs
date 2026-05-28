@@ -23,14 +23,13 @@ public sealed record UserSubscriptionEntitlement(
     Subscription? CurrentPlan)
 {
     private const int FreeTierMaxSocialAccounts = 2;
-    private const int FreeTierMaxWorkspaces = int.MaxValue;
     private const int FreeTierMaxPagesPerSocialAccount = 5;
     public const int DefaultRetentionDaysAfterDelete = 30;
     public const long DefaultFreeStorageQuotaBytes = 100L * 1024L * 1024L;
 
     public bool HasActivePlan => CurrentSubscription != null && CurrentPlan != null;
 
-    public int MaxWorkspaces => CurrentPlan?.Limits?.NumberOfWorkspaces ?? FreeTierMaxWorkspaces;
+    public int MaxWorkspaces => int.MaxValue;
 
     public int MaxSocialAccounts => CurrentPlan?.Limits?.NumberOfSocialAccounts ?? FreeTierMaxSocialAccounts;
 

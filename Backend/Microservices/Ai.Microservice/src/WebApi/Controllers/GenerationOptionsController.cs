@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Application.GenerationOptions;
 using Domain.Entities;
 using Infrastructure.Context;
 using MediatR;
@@ -60,6 +61,16 @@ public sealed class AdminGenerationOptionsController : ApiController
             includeInactive: true,
             cancellationToken);
 
+        return Ok(Result.Success(response));
+    }
+
+    [HttpGet("provider-models")]
+    [ProducesResponseType(typeof(Result<IReadOnlyList<ProviderGenerationModelOption>>), StatusCodes.Status200OK)]
+    public IActionResult GetProviderModels(
+        [FromQuery] string? provider = "kie",
+        [FromQuery] string? mode = null)
+    {
+        var response = ProviderGenerationModelCatalog.GetModels(provider, mode);
         return Ok(Result.Success(response));
     }
 

@@ -78,7 +78,7 @@ public sealed class SubscriptionSeeder
             RateLimitForContentCreation = seed.ContentRate,
             NumberOfWorkspaces = seed.Workspaces,
             MaxPagesPerSocialAccount = seed.MaxPages,
-            StorageQuotaBytes = 10L * 1024L * 1024L * 1024L,
+            StorageQuotaBytes = seed.StorageQuotaBytes,
             MaxUploadFileBytes = 500L * 1024L * 1024L,
             RetentionDaysAfterDelete = 30
         };

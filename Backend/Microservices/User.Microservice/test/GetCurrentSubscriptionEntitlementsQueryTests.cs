@@ -151,7 +151,7 @@ public sealed class GetCurrentSubscriptionEntitlementsQueryTests
             RemainingSocialAccounts: 6,
             MaxPagesPerSocialAccount: 10,
             CurrentWorkspaceCount: 2,
-            MaxWorkspaces: 5));
+            MaxWorkspaces: int.MaxValue));
     }
 
     private static GetCurrentSubscriptionEntitlementsQueryHandler CreateHandler(IUnitOfWork unitOfWork)
