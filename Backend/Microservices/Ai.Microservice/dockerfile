@@ -28,7 +28,7 @@ WORKDIR /App
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+	&& apt-get install -y --no-install-recommends ffmpeg libgssapi-krb5-2 \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /App/out ./

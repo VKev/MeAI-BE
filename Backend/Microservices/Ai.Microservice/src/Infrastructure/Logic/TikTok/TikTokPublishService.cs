@@ -12,7 +12,10 @@ public sealed class TikTokPublishService : ITikTokPublishService
     private const string CreatorInfoEndpoint = "https://open.tiktokapis.com/v2/post/publish/creator_info/query/";
     private const string VideoPublishInitEndpoint = "https://open.tiktokapis.com/v2/post/publish/video/init/";
     private const string ContentPublishInitEndpoint = "https://open.tiktokapis.com/v2/post/publish/content/init/";
+    private const string PublishStatusFetchEndpoint = "https://open.tiktokapis.com/v2/post/publish/status/fetch/";
     private const string PrivatePrivacyLevel = "SELF_ONLY";
+    private static readonly TimeSpan PublishStatusPollDelay = TimeSpan.FromSeconds(4);
+    private const int PublishStatusMaxAttempts = 30;
     private readonly HttpClient _httpClient;
     private readonly ILogger<TikTokPublishService> _logger;
 
@@ -153,10 +156,20 @@ public sealed class TikTokPublishService : ITikTokPublishService
             return Result.Failure<TikTokPublishResult>(publishResult.Error);
         }
 
+        var statusResult = await WaitForPublishCompletionAsync(
+            request.AccessToken,
+            publishResult.Value,
+            cancellationToken);
+
+        if (statusResult.IsFailure)
+        {
+            return Result.Failure<TikTokPublishResult>(statusResult.Error);
+        }
+
         return Result.Success(new TikTokPublishResult(
             request.OpenId,
             publishResult.Value,
-            "PROCESSING"));
+            statusResult.Value));
     }
 
     /// <inheritdoc />
@@ -423,7 +436,17 @@ public sealed class TikTokPublishService : ITikTokPublishService
             _logger.LogInformation("[TikTok] Carousel publish initiated: PublishId={PublishId}, Images={Count}",
                 apiResponse.Data.PublishId, imageUrls.Count);
 
-            return Result.Success(new TikTokPublishResult(openId, apiResponse.Data.PublishId, "PROCESSING"));
+            var statusResult = await WaitForPublishCompletionAsync(
+                accessToken,
+                apiResponse.Data.PublishId,
+                cancellationToken);
+
+            if (statusResult.IsFailure)
+            {
+                return Result.Failure<TikTokPublishResult>(statusResult.Error);
+            }
+
+            return Result.Success(new TikTokPublishResult(openId, apiResponse.Data.PublishId, statusResult.Value));
         }
         catch (HttpRequestException ex)
         {
@@ -435,6 +458,115 @@ public sealed class TikTokPublishService : ITikTokPublishService
             return Result.Failure<TikTokPublishResult>(
                 new Error("TikTok.ParseError", $"JSON parse error: {ex.Message}"));
         }
+    }
+
+    private async Task<Result<string>> WaitForPublishCompletionAsync(
+        string accessToken,
+        string publishId,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < PublishStatusMaxAttempts; attempt++)
+        {
+            var statusResult = await FetchPublishStatusAsync(accessToken, publishId, cancellationToken);
+            if (statusResult.IsFailure)
+            {
+                return Result.Failure<string>(statusResult.Error);
+            }
+
+            var status = statusResult.Value.Status;
+            _logger.LogInformation(
+                "[TikTok] Publish status: PublishId={PublishId}, Status={Status}, Attempt={Attempt}/{MaxAttempts}",
+                publishId,
+                status,
+                attempt + 1,
+                PublishStatusMaxAttempts);
+
+            if (string.Equals(status, "PUBLISH_COMPLETE", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Success(status);
+            }
+
+            if (string.Equals(status, "FAILED", StringComparison.OrdinalIgnoreCase))
+            {
+                var failureMessage = DescribePublishFailure(statusResult.Value.FailReason);
+                _logger.LogWarning(
+                    "[TikTok] Publish processing failed: PublishId={PublishId}, FailReason={FailReason}",
+                    publishId,
+                    statusResult.Value.FailReason);
+
+                return Result.Failure<string>(
+                    new Error("TikTok.PublishFailed", failureMessage));
+            }
+
+            if (attempt < PublishStatusMaxAttempts - 1)
+            {
+                await Task.Delay(PublishStatusPollDelay, cancellationToken);
+            }
+        }
+
+        return Result.Failure<string>(
+            new Error(
+                "TikTok.StatusTimeout",
+                "TikTok is still processing the post. Try again shortly if it does not appear."));
+    }
+
+    private async Task<Result<TikTokApiPublishStatusData>> FetchPublishStatusAsync(
+        string accessToken,
+        string publishId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, PublishStatusFetchEndpoint);
+            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            httpRequest.Content = new StringContent(
+                JsonSerializer.Serialize(new TikTokApiPublishStatusRequest { PublishId = publishId }, JsonOptions),
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            var apiResponse = JsonSerializer.Deserialize<TikTokApiPublishStatusResponse>(responseBody, JsonOptions);
+
+            if (apiResponse?.Error?.Code != null && apiResponse.Error.Code != "ok")
+            {
+                return Result.Failure<TikTokApiPublishStatusData>(
+                    new Error(
+                        "TikTok.StatusFailed",
+                        $"[{apiResponse.Error.Code}] {apiResponse.Error.Message ?? "Failed to fetch TikTok publish status."}"));
+            }
+
+            if (apiResponse?.Data == null || string.IsNullOrWhiteSpace(apiResponse.Data.Status))
+            {
+                return Result.Failure<TikTokApiPublishStatusData>(
+                    new Error("TikTok.StatusFailed", "TikTok publish status response was invalid."));
+            }
+
+            return Result.Success(apiResponse.Data);
+        }
+        catch (HttpRequestException ex)
+        {
+            return Result.Failure<TikTokApiPublishStatusData>(
+                new Error("TikTok.NetworkError", $"Network error: {ex.Message}"));
+        }
+        catch (JsonException ex)
+        {
+            return Result.Failure<TikTokApiPublishStatusData>(
+                new Error("TikTok.ParseError", $"JSON parse error: {ex.Message}"));
+        }
+    }
+
+    private static string DescribePublishFailure(string? failReason)
+    {
+        return failReason?.Trim().ToLowerInvariant() switch
+        {
+            "file_format_check_failed" =>
+                "TikTok rejected the media format after processing. Photo posts are converted to JPEG automatically; verify that the source file is a valid image.",
+            "picture_size_check_failed" =>
+                "TikTok rejected the image dimensions after processing. Photo posts are resized automatically; verify that the source file is a valid image.",
+            null or "" => "TikTok rejected the post during processing.",
+            var value => $"TikTok rejected the post during processing: {value}."
+        };
     }
 
     private static string GetSafeTitle(string caption, int maxLength = 80)
@@ -629,6 +761,30 @@ public sealed class TikTokPublishService : ITikTokPublishService
     {
         [JsonPropertyName("publish_id")]
         public string? PublishId { get; set; }
+    }
+
+    private sealed class TikTokApiPublishStatusRequest
+    {
+        [JsonPropertyName("publish_id")]
+        public string PublishId { get; set; } = string.Empty;
+    }
+
+    private sealed class TikTokApiPublishStatusResponse
+    {
+        [JsonPropertyName("data")]
+        public TikTokApiPublishStatusData? Data { get; set; }
+
+        [JsonPropertyName("error")]
+        public TikTokApiError? Error { get; set; }
+    }
+
+    private sealed class TikTokApiPublishStatusData
+    {
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = string.Empty;
+
+        [JsonPropertyName("fail_reason")]
+        public string? FailReason { get; set; }
     }
 
     private sealed class TikTokApiError

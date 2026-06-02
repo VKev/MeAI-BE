@@ -33,8 +33,8 @@ public sealed class FeedPostPublishGrpcClient : IFeedPostPublishService
             var feedPostId = Guid.TryParse(response.FeedPostId, out var parsedFeedPostId)
                 ? parsedFeedPostId
                 : Guid.Empty;
-            var createdAt = DateTime.TryParse(response.CreatedAt, out var parsedCreatedAt)
-                ? (DateTime?)parsedCreatedAt
+            var createdAt = DateTimeOffset.TryParse(response.CreatedAt, out var parsedCreatedAt)
+                ? (DateTime?)parsedCreatedAt.UtcDateTime
                 : null;
 
             return Result.Success(new FeedDirectPublishResult(feedPostId, createdAt));
