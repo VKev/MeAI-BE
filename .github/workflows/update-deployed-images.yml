@@ -464,6 +464,77 @@ jobs:
             kubectl -n "$K8S_NAMESPACE" delete daemonset "$prepull_name" --ignore-not-found --wait=false >/dev/null 2>&1 || true
           }
 
+          resolve_rds_identifier() {
+            local service="$1"
+            local row="$2"
+            local candidate
+
+            while IFS= read -r candidate; do
+              [ -n "$candidate" ] || continue
+              if aws rds describe-db-instances \
+                --region "$AWS_REGION" \
+                --db-instance-identifier "$candidate" >/dev/null 2>&1; then
+                echo "$candidate"
+                return 0
+              fi
+            done < <(jq -r '.identifierCandidates[]?' <<< "$row")
+
+            local matches_json
+            matches_json="$(aws rds describe-db-instances \
+              --region "$AWS_REGION" \
+              --query 'DBInstances[].{Identifier:DBInstanceIdentifier,Arn:DBInstanceArn}' \
+              --output json)"
+
+            local tagged_matches=()
+            local identifier
+            local arn
+            local tags_json
+            while IFS=$'\t' read -r identifier arn; do
+              [ -n "$identifier" ] || continue
+              tags_json="$(aws rds list-tags-for-resource \
+                --region "$AWS_REGION" \
+                --resource-name "$arn" \
+                --output json 2>/dev/null || true)"
+              if jq -e --arg project "$PROJECT_NAME" --arg service "$service" '
+                (.TagList // []) as $tags |
+                (any($tags[]?; .Key == "Project" and .Value == $project)) and
+                (any($tags[]?; .Key == "Service" and .Value == $service))
+              ' <<< "$tags_json" >/dev/null 2>&1; then
+                tagged_matches+=("$identifier")
+              fi
+            done < <(jq -r --arg prefix "${PROJECT_NAME}-${service}-" '
+              .[] | select(.Identifier | startswith($prefix)) | [.Identifier, .Arn] | @tsv
+            ' <<< "$matches_json")
+
+            if [ "${#tagged_matches[@]}" -eq 1 ]; then
+              echo "${tagged_matches[0]}"
+              return 0
+            fi
+
+            if [ "${#tagged_matches[@]}" -gt 1 ]; then
+              echo "Multiple RDS instances matched Project=$PROJECT_NAME and Service=$service: ${tagged_matches[*]}" >&2
+              exit 1
+            fi
+
+            local prefix_matches=()
+            mapfile -t prefix_matches < <(jq -r --arg prefix "${PROJECT_NAME}-${service}-" '
+              .[] | select(.Identifier | startswith($prefix)) | .Identifier
+            ' <<< "$matches_json")
+
+            if [ "${#prefix_matches[@]}" -eq 1 ]; then
+              echo "${prefix_matches[0]}"
+              return 0
+            fi
+
+            if [ "${#prefix_matches[@]}" -gt 1 ]; then
+              echo "Multiple RDS instances matched prefix ${PROJECT_NAME}-${service}-: ${prefix_matches[*]}" >&2
+            else
+              echo "No RDS instance found for service '$service'." >&2
+            fi
+            echo "Tried candidate identifiers: $(jq -r '.identifierCandidates | join(", ")' <<< "$row")" >&2
+            exit 1
+          }
+
           erase_rds_data() {
             if [ "$DELETE_RDS_DATA" != "true" ]; then
               echo "RDS data wipe disabled."
@@ -482,18 +553,34 @@ jobs:
 
             rds_plan="$(mktemp)"
             jq -r --arg project "$PROJECT_NAME" '
+              def uniq_preserve:
+                reduce .[] as $item ([]; if index($item) == null then . + [$item] else . end);
+              def nonempty_strings:
+                map(select(type == "string" and length > 0));
               ($project) as $projectName |
               (.rds // {}) | to_entries[] |
               .key as $service |
               .value as $cfg |
-              (($cfg.db_names // (if (($cfg.db_name // "") != "") then [$cfg.db_name] else ["defaultdb"] end))
-                | map(select(type == "string" and length > 0))
-                | unique) as $rawDbNames |
-              (if ($rawDbNames | length) > 0 then $rawDbNames else ["defaultdb"] end) as $dbNames |
-              ($cfg.db_name // ($dbNames[0] // "defaultdb")) as $primaryDbName |
+              (($cfg.db_names // []) | nonempty_strings | uniq_preserve) as $dbNamesFromList |
+              ($cfg.db_name // "") as $configuredDbNameRaw |
+              (if ($configuredDbNameRaw | type) == "string" then $configuredDbNameRaw else "" end) as $configuredDbName |
+              (
+                if ($dbNamesFromList | length) > 0 then $dbNamesFromList
+                elif $configuredDbName != "" then [$configuredDbName]
+                else ["defaultdb"]
+                end
+              ) as $dbNames |
+              (if $configuredDbName != "" then $configuredDbName else ($dbNames[0] // "defaultdb") end) as $primaryDbName |
+              (
+                ([$projectName + "-" + $service + "-" + $primaryDbName + "-db"] +
+                (if $configuredDbName == "" then [$projectName + "-" + $service + "-defaultdb-db"] else [] end) +
+                ($dbNames | map($projectName + "-" + $service + "-" + . + "-db")))
+                | uniq_preserve
+              ) as $identifierCandidates |
               {
                 service: $service,
-                identifier: ($projectName + "-" + $service + "-" + $primaryDbName + "-db"),
+                identifier: ($identifierCandidates[0] // ($projectName + "-" + $service + "-defaultdb-db")),
+                identifierCandidates: $identifierCandidates,
                 username: ($cfg.username // "avnadmin"),
                 password: ($cfg.password // ""),
                 databases: $dbNames
@@ -519,7 +606,7 @@ jobs:
               [ -n "$encoded" ] || continue
               row="$(printf '%s' "$encoded" | base64 -d)"
               service="$(jq -r '.service' <<< "$row")"
-              identifier="$(jq -r '.identifier' <<< "$row")"
+              identifier="$(resolve_rds_identifier "$service" "$row")"
               username="$(jq -r '.username' <<< "$row")"
               password="$(jq -r '.password' <<< "$row")"
 
