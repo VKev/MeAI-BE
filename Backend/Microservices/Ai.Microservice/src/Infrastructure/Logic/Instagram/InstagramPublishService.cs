@@ -23,28 +23,15 @@ public sealed class InstagramPublishService : IInstagramPublishService
         _httpClient = httpClientFactory.CreateClient("Instagram");
     }
 
-    public async Task<Result<bool>> DeleteAsync(
-        InstagramDeleteRequest request,
+    public Task<Result<bool>> DeleteAsync(
+        InstagramDeleteRequest _,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.MediaId))
-        {
-            return Result.Failure<bool>(new Error("Instagram.DeleteMissingId", "Missing Instagram media id."));
-        }
-        if (string.IsNullOrWhiteSpace(request.AccessToken))
-        {
-            return Result.Failure<bool>(new Error("Instagram.DeleteMissingToken", "Missing Instagram access token."));
-        }
-
-        var url = $"{GraphApiBaseUrl}/{Uri.EscapeDataString(request.MediaId)}?access_token={Uri.EscapeDataString(request.AccessToken)}";
-        var response = await _httpClient.DeleteAsync(url, cancellationToken);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            return Result.Failure<bool>(
-                new Error("Instagram.DeleteFailed", $"Instagram delete failed with status {(int)response.StatusCode}: {body}"));
-        }
-        return Result.Success(true);
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(Result.Failure<bool>(
+            new Error(
+                "Instagram.DeleteNotSupported",
+                "Instagram does not support deleting published posts via API. Please delete the post manually in Instagram.")));
     }
 
     public async Task<Result<InstagramPublishResult>> PublishAsync(

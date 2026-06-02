@@ -28,6 +28,8 @@ public sealed class UnpublishPostCommandHandler
 {
     private const string UnpublishingStatus = "unpublishing";
     private const string PublishedStatus = "published";
+    private const string InstagramType = "instagram";
+    private const string TikTokType = "tiktok";
 
     private readonly IPostRepository _postRepository;
     private readonly IPostPublicationRepository _postPublicationRepository;
@@ -69,6 +71,12 @@ public sealed class UnpublishPostCommandHandler
         {
             return Result.Failure<UnpublishPostResponse>(
                 new Error("Post.NoActivePublications", "This post has no active publications to unpublish."));
+        }
+
+        var manualDeleteOnlyError = GetManualDeleteOnlyError(active);
+        if (manualDeleteOnlyError is not null)
+        {
+            return Result.Failure<UnpublishPostResponse>(manualDeleteOnlyError);
         }
 
         var now = DateTimeExtensions.PostgreSqlUtcNow;
@@ -116,5 +124,27 @@ public sealed class UnpublishPostCommandHandler
                 p.ExternalContentId)).ToList());
 
         return Result.Success(response);
+    }
+
+    private static Error? GetManualDeleteOnlyError(IEnumerable<Domain.Entities.PostPublication> publications)
+    {
+        foreach (var publication in publications)
+        {
+            if (string.Equals(publication.SocialMediaType, InstagramType, StringComparison.OrdinalIgnoreCase))
+            {
+                return new Error(
+                    "Instagram.DeleteNotSupported",
+                    "Instagram does not support deleting published posts via API. Please delete the post manually in Instagram.");
+            }
+
+            if (string.Equals(publication.SocialMediaType, TikTokType, StringComparison.OrdinalIgnoreCase))
+            {
+                return new Error(
+                    "TikTok.DeleteNotSupported",
+                    "TikTok does not support deleting posts via API. Please delete the post manually in the TikTok app.");
+            }
+        }
+
+        return null;
     }
 }
