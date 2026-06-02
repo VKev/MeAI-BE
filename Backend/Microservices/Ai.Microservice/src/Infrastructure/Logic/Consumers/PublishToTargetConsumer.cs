@@ -97,8 +97,8 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         if (post is null || post.DeletedAt.HasValue)
         {
             await MarkPlaceholderFailedAsync(placeholder, "Post.NotFound", "Post was deleted before publish.", cancellationToken);
+            await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
             await FirePerTargetFailureAsync(context, message, "Post.NotFound", "Post was deleted before publish.");
-            await FinalizePostStatusIfDoneAsync(context, message, post, cancellationToken);
             return;
         }
 
@@ -112,8 +112,8 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                 : new Error("SocialMedia.NotFound", "Social media account not found.");
 
             await MarkPlaceholderFailedAsync(placeholder, error.Code, error.Description, cancellationToken);
+            await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
             await FirePerTargetFailureAsync(context, message, error.Code, error.Description);
-            await FinalizePostStatusIfDoneAsync(context, message, post, cancellationToken);
             return;
         }
 
@@ -128,8 +128,8 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
             if (resourceIds.Count == 0)
             {
                 await MarkPlaceholderFailedAsync(placeholder, "Post.MissingResources", "This post has no resources to publish.", cancellationToken);
+                await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
                 await FirePerTargetFailureAsync(context, message, "Post.MissingResources", "This post has no resources to publish.");
-                await FinalizePostStatusIfDoneAsync(context, message, post, cancellationToken);
                 return;
             }
 
@@ -139,8 +139,8 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
             if (presignResult.IsFailure)
             {
                 await MarkPlaceholderFailedAsync(placeholder, presignResult.Error.Code, presignResult.Error.Description, cancellationToken);
+                await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
                 await FirePerTargetFailureAsync(context, message, presignResult.Error.Code, presignResult.Error.Description);
-                await FinalizePostStatusIfDoneAsync(context, message, post, cancellationToken);
                 return;
             }
 
@@ -214,22 +214,21 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
 
         if (publishedDestinations is not null)
         {
-            await HandleSuccessAsync(context, message, placeholder, post, socialMedia, publishedDestinations, cancellationToken);
+            await HandleSuccessAsync(placeholder, post, socialMedia, publishedDestinations, cancellationToken);
+            await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
+            await FirePerDestinationSuccessAsync(context, message, socialMedia.Type, publishedDestinations, cancellationToken);
         }
         else
         {
             var errorCode = lastError?.Code ?? "Publish.Unknown";
             var errorMessage = lastError?.Description ?? "Publish failed for unknown reason.";
             await MarkPlaceholderFailedAsync(placeholder, errorCode, errorMessage, cancellationToken);
+            await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
             await FirePerTargetFailureAsync(context, message, errorCode, errorMessage);
         }
-
-        await FinalizePostStatusIfDoneAsync(context, message, post, cancellationToken);
     }
 
     private async Task HandleSuccessAsync(
-        ConsumeContext<PublishToTargetRequested> context,
-        PublishToTargetRequested message,
         PostPublication placeholder,
         Post post,
         UserSocialMediaResult socialMedia,
@@ -264,32 +263,48 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         await _postPublicationRepository.AddRangeAsync(newRows, cancellationToken);
         await _postPublicationRepository.SaveChangesAsync(cancellationToken);
 
-        await context.Publish(
-            NotificationRequestedEventFactory.CreateForUser(
-                message.UserId,
-                NotificationTypes.PostPublishTargetCompleted,
-                "Post published",
-                $"Published to {socialMedia.Type}.",
-                new
-                {
-                    message.CorrelationId,
-                    message.PostId,
-                    message.SocialMediaId,
-                    message.SocialMediaType,
-                    destinations = destinations.Select(d => new
-                    {
-                        pageId = d.PageId,
-                        externalContentId = d.ExternalId
-                    }).ToList()
-                },
-                createdAt: now,
-                source: NotificationSourceConstants.Creator),
-            cancellationToken);
-
         _logger.LogInformation(
             "Publish target succeeded. PublicationId: {PublicationId}, Destinations: {Count}",
-            message.PublicationId,
+            placeholder.Id,
             destinations.Count);
+    }
+
+    private static async Task FirePerDestinationSuccessAsync(
+        ConsumeContext<PublishToTargetRequested> context,
+        PublishToTargetRequested message,
+        string socialMediaType,
+        IReadOnlyList<(string PageId, string ExternalId)> destinations,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeExtensions.PostgreSqlUtcNow;
+
+        foreach (var destination in destinations)
+        {
+            await context.Publish(
+                NotificationRequestedEventFactory.CreateForUser(
+                    message.UserId,
+                    NotificationTypes.PostPublishTargetCompleted,
+                    "Post published",
+                    $"Published to {socialMediaType}.",
+                    new
+                    {
+                        message.CorrelationId,
+                        message.PostId,
+                        message.SocialMediaId,
+                        message.SocialMediaType,
+                        destinations = new[]
+                        {
+                            new
+                            {
+                                pageId = destination.PageId,
+                                externalContentId = destination.ExternalId
+                            }
+                        }
+                    },
+                    createdAt: now,
+                    source: NotificationSourceConstants.Creator),
+                cancellationToken);
+        }
     }
 
     private async Task MarkPlaceholderFailedAsync(
@@ -336,7 +351,6 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
     }
 
     private async Task FinalizePostStatusIfDoneAsync(
-        ConsumeContext<PublishToTargetRequested> context,
         PublishToTargetRequested message,
         Post? post,
         CancellationToken cancellationToken)
@@ -373,48 +387,8 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                 cancellationToken);
         }
 
-        // Emit one target per destination owner so the FE can render per-page identity on
-        // Facebook (fan-out to multiple pages) while still collapsing to a single row for
-        // single-destination platforms like TikTok/Threads. The FE maps destinationOwnerId
-        // back to the specific SocialMedia row for that page to resolve avatar + page name.
-        var targets = publications
-            .Where(p => !p.DeletedAt.HasValue)
-            .GroupBy(p => new { p.SocialMediaId, p.DestinationOwnerId })
-            .Select(g =>
-            {
-                var first = g.First();
-                var anyPub = g.Any(x => string.Equals(x.PublishStatus, PublishedStatus, StringComparison.OrdinalIgnoreCase));
-                return new
-                {
-                    socialMediaId = first.SocialMediaId,
-                    socialMediaType = first.SocialMediaType,
-                    destinationOwnerId = first.DestinationOwnerId,
-                    status = anyPub ? PublishedStatus : FailedStatus
-                };
-            })
-            .ToList();
-
-        await context.Publish(
-            NotificationRequestedEventFactory.CreateForUser(
-                message.UserId,
-                NotificationTypes.PostPublishBatchCompleted,
-                anyPublished ? "Post publishing finished" : "Post publishing failed",
-                anyPublished
-                    ? "Your post finished publishing — check the builder for per-target details."
-                    : "All publish targets failed. Your post remains in draft state.",
-                new
-                {
-                    message.CorrelationId,
-                    message.PostId,
-                    finalStatus,
-                    targets
-                },
-                createdAt: now,
-                source: NotificationSourceConstants.Creator),
-            cancellationToken);
-
         _logger.LogInformation(
-            "Post batch finalized. PostId: {PostId}, Status: {Status}",
+            "Post finalized after all publish targets completed. PostId: {PostId}, Status: {Status}",
             post.Id,
             finalStatus);
     }
