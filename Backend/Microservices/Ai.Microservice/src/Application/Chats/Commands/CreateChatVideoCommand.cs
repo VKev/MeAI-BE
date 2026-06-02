@@ -123,8 +123,9 @@ public sealed class CreateChatVideoCommandHandler
         var model = ResolveVideoModel(request.Model, activeConfig?.ChatModel);
         var variant = ResolveVideoVariant(model, request.Variant);
         var aspectRatio = ResolveValue(request.AspectRatio, activeConfig?.MediaAspectRatio, "16:9");
+        var duration = VideoGenerationSettings.NormalizeDuration(model, request.Duration);
         var enableTranslation = request.EnableTranslation ?? true;
-        var pricing = VideoPricingResolver.Resolve(model, variant, request.Resolution, request.Duration);
+        var pricing = VideoPricingResolver.Resolve(model, variant, request.Resolution, duration);
 
         var correlationId = Guid.CreateVersion7();
         var estimatedBytes = _storageEstimator.EstimateVideoGenerationBytes(model);
@@ -185,7 +186,7 @@ public sealed class CreateChatVideoCommandHandler
             pricing.CatalogVariant,
             pricing.Quantity,
             request.Resolution,
-            request.Duration,
+            duration,
             request.GenerateAudio,
             request.ReturnLastFrame,
             request.WebSearch);
@@ -241,7 +242,7 @@ public sealed class CreateChatVideoCommandHandler
             EnableTranslation = enableTranslation,
             Watermark = request.Watermark,
             Resolution = request.Resolution,
-            Duration = request.Duration,
+            Duration = duration,
             GenerateAudio = request.GenerateAudio,
             ReturnLastFrame = request.ReturnLastFrame,
             WebSearch = request.WebSearch,
@@ -269,7 +270,7 @@ public sealed class CreateChatVideoCommandHandler
                     enableTranslation,
                     request.Watermark,
                     request.Resolution,
-                    request.Duration,
+                    duration,
                     request.GenerateAudio,
                     request.ReturnLastFrame,
                     request.WebSearch

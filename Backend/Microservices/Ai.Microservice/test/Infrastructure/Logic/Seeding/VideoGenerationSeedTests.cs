@@ -130,6 +130,23 @@ public sealed class VideoGenerationSeedTests
         pricing.Quantity.Should().Be(expectedQuantity);
     }
 
+    [Theory]
+    [InlineData("gemini-omni-video", 6, 6)]
+    [InlineData("gemini-omni-video", 7, 4)]
+    [InlineData("grok-imagine-video-1-5-preview", null, 8)]
+    [InlineData("grok-imagine-video-1-5-preview", 99, 15)]
+    [InlineData("bytedance/seedance-2", 1, 4)]
+    [InlineData("bytedance/seedance-2", 12, 12)]
+    [InlineData("veo-3-1", 8, null)]
+    public void VideoGenerationSettings_ShouldNormalizeProviderDuration(
+        string model,
+        int? duration,
+        int? expectedDuration)
+    {
+        VideoGenerationSettings.NormalizeDuration(model, duration)
+            .Should().Be(expectedDuration);
+    }
+
     private static MyDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<MyDbContext>()

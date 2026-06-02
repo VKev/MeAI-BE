@@ -1,4 +1,4 @@
-name: Fresh Start Deployed EKS Images
+name: Update Deployed EKS Images
 
 on:
   workflow_dispatch:
@@ -18,6 +18,16 @@ on:
         type: string
         default: ""
         required: true
+      delete_rds_data:
+        description: "Also delete all tables in Terraform-defined RDS databases before restarting EKS services."
+        type: boolean
+        default: false
+        required: true
+      rds_data_confirmation:
+        description: "Required when delete_rds_data is true: type DELETE_RDS_DATA."
+        type: string
+        default: ""
+        required: false
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || '' }}
@@ -45,6 +55,17 @@ jobs:
           set -euo pipefail
           if [ "$FRESH_START_CONFIRMATION" != "DELETE_DEPLOYED_DATA" ]; then
             echo "Refusing destructive rollout. Set fresh_start_confirmation to DELETE_DEPLOYED_DATA." >&2
+            exit 1
+          fi
+
+      - name: Require destructive RDS confirmation
+        if: ${{ inputs.delete_rds_data }}
+        env:
+          RDS_DATA_CONFIRMATION: ${{ inputs.rds_data_confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$RDS_DATA_CONFIRMATION" != "DELETE_RDS_DATA" ]; then
+            echo "Refusing RDS data wipe. Set rds_data_confirmation to DELETE_RDS_DATA." >&2
             exit 1
           fi
 
@@ -113,9 +134,9 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
 
-          cp ../terraform-var/*.auto.tfvars . 2>/dev/null || true
-          cp ../terraform-vars/*.auto.tfvars . 2>/dev/null || true
           cp ../Terraform-vars/*.auto.tfvars . 2>/dev/null || true
+          cp ../terraform-vars/*.auto.tfvars . 2>/dev/null || true
+          cp ../terraform-var/*.auto.tfvars . 2>/dev/null || true
 
           if ! command -v jq >/dev/null 2>&1; then
             sudo apt-get update && sudo apt-get install -y jq
@@ -282,9 +303,9 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
 
-          cp ../terraform-var/*.auto.tfvars . 2>/dev/null || true
-          cp ../terraform-vars/*.auto.tfvars . 2>/dev/null || true
           cp ../Terraform-vars/*.auto.tfvars . 2>/dev/null || true
+          cp ../terraform-vars/*.auto.tfvars . 2>/dev/null || true
+          cp ../terraform-var/*.auto.tfvars . 2>/dev/null || true
 
           if ! command -v jq >/dev/null 2>&1; then
             sudo apt-get update && sudo apt-get install -y jq
@@ -397,6 +418,8 @@ jobs:
           SKIP_MISSING_DEPLOYMENTS: "false"
           ROLLOUT_TIMEOUT: 15m
           RUN_STAMP: ${{ github.run_id }}-${{ github.run_attempt }}
+          DELETE_RDS_DATA: ${{ inputs.delete_rds_data }}
+          RDS_DATA_CONFIRMATION: ${{ inputs.rds_data_confirmation }}
         run: |
           set -euo pipefail
 
@@ -439,6 +462,153 @@ jobs:
 
           cleanup_prepull() {
             kubectl -n "$K8S_NAMESPACE" delete daemonset "$prepull_name" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+          }
+
+          erase_rds_data() {
+            if [ "$DELETE_RDS_DATA" != "true" ]; then
+              echo "RDS data wipe disabled."
+              return 0
+            fi
+
+            if [ "$RDS_DATA_CONFIRMATION" != "DELETE_RDS_DATA" ]; then
+              echo "Refusing RDS data wipe. Set rds_data_confirmation to DELETE_RDS_DATA." >&2
+              exit 1
+            fi
+
+            if [ ! -f Terraform/00-all.auto.tfvars.json ]; then
+              echo "Merged Terraform vars file was not found; cannot derive RDS targets." >&2
+              exit 1
+            fi
+
+            rds_plan="$(mktemp)"
+            jq -r --arg project "$PROJECT_NAME" '
+              ($project) as $projectName |
+              (.rds // {}) | to_entries[] |
+              .key as $service |
+              .value as $cfg |
+              (($cfg.db_names // (if (($cfg.db_name // "") != "") then [$cfg.db_name] else ["defaultdb"] end))
+                | map(select(type == "string" and length > 0))
+                | unique) as $rawDbNames |
+              (if ($rawDbNames | length) > 0 then $rawDbNames else ["defaultdb"] end) as $dbNames |
+              ($cfg.db_name // ($dbNames[0] // "defaultdb")) as $primaryDbName |
+              {
+                service: $service,
+                identifier: ($projectName + "-" + $service + "-" + $primaryDbName + "-db"),
+                username: ($cfg.username // "avnadmin"),
+                password: ($cfg.password // ""),
+                databases: $dbNames
+              } | @base64
+            ' Terraform/00-all.auto.tfvars.json > "$rds_plan"
+
+            if [ ! -s "$rds_plan" ]; then
+              echo "No Terraform-defined RDS databases found; skipping RDS wipe."
+              echo "RDS data reset skipped: no Terraform-defined RDS databases." >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              return 0
+            fi
+
+            postgres_client_image="$(jq -r --arg registry "$ECR_REGISTRY" \
+              '$registry + "/" + (.dockerhub_pull_through_prefix // "dockerhub") + "/library/postgres:16-alpine"' \
+              Terraform/00-all.auto.tfvars.json)"
+
+            echo "Deleting all tables in Terraform-defined RDS databases before restarting EKS services..."
+            rds_instance_count=0
+            rds_database_count=0
+
+            while IFS= read -r encoded; do
+              [ -n "$encoded" ] || continue
+              row="$(printf '%s' "$encoded" | base64 -d)"
+              service="$(jq -r '.service' <<< "$row")"
+              identifier="$(jq -r '.identifier' <<< "$row")"
+              username="$(jq -r '.username' <<< "$row")"
+              password="$(jq -r '.password' <<< "$row")"
+
+              if [ -z "$password" ] || [ "$password" = "null" ]; then
+                echo "RDS password for service '$service' is empty in merged Terraform vars. Refusing to wipe '$identifier'." >&2
+                exit 1
+              fi
+              echo "::add-mask::$password"
+
+              endpoint_json="$(aws rds describe-db-instances \
+                --region "$AWS_REGION" \
+                --db-instance-identifier "$identifier" \
+                --query 'DBInstances[0].Endpoint' \
+                --output json)"
+              host="$(jq -r '.Address // empty' <<< "$endpoint_json")"
+              port="$(jq -r '.Port // 5432' <<< "$endpoint_json")"
+
+              if [ -z "$host" ]; then
+                echo "Unable to resolve RDS endpoint for '$identifier'." >&2
+                exit 1
+              fi
+
+              rds_instance_count=$((rds_instance_count + 1))
+
+              while read -r database; do
+                case "$database" in
+                  ""|"null"|"postgres"|"template0"|"template1")
+                    echo "Refusing to erase system or empty database name '$database' on '$identifier'." >&2
+                    exit 1
+                    ;;
+                esac
+                if ! [[ "$database" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+                  echo "Refusing to erase database '$database' on '$identifier' because the name is not a simple PostgreSQL identifier." >&2
+                  exit 1
+                fi
+                if ! [[ "$username" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+                  echo "Refusing to use RDS username '$username' on '$identifier' because the name is not a simple PostgreSQL identifier." >&2
+                  exit 1
+                fi
+
+                safe_suffix="$(printf '%s-%s' "$service" "$database" \
+                  | tr '[:upper:]' '[:lower:]' \
+                  | sed 's/[^a-z0-9-]/-/g; s/-\+/-/g; s/^-//; s/-$//' \
+                  | cut -c1-24)"
+                pod_name="$(printf 'meai-rds-wipe-%s-%s' "$RUN_STAMP" "$safe_suffix" | cut -c1-63 | sed 's/-$//')"
+
+                echo "Deleting all tables in RDS database '$database' on instance '$identifier'..."
+                kubectl -n "$K8S_NAMESPACE" run "$pod_name" \
+                  --rm -i \
+                  --attach=true \
+                  --restart=Never \
+                  --image="$postgres_client_image" \
+                  --env="PGHOST=$host" \
+                  --env="PGPORT=$port" \
+                  --env="PGUSER=$username" \
+                  --env="PGPASSWORD=$password" \
+                  --env="TARGET_DB=$database" \
+                  --command -- sh -ceu '
+                    psql -v ON_ERROR_STOP=1 -d postgres \
+                      -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = \$\$${TARGET_DB}\$\$ AND pid <> pg_backend_pid();"
+                    psql -v ON_ERROR_STOP=1 \
+                      -d "$TARGET_DB" \
+                      -c "
+                        DO \$meai_wipe\$
+                        DECLARE
+                          schema_name text;
+                        BEGIN
+                          FOR schema_name IN
+                            SELECT nspname
+                            FROM pg_namespace
+                            WHERE nspname <> \$\$information_schema\$\$
+                              AND nspname NOT LIKE \$\$pg_%\$\$
+                          LOOP
+                            EXECUTE format(\$\$DROP SCHEMA IF EXISTS %I CASCADE\$\$, schema_name);
+                          END LOOP;
+
+                          CREATE SCHEMA public AUTHORIZATION CURRENT_USER;
+                          GRANT ALL ON SCHEMA public TO PUBLIC;
+                          GRANT ALL ON SCHEMA public TO CURRENT_USER;
+                        END
+                        \$meai_wipe\$;
+                      "
+                  '
+                rds_database_count=$((rds_database_count + 1))
+              done < <(jq -r '.databases[]' <<< "$row")
+            done < "$rds_plan"
+
+            echo "RDS data reset complete: deleted all tables in $rds_database_count database(s) across $rds_instance_count RDS instance(s)." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
           }
 
           cleanup() {
@@ -500,6 +670,8 @@ jobs:
           done < "$replica_file"
 
           kubectl -n "$K8S_NAMESPACE" delete pods --all --wait=true --timeout=5m
+
+          erase_rds_data
 
           echo "Snapshotting and deleting all namespace PVCs..."
           kubectl -n "$K8S_NAMESPACE" get pvc -o json > "$pvc_snapshot"

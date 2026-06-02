@@ -1,3 +1,4 @@
+using Application.Billing;
 using Domain.Repositories;
 using MediatR;
 using SharedLibrary.Common.ResponseModel;
@@ -48,6 +49,7 @@ public sealed class GenerateVideoCommandHandler
             return Result.Failure<GenerateVideoCommandResponse>(VeoErrors.InvalidPrompt);
         }
 
+        var duration = VideoGenerationSettings.NormalizeDuration(request.Model, request.Duration);
         var correlationId = Guid.CreateVersion7();
 
         var message = new VideoGenerationStarted
@@ -64,7 +66,7 @@ public sealed class GenerateVideoCommandHandler
             EnableTranslation = request.EnableTranslation,
             Watermark = request.Watermark,
             Resolution = request.Resolution,
-            Duration = request.Duration,
+            Duration = duration,
             GenerateAudio = request.GenerateAudio,
             ReturnLastFrame = request.ReturnLastFrame,
             WebSearch = request.WebSearch,
@@ -90,7 +92,7 @@ public sealed class GenerateVideoCommandHandler
                     request.EnableTranslation,
                     request.Watermark,
                     request.Resolution,
-                    request.Duration,
+                    duration,
                     request.GenerateAudio,
                     request.ReturnLastFrame,
                     request.WebSearch
