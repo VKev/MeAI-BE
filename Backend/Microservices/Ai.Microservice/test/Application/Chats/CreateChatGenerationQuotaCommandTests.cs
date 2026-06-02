@@ -315,13 +315,13 @@ public sealed class CreateChatGenerationQuotaCommandTests
             .Setup(service => service.GetCostAsync(
                 CoinActionTypes.VideoGeneration,
                 "gemini-omni-video",
-                null,
+                "720p:4s",
                 1,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new CoinCostQuote(
                 CoinActionTypes.VideoGeneration,
                 "gemini-omni-video",
-                null,
+                "720p:4s",
                 "per_video",
                 90m,
                 1,

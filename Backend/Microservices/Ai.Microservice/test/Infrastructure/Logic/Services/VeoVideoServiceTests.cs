@@ -27,12 +27,14 @@ public sealed class VeoVideoServiceTests
         var result = await service.GenerateVideoAsync(new VeoGenerateRequest(
             Prompt: "Animate the launch",
             Model: "veo-3-1",
-            Variant: variant));
+            Variant: variant,
+            Duration: 12));
 
         result.Success.Should().BeTrue();
         handler.RequestUri!.AbsolutePath.Should().Be("/api/v1/veo/generate");
         using var body = JsonDocument.Parse(handler.Body!);
         body.RootElement.GetProperty("model").GetString().Should().Be(expectedModel);
+        body.RootElement.TryGetProperty("duration", out _).Should().BeFalse();
     }
 
     [Fact]

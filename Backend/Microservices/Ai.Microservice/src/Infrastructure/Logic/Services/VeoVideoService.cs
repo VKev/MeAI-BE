@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Abstractions;
 using Application.Abstractions.ApiCredentials;
+using Application.Billing;
 using Infrastructure.Configs;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -389,7 +390,7 @@ public sealed class VeoVideoService : IVeoVideoService
                 ? "auto"
                 : NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3");
             input["resolution"] = NormalizeProviderVideoResolution(request.Resolution, "480p", "480p", "720p");
-            input["duration"] = NormalizeProviderVideoDuration(request.Duration, 8, 1, 15);
+            input["duration"] = VideoGenerationSettings.NormalizeDuration(model, request.Duration) ?? 8;
             AddProviderVideoFirstImageAsList(input, request.ImageUrls, "image_urls");
             return input;
         }
@@ -448,7 +449,9 @@ public sealed class VeoVideoService : IVeoVideoService
         {
             input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "1:1", "4:3", "3:4", "16:9", "9:16", "21:9");
             input["resolution"] = NormalizeProviderVideoResolution(request.Resolution, "720p", "480p", "720p", "1080p");
-            input["duration"] = NormalizeProviderVideoDuration(request.Duration, 5, 4, 15);
+            input["duration"] = string.Equals(model, "bytedance/seedance-2", StringComparison.OrdinalIgnoreCase)
+                ? VideoGenerationSettings.NormalizeDuration(model, request.Duration) ?? 5
+                : NormalizeProviderVideoDuration(request.Duration, 5, 4, 15);
             input["generate_audio"] = request.GenerateAudio ?? false;
             input["nsfw_checker"] = false;
             if (model.StartsWith("bytedance/seedance-1.5", StringComparison.OrdinalIgnoreCase))
@@ -578,7 +581,7 @@ public sealed class VeoVideoService : IVeoVideoService
 
         if (string.Equals(model, "gemini-omni-video", StringComparison.OrdinalIgnoreCase))
         {
-            input["duration"] = NormalizeProviderVideoDurationOption(request.Duration, 4, 4, 6, 8, 10).ToString();
+            input["duration"] = (VideoGenerationSettings.NormalizeDuration(model, request.Duration) ?? 4).ToString();
             input["resolution"] = NormalizeProviderVideoResolution(request.Resolution, "720p", "720p", "1080p", "4k");
             input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16");
             AddProviderVideoImages(input, request.ImageUrls, "image_urls");
@@ -713,13 +716,6 @@ public sealed class VeoVideoService : IVeoVideoService
     {
         return duration.HasValue
             ? Math.Clamp(duration.Value, minimum, maximum)
-            : fallback;
-    }
-
-    private static int NormalizeProviderVideoDurationOption(int? duration, int fallback, params int[] supported)
-    {
-        return duration.HasValue && supported.Contains(duration.Value)
-            ? duration.Value
             : fallback;
     }
 
