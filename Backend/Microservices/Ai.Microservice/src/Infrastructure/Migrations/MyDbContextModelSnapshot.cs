@@ -397,6 +397,14 @@ namespace Infrastructure.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_auto_topic");
 
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("image")
+                        .HasColumnName("media_type");
+
                     b.Property<int>("MaxRagPosts")
                         .HasColumnType("integer")
                         .HasColumnName("max_rag_posts");

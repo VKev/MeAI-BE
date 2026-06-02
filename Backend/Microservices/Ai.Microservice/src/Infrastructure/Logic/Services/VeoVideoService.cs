@@ -49,7 +49,7 @@ public sealed class VeoVideoService : IVeoVideoService
         }
 
         var isVeoModel = request.Model.StartsWith("veo", StringComparison.OrdinalIgnoreCase);
-        var callbackUrl = BuildCallbackUrl(request.CorrelationId);
+        var callbackUrl = request.UseCallback ? BuildCallbackUrl(request.CorrelationId) : null;
 
         object payload;
         string endpoint;

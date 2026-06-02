@@ -766,13 +766,16 @@ Async pipeline (see `DraftPostGenerationConsumer`):
 7. Step 3.35 — Jina-m0 multimodal rerank of (past-post + fresh-topic) candidate pool.
 8. Step 3.4 — fetch style-knowledge for the requested style
    (`knowledge:image-design-{style}:*`).
-9. Step 3.5 — image-brief LLM (gpt-4o-mini, JSON output: `prompt`, `aspect_ratio`,
+9. Step 3.5 — visual-brief LLM (gpt-4o-mini, JSON output: `prompt`, `aspect_ratio`,
    `style_notes`).
-10. Step 4 — image-gen (Kie / OpenRouter image model). **Costs ~$0.234 per fire.**
+10. Step 4 — media-gen. `mediaType=image` keeps the Kie / OpenRouter image path.
+    `mediaType=video` reuses the same RAG-selected references and brief, caps references
+    at 3, then submits one Veo 3.1 Fast video (`720p`, `8s`) through Kie. Image generation
+    **costs ~$0.234 per fire.**
 11. Step 5 — persist result, mark `Completed`.
 
 HTTP returns 202 with `correlationId`; poll `draft_post_tasks` row by correlationId for
-status.
+status. Request `mediaType` is optional (`image` or `video`) and defaults to `image`.
 
 ## 17. Subscription / billing invariants
 

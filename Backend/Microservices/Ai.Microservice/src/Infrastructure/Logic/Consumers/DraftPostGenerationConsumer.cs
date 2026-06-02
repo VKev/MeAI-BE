@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Application.Abstractions;
 using Application.Abstractions.Billing;
 using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
@@ -27,8 +28,8 @@ namespace Infrastructure.Logic.Consumers;
 ///   1. Auto-index latest posts (skip-if-unchanged via fingerprint registry)
 ///   2. RAG multimodal query (text context + image references)
 ///   3. Caption generation (gpt-4o-mini multimodal, references attached as image_url parts)
-///   4. Image generation (gpt-5.4-image-2 multimodal, same references for visual style)
-///   5. Upload generated image to S3 via User microservice (data URL)
+///   4. Media generation (image or Veo 3.1 Fast video, same references for visual style)
+///   5. Upload generated media to S3 via User microservice
 ///   6. Create PostBuilder + Post via existing CreatePostCommand
 ///   7. Update DraftPostTask + publish notification
 /// </summary>
@@ -204,6 +205,16 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             "Render at high resolution. Output an image, no text response.";
     }
 
+    private static string BuildDraftVideoPrompt(ImageBrief brief)
+    {
+        return
+            $"{brief.Prompt}\n\n" +
+            $"Visual direction: {brief.StyleNotes}\n\n" +
+            "Create one publish-ready 8-second social media video at 720p in 16:9. " +
+            "Use the supplied images as visual references for palette, lighting, mood, subject, and brand direction. " +
+            "Add intentional camera motion and natural scene movement. Keep the sequence visually coherent and suitable for a social post.";
+    }
+
     private static string BuildDraftImageSystemPrompt(string baseSystemPrompt, DraftImageTarget target)
     {
         if (target.Total <= 1)
@@ -363,7 +374,19 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
 
     private sealed record GeneratedDraftImage(int Ordinal, int Total, ImageGenerationResult Result);
 
-    private sealed record UploadedDraftImage(
+    private sealed record GeneratedDraftMedia(
+        int Ordinal,
+        int Total,
+        string Url,
+        string MimeType,
+        bool IsDataUrl = false,
+        int? PromptTokens = null,
+        int? CompletionTokens = null,
+        decimal? CostUsd = null,
+        string? ProviderTaskId = null,
+        string? Resolution = null);
+
+    private sealed record UploadedDraftMedia(
         int Ordinal,
         int Total,
         Guid ResourceId,
@@ -410,12 +433,21 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     /// has a real choice — picking 4 of 14 is meaningfully better than picking 4 of 4.
     /// </summary>
     private const int DefaultRerankCandidatePool = 14;
+    private const int MaxVideoReferenceImages = 3;
+    private const string RecommendationVideoModel = "veo-3-1";
+    private const string RecommendationVideoVariant = "fast";
+    private const string RecommendationVideoResolution = "720p";
+    private const int RecommendationVideoDurationSeconds = 8;
+    private const string RecommendationVideoAspectRatio = "16:9";
+    private static readonly TimeSpan RecommendationVideoPollInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan RecommendationVideoTimeout = TimeSpan.FromMinutes(10);
 
     private readonly IMediator _mediator;
     private readonly IDraftPostTaskRepository _taskRepository;
     private readonly IPostRepository _postRepository;
     private readonly IMultimodalLlmClient _multimodalLlm;
     private readonly IImageGenerationClient _imageGenClient;
+    private readonly IVeoVideoService _veoVideoService;
     private readonly IUserResourceService _userResourceService;
     private readonly IRagClient _ragClient;
     private readonly IImageSearchClient _imageSearchClient;
@@ -431,6 +463,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         IPostRepository postRepository,
         IMultimodalLlmClient multimodalLlm,
         IImageGenerationClient imageGenClient,
+        IVeoVideoService veoVideoService,
         IUserResourceService userResourceService,
         IRagClient ragClient,
         IImageSearchClient imageSearchClient,
@@ -445,6 +478,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         _postRepository = postRepository;
         _multimodalLlm = multimodalLlm;
         _imageGenClient = imageGenClient;
+        _veoVideoService = veoVideoService;
         _userResourceService = userResourceService;
         _ragClient = ragClient;
         _imageSearchClient = imageSearchClient;
@@ -590,11 +624,15 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         // older queued messages (with no Style field) and any direct re-publishes
         // both default cleanly to "branded".
         var style = DraftPostStyles.NormalizeOrDefault(msg.Style);
+        var mediaType = DraftPostMediaTypes.NormalizeOrDefault(msg.MediaType);
+        var maxReferenceImages = string.Equals(mediaType, DraftPostMediaTypes.Video, StringComparison.Ordinal)
+            ? Math.Clamp(msg.MaxReferenceImages, 1, MaxVideoReferenceImages)
+            : Math.Max(msg.MaxReferenceImages, 1);
         var isAutoTopic = msg.IsAutoTopic;
 
         _logger.LogInformation(
-            "DraftPost: starting CorrelationId={CorrelationId} UserId={UserId} SocialMediaId={SocialMediaId} Style={Style} AutoTopic={Auto}",
-            msg.CorrelationId, msg.UserId, msg.SocialMediaId, style, isAutoTopic);
+            "DraftPost: starting CorrelationId={CorrelationId} UserId={UserId} SocialMediaId={SocialMediaId} Style={Style} MediaType={MediaType} AutoTopic={Auto}",
+            msg.CorrelationId, msg.UserId, msg.SocialMediaId, style, mediaType, isAutoTopic);
 
         var task = await _taskRepository.GetByCorrelationIdForUpdateAsync(msg.CorrelationId, ct);
         if (task is null)
@@ -604,7 +642,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         }
 
         // Tracks whether the empty Post (pre-created by StartDraftPostGenerationCommand)
-        // has been finalized with caption + image. If we fail BEFORE this flips true,
+        // has been finalized with caption + media. If we fail BEFORE this flips true,
         // the catch path soft-deletes the empty Post so the FE doesn't see a permanent
         // blank placeholder. After it's true, the Post has real content and we keep it.
         bool postFinalized = false;
@@ -612,6 +650,10 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         try
         {
             task.Status = DraftPostTaskStatuses.Processing;
+            task.MediaType = mediaType;
+            task.ImageCount = string.Equals(mediaType, DraftPostMediaTypes.Video, StringComparison.Ordinal)
+                ? 1
+                : task.ImageCount;
             task.UpdatedAt = DateTimeExtensions.PostgreSqlUtcNow;
             await _taskRepository.SaveChangesAsync(ct);
 
@@ -624,10 +666,11 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 new
                 {
                     style,
+                    mediaType,
                     userPrompt = msg.UserPrompt,
                     isAutoTopic,
                     topK = msg.TopK,
-                    maxReferenceImages = msg.MaxReferenceImages,
+                    maxReferenceImages,
                     maxRagPosts = msg.MaxRagPosts,
                 },
                 ct);
@@ -740,11 +783,11 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 new Application.Recommendations.Services.QueryRewriteRequest(
                     UserPrompt: recommendationQuery,
                     PageProfileSnippet: null,         // handler will be called next; we
-                                                       // could fetch profile here first but
-                                                       // it adds an extra round-trip. Hand
-                                                       // off without profile — handler does
-                                                       // the rewrite+intent classification
-                                                       // adequately on prompt+platform alone.
+                                                      // could fetch profile here first but
+                                                      // it adds an extra round-trip. Hand
+                                                      // off without profile — handler does
+                                                      // the rewrite+intent classification
+                                                      // adequately on prompt+platform alone.
                     Platform: null,                   // handler resolves platform via gRPC
                     Style: style),
                 ct);
@@ -974,7 +1017,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             var topicForDownstream = isAutoTopic
                 ? "(Auto-discovered topic — read the recommendation summary above; the chosen topic is stated at the top of that summary.)"
                 : msg.UserPrompt;
-            var captionRefImageUrls = topImageUrls.Take(msg.MaxReferenceImages).ToList();
+            var captionRefImageUrls = topImageUrls.Take(maxReferenceImages).ToList();
             var captionUserText = BuildCaptionUserText(topicForDownstream, rag, captionRefImageUrls.Count, style);
             _logger.LogInformation(
                 "LLM[caption] INPUT for DraftPost {Id} Style={Style} ({UserTextLen} chars, {RefCount} ref images):\n{UserText}",
@@ -1132,7 +1175,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     caption,
                     visualQuery = rewrite.VisualQuery,
                     keyTerms = rewrite.KeyTerms,
-                    cap = msg.MaxReferenceImages,
+                    cap = maxReferenceImages,
                     candidateCount = rerankCandidates.Count,
                     candidates = rerankCandidates.Select(candidate => new
                     {
@@ -1149,7 +1192,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 caption: caption,
                 visualQuery: rewrite.VisualQuery,                  // ← K4 enhancement
                 keyTerms: rewrite.KeyTerms,                        // ← K4 enhancement
-                cap: msg.MaxReferenceImages,
+                cap: maxReferenceImages,
                 cancellationToken: ct);
             if (referenceSelection.Error is not null)
             {
@@ -1166,7 +1209,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                         caption,
                         visualQuery = rewrite.VisualQuery,
                         keyTerms = rewrite.KeyTerms,
-                        cap = msg.MaxReferenceImages,
+                        cap = maxReferenceImages,
                         candidateCount = rerankCandidates.Count,
                     },
                     ct,
@@ -1184,7 +1227,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     selectedReferenceImageUrls = imageBriefRefImageUrls,
                     selectedCount = imageBriefRefImageUrls.Count,
                     candidateCount = rerankCandidates.Count,
-                    cap = msg.MaxReferenceImages,
+                    cap = maxReferenceImages,
                 },
                 ct,
                 phaseStatus: "completed");
@@ -1317,18 +1360,18 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     task.Id, Truncate(brief.StyleNotes, 1500));
             }
 
-            // Step 4 — image generation (gpt-5.4-image-2 multimodal). The image-gen
-            // prompt is the LLM-authored brief; the system prompt is style-aware
-            // (creative = no text on image, branded = optional headline, marketing =
-            // full quoted-text rendering) plus the brief's style_notes.
+            // Step 4 — media generation. Image drafts use the multimodal image provider;
+            // video drafts reuse the same RAG-grounded brief and selected references,
+            // then submit one Veo 3.1 Fast clip.
             await PublishThinkingAsync(
                 context,
                 task,
                 "image_brief_generation_completed",
-                "AI planned the image",
-                "AI finished the image-generation brief.",
+                "AI planned the media",
+                "AI finished the media-generation brief.",
                 new
                 {
+                    mediaType,
                     prompt = brief.Prompt,
                     brief.AspectRatio,
                     brief.StyleNotes,
@@ -1336,116 +1379,173 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 },
                 ct,
                 phaseStatus: "completed");
-            var imageCount = Math.Clamp(msg.ImageCount > 0 ? msg.ImageCount : task.ImageCount > 0 ? task.ImageCount : 1, 1, 4);
-            task.ImageCount = imageCount;
-            var imageBaseSystem = ImageSystemPromptFor(style);
-            var imageTargets = Enumerable.Range(1, imageCount)
-                .Select(ordinal => new DraftImageTarget(ordinal, imageCount))
-                .ToList();
-            var baseImageSystemPrompt = string.IsNullOrWhiteSpace(brief.StyleNotes)
-                ? imageBaseSystem
-                : $"{imageBaseSystem}\n\nAdditional style constraints from the art-director brief: {brief.StyleNotes}";
-            foreach (var imageTarget in imageTargets)
+            List<GeneratedDraftMedia> generatedMedia;
+            if (string.Equals(mediaType, DraftPostMediaTypes.Video, StringComparison.Ordinal))
             {
-                var targetPrompt = BuildDraftImagePrompt(brief, imageTarget);
-                var targetSystemPrompt = BuildDraftImageSystemPrompt(baseImageSystemPrompt, imageTarget);
-                _logger.LogInformation(
-                    "IMAGEGEN INPUT for DraftPost {Id} Style={Style} Media={Ordinal}/{Total} ({RefCount} ref images = {PastCount} past-post + {FreshCount} fresh-topic):\n  --- prompt ---\n{Prompt}\n  --- system ---\n{System}",
-                    task.Id, style, imageTarget.Ordinal, imageTarget.Total,
-                    imageBriefRefImageUrls.Count, topImageUrls.Count, freshRefImageUrls.Count,
-                    Truncate(targetPrompt, 2500),
-                    Truncate(targetSystemPrompt, 1500));
+                task.ImageCount = 1;
+                var videoReferenceImageUrls = imageBriefRefImageUrls.Take(MaxVideoReferenceImages).ToList();
+                var videoPrompt = BuildDraftVideoPrompt(brief);
                 await PublishThinkingAsync(
                     context,
                     task,
-                    $"image_generation_started_{imageTarget.Ordinal}",
-                    imageTarget.Total == 1
-                        ? "AI is generating the image"
-                        : $"AI is generating draft media {imageTarget.Ordinal}/{imageTarget.Total}",
-                    "AI is generating draft media from the brief and selected references.",
+                    "video_generation_started",
+                    "AI is generating the video",
+                    "AI is generating an 8-second Veo 3.1 Fast video from the RAG-grounded brief and selected references.",
                     new
                     {
                         style,
-                        prompt = targetPrompt,
-                        systemPrompt = targetSystemPrompt,
-                        mediaOrdinal = imageTarget.Ordinal,
-                        mediaTotal = imageTarget.Total,
-                        referenceImageUrls = imageBriefRefImageUrls,
+                        prompt = videoPrompt,
+                        model = RecommendationVideoModel,
+                        variant = RecommendationVideoVariant,
+                        resolution = RecommendationVideoResolution,
+                        duration = RecommendationVideoDurationSeconds,
+                        aspectRatio = RecommendationVideoAspectRatio,
+                        generationType = videoReferenceImageUrls.Count > 0 ? "REFERENCE_2_VIDEO" : "TEXT_2_VIDEO",
+                        referenceImageUrls = videoReferenceImageUrls,
                     },
                     ct);
-            }
-
-            var generatedImages = (await Task.WhenAll(imageTargets.Select(async imageTarget =>
-            {
-                var targetPrompt = BuildDraftImagePrompt(brief, imageTarget);
-                var targetSystemPrompt = BuildDraftImageSystemPrompt(baseImageSystemPrompt, imageTarget);
-                var result = await _imageGenClient.GenerateImageAsync(
-                    new ImageGenerationRequest(
-                        Prompt: targetPrompt,
-                        ReferenceImageUrls: imageBriefRefImageUrls,
-                        SystemPrompt: targetSystemPrompt),
-                    ct);
-                return new GeneratedDraftImage(imageTarget.Ordinal, imageTarget.Total, result);
-            })))
-                .OrderBy(item => item.Ordinal)
-                .ToList();
-
-            foreach (var generatedImage in generatedImages)
-            {
-                _logger.LogInformation(
-                    "IMAGEGEN OUTPUT for DraftPost {Id} Media={Ordinal}/{Total}: mime={MimeType}, urlLen={Len}, inlineData={InlineData}, promptTokens={Pt}, completionTokens={Ct}, costUsd={Cost}",
-                    task.Id, generatedImage.Ordinal, generatedImage.Total, generatedImage.Result.MimeType,
-                    generatedImage.Result.Url.Length, generatedImage.Result.IsDataUrl, generatedImage.Result.PromptTokens,
-                    generatedImage.Result.CompletionTokens, generatedImage.Result.CostUsd);
+                var generatedVideo = await GenerateRecommendationVideoAsync(videoPrompt, videoReferenceImageUrls, ct);
+                generatedMedia = new List<GeneratedDraftMedia> { generatedVideo };
                 await PublishThinkingAsync(
                     context,
                     task,
-                    $"image_generation_completed_{generatedImage.Ordinal}",
-                    generatedImage.Total == 1
-                        ? "AI generated the image"
-                        : $"AI generated draft media {generatedImage.Ordinal}/{generatedImage.Total}",
-                    "AI finished generating draft media.",
+                    "video_generation_completed",
+                    "AI generated the video",
+                    "AI finished generating the Veo 3.1 Fast video.",
                     new
                     {
-                        generatedImage.Result.MimeType,
-                        urlLength = generatedImage.Result.Url.Length,
-                        generatedImage.Result.IsDataUrl,
-                        generatedImage.Result.PromptTokens,
-                        generatedImage.Result.CompletionTokens,
-                        generatedImage.Result.CostUsd,
-                        mediaOrdinal = generatedImage.Ordinal,
-                        mediaTotal = generatedImage.Total,
+                        generatedVideo.ProviderTaskId,
+                        generatedVideo.Resolution,
+                        duration = RecommendationVideoDurationSeconds,
+                        urlLength = generatedVideo.Url.Length,
                     },
                     ct,
                     phaseStatus: "completed");
             }
+            else
+            {
+                var imageCount = Math.Clamp(msg.ImageCount > 0 ? msg.ImageCount : task.ImageCount > 0 ? task.ImageCount : 1, 1, 4);
+                task.ImageCount = imageCount;
+                var imageBaseSystem = ImageSystemPromptFor(style);
+                var imageTargets = Enumerable.Range(1, imageCount)
+                    .Select(ordinal => new DraftImageTarget(ordinal, imageCount))
+                    .ToList();
+                var baseImageSystemPrompt = string.IsNullOrWhiteSpace(brief.StyleNotes)
+                    ? imageBaseSystem
+                    : $"{imageBaseSystem}\n\nAdditional style constraints from the art-director brief: {brief.StyleNotes}";
+                foreach (var imageTarget in imageTargets)
+                {
+                    var targetPrompt = BuildDraftImagePrompt(brief, imageTarget);
+                    var targetSystemPrompt = BuildDraftImageSystemPrompt(baseImageSystemPrompt, imageTarget);
+                    _logger.LogInformation(
+                        "IMAGEGEN INPUT for DraftPost {Id} Style={Style} Media={Ordinal}/{Total} ({RefCount} ref images = {PastCount} past-post + {FreshCount} fresh-topic):\n  --- prompt ---\n{Prompt}\n  --- system ---\n{System}",
+                        task.Id, style, imageTarget.Ordinal, imageTarget.Total,
+                        imageBriefRefImageUrls.Count, topImageUrls.Count, freshRefImageUrls.Count,
+                        Truncate(targetPrompt, 2500),
+                        Truncate(targetSystemPrompt, 1500));
+                    await PublishThinkingAsync(
+                        context,
+                        task,
+                        $"image_generation_started_{imageTarget.Ordinal}",
+                        imageTarget.Total == 1
+                            ? "AI is generating the image"
+                            : $"AI is generating draft media {imageTarget.Ordinal}/{imageTarget.Total}",
+                        "AI is generating draft media from the brief and selected references.",
+                        new
+                        {
+                            style,
+                            prompt = targetPrompt,
+                            systemPrompt = targetSystemPrompt,
+                            mediaOrdinal = imageTarget.Ordinal,
+                            mediaTotal = imageTarget.Total,
+                            referenceImageUrls = imageBriefRefImageUrls,
+                        },
+                        ct);
+                }
 
-            // Step 5 — upload generated image to S3. KIE results stay as provider URLs;
+                var generatedImages = (await Task.WhenAll(imageTargets.Select(async imageTarget =>
+                {
+                    var targetPrompt = BuildDraftImagePrompt(brief, imageTarget);
+                    var targetSystemPrompt = BuildDraftImageSystemPrompt(baseImageSystemPrompt, imageTarget);
+                    var result = await _imageGenClient.GenerateImageAsync(
+                        new ImageGenerationRequest(
+                            Prompt: targetPrompt,
+                            ReferenceImageUrls: imageBriefRefImageUrls,
+                            SystemPrompt: targetSystemPrompt),
+                        ct);
+                    return new GeneratedDraftImage(imageTarget.Ordinal, imageTarget.Total, result);
+                })))
+                    .OrderBy(item => item.Ordinal)
+                    .ToList();
+
+                foreach (var generatedImage in generatedImages)
+                {
+                    _logger.LogInformation(
+                        "IMAGEGEN OUTPUT for DraftPost {Id} Media={Ordinal}/{Total}: mime={MimeType}, urlLen={Len}, inlineData={InlineData}, promptTokens={Pt}, completionTokens={Ct}, costUsd={Cost}",
+                        task.Id, generatedImage.Ordinal, generatedImage.Total, generatedImage.Result.MimeType,
+                        generatedImage.Result.Url.Length, generatedImage.Result.IsDataUrl, generatedImage.Result.PromptTokens,
+                        generatedImage.Result.CompletionTokens, generatedImage.Result.CostUsd);
+                    await PublishThinkingAsync(
+                        context,
+                        task,
+                        $"image_generation_completed_{generatedImage.Ordinal}",
+                        generatedImage.Total == 1
+                            ? "AI generated the image"
+                            : $"AI generated draft media {generatedImage.Ordinal}/{generatedImage.Total}",
+                        "AI finished generating draft media.",
+                        new
+                        {
+                            generatedImage.Result.MimeType,
+                            urlLength = generatedImage.Result.Url.Length,
+                            generatedImage.Result.IsDataUrl,
+                            generatedImage.Result.PromptTokens,
+                            generatedImage.Result.CompletionTokens,
+                            generatedImage.Result.CostUsd,
+                            mediaOrdinal = generatedImage.Ordinal,
+                            mediaTotal = generatedImage.Total,
+                        },
+                        ct,
+                        phaseStatus: "completed");
+                }
+                generatedMedia = generatedImages
+                    .Select(image => new GeneratedDraftMedia(
+                        image.Ordinal,
+                        image.Total,
+                        image.Result.Url,
+                        image.Result.MimeType,
+                        image.Result.IsDataUrl,
+                        image.Result.PromptTokens,
+                        image.Result.CompletionTokens,
+                        image.Result.CostUsd))
+                    .ToList();
+            }
+
+            // Step 5 — upload generated media to S3. KIE results stay as provider URLs;
             // providers that only return inline bytes still flow through as `data:` URLs.
-            _logger.LogDebug("DraftPost {Id}: uploading {Count} generated image(s) to S3...", task.Id, generatedImages.Count);
+            _logger.LogDebug("DraftPost {Id}: uploading {Count} generated {MediaType} resource(s) to S3...", task.Id, generatedMedia.Count, mediaType);
             await PublishThinkingAsync(
                 context,
                 task,
                 "resource_upload_started",
-                generatedImages.Count == 1 ? "AI is saving the image" : "AI is saving generated media",
-                generatedImages.Count == 1
-                    ? "AI is uploading the generated image to workspace storage."
+                generatedMedia.Count == 1 ? "AI is saving the media" : "AI is saving generated media",
+                generatedMedia.Count == 1
+                    ? "AI is uploading the generated media to workspace storage."
                     : "AI is uploading the generated media to workspace storage.",
                 new
                 {
                     workspaceId = msg.WorkspaceId,
-                    resourceType = "image",
+                    resourceType = mediaType,
                     status = "generated",
-                    imageCount = generatedImages.Count,
-                    contentTypes = generatedImages.Select(image => image.Result.MimeType).ToList(),
+                    mediaCount = generatedMedia.Count,
+                    contentTypes = generatedMedia.Select(media => media.MimeType).ToList(),
                     originKind = ResourceOriginKinds.AiGenerated,
                 },
                 ct);
             var uploadResult = await _userResourceService.CreateResourcesFromUrlsAsync(
                 userId: msg.UserId,
-                urls: generatedImages.Select(image => image.Result.Url).ToArray(),
+                urls: generatedMedia.Select(media => media.Url).ToArray(),
                 status: "generated",
-                resourceType: "image",
+                resourceType: mediaType,
                 cancellationToken: ct,
                 workspaceId: msg.WorkspaceId,
                 provenance: new ResourceProvenanceMetadata(
@@ -1453,17 +1553,17 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     OriginChatSessionId: null,
                     OriginChatId: null));
 
-            if (uploadResult.IsFailure || uploadResult.Value.Count < generatedImages.Count)
+            if (uploadResult.IsFailure || uploadResult.Value.Count < generatedMedia.Count)
             {
                 throw new InvalidOperationException(
                     $"S3 upload failed: {uploadResult.Error?.Code} {uploadResult.Error?.Description}");
             }
-            var uploadedImages = uploadResult.Value
-                .Take(generatedImages.Count)
+            var uploadedMedia = uploadResult.Value
+                .Take(generatedMedia.Count)
                 .Select((uploaded, index) =>
-                    new UploadedDraftImage(
-                        generatedImages[index].Ordinal,
-                        generatedImages[index].Total,
+                    new UploadedDraftMedia(
+                        generatedMedia[index].Ordinal,
+                        generatedMedia[index].Total,
                         uploaded.ResourceId,
                         uploaded.PresignedUrl,
                         uploaded.ContentType,
@@ -1477,21 +1577,22 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 context,
                 task,
                 "resource_upload_completed",
-                uploadedImages.Count == 1 ? "AI saved the image" : "AI saved generated media",
-                uploadedImages.Count == 1
-                    ? "AI finished uploading the generated image."
+                uploadedMedia.Count == 1 ? "AI saved the media" : "AI saved generated media",
+                uploadedMedia.Count == 1
+                    ? "AI finished uploading the generated media."
                     : "AI finished uploading the generated media.",
                 new
                 {
-                    resourceIds = uploadedImages.Select(image => image.ResourceId).ToList(),
-                    presignedUrls = uploadedImages.Select(image => image.PresignedUrl).ToList(),
-                    mediaTotal = uploadedImages.Count,
-                    items = uploadedImages,
+                    mediaType,
+                    resourceIds = uploadedMedia.Select(media => media.ResourceId).ToList(),
+                    presignedUrls = uploadedMedia.Select(media => media.PresignedUrl).ToList(),
+                    mediaTotal = uploadedMedia.Count,
+                    items = uploadedMedia,
                 },
                 ct,
                 phaseStatus: "completed");
 
-            // Step 6 — populate the draft Post with the generated caption + image.
+            // Step 6 — populate the draft Post with the generated caption + media.
             //
             // The Post row was created EMPTY by StartDraftPostGenerationCommandHandler
             // at submit time (so the 202 response could return a real postId for FE).
@@ -1505,19 +1606,20 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 task,
                 "draft_post_finalizing_started",
                 "AI is finalizing the draft",
-                "AI is saving the generated caption and image on the draft post.",
+                "AI is saving the generated caption and media on the draft post.",
                 new
                 {
+                    mediaType,
                     draftPostId = task.ResultPostId,
                     hasPrecreatedDraftPost = task.ResultPostId.HasValue,
-                    resourceIds = uploadedImages.Select(image => image.ResourceId).ToList(),
+                    resourceIds = uploadedMedia.Select(media => media.ResourceId).ToList(),
                     caption,
                 },
                 ct);
             var content = new PostContent
             {
                 Content = caption,
-                ResourceList = uploadedImages.Select(image => image.ResourceId.ToString()).ToList(),
+                ResourceList = uploadedMedia.Select(media => media.ResourceId.ToString()).ToList(),
                 PostType = "posts",
             };
             Post draftPost;
@@ -1558,17 +1660,18 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             await _postRepository.SaveChangesAsync(ct);
             postFinalized = true;
             task.ResultPostId = draftPost.Id;
-            var primaryUploaded = uploadedImages[0];
-            var resultResourceIds = uploadedImages.Select(image => image.ResourceId).ToList();
-            var resultPresignedUrls = uploadedImages.Select(image => image.PresignedUrl).ToList();
+            var primaryUploaded = uploadedMedia[0];
+            var resultResourceIds = uploadedMedia.Select(media => media.ResourceId).ToList();
+            var resultPresignedUrls = uploadedMedia.Select(media => media.PresignedUrl).ToList();
             await PublishThinkingAsync(
                 context,
                 task,
                 "draft_post_finalized",
                 "AI finalized the draft",
-                "AI saved the generated caption and image on the draft post.",
+                "AI saved the generated caption and media on the draft post.",
                 new
                 {
+                    mediaType,
                     draftPostId = draftPost.Id,
                     resourceId = primaryUploaded.ResourceId,
                     presignedUrl = primaryUploaded.PresignedUrl,
@@ -1599,7 +1702,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     msg.UserId,
                     NotificationTypes.AiDraftPostGenerationCompleted,
                     "Draft post is ready",
-                    "Your AI-generated draft post (caption + image) is ready.",
+                    $"Your AI-generated draft post (caption + {mediaType}) is ready.",
                     new
                     {
                         correlationId = task.CorrelationId,
@@ -1612,6 +1715,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                         presignedUrls = resultPresignedUrls,
                         resultResourceIds,
                         resultPresignedUrls,
+                        mediaType,
                         imageCount = task.ImageCount,
                         caption = task.ResultCaption,
                     },
@@ -1646,6 +1750,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     workspaceId = task.WorkspaceId,
                     draftPostId = failedDraftPostId,
                     postId = failedDraftPostId,
+                    mediaType = task.MediaType,
                     postFinalized,
                 },
                 ct);
@@ -1703,6 +1808,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                             socialMediaId = task.SocialMediaId,
                             draftPostId = failedDraftPostId,
                             postId = failedDraftPostId,
+                            mediaType = task.MediaType,
                             errorCode = task.ErrorCode,
                             errorMessage = task.ErrorMessage,
                             details = new
@@ -2308,10 +2414,83 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
            ReferenceImageSimilarityGuard +
            "Keep it brand-consistent.";
 
+    private async Task<GeneratedDraftMedia> GenerateRecommendationVideoAsync(
+        string prompt,
+        IReadOnlyList<string> referenceImageUrls,
+        CancellationToken cancellationToken)
+    {
+        var normalizedReferences = referenceImageUrls
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(MaxVideoReferenceImages)
+            .ToList();
+        var generationType = normalizedReferences.Count > 0 ? "REFERENCE_2_VIDEO" : null;
+        var submitResult = await _veoVideoService.GenerateVideoAsync(
+            new VeoGenerateRequest(
+                Prompt: prompt,
+                ImageUrls: normalizedReferences,
+                Model: RecommendationVideoModel,
+                GenerationType: generationType,
+                AspectRatio: RecommendationVideoAspectRatio,
+                Variant: RecommendationVideoVariant,
+                Resolution: RecommendationVideoResolution,
+                Duration: RecommendationVideoDurationSeconds,
+                UseCallback: false),
+            cancellationToken);
+
+        if (!submitResult.Success || string.IsNullOrWhiteSpace(submitResult.TaskId))
+        {
+            throw new InvalidOperationException(
+                $"Veo 3.1 Fast submission failed: {submitResult.Code} {submitResult.Message}");
+        }
+
+        var deadline = DateTime.UtcNow.Add(RecommendationVideoTimeout);
+        while (DateTime.UtcNow < deadline)
+        {
+            var statusResult = await _veoVideoService.GetVideoDetailsAsync(submitResult.TaskId, cancellationToken);
+            if (!statusResult.Success)
+            {
+                throw new InvalidOperationException(
+                    $"Veo 3.1 Fast status lookup failed: {statusResult.Code} {statusResult.Message}");
+            }
+
+            var status = statusResult.Data;
+            if (status?.ErrorCode is { } errorCode && errorCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Veo 3.1 Fast generation failed: {errorCode} {status.ErrorMessage}");
+            }
+
+            if (status?.SuccessFlag == 1)
+            {
+                var resultUrl = status.Response?.ResultUrls?
+                    .FirstOrDefault(url => !string.IsNullOrWhiteSpace(url));
+                if (string.IsNullOrWhiteSpace(resultUrl))
+                {
+                    throw new InvalidOperationException(
+                        "Veo 3.1 Fast generation completed without a result URL.");
+                }
+
+                return new GeneratedDraftMedia(
+                    Ordinal: 1,
+                    Total: 1,
+                    Url: resultUrl,
+                    MimeType: "video/mp4",
+                    ProviderTaskId: submitResult.TaskId,
+                    Resolution: status.Response?.Resolution ?? RecommendationVideoResolution);
+            }
+
+            await Task.Delay(RecommendationVideoPollInterval, cancellationToken);
+        }
+
+        throw new TimeoutException(
+            $"Veo 3.1 Fast generation did not finish within {RecommendationVideoTimeout.TotalMinutes:0} minutes.");
+    }
+
     /// <summary>
     /// Step 3.5 — calls gpt-4o-mini with the post caption + all RAG context (text refs,
     /// video segment captions/transcripts, knowledge guidance) to produce a focused
-    /// JSON brief that the image-gen model will consume.
+    /// JSON brief that the selected image/video generation branch will consume.
     ///
     /// Falls back to a generic brief if the LLM call fails or produces malformed JSON
     /// — we never want a single failing brief to drop the whole draft pipeline.

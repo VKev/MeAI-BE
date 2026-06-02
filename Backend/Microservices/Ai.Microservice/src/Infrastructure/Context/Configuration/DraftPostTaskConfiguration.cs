@@ -22,6 +22,7 @@ public sealed class DraftPostTaskConfiguration : IEntityTypeConfiguration<DraftP
         entity.Property(e => e.UserPrompt).HasColumnName("user_prompt").HasColumnType("text").IsRequired();
         entity.Property(e => e.IsAutoTopic).HasColumnName("is_auto_topic").IsRequired().HasDefaultValue(false);
         entity.Property(e => e.Style).HasColumnName("style").HasMaxLength(32).IsRequired().HasDefaultValue(DraftPostStyles.Branded);
+        entity.Property(e => e.MediaType).HasColumnName("media_type").HasMaxLength(16).IsRequired().HasDefaultValue(DraftPostMediaTypes.Image);
         entity.Property(e => e.TopK).HasColumnName("top_k");
         entity.Property(e => e.MaxReferenceImages).HasColumnName("max_reference_images");
         entity.Property(e => e.MaxRagPosts).HasColumnName("max_rag_posts");

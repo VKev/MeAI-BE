@@ -802,10 +802,12 @@ public sealed class PostsController : ApiController
 
         var publishToMeAiFeed = GetBooleanProperty(item, "publishToMeAiFeed", "publish_to_me_ai_feed") ?? false;
 
-        if (socialMediaIds.Count == 0 && !publishToMeAiFeed)
+        if (socialMediaIds.Count == 0)
         {
             return Result.Failure<PublishPostTargetInput>(
-                new Error("Post.PublishMissingSocialMedia", "Each publish target must include at least one social media id."));
+                new Error(
+                    "Post.PublishMissingSocialMedia",
+                    "Each publish target must include at least one external social media id. publishToMeAiFeed is additive and cannot be used as the only destination."));
         }
 
         return Result.Success(new PublishPostTargetInput(
