@@ -188,6 +188,12 @@ public sealed class FacebookPublishService : IFacebookPublishService
         var wantsReel = !string.IsNullOrWhiteSpace(request.PostType) &&
                         string.Equals(request.PostType, "reels", StringComparison.OrdinalIgnoreCase);
 
+        if (invalidMedia.Count > 0)
+        {
+            return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
+                new Error("Facebook.UnsupportedMedia", "Unsupported media type for Facebook publishing."));
+        }
+
         if (!wantsReel && videos.Count == 0 && images.Count == 0)
         {
             var textResults = new List<FacebookPublishResult>();
@@ -221,52 +227,48 @@ public sealed class FacebookPublishService : IFacebookPublishService
                     new Error("Facebook.ReelRequiresVideo",
                         "Facebook Reels require a single video — images are not supported."));
             }
-            if (videos.Count > 1 || images.Count > 0)
+            if (videos.Count != 1 || images.Count > 0)
             {
                 return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
                     new Error("Facebook.ReelSingleVideo",
-                        "Facebook Reels only support a single video."));
+                        "Facebook Reels require exactly one video."));
             }
         }
 
-        if (invalidMedia.Count > 0)
+        var feedResults = new List<FacebookPublishResult>();
+        foreach (var page in pages)
         {
-            return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
-                new Error("Facebook.UnsupportedMedia", "Unsupported media type for Facebook publishing."));
-        }
-
-        if (videos.Count > 0 && images.Count > 0)
-        {
-            return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
-                new Error("Facebook.MixedMedia", "Facebook posts cannot mix images and videos."));
-        }
-
-        if (videos.Count > 1)
-        {
-            return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
-                new Error("Facebook.MultiVideo", "Facebook posts support only one video per publish."));
-        }
-
-        if (videos.Count == 1)
-        {
-            var isReel = !string.IsNullOrWhiteSpace(request.PostType) &&
-                         string.Equals(request.PostType, "reels", StringComparison.OrdinalIgnoreCase);
-
-            var results = new List<FacebookPublishResult>();
-            foreach (var page in pages)
+            if (images.Count > 0)
             {
-                var publishResult = isReel
+                var imagePublishResult = await PublishImagesAsync(
+                    page.PageId,
+                    page.PageAccessToken,
+                    request.Message,
+                    images,
+                    cancellationToken);
+
+                if (imagePublishResult.IsFailure)
+                {
+                    return Result.Failure<IReadOnlyList<FacebookPublishResult>>(imagePublishResult.Error);
+                }
+
+                feedResults.Add(new FacebookPublishResult(page.PageId, imagePublishResult.Value.PostId));
+            }
+
+            foreach (var video in videos)
+            {
+                var publishResult = wantsReel
                     ? await PublishReelAsync(
                         page.PageId,
                         page.PageAccessToken,
                         request.Message,
-                        videos[0],
+                        video,
                         cancellationToken)
                     : await PublishVideoAsync(
                         page.PageId,
                         page.PageAccessToken,
                         request.Message,
-                        videos[0],
+                        video,
                         cancellationToken);
 
                 if (publishResult.IsFailure)
@@ -274,31 +276,11 @@ public sealed class FacebookPublishService : IFacebookPublishService
                     return Result.Failure<IReadOnlyList<FacebookPublishResult>>(publishResult.Error);
                 }
 
-                results.Add(new FacebookPublishResult(page.PageId, publishResult.Value.PostId));
+                feedResults.Add(new FacebookPublishResult(page.PageId, publishResult.Value.PostId));
             }
-
-            return Result.Success<IReadOnlyList<FacebookPublishResult>>(results);
         }
 
-        var imageResults = new List<FacebookPublishResult>();
-        foreach (var page in pages)
-        {
-            var publishResult = await PublishImagesAsync(
-                page.PageId,
-                page.PageAccessToken,
-                request.Message,
-                images,
-                cancellationToken);
-
-            if (publishResult.IsFailure)
-            {
-                return Result.Failure<IReadOnlyList<FacebookPublishResult>>(publishResult.Error);
-            }
-
-            imageResults.Add(new FacebookPublishResult(page.PageId, publishResult.Value.PostId));
-        }
-
-        return Result.Success<IReadOnlyList<FacebookPublishResult>>(imageResults);
+        return Result.Success<IReadOnlyList<FacebookPublishResult>>(feedResults);
     }
 
     private async Task<Result<FacebookPublishResult>> PublishImagesAsync(

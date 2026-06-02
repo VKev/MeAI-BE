@@ -63,51 +63,81 @@ public sealed class InstagramPublishService : IInstagramPublishService
                 new Error("Instagram.InvalidAccount", "Instagram business account id is missing."));
         }
 
-        if (string.IsNullOrWhiteSpace(request.Media.Url))
+        var mediaItems = request.Media?
+            .Where(media => media is not null)
+            .ToList() ?? [];
+
+        if (mediaItems.Count == 0)
         {
             return Result.Failure<InstagramPublishResult>(
                 new Error("Instagram.MissingMedia", "Instagram media URL is required."));
         }
 
-        if (!TryValidateMediaUrl(request.Media.Url, out var mediaUrlError))
+        foreach (var media in mediaItems)
         {
-            return Result.Failure<InstagramPublishResult>(
-                new Error("Instagram.InvalidMediaUrl", mediaUrlError));
+            if (string.IsNullOrWhiteSpace(media.Url))
+            {
+                return Result.Failure<InstagramPublishResult>(
+                    new Error("Instagram.MissingMedia", "Instagram media URL is required."));
+            }
+
+            if (!TryValidateMediaUrl(media.Url, out var mediaUrlError))
+            {
+                return Result.Failure<InstagramPublishResult>(
+                    new Error("Instagram.InvalidMediaUrl", mediaUrlError));
+            }
         }
 
-        var mediaTypeResult = ResolveMediaType(request.Media);
-        if (mediaTypeResult.IsFailure)
+        var mediaTypes = new List<MediaType>(mediaItems.Count);
+        foreach (var media in mediaItems)
         {
-            return Result.Failure<InstagramPublishResult>(mediaTypeResult.Error);
-        }
+            var mediaTypeResult = ResolveMediaType(media);
+            if (mediaTypeResult.IsFailure)
+            {
+                return Result.Failure<InstagramPublishResult>(mediaTypeResult.Error);
+            }
 
-        var mediaType = mediaTypeResult.Value;
+            mediaTypes.Add(mediaTypeResult.Value);
+        }
 
         // Reels must be videos. If the user queued an image in the Instagram reel bucket,
         // reject loudly so they get a clear error instead of a silently-demoted regular post.
         var wantsReel = !string.IsNullOrWhiteSpace(request.PostType) &&
                         string.Equals(request.PostType, "reels", StringComparison.OrdinalIgnoreCase);
-        if (wantsReel && mediaType != MediaType.Video)
+        if (wantsReel && (mediaItems.Count != 1 || mediaTypes[0] != MediaType.Video))
         {
             return Result.Failure<InstagramPublishResult>(
                 new Error("Instagram.ReelRequiresVideo",
                     "Instagram Reels require a video — images are not supported."));
         }
 
-        var creationResult = await CreateMediaContainerAsync(
-            request.InstagramUserId,
-            request.AccessToken,
-            request.Caption,
-            request.Media.Url,
-            mediaType,
-            cancellationToken);
+        var publishMediaType = mediaItems.Count > 1
+            ? MediaType.Carousel
+            : mediaTypes[0];
+
+        var creationResult = mediaItems.Count > 1
+            ? await CreateCarouselContainerAsync(
+                request.InstagramUserId,
+                request.AccessToken,
+                request.Caption,
+                mediaItems,
+                mediaTypes,
+                cancellationToken)
+            : await CreateMediaContainerAsync(
+                request.InstagramUserId,
+                request.AccessToken,
+                request.Caption,
+                mediaItems[0].Url,
+                mediaTypes[0],
+                isCarouselItem: false,
+                cancellationToken);
 
         if (creationResult.IsFailure)
         {
             return Result.Failure<InstagramPublishResult>(creationResult.Error);
         }
 
-        if (mediaType == MediaType.Video)
+        if (publishMediaType is MediaType.Video or MediaType.Carousel)
         {
             var readinessResult = await WaitForMediaReadyAsync(
                 creationResult.Value,
@@ -142,6 +172,7 @@ public sealed class InstagramPublishService : IInstagramPublishService
         string caption,
         string mediaUrl,
         MediaType mediaType,
+        bool isCarouselItem,
         CancellationToken cancellationToken)
     {
         var payload = new Dictionary<string, string>
@@ -161,8 +192,16 @@ public sealed class InstagramPublishService : IInstagramPublishService
         else
         {
             payload["video_url"] = mediaUrl;
-            payload["media_type"] = "REELS";
-            payload["share_to_feed"] = "true";
+            payload["media_type"] = isCarouselItem ? "VIDEO" : "REELS";
+            if (!isCarouselItem)
+            {
+                payload["share_to_feed"] = "true";
+            }
+        }
+
+        if (isCarouselItem)
+        {
+            payload["is_carousel_item"] = "true";
         }
 
         var response = await _httpClient.PostAsync(
@@ -182,6 +221,81 @@ public sealed class InstagramPublishService : IInstagramPublishService
         {
             return Result.Failure<string>(
                 new Error("Instagram.MediaCreateFailed", "Instagram response did not include a creation id."));
+        }
+
+        return Result.Success(parsed.Id);
+    }
+
+    private async Task<Result<string>> CreateCarouselContainerAsync(
+        string instagramUserId,
+        string accessToken,
+        string caption,
+        IReadOnlyList<InstagramPublishMedia> mediaItems,
+        IReadOnlyList<MediaType> mediaTypes,
+        CancellationToken cancellationToken)
+    {
+        var childIds = new List<string>(mediaItems.Count);
+        for (var i = 0; i < mediaItems.Count; i++)
+        {
+            var childResult = await CreateMediaContainerAsync(
+                instagramUserId,
+                accessToken,
+                caption: string.Empty,
+                mediaItems[i].Url,
+                mediaTypes[i],
+                isCarouselItem: true,
+                cancellationToken);
+
+            if (childResult.IsFailure)
+            {
+                return Result.Failure<string>(childResult.Error);
+            }
+
+            if (mediaTypes[i] == MediaType.Video)
+            {
+                var readinessResult = await WaitForMediaReadyAsync(
+                    childResult.Value,
+                    accessToken,
+                    cancellationToken);
+
+                if (readinessResult.IsFailure)
+                {
+                    return Result.Failure<string>(readinessResult.Error);
+                }
+            }
+
+            childIds.Add(childResult.Value);
+        }
+
+        var payload = new Dictionary<string, string>
+        {
+            ["access_token"] = accessToken,
+            ["media_type"] = "CAROUSEL",
+            ["children"] = string.Join(",", childIds)
+        };
+
+        if (!string.IsNullOrWhiteSpace(caption))
+        {
+            payload["caption"] = caption;
+        }
+
+        var response = await _httpClient.PostAsync(
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(instagramUserId)}/media",
+            new FormUrlEncodedContent(payload),
+            cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            return Result.Failure<string>(
+                new Error("Instagram.CarouselCreateFailed", ReadGraphApiError(body) ?? "Failed to create Instagram carousel media."));
+        }
+
+        var parsed = JsonSerializer.Deserialize<GraphApiIdResponse>(body, JsonOptions);
+        if (string.IsNullOrWhiteSpace(parsed?.Id))
+        {
+            return Result.Failure<string>(
+                new Error("Instagram.CarouselCreateFailed", "Instagram response did not include a carousel creation id."));
         }
 
         return Result.Success(parsed.Id);
@@ -542,6 +656,7 @@ public sealed class InstagramPublishService : IInstagramPublishService
     {
         Unknown,
         Image,
-        Video
+        Video,
+        Carousel
     }
 }

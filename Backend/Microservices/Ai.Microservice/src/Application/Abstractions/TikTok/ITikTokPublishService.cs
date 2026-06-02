@@ -13,7 +13,7 @@ public interface ITikTokPublishService
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Publishes a photo carousel post (1–35 images) using TikTok's
+    /// Publishes a photo carousel post using TikTok's
     /// Direct Post photo API endpoint.
     /// </summary>
     Task<Result<TikTokPublishResult>> PublishCarouselAsync(
@@ -46,7 +46,7 @@ public sealed record TikTokCarouselPublishRequest(
     string AccessToken,
     string OpenId,
     string Caption,
-    /// <summary>1–35 publicly accessible image URLs (JPEG/PNG, max 10 MB each).</summary>
+    /// <summary>Publicly accessible image URLs (JPEG/PNG, max 10 MB each).</summary>
     IReadOnlyList<string> ImageUrls,
     bool? IsPrivate = null,
     TikTokCreatorInfo? CreatorInfo = null);

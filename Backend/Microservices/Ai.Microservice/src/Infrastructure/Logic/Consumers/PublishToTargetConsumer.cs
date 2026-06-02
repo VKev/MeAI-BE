@@ -479,35 +479,51 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                     new Error("TikTok.InvalidAccount", "TikTok open_id is missing in social media metadata."));
             }
 
-            // Dynamic media detection: Check if there is at least one video resource in presignedResources
-            var videoResource = presignedResources.FirstOrDefault(r =>
-            {
-                var type = r.ContentType ?? r.ResourceType;
-                if (!string.IsNullOrWhiteSpace(type))
-                {
-                    if (type.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(type, "video", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
-                }
-                var url = r.PresignedUrl;
-                if (!string.IsNullOrWhiteSpace(url))
-                {
-                    var cleanUrl = url;
-                    var queryIndex = cleanUrl.IndexOf('?', StringComparison.Ordinal);
-                    if (queryIndex > 0)
-                    {
-                        cleanUrl = cleanUrl[..queryIndex];
-                    }
-                    var extension = System.IO.Path.GetExtension(cleanUrl).ToLowerInvariant();
-                    return extension is ".mp4" or ".mov" or ".m4v" or ".webm";
-                }
-                return false;
-            });
+            var videoResources = presignedResources
+                .Where(IsVideoResource)
+                .ToList();
+            var imageResources = presignedResources
+                .Where(IsImageResource)
+                .ToList();
+            var normalizedPostType = NormalizePostType(post.Content?.PostType);
 
-            // If a video is present, publish it as a video/reel
-            if (videoResource is not null)
+            if (videoResources.Count == 0 && imageResources.Count == 0)
+            {
+                return Result.Failure<IReadOnlyList<(string, string)>>(
+                    new Error("TikTok.MissingMedia", "TikTok publishing requires at least one image or video."));
+            }
+
+            if (normalizedPostType == "reels")
+            {
+                if (videoResources.Count != 1 || imageResources.Count > 0)
+                {
+                    return Result.Failure<IReadOnlyList<(string, string)>>(
+                        new Error("TikTok.ReelSingleVideo", "TikTok reels require exactly one video."));
+                }
+
+                var publishResult = await _tikTokPublishService.PublishAsync(
+                    new TikTokPublishRequest(
+                        AccessToken: accessToken,
+                        OpenId: openId,
+                        Caption: caption,
+                        Media: new TikTokPublishMedia(
+                            videoResources[0].PresignedUrl,
+                            videoResources[0].ContentType ?? videoResources[0].ResourceType),
+                        IsPrivate: isPrivate),
+                    cancellationToken);
+
+                if (publishResult.IsFailure)
+                {
+                    return Result.Failure<IReadOnlyList<(string, string)>>(publishResult.Error);
+                }
+
+                return Result.Success<IReadOnlyList<(string, string)>>(
+                    new[] { (publishResult.Value.OpenId, publishResult.Value.PublishId) });
+            }
+
+            var tikTokResults = new List<(string OpenId, string PublishId)>();
+
+            foreach (var videoResource in videoResources)
             {
                 var publishResult = await _tikTokPublishService.PublishAsync(
                     new TikTokPublishRequest(
@@ -525,38 +541,34 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                     return Result.Failure<IReadOnlyList<(string, string)>>(publishResult.Error);
                 }
 
-                return Result.Success<IReadOnlyList<(string, string)>>(
-                    new[] { (publishResult.Value.OpenId, publishResult.Value.PublishId) });
+                tikTokResults.Add((publishResult.Value.OpenId, publishResult.Value.PublishId));
             }
 
-            // TikTok posts: photo carousel (1-35 images)
-            if (presignedResources.Count == 0)
-            {
-                return Result.Failure<IReadOnlyList<(string, string)>>(
-                    new Error("TikTok.MissingMedia", "TikTok photo carousel requires at least one image."));
-            }
-
-            var imageUrls = presignedResources
+            var imageUrls = imageResources
                 .Select(r => r.PresignedUrl)
                 .Where(url => !string.IsNullOrWhiteSpace(url))
                 .ToList();
 
-            var carouselResult = await _tikTokPublishService.PublishCarouselAsync(
-                new TikTokCarouselPublishRequest(
-                    AccessToken: accessToken,
-                    OpenId: openId,
-                    Caption: caption,
-                    ImageUrls: imageUrls,
-                    IsPrivate: isPrivate),
-                cancellationToken);
-
-            if (carouselResult.IsFailure)
+            if (imageUrls.Count > 0)
             {
-                return Result.Failure<IReadOnlyList<(string, string)>>(carouselResult.Error);
+                var carouselResult = await _tikTokPublishService.PublishCarouselAsync(
+                    new TikTokCarouselPublishRequest(
+                        AccessToken: accessToken,
+                        OpenId: openId,
+                        Caption: caption,
+                        ImageUrls: imageUrls,
+                        IsPrivate: isPrivate),
+                    cancellationToken);
+
+                if (carouselResult.IsFailure)
+                {
+                    return Result.Failure<IReadOnlyList<(string, string)>>(carouselResult.Error);
+                }
+
+                tikTokResults.Add((carouselResult.Value.OpenId, carouselResult.Value.PublishId));
             }
 
-            return Result.Success<IReadOnlyList<(string, string)>>(
-                new[] { (carouselResult.Value.OpenId, carouselResult.Value.PublishId) });
+            return Result.Success<IReadOnlyList<(string, string)>>(tikTokResults);
         }
 
         if (string.Equals(socialMedia.Type, FacebookType, StringComparison.OrdinalIgnoreCase))
@@ -597,12 +609,6 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
 
         if (string.Equals(socialMedia.Type, InstagramType, StringComparison.OrdinalIgnoreCase))
         {
-            if (presignedResources.Count != 1)
-            {
-                return Result.Failure<IReadOnlyList<(string, string)>>(
-                    new Error("Instagram.UnsupportedMedia", "Instagram publishing currently supports only one media item."));
-            }
-
             var instagramUserId = GetMetadataValue(metadata, "instagram_business_account_id")
                                   ?? GetMetadataValue(metadata, "user_id");
 
@@ -618,18 +624,19 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
             if (string.IsNullOrWhiteSpace(instagramAccessToken))
             {
                 return Result.Failure<IReadOnlyList<(string, string)>>(
-                    new Error("Instagram.InvalidToken", "Access token not found in social media metadata."));
+                new Error("Instagram.InvalidToken", "Access token not found in social media metadata."));
             }
 
-            var resource = presignedResources[0];
             var publishResult = await _instagramPublishService.PublishAsync(
                 new InstagramPublishRequest(
                     AccessToken: instagramAccessToken,
                     InstagramUserId: instagramUserId,
                     Caption: caption,
-                    Media: new InstagramPublishMedia(
-                        resource.PresignedUrl,
-                        resource.ContentType ?? resource.ResourceType),
+                    Media: presignedResources
+                        .Select(resource => new InstagramPublishMedia(
+                            resource.PresignedUrl,
+                            resource.ContentType ?? resource.ResourceType))
+                        .ToList(),
                     PostType: post.Content?.PostType),
                 cancellationToken);
 
@@ -640,13 +647,6 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
 
             return Result.Success<IReadOnlyList<(string, string)>>(
                 new[] { (publishResult.Value.InstagramUserId, publishResult.Value.PostId) });
-        }
-
-        // Threads
-        if (presignedResources.Count > 1)
-        {
-            return Result.Failure<IReadOnlyList<(string, string)>>(
-                new Error("Threads.UnsupportedMedia", "Threads publishing currently supports one media item at a time."));
         }
 
         var threadsUserId = GetMetadataValue(metadata, "user_id");
@@ -663,14 +663,11 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                 new Error("Threads.InvalidToken", "Access token not found in social media metadata."));
         }
 
-        ThreadsPublishMedia? media = null;
-        if (presignedResources.Count == 1)
-        {
-            var resource = presignedResources[0];
-            media = new ThreadsPublishMedia(
+        var media = presignedResources
+            .Select(resource => new ThreadsPublishMedia(
                 resource.PresignedUrl,
-                resource.ContentType ?? resource.ResourceType);
-        }
+                resource.ContentType ?? resource.ResourceType))
+            .ToList();
 
         var threadsResult = await _threadsPublishService.PublishAsync(
             new ThreadsPublishRequest(
@@ -706,6 +703,56 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         }
 
         return ids;
+    }
+
+    private static bool IsVideoResource(UserResourcePresignResult resource)
+    {
+        var type = resource.ContentType ?? resource.ResourceType;
+        if (!string.IsNullOrWhiteSpace(type) &&
+            (type.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(type, "video", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return HasExtension(resource.PresignedUrl, ".mp4", ".mov", ".m4v", ".webm");
+    }
+
+    private static bool IsImageResource(UserResourcePresignResult resource)
+    {
+        var type = resource.ContentType ?? resource.ResourceType;
+        if (!string.IsNullOrWhiteSpace(type) &&
+            (type.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(type, "image", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return HasExtension(resource.PresignedUrl, ".jpg", ".jpeg", ".png", ".gif", ".webp");
+    }
+
+    private static bool HasExtension(string? url, params string[] extensions)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        var cleanUrl = url;
+        var queryIndex = cleanUrl.IndexOf('?', StringComparison.Ordinal);
+        if (queryIndex > 0)
+        {
+            cleanUrl = cleanUrl[..queryIndex];
+        }
+
+        var extension = System.IO.Path.GetExtension(cleanUrl).ToLowerInvariant();
+        return extensions.Contains(extension, StringComparer.Ordinal);
+    }
+
+    private static string NormalizePostType(string? postType)
+    {
+        var normalized = (postType ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized is "reel" or "reels" or "video" ? "reels" : "posts";
     }
 
     private static JsonDocument? ParseMetadata(string? metadataJson)

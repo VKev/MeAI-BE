@@ -21,7 +21,7 @@ public sealed record ThreadsPublishRequest(
     string AccessToken,
     string ThreadsUserId,
     string Text,
-    ThreadsPublishMedia? Media);
+    IReadOnlyList<ThreadsPublishMedia>? Media);
 
 public sealed record ThreadsPublishMedia(
     string Url,

@@ -125,14 +125,20 @@ public sealed class ThreadsPublishService : IThreadsPublishService
                 new Error("Threads.InvalidAccount", "Threads user id is missing."));
         }
 
-        if (string.IsNullOrWhiteSpace(request.Text) && request.Media is null)
+        var mediaItems = request.Media?
+            .Where(media => media is not null)
+            .ToList() ?? [];
+
+        if (string.IsNullOrWhiteSpace(request.Text) && mediaItems.Count == 0)
         {
             return Result.Failure<ThreadsPublishResult>(
                 new Error("Threads.MissingContent", "Threads post content is empty."));
         }
 
-        var mediaType = ResolveMediaType(request.Media);
-        if (request.Media is not null && mediaType == MediaType.Unknown)
+        var mediaTypes = mediaItems
+            .Select(ResolveMediaType)
+            .ToList();
+        if (mediaTypes.Any(mediaType => mediaType == MediaType.Unknown))
         {
             return Result.Failure<ThreadsPublishResult>(
                 new Error("Threads.UnsupportedMedia", "Unsupported Threads media type."));
@@ -148,13 +154,26 @@ public sealed class ThreadsPublishService : IThreadsPublishService
                 text.Length);
         }
 
-        var creationResult = await CreateThreadContainerAsync(
-            request.ThreadsUserId,
-            request.AccessToken,
-            text,
-            request.Media,
-            mediaType,
-            cancellationToken);
+        var mediaType = mediaItems.Count > 1
+            ? MediaType.Carousel
+            : mediaTypes.FirstOrDefault(MediaType.None);
+
+        var creationResult = mediaItems.Count > 1
+            ? await CreateCarouselContainerAsync(
+                request.ThreadsUserId,
+                request.AccessToken,
+                text,
+                mediaItems,
+                mediaTypes,
+                cancellationToken)
+            : await CreateThreadContainerAsync(
+                request.ThreadsUserId,
+                request.AccessToken,
+                text,
+                mediaItems.Count == 1 ? mediaItems[0] : null,
+                mediaType,
+                isCarouselItem: false,
+                cancellationToken);
 
         if (creationResult.IsFailure)
         {
@@ -252,13 +271,18 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         string text,
         ThreadsPublishMedia? media,
         MediaType mediaType,
+        bool isCarouselItem,
         CancellationToken cancellationToken)
     {
         var payload = new Dictionary<string, string>
         {
-            ["access_token"] = accessToken,
-            ["text"] = text
+            ["access_token"] = accessToken
         };
+
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            payload["text"] = text;
+        }
 
         if (media is null)
         {
@@ -273,6 +297,11 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         {
             payload["media_type"] = "VIDEO";
             payload["video_url"] = media.Url;
+        }
+
+        if (isCarouselItem)
+        {
+            payload["is_carousel_item"] = "true";
         }
 
         var response = await _httpClient.PostAsync(
@@ -307,6 +336,92 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         return Result.Success(parsed.Id);
     }
 
+    private async Task<Result<string>> CreateCarouselContainerAsync(
+        string threadsUserId,
+        string accessToken,
+        string text,
+        IReadOnlyList<ThreadsPublishMedia> mediaItems,
+        IReadOnlyList<MediaType> mediaTypes,
+        CancellationToken cancellationToken)
+    {
+        var childIds = new List<string>(mediaItems.Count);
+        for (var i = 0; i < mediaItems.Count; i++)
+        {
+            var childResult = await CreateThreadContainerAsync(
+                threadsUserId,
+                accessToken,
+                text: string.Empty,
+                mediaItems[i],
+                mediaTypes[i],
+                isCarouselItem: true,
+                cancellationToken);
+
+            if (childResult.IsFailure)
+            {
+                return Result.Failure<string>(childResult.Error);
+            }
+
+            if (mediaTypes[i] == MediaType.Video)
+            {
+                var waitResult = await WaitForContainerAsync(
+                    accessToken,
+                    childResult.Value,
+                    mediaTypes[i],
+                    cancellationToken);
+
+                if (waitResult.IsFailure)
+                {
+                    return Result.Failure<string>(waitResult.Error);
+                }
+            }
+
+            childIds.Add(childResult.Value);
+        }
+
+        var payload = new Dictionary<string, string>
+        {
+            ["access_token"] = accessToken,
+            ["media_type"] = "CAROUSEL",
+            ["children"] = string.Join(",", childIds)
+        };
+
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            payload["text"] = text;
+        }
+
+        var response = await _httpClient.PostAsync(
+            $"{GraphApiBaseUrl}/{Uri.EscapeDataString(threadsUserId)}/threads",
+            new FormUrlEncodedContent(payload),
+            cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorMessage = ReadGraphApiError(body);
+            _logger.LogWarning(
+                "Threads create-carousel-container failed. ThreadsUserId={ThreadsUserId}, StatusCode={StatusCode}, MediaCount={MediaCount}, TextLength={TextLength}, Error={Error}, Body={Body}",
+                threadsUserId,
+                (int)response.StatusCode,
+                mediaItems.Count,
+                text.Length,
+                errorMessage,
+                TruncateForLog(body));
+
+            return Result.Failure<string>(
+                new Error("Threads.CreateCarouselFailed", errorMessage ?? "Failed to create Threads carousel container."));
+        }
+
+        var parsed = JsonSerializer.Deserialize<GraphApiIdResponse>(body, JsonOptions);
+        if (string.IsNullOrWhiteSpace(parsed?.Id))
+        {
+            return Result.Failure<string>(
+                new Error("Threads.CreateCarouselFailed", "Threads response did not include a carousel creation id."));
+        }
+
+        return Result.Success(parsed.Id);
+    }
+
     private async Task<Result<string>> PublishThreadAsync(
         string threadsUserId,
         string accessToken,
@@ -314,11 +429,12 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         MediaType mediaType,
         CancellationToken cancellationToken)
     {
-        if (mediaType == MediaType.Video)
+        if (mediaType is MediaType.Video or MediaType.Carousel)
         {
-            var waitResult = await WaitForVideoContainerAsync(
+            var waitResult = await WaitForContainerAsync(
                 accessToken,
                 creationId,
+                mediaType,
                 cancellationToken);
 
             if (waitResult.IsFailure)
@@ -365,9 +481,10 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         return Result.Success(parsed.Id);
     }
 
-    private async Task<Result<bool>> WaitForVideoContainerAsync(
+    private async Task<Result<bool>> WaitForContainerAsync(
         string accessToken,
         string creationId,
+        MediaType mediaType,
         CancellationToken cancellationToken)
     {
         for (var attempt = 0; attempt < VideoStatusMaxAttempts; attempt++)
@@ -387,31 +504,45 @@ public sealed class ThreadsPublishService : IThreadsPublishService
             if (string.Equals(status, "ERROR", StringComparison.OrdinalIgnoreCase))
             {
                 var message = string.IsNullOrWhiteSpace(statusResult.Value.ErrorMessage)
-                    ? "Threads video processing failed."
+                    ? mediaType == MediaType.Video
+                        ? "Threads video processing failed."
+                        : "Threads media container processing failed."
                     : statusResult.Value.ErrorMessage;
                 _logger.LogWarning(
-                    "Threads video container processing failed. CreationId={CreationId}, Status={Status}, Error={Error}",
+                    "Threads container processing failed. CreationId={CreationId}, MediaType={MediaType}, Status={Status}, Error={Error}",
                     creationId,
+                    mediaType,
                     status,
                     message);
-                return Result.Failure<bool>(new Error("Threads.VideoProcessingFailed", message));
+                return Result.Failure<bool>(new Error(
+                    mediaType == MediaType.Video ? "Threads.VideoProcessingFailed" : "Threads.ContainerProcessingFailed",
+                    message));
             }
 
             if (string.Equals(status, "EXPIRED", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning(
-                    "Threads video container expired before publish. CreationId={CreationId}, Status={Status}",
+                    "Threads container expired before publish. CreationId={CreationId}, MediaType={MediaType}, Status={Status}",
                     creationId,
+                    mediaType,
                     status);
                 return Result.Failure<bool>(
-                    new Error("Threads.VideoExpired", "Threads video container expired before publishing."));
+                    new Error(
+                        mediaType == MediaType.Video ? "Threads.VideoExpired" : "Threads.ContainerExpired",
+                        mediaType == MediaType.Video
+                            ? "Threads video container expired before publishing."
+                            : "Threads media container expired before publishing."));
             }
 
             await Task.Delay(VideoStatusPollDelay, cancellationToken);
         }
 
         return Result.Failure<bool>(
-            new Error("Threads.VideoProcessingTimeout", "Threads video is still processing. Try publishing again shortly."));
+            new Error(
+                mediaType == MediaType.Video ? "Threads.VideoProcessingTimeout" : "Threads.ContainerProcessingTimeout",
+                mediaType == MediaType.Video
+                    ? "Threads video is still processing. Try publishing again shortly."
+                    : "Threads media container is still processing. Try publishing again shortly."));
     }
 
     private async Task<Result<GraphApiStatusResponse>> GetContainerStatusAsync(
@@ -566,6 +697,7 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         None,
         Image,
         Video,
+        Carousel,
         Unknown
     }
 }
