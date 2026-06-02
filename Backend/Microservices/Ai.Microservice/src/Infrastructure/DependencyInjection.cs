@@ -11,6 +11,7 @@ using Application.Abstractions.Facebook;
 using Application.Abstractions.Feed;
 using Application.Abstractions.Gemini;
 using Application.Abstractions.Instagram;
+using Application.Abstractions.Publishing;
 using Application.Abstractions.Rag;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
@@ -30,6 +31,7 @@ using Infrastructure.Logic.Feed;
 using Infrastructure.Logic.Formulas;
 using Infrastructure.Logic.Gemini;
 using Infrastructure.Logic.Instagram;
+using Infrastructure.Logic.Publishing;
 using Infrastructure.Logic.Rag;
 using Infrastructure.Logic.Threads;
 using Infrastructure.Logic.Resources;
@@ -80,6 +82,10 @@ namespace Infrastructure
             services.AddHttpClient("Facebook");
             services.AddHttpClient("Instagram");
             services.AddHttpClient("TikTok");
+            services.AddHttpClient("SocialPublishMedia", client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(60);
+            });
             services.AddHttpClient("WebSearchContent", client =>
             {
                 client.Timeout = TimeSpan.FromSeconds(12);
@@ -112,6 +118,8 @@ namespace Infrastructure
             services.AddScoped<IInstagramContentService, InstagramContentService>();
             services.AddScoped<ITikTokPublishService, TikTokPublishService>();
             services.AddScoped<ITikTokContentService, TikTokContentService>();
+            services.AddScoped<ISocialPublishMediaNormalizer, SocialPublishMediaNormalizer>();
+            services.AddScoped<ISocialPublishVideoTranscoder, FfmpegSocialPublishVideoTranscoder>();
             services.AddHttpClient("Threads");
             services.AddScoped<IThreadsPublishService, ThreadsPublishService>();
             services.AddScoped<IThreadsContentService, ThreadsContentService>();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Application.Abstractions.Facebook;
 using Application.Abstractions.Instagram;
+using Application.Abstractions.Publishing;
 using Application.PublishingSchedules;
 using Application.Abstractions.Resources;
 using Application.Abstractions.SocialMedias;
@@ -36,6 +37,7 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
     private readonly IUserSocialMediaService _userSocialMediaService;
     private readonly IFacebookPublishService _facebookPublishService;
     private readonly IInstagramPublishService _instagramPublishService;
+    private readonly ISocialPublishMediaNormalizer _socialPublishMediaNormalizer;
     private readonly ITikTokPublishService _tikTokPublishService;
     private readonly IThreadsPublishService _threadsPublishService;
     private readonly ILogger<PublishToTargetConsumer> _logger;
@@ -48,6 +50,7 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         IUserSocialMediaService userSocialMediaService,
         IFacebookPublishService facebookPublishService,
         IInstagramPublishService instagramPublishService,
+        ISocialPublishMediaNormalizer socialPublishMediaNormalizer,
         ITikTokPublishService tikTokPublishService,
         IThreadsPublishService threadsPublishService,
         ILogger<PublishToTargetConsumer> logger)
@@ -59,6 +62,7 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         _userSocialMediaService = userSocialMediaService;
         _facebookPublishService = facebookPublishService;
         _instagramPublishService = instagramPublishService;
+        _socialPublishMediaNormalizer = socialPublishMediaNormalizer;
         _tikTokPublishService = tikTokPublishService;
         _threadsPublishService = threadsPublishService;
         _logger = logger;
@@ -147,84 +151,124 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
             presignedResources = presignResult.Value;
         }
 
-        Error? lastError = null;
-        IReadOnlyList<(string PageId, string ExternalId)>? publishedDestinations = null;
+        var normalizationResult = await _socialPublishMediaNormalizer.NormalizeAsync(
+            message.UserId,
+            placeholder.WorkspaceId,
+            socialMedia.Type,
+            post.Content?.PostType,
+            presignedResources,
+            cancellationToken);
 
-        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+        if (normalizationResult.IsFailure)
         {
-            try
-            {
-                var publishResult = await PublishToSocialMediaAsync(
-                    post,
-                    socialMedia,
-                    presignedResources,
-                    message.IsPrivate,
-                    cancellationToken);
+            await MarkPlaceholderFailedAsync(
+                placeholder,
+                normalizationResult.Error.Code,
+                normalizationResult.Error.Description,
+                cancellationToken);
+            await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
+            await FirePerTargetFailureAsync(
+                context,
+                message,
+                normalizationResult.Error.Code,
+                normalizationResult.Error.Description);
+            return;
+        }
 
-                if (publishResult.IsSuccess)
-                {
-                    publishedDestinations = publishResult.Value;
-                    break;
-                }
+        presignedResources = normalizationResult.Value.Resources;
+        var retainTemporaryResources = false;
 
-                lastError = publishResult.Error;
-                _logger.LogWarning(
-                    "Publish attempt {Attempt}/{Max} failed. CorrelationId: {CorrelationId}, PublicationId: {PublicationId}, PostId: {PostId}, SocialMediaId: {SocialMediaId}, Platform: {Platform}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
-                    attempt,
-                    MaxAttempts,
-                    message.CorrelationId,
-                    message.PublicationId,
-                    message.PostId,
-                    message.SocialMediaId,
-                    socialMedia.Type,
-                    lastError.Code,
-                    lastError.Description);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(
-                    ex,
-                    "Publish attempt {Attempt}/{Max} threw. CorrelationId: {CorrelationId}, PublicationId: {PublicationId}",
-                    attempt,
-                    MaxAttempts,
-                    message.CorrelationId,
-                    message.PublicationId);
-                lastError = new Error("Publish.Unexpected", ex.Message);
-            }
+        try
+        {
+            Error? lastError = null;
+            IReadOnlyList<(string PageId, string ExternalId)>? publishedDestinations = null;
 
-            if (attempt < MaxAttempts)
+            for (var attempt = 1; attempt <= MaxAttempts; attempt++)
             {
-                var delay = TimeSpan.FromSeconds(attempt * 3);
-                _logger.LogInformation(
-                    "Retrying publish in {Delay}s. Attempt: {Attempt}/{Max}, PublicationId: {PublicationId}",
-                    delay.TotalSeconds,
-                    attempt,
-                    MaxAttempts,
-                    message.PublicationId);
                 try
                 {
-                    await Task.Delay(delay, cancellationToken);
+                    var publishResult = await PublishToSocialMediaAsync(
+                        post,
+                        socialMedia,
+                        presignedResources,
+                        message.IsPrivate,
+                        cancellationToken);
+
+                    if (publishResult.IsSuccess)
+                    {
+                        publishedDestinations = publishResult.Value;
+                        break;
+                    }
+
+                    lastError = publishResult.Error;
+                    _logger.LogWarning(
+                        "Publish attempt {Attempt}/{Max} failed. CorrelationId: {CorrelationId}, PublicationId: {PublicationId}, PostId: {PostId}, SocialMediaId: {SocialMediaId}, Platform: {Platform}, ErrorCode: {ErrorCode}, ErrorMessage: {ErrorMessage}",
+                        attempt,
+                        MaxAttempts,
+                        message.CorrelationId,
+                        message.PublicationId,
+                        message.PostId,
+                        message.SocialMediaId,
+                        socialMedia.Type,
+                        lastError.Code,
+                        lastError.Description);
                 }
-                catch (OperationCanceledException)
+                catch (Exception ex)
                 {
-                    break;
+                    _logger.LogWarning(
+                        ex,
+                        "Publish attempt {Attempt}/{Max} threw. CorrelationId: {CorrelationId}, PublicationId: {PublicationId}",
+                        attempt,
+                        MaxAttempts,
+                        message.CorrelationId,
+                        message.PublicationId);
+                    lastError = new Error("Publish.Unexpected", ex.Message);
+                }
+
+                if (attempt < MaxAttempts)
+                {
+                    var delay = TimeSpan.FromSeconds(attempt * 3);
+                    _logger.LogInformation(
+                        "Retrying publish in {Delay}s. Attempt: {Attempt}/{Max}, PublicationId: {PublicationId}",
+                        delay.TotalSeconds,
+                        attempt,
+                        MaxAttempts,
+                        message.PublicationId);
+                    try
+                    {
+                        await Task.Delay(delay, cancellationToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
                 }
             }
-        }
 
-        if (publishedDestinations is not null)
-        {
-            await HandleSuccessAsync(placeholder, post, socialMedia, publishedDestinations, cancellationToken);
-            await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
-            await FirePerDestinationSuccessAsync(context, message, socialMedia.Type, publishedDestinations, cancellationToken);
+            if (publishedDestinations is not null)
+            {
+                await HandleSuccessAsync(placeholder, post, socialMedia, publishedDestinations, cancellationToken);
+                await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
+                await FirePerDestinationSuccessAsync(context, message, socialMedia.Type, publishedDestinations, cancellationToken);
+            }
+            else
+            {
+                var errorCode = lastError?.Code ?? "Publish.Unknown";
+                var errorMessage = lastError?.Description ?? "Publish failed for unknown reason.";
+                retainTemporaryResources = string.Equals(errorCode, "TikTok.StatusTimeout", StringComparison.Ordinal);
+                await MarkPlaceholderFailedAsync(placeholder, errorCode, errorMessage, cancellationToken);
+                await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
+                await FirePerTargetFailureAsync(context, message, errorCode, errorMessage);
+            }
         }
-        else
+        finally
         {
-            var errorCode = lastError?.Code ?? "Publish.Unknown";
-            var errorMessage = lastError?.Description ?? "Publish failed for unknown reason.";
-            await MarkPlaceholderFailedAsync(placeholder, errorCode, errorMessage, cancellationToken);
-            await FinalizePostStatusIfDoneAsync(message, post, cancellationToken);
-            await FirePerTargetFailureAsync(context, message, errorCode, errorMessage);
+            if (!retainTemporaryResources)
+            {
+                await DeleteTemporaryResourcesBestEffortAsync(
+                    message.UserId,
+                    normalizationResult.Value.TemporaryResourceIds);
+            }
         }
     }
 
@@ -703,6 +747,30 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         }
 
         return ids;
+    }
+
+    private async Task DeleteTemporaryResourcesBestEffortAsync(
+        Guid userId,
+        IReadOnlyCollection<Guid> temporaryResourceIds)
+    {
+        if (temporaryResourceIds.Count == 0)
+        {
+            return;
+        }
+
+        var deleteResult = await _userResourceService.DeleteResourcesAsync(
+            userId,
+            temporaryResourceIds,
+            hardDelete: true,
+            CancellationToken.None);
+
+        if (deleteResult.IsFailure)
+        {
+            _logger.LogWarning(
+                "Failed to clean up temporary social publish image derivatives. UserId: {UserId}, Error: {Error}",
+                userId,
+                deleteResult.Error.Description);
+        }
     }
 
     private static bool IsVideoResource(UserResourcePresignResult resource)

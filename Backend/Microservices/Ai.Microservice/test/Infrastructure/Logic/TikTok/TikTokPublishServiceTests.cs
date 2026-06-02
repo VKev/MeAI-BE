@@ -64,6 +64,11 @@ public sealed class TikTokPublishServiceTests
                     """);
             }
 
+            if (path.EndsWith("/status/fetch/", StringComparison.Ordinal))
+            {
+                return PublishCompleteResponse();
+            }
+
             throw new InvalidOperationException($"Unexpected TikTok API path: {path}");
         });
 
@@ -132,6 +137,11 @@ public sealed class TikTokPublishServiceTests
                       }
                     }
                     """);
+            }
+
+            if (path.EndsWith("/status/fetch/", StringComparison.Ordinal))
+            {
+                return PublishCompleteResponse();
             }
 
             throw new InvalidOperationException($"Unexpected TikTok API path: {path}");
@@ -255,6 +265,11 @@ public sealed class TikTokPublishServiceTests
                     """);
             }
 
+            if (path.EndsWith("/status/fetch/", StringComparison.Ordinal))
+            {
+                return PublishCompleteResponse();
+            }
+
             throw new InvalidOperationException($"Unexpected TikTok API path: {path}");
         });
 
@@ -276,6 +291,83 @@ public sealed class TikTokPublishServiceTests
         capturedTitle.Should().EndWith("...");
         capturedDescription.Should().Be(longCaption);
         result.Value.PublishId.Should().Be("publish-carousel-123");
+    }
+
+    [Fact]
+    public async Task PublishCarouselAsync_ShouldReturnProcessingFailure_WhenTikTokRejectsMediaAfterInit()
+    {
+        var service = CreateService(request =>
+        {
+            var path = request.RequestUri!.AbsolutePath;
+
+            if (path.EndsWith("/creator_info/query/", StringComparison.Ordinal))
+            {
+                return JsonResponse("""
+                    {
+                      "data": {
+                        "creator_avatar_url": "https://cdn.example.com/avatar.jpg",
+                        "creator_username": "creator",
+                        "creator_nickname": "Creator",
+                        "privacy_level_options": ["SELF_ONLY"],
+                        "comment_disabled": false,
+                        "duet_disabled": false,
+                        "stitch_disabled": false,
+                        "max_video_post_duration_sec": 600
+                      },
+                      "error": {
+                        "code": "ok",
+                        "message": ""
+                      }
+                    }
+                    """);
+            }
+
+            if (path.EndsWith("/content/init/", StringComparison.Ordinal))
+            {
+                return JsonResponse("""
+                    {
+                      "data": {
+                        "publish_id": "publish-carousel-failed"
+                      },
+                      "error": {
+                        "code": "ok",
+                        "message": ""
+                      }
+                    }
+                    """);
+            }
+
+            if (path.EndsWith("/status/fetch/", StringComparison.Ordinal))
+            {
+                return JsonResponse("""
+                    {
+                      "data": {
+                        "status": "FAILED",
+                        "fail_reason": "file_format_check_failed"
+                      },
+                      "error": {
+                        "code": "ok",
+                        "message": ""
+                      }
+                    }
+                    """);
+            }
+
+            throw new InvalidOperationException($"Unexpected TikTok API path: {path}");
+        });
+
+        var result = await service.PublishCarouselAsync(
+            new TikTokCarouselPublishRequest(
+                AccessToken: "access-token",
+                OpenId: "open-123",
+                Caption: "caption",
+                ImageUrls: new[] { "https://cdn.example.com/img.png" },
+                IsPrivate: true),
+            CancellationToken.None);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("TikTok.PublishFailed");
+        result.Error.Description.Should().Contain("media format");
     }
 
     private static ITikTokPublishService CreateService(Func<HttpRequestMessage, HttpResponseMessage> responder)
@@ -301,6 +393,21 @@ public sealed class TikTokPublishServiceTests
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
+    }
+
+    private static HttpResponseMessage PublishCompleteResponse()
+    {
+        return JsonResponse("""
+            {
+              "data": {
+                "status": "PUBLISH_COMPLETE"
+              },
+              "error": {
+                "code": "ok",
+                "message": ""
+              }
+            }
+            """);
     }
 
     private sealed class StubHttpMessageHandler : HttpMessageHandler
