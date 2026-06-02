@@ -13,7 +13,6 @@ public sealed class TikTokPublishService : ITikTokPublishService
     private const string VideoPublishInitEndpoint = "https://open.tiktokapis.com/v2/post/publish/video/init/";
     private const string ContentPublishInitEndpoint = "https://open.tiktokapis.com/v2/post/publish/content/init/";
     private const string PrivatePrivacyLevel = "SELF_ONLY";
-    private const int MaxCarouselImages = 35;
     private readonly HttpClient _httpClient;
     private readonly ILogger<TikTokPublishService> _logger;
 
@@ -181,12 +180,6 @@ public sealed class TikTokPublishService : ITikTokPublishService
         {
             return Result.Failure<TikTokPublishResult>(
                 new Error("TikTok.MissingMedia", "At least one image URL is required for a TikTok photo carousel."));
-        }
-
-        if (request.ImageUrls.Count > MaxCarouselImages)
-        {
-            return Result.Failure<TikTokPublishResult>(
-                new Error("TikTok.TooManyImages", $"TikTok photo carousel supports a maximum of {MaxCarouselImages} images."));
         }
 
         // Query creator info first

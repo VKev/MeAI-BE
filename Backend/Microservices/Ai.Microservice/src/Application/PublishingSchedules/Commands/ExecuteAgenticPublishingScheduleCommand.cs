@@ -901,14 +901,14 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
                 RequiresSingleMedia: true,
                 AllowTextOnly: false,
                 "TikTok reels require exactly one video resource."),
-            // TikTok carousel posts: 1-35 images, no video
+            // AI scheduled TikTok posts: one image, no video
             "tiktok" => new RuntimePublishingConstraint(
                 normalizedPlatform,
                 "posts",
                 RequiresVideoMedia: false,
-                RequiresSingleMedia: false,
+                RequiresSingleMedia: true,
                 AllowTextOnly: false,
-                "TikTok photo posts support 1 to 35 images as a carousel. Import image URLs and use postType posts."),
+                "TikTok photo posts should use one image for AI scheduled publishing. Import one image URL and use postType posts."),
             "facebook" when normalizedPostType == "reels" => new RuntimePublishingConstraint(
                 normalizedPlatform,
                 "reels",
@@ -929,28 +929,28 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
                 RequiresVideoMedia: false,
                 RequiresSingleMedia: true,
                 AllowTextOnly: false,
-                "Instagram posts currently require exactly one image or video."),
+                "Instagram posts should use exactly one compatible media item for AI scheduled publishing."),
             "threads" => new RuntimePublishingConstraint(
                 normalizedPlatform,
                 "posts",
                 RequiresVideoMedia: false,
                 RequiresSingleMedia: true,
                 AllowTextOnly: true,
-                "Threads supports text-only posts or a single attached media item."),
+                "Threads supports text-only posts or one compatible media item for AI scheduled publishing."),
             "facebook" when normalizedPostType == "posts" => new RuntimePublishingConstraint(
                 normalizedPlatform,
                 "posts",
                 RequiresVideoMedia: false,
-                RequiresSingleMedia: false,
+                RequiresSingleMedia: true,
                 AllowTextOnly: true,
-                "Facebook posts support text-only, or single/multiple images, or a single video. Generate or import one or more suitable images for a visually richer post."),
+                "Facebook posts support text-only or one compatible media item for AI scheduled publishing. Generate or import one suitable image for a visually richer post."),
             _ => new RuntimePublishingConstraint(
                 normalizedPlatform,
                 normalizedPostType,
                 RequiresVideoMedia: false,
-                RequiresSingleMedia: false,
+                RequiresSingleMedia: true,
                 AllowTextOnly: true,
-                $"{(string.IsNullOrEmpty(normalizedPlatform) ? "Social media" : char.ToUpper(normalizedPlatform[0]) + normalizedPlatform[1..])} posts support text-only or compatible media attachments. Generate or import one or more suitable images for a visually richer post.")
+                $"{(string.IsNullOrEmpty(normalizedPlatform) ? "Social media" : char.ToUpper(normalizedPlatform[0]) + normalizedPlatform[1..])} posts support text-only or one compatible media attachment for AI scheduled publishing. Generate or import one suitable image for a visually richer post.")
         };
     }
 
@@ -1004,7 +1004,7 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
                     $"{normalizedPlatform} publishing currently supports only one attached media item for this target."));
         }
 
-        // TikTok photo carousel: 1-35 images, no videos allowed
+        // AI scheduled TikTok photo posts: one image, no videos allowed
         if (string.Equals(normalizedPlatform, "tiktok", StringComparison.Ordinal) &&
             string.Equals(normalizedPostType, "posts", StringComparison.Ordinal))
         {
@@ -1015,12 +1015,6 @@ public sealed class ExecuteAgenticPublishingScheduleCommandHandler
                         "TikTok photo carousel posts cannot include video resources. Use postType reels for video."));
             }
 
-            if (imageCount > 35)
-            {
-                return Result.Failure<AgenticRuntimePostDraft>(
-                    new Error("PublishingSchedule.TikTokCarouselTooManyImages",
-                        "TikTok photo carousel supports a maximum of 35 images."));
-            }
         }
 
         if (string.Equals(normalizedPlatform, "facebook", StringComparison.Ordinal))

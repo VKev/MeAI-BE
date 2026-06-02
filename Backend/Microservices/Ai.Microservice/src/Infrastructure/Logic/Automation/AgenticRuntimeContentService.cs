@@ -83,7 +83,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                       Only call this for URLs that passed validate_media with suitability="suitable" (or for video URLs).
                     - generate_image: generate a brand-new image from a text prompt when web images are unavailable, or validate_media marked them as unsuitable.
                       Prefer this for single decorative images (Instagram/Facebook posts, TikTok single-image posts).
-                      For TikTok photo carousels, use generate_image once per needed slide (up to 35), or import validated web images.
+                      For AI scheduled photo posts, create or import one suitable image.
                     - create_runtime_post_draft: finalize the draft output.
                     Always finish by calling create_runtime_post_draft. Do not answer in plain text.
                     CRITICAL: Do NOT call create_runtime_post_draft in the same turn as other tools (like web_search, fetch_url, validate_media, import_media, generate_image). You must call those other tools first, wait for their outputs to be returned to you in the next turn, and only call create_runtime_post_draft in a subsequent, final turn with the final content and imported resource IDs.
@@ -92,7 +92,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                     If the payload includes recommendationSummary or recommendationPageProfile, use them to match the account's voice, positioning, and contact details.
                     Keep the post grounded in fresh search results when they are present.
                     Workflow for images: web_search → validate_media (ALWAYS for web images) → import_media (only suitable ones) OR generate_image (if none suitable) → create_runtime_post_draft.
-                    TikTok photo posts (postType=posts): validate web images via validate_media, import the suitable ones, OR call generate_image for each slide (1-35 images). Do NOT import a video.
+                    TikTok photo posts (postType=posts): validate web images via validate_media, import one suitable image, OR call generate_image once. Do NOT import a video.
                     TikTok reels (postType=reels): find and import exactly ONE VIDEO URL from web_search. generate_image only produces STILL IMAGES and CANNOT create videos, so do NOT use it for reels. If no public video URL is found in web search results, call create_runtime_post_draft with postType=reels and no resourceIds — the system will handle the failure gracefully.
 
                     """ + BuildPrompt(request))
@@ -186,7 +186,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 "This is a TikTok PHOTO CAROUSEL post. " +
                 "First, validate web image URLs via validate_media and import the suitable ones via import_media. " +
                 "If no suitable web images are found, call generate_image (one call per slide) to create images instead. " +
-                "You need 1 to 35 images in total. Do NOT import or reference a video. Do NOT finalize without at least one image resource. ";
+                "Attach exactly one image in total. Do NOT import or reference a video. Do NOT finalize without one image resource. ";
         }
 
         // TikTok reels (video)
@@ -231,7 +231,7 @@ public sealed class AgenticRuntimeContentService : IAgenticRuntimeContentService
                 "If no suitable video URL is found, still call create_runtime_post_draft with no resourceIds \u2014 the system will report the missing video. ";
         }
 
-        // Single media required (Instagram posts)
+        // Single media required (AI scheduled posts)
         if (request.RequiresSingleMedia == true)
         {
             return "You must attach exactly one media resource. ";
