@@ -23,7 +23,8 @@ public sealed record VeoGenerateRequest(
     int? Duration = null,
     bool? GenerateAudio = null,
     bool? ReturnLastFrame = null,
-    bool? WebSearch = null);
+    bool? WebSearch = null,
+    bool UseCallback = true);
 
 public sealed record VeoGenerateResult(
     bool Success,

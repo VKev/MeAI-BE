@@ -19,7 +19,7 @@ on:
         default: ""
         required: true
       delete_rds_data:
-        description: "Also delete all tables in Terraform-defined RDS databases before restarting EKS services."
+        description: "Also delete all tables in Terraform-defined logical RDS databases before restarting EKS services."
         type: boolean
         default: false
         required: true
@@ -598,7 +598,7 @@ jobs:
               '$registry + "/" + (.dockerhub_pull_through_prefix // "dockerhub") + "/library/postgres:16-alpine"' \
               Terraform/00-all.auto.tfvars.json)"
 
-            echo "Deleting all tables in Terraform-defined RDS databases before restarting EKS services..."
+            echo "Deleting all tables in Terraform-defined logical RDS databases before restarting EKS services..."
             rds_instance_count=0
             rds_database_count=0
 
@@ -631,19 +631,20 @@ jobs:
 
               rds_instance_count=$((rds_instance_count + 1))
 
-              while read -r database; do
+              if ! [[ "$username" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+                echo "Refusing to use RDS username '$username' on '$identifier' because the name is not a simple PostgreSQL identifier." >&2
+                exit 1
+              fi
+
+              while IFS= read -r database; do
                 case "$database" in
-                  ""|"null"|"postgres"|"template0"|"template1")
+                  ""|"null"|"postgres"|"rdsadmin"|"template0"|"template1")
                     echo "Refusing to erase system or empty database name '$database' on '$identifier'." >&2
                     exit 1
                     ;;
                 esac
                 if ! [[ "$database" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
                   echo "Refusing to erase database '$database' on '$identifier' because the name is not a simple PostgreSQL identifier." >&2
-                  exit 1
-                fi
-                if ! [[ "$username" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-                  echo "Refusing to use RDS username '$username' on '$identifier' because the name is not a simple PostgreSQL identifier." >&2
                   exit 1
                 fi
 
@@ -653,48 +654,75 @@ jobs:
                   | cut -c1-24)"
                 pod_name="$(printf 'meai-rds-wipe-%s-%s' "$RUN_STAMP" "$safe_suffix" | cut -c1-63 | sed 's/-$//')"
 
-                echo "Deleting all tables in RDS database '$database' on instance '$identifier'..."
-                kubectl -n "$K8S_NAMESPACE" run "$pod_name" \
-                  --rm -i \
-                  --attach=true \
-                  --restart=Never \
-                  --image="$postgres_client_image" \
-                  --env="PGHOST=$host" \
-                  --env="PGPORT=$port" \
-                  --env="PGUSER=$username" \
-                  --env="PGPASSWORD=$password" \
-                  --env="TARGET_DB=$database" \
-                  --command -- sh -ceu '
-                    psql -v ON_ERROR_STOP=1 -d postgres \
-                      -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = \$\$${TARGET_DB}\$\$ AND pid <> pg_backend_pid();"
-                    psql -v ON_ERROR_STOP=1 \
-                      -d "$TARGET_DB" \
-                      -c "
-                        DO \$meai_wipe\$
-                        DECLARE
-                          schema_name text;
-                        BEGIN
-                          FOR schema_name IN
-                            SELECT nspname
-                            FROM pg_namespace
-                            WHERE nspname <> \$\$information_schema\$\$
-                              AND nspname NOT LIKE \$\$pg_%\$\$
-                          LOOP
-                            EXECUTE format(\$\$DROP SCHEMA IF EXISTS %I CASCADE\$\$, schema_name);
-                          END LOOP;
+                echo "Deleting all tables in Terraform-declared logical database '$database' on instance '$identifier'..."
+                wipe_output="$(
+                  kubectl -n "$K8S_NAMESPACE" run "$pod_name" \
+                    --rm -i \
+                    --attach=true \
+                    --restart=Never \
+                    --image="$postgres_client_image" \
+                    --env="PGHOST=$host" \
+                    --env="PGPORT=$port" \
+                    --env="PGUSER=$username" \
+                    --env="PGPASSWORD=$password" \
+                    --env="TARGET_DB=$database" \
+                    --command -- sh -ceu '
+                      database_exists="$(
+                        psql -v ON_ERROR_STOP=1 -d postgres -At \
+                          -c "SELECT 1 FROM pg_database WHERE datname = \$\$${TARGET_DB}\$\$;"
+                      )"
+                      if [ "$database_exists" != "1" ]; then
+                        echo "Terraform-declared logical database does not exist yet; skipping: $TARGET_DB"
+                        echo "MEAI_LOGICAL_DATABASE_STATUS=skipped"
+                        exit 0
+                      fi
 
-                          CREATE SCHEMA public AUTHORIZATION CURRENT_USER;
-                          GRANT ALL ON SCHEMA public TO PUBLIC;
-                          GRANT ALL ON SCHEMA public TO CURRENT_USER;
-                        END
-                        \$meai_wipe\$;
-                      "
-                  '
-                rds_database_count=$((rds_database_count + 1))
+                      psql -v ON_ERROR_STOP=1 -d postgres \
+                        -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = \$\$${TARGET_DB}\$\$ AND pid <> pg_backend_pid();"
+                      psql -v ON_ERROR_STOP=1 \
+                        -d "$TARGET_DB" \
+                        -c "
+                          DO \$meai_wipe\$
+                          DECLARE
+                            schema_name text;
+                          BEGIN
+                            FOR schema_name IN
+                              SELECT nspname
+                              FROM pg_namespace
+                              WHERE nspname <> \$\$information_schema\$\$
+                                AND nspname NOT LIKE \$\$pg_%\$\$
+                            LOOP
+                              EXECUTE format(\$\$DROP SCHEMA IF EXISTS %I CASCADE\$\$, schema_name);
+                            END LOOP;
+
+                            CREATE SCHEMA public AUTHORIZATION CURRENT_USER;
+                            GRANT ALL ON SCHEMA public TO PUBLIC;
+                            GRANT ALL ON SCHEMA public TO CURRENT_USER;
+                          END
+                          \$meai_wipe\$;
+                        "
+                      echo "MEAI_LOGICAL_DATABASE_STATUS=wiped"
+                    '
+                )"
+                printf '%s\n' "$wipe_output"
+
+                wipe_status="$(sed -n 's/^MEAI_LOGICAL_DATABASE_STATUS=//p' <<< "$wipe_output" | tail -n 1)"
+                case "$wipe_status" in
+                  wiped)
+                    rds_database_count=$((rds_database_count + 1))
+                    ;;
+                  skipped)
+                    echo "Skipped missing logical database '$database' on '$identifier'."
+                    ;;
+                  *)
+                    echo "Unable to determine wipe status for logical database '$database' on '$identifier'." >&2
+                    exit 1
+                    ;;
+                esac
               done < <(jq -r '.databases[]' <<< "$row")
             done < "$rds_plan"
 
-            echo "RDS data reset complete: deleted all tables in $rds_database_count database(s) across $rds_instance_count RDS instance(s)." >> "$GITHUB_STEP_SUMMARY"
+            echo "RDS logical database reset complete: deleted all tables in $rds_database_count database(s) across $rds_instance_count RDS instance(s)." >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           }
 

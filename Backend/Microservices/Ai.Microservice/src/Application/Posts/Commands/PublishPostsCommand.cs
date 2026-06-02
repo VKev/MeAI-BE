@@ -332,10 +332,12 @@ public sealed class PublishPostsCommandHandler
                 .Distinct()
                 .ToList();
 
-            if (socialMediaIds.Count == 0 && !target.PublishToMeAiFeed)
+            if (socialMediaIds.Count == 0)
             {
                 return Result.Failure<IReadOnlyList<PublishPostTargetInput>>(
-                    new Error("Post.PublishMissingSocialMedia", "Each publish target must include at least one social media id."));
+                    new Error(
+                        "Post.PublishMissingSocialMedia",
+                        "Each publish target must include at least one external social media id. publishToMeAiFeed is additive and cannot be used as the only destination."));
             }
 
             if (normalizedByPostId.TryGetValue(target.PostId, out var existing) &&

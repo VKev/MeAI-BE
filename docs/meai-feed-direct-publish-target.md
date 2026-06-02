@@ -15,7 +15,8 @@ Tài liệu này mô tả trạng thái backend hiện tại của direct publis
 ### Contract hiện tại
 
 - [x] Request publish vẫn hỗ trợ các shape hiện có.
-- [x] Field mới `publishToMeAiFeed` là additive và optional.
+- [x] Field mới `publishToMeAiFeed` là additive và optional. Khi bật, request vẫn phải
+  chứa ít nhất một `socialMediaId` ngoài hệ thống.
 - [x] Response destination có thêm field nullable `internalTargetKey`.
 - [x] Direct publish sang Feed là synchronous.
 - [x] Publish sang Feed tạo `PostPublication` type `meai_feed` bên Ai để các flow
@@ -81,6 +82,10 @@ Row này là source of truth để:
 4. Nếu Feed thành công, Ai thêm destination result cho `meai_feed`.
 5. Ai lưu `PostPublication` `meai_feed` với `ExternalContentId = feed_post_id`.
 6. Sau đó Ai tiếp tục flow publish external social media như cũ.
+
+`publishToMeAiFeed = true` không phải chế độ feed-only. API từ chối request không có
+`socialMediaIds`, để một thao tác publish luôn đẩy lên cả MeAI Feed và các social account
+đã chọn.
 
 ## Luồng unpublish từ creator/Ai
 
@@ -152,6 +157,7 @@ Shared proto files:
 ## Ghi chú tương thích
 
 - Request cũ không có `publishToMeAiFeed` vẫn hoạt động.
+- Request bật `publishToMeAiFeed` phải kèm ít nhất một external `socialMediaId`.
 - `internalTargetKey` là field thêm mới, nullable.
 - Contract publish external social media hiện có không bị đổi.
 - Các publication `meai_feed` cũ trước thay đổi này có thể chưa có `PostPublication` row;

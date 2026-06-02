@@ -34,6 +34,9 @@ public sealed class DraftPostTask
     [MaxLength(32)]
     public string Style { get; set; } = DraftPostStyles.Branded;
 
+    [MaxLength(16)]
+    public string MediaType { get; set; } = DraftPostMediaTypes.Image;
+
     public int TopK { get; set; }
 
     public int MaxReferenceImages { get; set; }
@@ -139,6 +142,41 @@ public static class DraftPostStyles
             return true;
         }
         normalized = Branded;
+        return false;
+    }
+}
+
+public static class DraftPostMediaTypes
+{
+    public const string Image = "image";
+    public const string Video = "video";
+
+    public static readonly IReadOnlySet<string> All =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { Image, Video };
+
+    public static string NormalizeOrDefault(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return Image;
+        var lower = raw.Trim().ToLowerInvariant();
+        return All.Contains(lower) ? lower : Image;
+    }
+
+    public static bool TryValidate(string? raw, out string normalized)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            normalized = Image;
+            return true;
+        }
+
+        var lower = raw.Trim().ToLowerInvariant();
+        if (All.Contains(lower))
+        {
+            normalized = lower;
+            return true;
+        }
+
+        normalized = Image;
         return false;
     }
 }

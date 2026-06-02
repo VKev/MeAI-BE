@@ -131,8 +131,9 @@ public sealed class RecommendationsController : ApiController
 
     /// <summary>
     /// Async draft-post generation. Indexes the account's recent posts (skip-if-unchanged),
-    /// queries RAG, generates a caption + image grounded in the account's voice and visual style,
-    /// uploads the image to S3, and creates a PostBuilder + Post (status="draft"). Returns 202
+    /// queries RAG, generates a caption + selected image/video media grounded in the account's
+    /// voice and visual style, uploads the media to S3, and creates a PostBuilder + Post
+    /// (status="draft"). Returns 202
     /// immediately; final completion is delivered via SignalR notification.
     /// </summary>
     [HttpPost("{socialMediaId:guid}/draft-posts")]
@@ -159,7 +160,8 @@ public sealed class RecommendationsController : ApiController
                 TopK: request.TopK,
                 MaxReferenceImages: request.MaxReferenceImages,
                 MaxRagPosts: request.MaxRagPosts,
-                ImageCount: request.ImageCount),
+                ImageCount: request.ImageCount,
+                MediaType: request.MediaType),
             cancellationToken);
 
         if (result.IsFailure)
@@ -172,7 +174,7 @@ public sealed class RecommendationsController : ApiController
 
     /// <summary>
     /// Status of an async draft-post generation by correlation id or the pre-created draft post id.
-    /// The final result (post-builder id, resource id, presigned image URL, caption) populates here once done.
+    /// The final result (post-builder id, resource id, presigned media URL, caption) populates here once done.
     /// </summary>
     [HttpGet("draft-posts/{id:guid}")]
     [ProducesResponseType(typeof(Result<DraftPostTaskResponse>), StatusCodes.Status200OK)]

@@ -24,7 +24,8 @@ public sealed record StartDraftPostGenerationCommand(
     int? TopK = null,
     int? MaxReferenceImages = null,
     int? MaxRagPosts = null,
-    int? ImageCount = null) : IRequest<Result<DraftPostTaskResponse>>;
+    int? ImageCount = null,
+    string? MediaType = null) : IRequest<Result<DraftPostTaskResponse>>;
 
 public sealed class StartDraftPostGenerationCommandHandler
     : IRequestHandler<StartDraftPostGenerationCommand, Result<DraftPostTaskResponse>>
@@ -105,9 +106,7 @@ public sealed class StartDraftPostGenerationCommandHandler
         }
 
         var topK = Math.Clamp(request.TopK ?? DefaultTopK, 1, MaxAllowedTopK);
-        var maxRefs = Math.Clamp(request.MaxReferenceImages ?? DefaultMaxReferenceImages, 1, MaxAllowedReferenceImages);
         var maxRagPosts = Math.Clamp(request.MaxRagPosts ?? DefaultMaxRagPosts, 1, MaxAllowedRagPosts);
-        var imageCount = Math.Clamp(request.ImageCount ?? DefaultImageCount, 1, MaxAllowedImageCount);
 
         // Validate style strictly: null/empty → "branded" default; anything else must
         // match one of the allowed values (creative / branded / marketing) or we reject.
@@ -118,6 +117,23 @@ public sealed class StartDraftPostGenerationCommandHandler
                     "DraftPost.InvalidStyle",
                     $"style '{request.Style}' is not supported. Allowed values: {string.Join(", ", DraftPostStyles.All)}. Omit to use the default 'branded'."));
         }
+
+        if (!DraftPostMediaTypes.TryValidate(request.MediaType, out var mediaType))
+        {
+            return Result.Failure<DraftPostTaskResponse>(
+                new Error(
+                    "DraftPost.InvalidMediaType",
+                    $"mediaType '{request.MediaType}' is not supported. Allowed values: {string.Join(", ", DraftPostMediaTypes.All)}. Omit to use the default 'image'."));
+        }
+
+        var isVideo = string.Equals(mediaType, DraftPostMediaTypes.Video, StringComparison.Ordinal);
+        var maxRefs = Math.Clamp(
+            request.MaxReferenceImages ?? DefaultMaxReferenceImages,
+            1,
+            isVideo ? 3 : MaxAllowedReferenceImages);
+        var imageCount = isVideo
+            ? 1
+            : Math.Clamp(request.ImageCount ?? DefaultImageCount, 1, MaxAllowedImageCount);
 
         var correlationId = Guid.CreateVersion7();
         var now = DateTimeExtensions.PostgreSqlUtcNow;
@@ -162,6 +178,7 @@ public sealed class StartDraftPostGenerationCommandHandler
             UserPrompt = promptForStorage,
             IsAutoTopic = isAutoTopic,
             Style = style,
+            MediaType = mediaType,
             TopK = topK,
             MaxReferenceImages = maxRefs,
             MaxRagPosts = maxRagPosts,
@@ -225,6 +242,7 @@ public sealed class StartDraftPostGenerationCommandHandler
                 UserPrompt = task.UserPrompt,
                 IsAutoTopic = isAutoTopic,
                 Style = style,
+                MediaType = mediaType,
                 TopK = topK,
                 MaxReferenceImages = maxRefs,
                 MaxRagPosts = maxRagPosts,
@@ -248,6 +266,7 @@ public sealed class StartDraftPostGenerationCommandHandler
                     workspaceId = task.WorkspaceId,
                     status = task.Status,
                     style = task.Style,
+                    mediaType = task.MediaType,
                     userPrompt = task.UserPrompt,
                     isAutoTopic = task.IsAutoTopic,
                     topK = task.TopK,
@@ -261,11 +280,12 @@ public sealed class StartDraftPostGenerationCommandHandler
             cancellationToken);
 
         _logger.LogInformation(
-            "Draft-post generation queued. CorrelationId={CorrelationId} UserId={UserId} SocialMediaId={SocialMediaId} Style={Style} AutoTopic={Auto}",
+            "Draft-post generation queued. CorrelationId={CorrelationId} UserId={UserId} SocialMediaId={SocialMediaId} Style={Style} MediaType={MediaType} AutoTopic={Auto}",
             correlationId,
             request.UserId,
             request.SocialMediaId,
             style,
+            mediaType,
             isAutoTopic);
 
         return Result.Success(MapToResponse(task));
@@ -282,6 +302,7 @@ public sealed class StartDraftPostGenerationCommandHandler
             UserPrompt: task.UserPrompt,
             IsAutoTopic: task.IsAutoTopic,
             Style: task.Style,
+            MediaType: task.MediaType,
             ImageCount: task.ImageCount,
             ResultPostBuilderId: task.ResultPostBuilderId,
             ResultPostId: task.ResultPostId,

@@ -9,6 +9,7 @@ public sealed record DraftPostTaskResponse(
     string UserPrompt,
     bool IsAutoTopic,
     string Style,
+    string MediaType,
     int ImageCount,
     Guid? ResultPostBuilderId,
     Guid? ResultPostId,
@@ -33,9 +34,12 @@ public sealed record StartDraftPostGenerationRequest(
     /// short headline). Use "creative" for pure mood/lifestyle posts (no on-image
     /// text), "marketing" for full promo (logo + headline + CTA + contact rendered).</summary>
     string? Style = null,
+    /// <summary>"image" (default) | "video". Video creates one Veo 3.1 Fast clip
+    /// from the same RAG-selected reference-image pipeline.</summary>
+    string? MediaType = null,
     Guid? WorkspaceId = null,
     int? TopK = null,
     int? MaxReferenceImages = null,
     int? MaxRagPosts = null,
-    /// <summary>Number of AI-generated images to create for the draft post. Default 1.</summary>
+    /// <summary>Number of AI-generated images to create for image drafts. Video drafts always create one clip.</summary>
     int? ImageCount = null);

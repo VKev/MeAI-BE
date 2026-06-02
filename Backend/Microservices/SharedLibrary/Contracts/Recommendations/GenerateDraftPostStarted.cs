@@ -15,6 +15,9 @@ public sealed class GenerateDraftPostStarted
     /// image-design knowledge namespace the consumer RAGs for the brief, and how
     /// aggressively the caption pushes brand contact info.</summary>
     public string Style { get; set; } = "branded";
+    /// <summary>"image" (default) | "video". Video drafts reuse the same RAG and
+    /// visual-reference pipeline, then render one Veo 3.1 Fast clip.</summary>
+    public string MediaType { get; set; } = "image";
     public int TopK { get; set; } = 6;
     public int MaxReferenceImages { get; set; } = 3;
     public int MaxRagPosts { get; set; } = 30;

@@ -18,7 +18,8 @@ internal static class PostsOpenApiTransformers
               "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
               "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
             ],
-            "isPrivate": false
+            "isPrivate": false,
+            "publishToMeAiFeed": true
           },
           {
             "postId": "22222222-2222-2222-2222-222222222222",
@@ -121,6 +122,11 @@ internal static class PostsOpenApiTransformers
                     ["isPrivate"] = (IOpenApiSchema)new OpenApiSchema
                     {
                         Type = JsonSchemaType.Boolean
+                    },
+                    ["publishToMeAiFeed"] = (IOpenApiSchema)new OpenApiSchema
+                    {
+                        Type = JsonSchemaType.Boolean,
+                        Description = "Optional additive destination. When true, the post is published to MeAI Feed and every selected external socialMediaId."
                     }
                 },
                 Required = new HashSet<string>

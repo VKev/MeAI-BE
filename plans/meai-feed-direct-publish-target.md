@@ -141,8 +141,8 @@ Origin dữ liệu:
 ## Validation And Errors
 
 Rules:
-- một target có thể chỉ publish lên MeAI Feed, chỉ publish social ngoài, hoặc cả hai
-- nếu cả `socialMediaIds` rỗng và `publishToMeAiFeed = false` thì vẫn trả lỗi hiện tại
+- một target có thể chỉ publish social ngoài, hoặc publish đồng thời social ngoài + MeAI Feed
+- `publishToMeAiFeed = true` là additive: request vẫn phải có ít nhất một `socialMediaId`
 - nếu publish lên MeAI Feed nhiều lần cho cùng một Ai post trong v1 thì block bằng error `Post.AlreadyPublishedToFeed`
 
 Idempotency:
@@ -151,8 +151,8 @@ Idempotency:
 ## Tests
 
 Happy path:
-- publish chỉ lên MeAI Feed thành công.
 - publish MeAI Feed + Facebook/Instagram trong cùng request thành công.
+- request chỉ bật MeAI Feed nhưng không có external social target bị từ chối.
 
 Recursion safety:
 - Ai publish sang Feed không tạo vòng lặp mirror ngược về Ai.
@@ -166,5 +166,5 @@ Security:
 
 ## Assumptions
 
-- V1 coi MeAI Feed là target internal synchronous.
+- V1 coi MeAI Feed là target internal synchronous bổ sung cho external social publish.
 - Feed post được tạo ra là published ngay, không cần async consumer riêng.
