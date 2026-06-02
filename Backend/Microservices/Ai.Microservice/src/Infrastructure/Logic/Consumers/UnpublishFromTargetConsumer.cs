@@ -106,6 +106,10 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
                     break;
                 }
                 lastError = deleteResult.Error;
+                if (IsNonRetryable(lastError))
+                {
+                    break;
+                }
             }
             catch (Exception ex)
             {
@@ -212,6 +216,13 @@ public sealed class UnpublishFromTargetConsumer : IConsumer<UnpublishFromTargetR
         }
 
         return Result.Failure<bool>(new Error("Unpublish.UnsupportedPlatform", $"Unsupported platform: {type}"));
+    }
+
+    private static bool IsNonRetryable(Error? error)
+    {
+        return error?.Code is "Instagram.DeleteNotSupported" or
+            "TikTok.DeleteNotSupported" or
+            "Unpublish.UnsupportedPlatform";
     }
 
     private async Task UnpublishFeedAsync(
