@@ -4,6 +4,7 @@ using Application.Abstractions.Configs;
 using Application.Abstractions.Resources;
 using Application.Billing;
 using Application.ChatSessions;
+using Application.GenerationOptions;
 using Domain.Entities;
 using Domain.Repositories;
 using MassTransit;
@@ -25,7 +26,14 @@ public sealed record CreateChatVideoCommand(
     int? Seeds,
     bool? EnableTranslation,
     string? Watermark,
-    Guid? LinkedPostId = null) : IRequest<Result<ChatVideoResponse>>;
+    Guid? LinkedPostId = null,
+    string? Variant = null,
+    string? GenerationType = null,
+    string? Resolution = null,
+    int? Duration = null,
+    bool? GenerateAudio = null,
+    bool? ReturnLastFrame = null,
+    bool? WebSearch = null) : IRequest<Result<ChatVideoResponse>>;
 
 public sealed record ChatVideoResponse(
     Guid ChatId,
@@ -112,9 +120,11 @@ public sealed class CreateChatVideoCommandHandler
         }
 
         var activeConfig = await TryGetActiveConfigAsync(cancellationToken);
-        var model = ResolveValue(request.Model, activeConfig?.ChatModel, "veo3_fast");
+        var model = ResolveVideoModel(request.Model, activeConfig?.ChatModel);
+        var variant = ResolveVideoVariant(model, request.Variant);
         var aspectRatio = ResolveValue(request.AspectRatio, activeConfig?.MediaAspectRatio, "16:9");
         var enableTranslation = request.EnableTranslation ?? true;
+        var pricing = VideoPricingResolver.Resolve(model, variant, request.Resolution, request.Duration);
 
         var correlationId = Guid.CreateVersion7();
         var estimatedBytes = _storageEstimator.EstimateVideoGenerationBytes(model);
@@ -136,13 +146,13 @@ public sealed class CreateChatVideoCommandHandler
         }
 
         // Quote + charge coins BEFORE we persist the chat / enqueue the Kie Veo job.
-        // Video generation is expensive — veo3_fast 8s = 90 coins, veo3 quality = 540
-        // per the seeded catalog. Insufficient → bubble for FE top-up modal.
+        // Quote before enqueueing the provider job so insufficient balance reaches the
+        // FE top-up modal without creating a chat or spend record.
         var videoQuoteResult = await _pricingService.GetCostAsync(
             CoinActionTypes.VideoGeneration,
             model,
-            variant: null,
-            quantity: 1,
+            pricing.CatalogVariant,
+            pricing.Quantity,
             cancellationToken);
         if (videoQuoteResult.IsFailure)
         {
@@ -165,11 +175,20 @@ public sealed class CreateChatVideoCommandHandler
         var config = new ChatVideoConfig(
             correlationId,
             model,
+            variant,
             aspectRatio,
             request.Seeds,
             enableTranslation,
             request.Watermark,
-            request.LinkedPostId == Guid.Empty ? null : request.LinkedPostId);
+            request.LinkedPostId == Guid.Empty ? null : request.LinkedPostId,
+            request.GenerationType,
+            pricing.CatalogVariant,
+            pricing.Quantity,
+            request.Resolution,
+            request.Duration,
+            request.GenerateAudio,
+            request.ReturnLastFrame,
+            request.WebSearch);
 
         var chat = new Chat
         {
@@ -194,9 +213,9 @@ public sealed class CreateChatVideoCommandHandler
                 Provider = AiSpendProviders.Kie,
                 ActionType = CoinActionTypes.VideoGeneration,
                 Model = model,
-                Variant = null,
+                Variant = pricing.CatalogVariant,
                 Unit = videoQuoteResult.Value.Unit,
-                Quantity = 1,
+                Quantity = pricing.Quantity,
                 UnitCostCoins = videoQuoteResult.Value.UnitCostCoins,
                 TotalCoins = videoQuoteResult.Value.TotalCoins,
                 ReferenceType = CoinReferenceTypes.ChatVideo,
@@ -215,10 +234,17 @@ public sealed class CreateChatVideoCommandHandler
             Prompt = chat.Prompt ?? string.Empty,
             ImageUrls = imageUrls,
             Model = model,
+            Variant = variant,
+            GenerationType = request.GenerationType,
             AspectRatio = aspectRatio,
             Seeds = request.Seeds,
             EnableTranslation = enableTranslation,
             Watermark = request.Watermark,
+            Resolution = request.Resolution,
+            Duration = request.Duration,
+            GenerateAudio = request.GenerateAudio,
+            ReturnLastFrame = request.ReturnLastFrame,
+            WebSearch = request.WebSearch,
             CreatedAt = messageCreatedAt
         };
 
@@ -236,10 +262,17 @@ public sealed class CreateChatVideoCommandHandler
                     chatId = chat.Id,
                     resourceIds,
                     model,
+                    variant,
+                    request.GenerationType,
                     aspectRatio,
                     request.Seeds,
                     enableTranslation,
-                    request.Watermark
+                    request.Watermark,
+                    request.Resolution,
+                    request.Duration,
+                    request.GenerateAudio,
+                    request.ReturnLastFrame,
+                    request.WebSearch
                 },
                 request.UserId,
                 message.CreatedAt,
@@ -252,11 +285,20 @@ public sealed class CreateChatVideoCommandHandler
     private sealed record ChatVideoConfig(
         Guid CorrelationId,
         string Model,
+        string? Variant,
         string AspectRatio,
         int? Seeds,
         bool EnableTranslation,
         string? Watermark,
-        Guid? LinkedPostId);
+        Guid? LinkedPostId,
+        string? GenerationType,
+        string? BillingVariant,
+        int BillingQuantity,
+        string? Resolution,
+        int? Duration,
+        bool? GenerateAudio,
+        bool? ReturnLastFrame,
+        bool? WebSearch);
 
     private static Error BuildQuotaError(StorageQuotaCheckResult quota, long estimatedBytes)
     {
@@ -301,5 +343,39 @@ public sealed class CreateChatVideoCommandHandler
         }
 
         return fallback;
+    }
+
+    private static string ResolveVideoModel(string? requestedValue, string? configuredValue)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedValue))
+        {
+            return requestedValue.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(configuredValue))
+        {
+            var normalizedConfiguredValue = configuredValue.Trim();
+            if (ProviderGenerationModelCatalog.IsKnownModel("video", normalizedConfiguredValue))
+            {
+                return normalizedConfiguredValue;
+            }
+        }
+
+        return "gemini-omni-video";
+    }
+
+    private static string? ResolveVideoVariant(string model, string? requestedValue)
+    {
+        if (!string.Equals(model, "veo-3-1", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return requestedValue?.Trim().ToLowerInvariant() switch
+        {
+            "lite" => "lite",
+            "quality" => "quality",
+            _ => "fast"
+        };
     }
 }

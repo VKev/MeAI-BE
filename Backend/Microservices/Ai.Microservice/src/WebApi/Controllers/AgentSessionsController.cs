@@ -99,7 +99,14 @@ public sealed class AgentSessionsController : ApiController
                         request.VideoOptions.ResourceIds?
                             .Where(id => id != Guid.Empty)
                             .Distinct()
-                            .ToList()),
+                            .ToList(),
+                        request.VideoOptions.Variant,
+                        request.VideoOptions.GenerationType,
+                        request.VideoOptions.Resolution,
+                        request.VideoOptions.Duration,
+                        request.VideoOptions.GenerateAudio,
+                        request.VideoOptions.ReturnLastFrame,
+                        request.VideoOptions.WebSearch),
                 request.ScheduleOptions is null
                     ? null
                     : new AgentScheduleOptions(
@@ -170,7 +177,14 @@ public sealed record AgentVideoOptionsRequest(
     int? Seeds,
     bool? EnableTranslation,
     string? Watermark,
-    List<Guid>? ResourceIds = null);
+    List<Guid>? ResourceIds = null,
+    string? Variant = null,
+    string? GenerationType = null,
+    string? Resolution = null,
+    int? Duration = null,
+    bool? GenerateAudio = null,
+    bool? ReturnLastFrame = null,
+    bool? WebSearch = null);
 
 public sealed record AgentScheduleOptionsRequest(
     DateTime ExecuteAtUtc,

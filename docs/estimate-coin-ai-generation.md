@@ -136,7 +136,7 @@ Dưới đây là bảng ánh xạ chi tiết 1:1 từ **Giao Diện Frontend** 
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Sinh ảnh từ văn bản (Chat Image)** | `image_generation` | `nano-banana-pro` (hoặc `ideogram/v3-text-to-image`) | `1K`, `2K` hoặc `null` | `per_image` | Số lượng ảnh yêu cầu (ví dụ: `4`) | `POST /api/Ai/chats/image` | `chatSessionId`, `prompt`, `model`, `aspectRatio`, `resolution` (1K/2K), `numberOfVariances` (tương ứng quantity) |
 | **Sinh biến thể ảnh / Reframe ảnh** | `image_reframe_variant` | `nano-banana-pro` (hoặc wildcard `*`) | `null` | `per_variant` | Số lượng biến thể sinh ra | `POST /api/Ai/chats/image` *(chế độ reframe)* | `chatSessionId`, `prompt`, `resourceIds` (chứa ảnh gốc), `aspectRatio`, `resolution` |
-| **Sinh video ngắn (Chat Video)** | `video_generation` | `veo3_fast` (hoặc `veo3`, `veo3_quality`) | `null` | `per_clip` | Số lượng clip sinh ra (mặc định `1`) | `POST /api/Ai/chats/video` | `chatSessionId`, `prompt`, `model` (`veo3_fast`/`veo3`/`veo3_quality`), `aspectRatio`, `seeds` |
+| **Short video generation (Chat Video)** | `video_generation` | `gemini-omni-video`, `grok-imagine-video-1-5-preview`, `veo-3-1`, or `bytedance/seedance-2` | `resolution:duration` for Gemini Omni and Grok; resolution for Seedance; `lite`, `fast`, `quality` for `veo-3-1` | `per_clip` or `per_second` | Clip count, or selected duration in seconds for Seedance | `POST /api/Ai/chats/video` | `chatSessionId`, `prompt`, `model`, `variant`, `aspectRatio`, `seeds`, `generationType`, `resolution`, `duration`, `generateAudio`, `returnLastFrame`, `webSearch` |
 | **Tạo Caption Đồng Loạt (Batch Captions)** | `caption_generation` | `openai/gpt-4o` | `null` | `per_platform` | Số lượng nền tảng tích hợp được chọn | `POST /api/AiGeneration/captions` | `postId` (Guid), `platform` (ví dụ: `"facebook"`), `language`, `style`, `resourceIds` |
 | **Tạo Bài Đăng Gemini (Gemini Post)** | `caption_generation` | Config theo user hoặc mặc định `gpt-4o-mini` | `null` | `per_platform` | `1` | `POST /api/AiGeneration/post` | `workspaceId`, `resourceIds`, `caption`, `postType`, `language`, `instruction` |
 | **Chuẩn Bị Bài Đăng (Post Prepare)** | Không gọi catalog | `none` | `null` | `per_request` | `1` (Miễn phí - 0 Coin) | `POST /api/AiGeneration/post-prepare` | `workspaceId`, `resourceIds`, `socialMedia` |
@@ -195,17 +195,35 @@ Sử dụng khi người dùng chọn một ảnh đã có, yêu cầu thay đ�
 Sử dụng trong tính năng tạo video clip ngắn từ prompt chữ hoặc từ ảnh nguồn.
 
 * **Cấu hình định giá mặc định**:
-  * Model `veo3_fast` + Variant `null`: ~2,367.81 Coins / clip.
-  * Model `veo3` + Variant `null`: ~14,206.86 Coins / clip.
-  * Model `veo3_quality` + Variant `null`: ~14,206.86 Coins / clip.
-  * Fallback Wildcard (`*`): ~3,157.08 Coins / clip.
+  * Model `gemini-omni-video` + Variant `720p:4s`, `720p:6s`, `720p:8s`, `720p:10s`: ~11.84, 15.79, 19.73, 23.68 Coins / clip.
+  * Model `gemini-omni-video` + Variant `1080p:4s`, `1080p:6s`, `1080p:8s`, `1080p:10s`: ~11.84, 15.79, 19.73, 23.68 Coins / clip.
+  * Model `gemini-omni-video` + Variant `4k:4s`, `4k:6s`, `4k:8s`, `4k:10s`: ~27.62, 31.57, 35.52, 39.46 Coins / clip.
+  * Model `grok-imagine-video-1-5-preview` + Variant `480p:{duration}s`: ~`((0.08 × duration) + 0.01) × 26.309` Coins / clip.
+  * Model `grok-imagine-video-1-5-preview` + Variant `720p:{duration}s`: ~`((0.14 × duration) + 0.01) × 26.309` Coins / clip.
+  * Model `veo-3-1` + Variant `lite`: ~3.95 Coins / clip.
+  * Model `veo-3-1` + Variant `fast`: ~7.89 Coins / clip.
+  * Model `veo-3-1` + Variant `quality`: ~32.89 Coins / clip.
+  * Model `bytedance/seedance-2` + Variant `480p`: ~2.50 Coins / giây.
+  * Model `bytedance/seedance-2` + Variant `720p`: ~5.39 Coins / giây.
+  * Model `bytedance/seedance-2` + Variant `1080p`: ~13.42 Coins / giây.
+  * Fallback Wildcard (`*`): ~31.57 Coins / clip.
+
+  Các dòng `variant = null` cũ vẫn được giữ để tương thích ngược. Luồng FE mới dùng `resolution:duration` làm `variant` cho Gemini Omni và Grok. Với Grok, giá clip gồm phí output theo giây và phí cố định 1 ảnh nguồn. Seedance dùng resolution làm `variant` và duration làm `quantity`.
+
+  Catalog giá được seed vào database và có thể chỉnh qua admin. Backend không gọi API Kie để lấy giá realtime. Snapshot quy đổi hiện tại dùng `1 Coin ~= 1,000 VND`, tương đương `100,000 VND = 100 Coins`.
+
+* **Duration và ảnh tham chiếu theo model**:
+  * `gemini-omni-video`: `4`, `6`, `8`, `10` giây; tối đa 7 ảnh tham chiếu.
+  * `grok-imagine-video-1-5-preview`: `1-15` giây; đúng 1 ảnh nguồn.
+  * `veo-3-1`: clip trực tiếp cố định 8 giây; ảnh đầu/cuối hoặc tối đa 3 ảnh material reference khi dùng tier Fast.
+  * `bytedance/seedance-2`: `4-15` giây; ảnh đầu/cuối hoặc tối đa 9 ảnh tham chiếu, hai chế độ không được dùng chung.
 
 * **Payload gửi lên `/api/Ai/coin-pricing/estimate`**:
   ```json
   {
     "actionType": "video_generation",
-    "model": "veo3_fast", // Hoặc "veo3", "veo3_quality"
-    "variant": null,
+    "model": "veo-3-1",
+    "variant": "fast", // Or "lite", "quality"
     "quantity": 1
   }
   ```

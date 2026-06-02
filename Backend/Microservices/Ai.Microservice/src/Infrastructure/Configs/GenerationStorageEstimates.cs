@@ -12,8 +12,9 @@ public sealed class GenerationStorageEstimates
 
     public Dictionary<string, long> VideosByModelMb { get; set; } = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["veo3_fast"] = 150,
-        ["veo3"] = 250,
-        ["veo3_quality"] = 350
+        ["gemini-omni-video"] = 150,
+        ["grok-imagine-video-1-5-preview"] = 150,
+        ["veo-3-1"] = 250,
+        ["bytedance/seedance-2"] = 250
     };
 }

@@ -11,13 +11,19 @@ public interface IVeoVideoService
 public sealed record VeoGenerateRequest(
     string Prompt,
     List<string>? ImageUrls = null,
-    string Model = "veo3_fast",
+    string Model = "gemini-omni-video",
     string? GenerationType = null,
     string AspectRatio = "16:9",
     int? Seeds = null,
     bool EnableTranslation = true,
     string? Watermark = null,
-    Guid? CorrelationId = null);
+    Guid? CorrelationId = null,
+    string? Variant = null,
+    string? Resolution = null,
+    int? Duration = null,
+    bool? GenerateAudio = null,
+    bool? ReturnLastFrame = null,
+    bool? WebSearch = null);
 
 public sealed record VeoGenerateResult(
     bool Success,

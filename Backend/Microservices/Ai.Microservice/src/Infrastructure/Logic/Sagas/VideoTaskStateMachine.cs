@@ -27,12 +27,18 @@ public class VideoTaskStateMachine : MassTransitStateMachine<VideoTaskState>
                     context.Saga.VideoTaskId = Guid.CreateVersion7();
                     context.Saga.Prompt = context.Message.Prompt;
                     context.Saga.Model = context.Message.Model;
+                    context.Saga.Variant = context.Message.Variant;
                     context.Saga.AspectRatio = context.Message.AspectRatio;
                     context.Saga.ImageUrls = context.Message.ImageUrls;
                     context.Saga.GenerationType = context.Message.GenerationType;
                     context.Saga.Seeds = context.Message.Seeds;
                     context.Saga.EnableTranslation = context.Message.EnableTranslation;
                     context.Saga.Watermark = context.Message.Watermark;
+                    context.Saga.Resolution = context.Message.Resolution;
+                    context.Saga.Duration = context.Message.Duration;
+                    context.Saga.GenerateAudio = context.Message.GenerateAudio;
+                    context.Saga.ReturnLastFrame = context.Message.ReturnLastFrame;
+                    context.Saga.WebSearch = context.Message.WebSearch;
                     context.Saga.CreatedAt = context.Message.CreatedAt;
                 })
                 .Schedule(GenerationTimeout, context => context.Init<VideoGenerationTimeout>(new

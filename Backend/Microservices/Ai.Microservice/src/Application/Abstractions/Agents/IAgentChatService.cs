@@ -34,7 +34,14 @@ public sealed record AgentVideoOptions(
     int? Seeds = null,
     bool? EnableTranslation = null,
     string? Watermark = null,
-    IReadOnlyList<Guid>? ResourceIds = null);
+    IReadOnlyList<Guid>? ResourceIds = null,
+    string? Variant = null,
+    string? GenerationType = null,
+    string? Resolution = null,
+    int? Duration = null,
+    bool? GenerateAudio = null,
+    bool? ReturnLastFrame = null,
+    bool? WebSearch = null);
 
 public sealed record AgentSocialTarget(
     string Platform,

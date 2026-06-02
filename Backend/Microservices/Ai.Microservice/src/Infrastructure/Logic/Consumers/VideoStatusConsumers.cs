@@ -570,12 +570,12 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
     {
         try
         {
-            var model = ParseVideoModel(chat.Config);
+            var (model, variant, quantity) = ParseVideoPricing(chat.Config);
             var quote = await _pricingService.GetCostAsync(
                 CoinActionTypes.VideoGeneration,
                 model,
-                variant: null,
-                quantity: 1,
+                variant,
+                quantity,
                 cancellationToken);
             if (quote.IsFailure)
             {
@@ -635,15 +635,17 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private static string ParseVideoModel(string? configJson)
+    private static (string Model, string? Variant, int Quantity) ParseVideoPricing(string? configJson)
     {
-        var model = "veo3_fast";
-        if (string.IsNullOrWhiteSpace(configJson)) return model;
+        var model = "gemini-omni-video";
+        string? variant = null;
+        var quantity = 1;
+        if (string.IsNullOrWhiteSpace(configJson)) return (model, variant, quantity);
 
         try
         {
             var raw = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(configJson);
-            if (raw is null) return model;
+            if (raw is null) return (model, variant, quantity);
 
             if ((raw.TryGetValue("Model", out var el) || raw.TryGetValue("model", out el))
                 && el.ValueKind == JsonValueKind.String)
@@ -651,9 +653,30 @@ public class VideoFailedConsumer : IConsumer<VideoGenerationFailed>
                 var name = el.GetString();
                 if (!string.IsNullOrWhiteSpace(name)) model = name;
             }
+
+            if ((raw.TryGetValue("Variant", out el) || raw.TryGetValue("variant", out el))
+                && el.ValueKind == JsonValueKind.String)
+            {
+                var name = el.GetString();
+                if (!string.IsNullOrWhiteSpace(name)) variant = name;
+            }
+
+            if ((raw.TryGetValue("BillingVariant", out el) || raw.TryGetValue("billingVariant", out el))
+                && el.ValueKind == JsonValueKind.String)
+            {
+                var name = el.GetString();
+                if (!string.IsNullOrWhiteSpace(name)) variant = name;
+            }
+
+            if ((raw.TryGetValue("BillingQuantity", out el) || raw.TryGetValue("billingQuantity", out el))
+                && el.ValueKind == JsonValueKind.Number
+                && el.TryGetInt32(out var parsedQuantity))
+            {
+                quantity = Math.Max(1, parsedQuantity);
+            }
         }
         catch (JsonException) { /* keep default */ }
 
-        return model;
+        return (model, variant, quantity);
     }
 }

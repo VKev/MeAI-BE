@@ -541,7 +541,14 @@ public sealed class GeminiAgentChatService : IAgentChatService
                 request.VideoOptions?.Seeds,
                 request.VideoOptions?.EnableTranslation,
                 request.VideoOptions?.Watermark,
-                postResult.Value.Id),
+                postResult.Value.Id,
+                request.VideoOptions?.Variant,
+                request.VideoOptions?.GenerationType,
+                request.VideoOptions?.Resolution,
+                request.VideoOptions?.Duration,
+                request.VideoOptions?.GenerateAudio,
+                request.VideoOptions?.ReturnLastFrame,
+                request.VideoOptions?.WebSearch),
             cancellationToken);
 
         if (videoResult.IsFailure)

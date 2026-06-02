@@ -60,7 +60,7 @@ public sealed class VeoVideoService : IVeoVideoService
             {
                 Prompt = request.Prompt,
                 ImageUrls = request.ImageUrls,
-                Model = request.Model,
+                Model = ResolveVeoApiModel(request.Model, request.Variant),
                 GenerationType = request.GenerationType,
                 AspectRatio = NormalizeVeoAspectRatio(request.AspectRatio),
                 Seeds = request.Seeds,
@@ -353,6 +353,21 @@ public sealed class VeoVideoService : IVeoVideoService
             : aspectRatio;
     }
 
+    private static string ResolveVeoApiModel(string model, string? variant)
+    {
+        if (!string.Equals(model, "veo-3-1", StringComparison.OrdinalIgnoreCase))
+        {
+            return model;
+        }
+
+        return variant?.Trim().ToLowerInvariant() switch
+        {
+            "lite" => "veo3_lite",
+            "quality" => "veo3",
+            _ => "veo3_fast"
+        };
+    }
+
     private static Dictionary<string, object?> BuildMarketVideoInput(VeoGenerateRequest request)
     {
         var model = request.Model;
@@ -365,6 +380,17 @@ public sealed class VeoVideoService : IVeoVideoService
             input["remove_watermark"] = true;
             input["upload_method"] = "s3";
             AddProviderVideoImages(input, request.ImageUrls, "image_urls");
+            return input;
+        }
+
+        if (string.Equals(model, "grok-imagine-video-1-5-preview", StringComparison.OrdinalIgnoreCase))
+        {
+            input["aspect_ratio"] = string.Equals(request.AspectRatio, "auto", StringComparison.OrdinalIgnoreCase)
+                ? "auto"
+                : NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3");
+            input["resolution"] = NormalizeProviderVideoResolution(request.Resolution, "480p", "480p", "720p");
+            input["duration"] = NormalizeProviderVideoDuration(request.Duration, 8, 1, 15);
+            AddProviderVideoFirstImageAsList(input, request.ImageUrls, "image_urls");
             return input;
         }
 
@@ -421,9 +447,9 @@ public sealed class VeoVideoService : IVeoVideoService
         if (model.StartsWith("bytedance/seedance", StringComparison.OrdinalIgnoreCase))
         {
             input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "1:1", "4:3", "3:4", "16:9", "9:16", "21:9");
-            input["resolution"] = "720p";
-            input["duration"] = 5;
-            input["generate_audio"] = false;
+            input["resolution"] = NormalizeProviderVideoResolution(request.Resolution, "720p", "480p", "720p", "1080p");
+            input["duration"] = NormalizeProviderVideoDuration(request.Duration, 5, 4, 15);
+            input["generate_audio"] = request.GenerateAudio ?? false;
             input["nsfw_checker"] = false;
             if (model.StartsWith("bytedance/seedance-1.5", StringComparison.OrdinalIgnoreCase))
             {
@@ -432,10 +458,9 @@ public sealed class VeoVideoService : IVeoVideoService
             }
             else
             {
-                input["return_last_frame"] = false;
-                input["web_search"] = false;
-                AddProviderVideoImages(input, request.ImageUrls, "reference_image_urls");
-                AddProviderVideoFirstImage(input, request.ImageUrls, "first_frame_url");
+                input["return_last_frame"] = request.ReturnLastFrame ?? false;
+                input["web_search"] = request.WebSearch ?? false;
+                AddSeedance2Images(input, request.ImageUrls, request.GenerationType);
             }
             return input;
         }
@@ -553,8 +578,8 @@ public sealed class VeoVideoService : IVeoVideoService
 
         if (string.Equals(model, "gemini-omni-video", StringComparison.OrdinalIgnoreCase))
         {
-            input["duration"] = 5;
-            input["resolution"] = "720p";
+            input["duration"] = NormalizeProviderVideoDurationOption(request.Duration, 4, 4, 6, 8, 10).ToString();
+            input["resolution"] = NormalizeProviderVideoResolution(request.Resolution, "720p", "720p", "1080p", "4k");
             input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16");
             AddProviderVideoImages(input, request.ImageUrls, "image_urls");
             AddProviderVideoSeed(input, request.Seeds);
@@ -564,6 +589,39 @@ public sealed class VeoVideoService : IVeoVideoService
         input["aspect_ratio"] = NormalizeProviderVideoRatio(request.AspectRatio, "16:9", "16:9", "9:16", "1:1");
         AddProviderVideoFirstImage(input, request.ImageUrls, "image_url");
         return input;
+    }
+
+    private static void AddSeedance2Images(
+        Dictionary<string, object?> input,
+        IReadOnlyList<string>? imageUrls,
+        string? generationType)
+    {
+        var urls = imageUrls?
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (urls is not { Count: > 0 })
+        {
+            return;
+        }
+
+        if (string.Equals(generationType, "REFERENCE_2_VIDEO", StringComparison.OrdinalIgnoreCase))
+        {
+            input["reference_image_urls"] = urls.Take(9).ToList();
+            return;
+        }
+
+        if (urls.Count > 0)
+        {
+            input["first_frame_url"] = urls[0];
+            if (urls.Count >= 2)
+            {
+                input["last_frame_url"] = urls[1];
+            }
+
+            return;
+        }
     }
 
     private static void AddProviderVideoFirstImage(
@@ -591,6 +649,18 @@ public sealed class VeoVideoService : IVeoVideoService
         if (urls is { Count: > 0 })
         {
             input[fieldName] = urls;
+        }
+    }
+
+    private static void AddProviderVideoFirstImageAsList(
+        Dictionary<string, object?> input,
+        IReadOnlyList<string>? imageUrls,
+        string fieldName)
+    {
+        var first = imageUrls?.FirstOrDefault(url => !string.IsNullOrWhiteSpace(url));
+        if (!string.IsNullOrWhiteSpace(first))
+        {
+            input[fieldName] = new List<string> { first };
         }
     }
 
@@ -625,6 +695,31 @@ public sealed class VeoVideoService : IVeoVideoService
 
         return supported.Any(item => item.Equals(mapped, StringComparison.OrdinalIgnoreCase))
             ? supported.First(item => item.Equals(mapped, StringComparison.OrdinalIgnoreCase))
+            : fallback;
+    }
+
+    private static string NormalizeProviderVideoResolution(string? resolution, string fallback, params string[] supported)
+    {
+        if (string.IsNullOrWhiteSpace(resolution))
+        {
+            return fallback;
+        }
+
+        return supported.FirstOrDefault(item =>
+            item.Equals(resolution.Trim(), StringComparison.OrdinalIgnoreCase)) ?? fallback;
+    }
+
+    private static int NormalizeProviderVideoDuration(int? duration, int fallback, int minimum, int maximum)
+    {
+        return duration.HasValue
+            ? Math.Clamp(duration.Value, minimum, maximum)
+            : fallback;
+    }
+
+    private static int NormalizeProviderVideoDurationOption(int? duration, int fallback, params int[] supported)
+    {
+        return duration.HasValue && supported.Contains(duration.Value)
+            ? duration.Value
             : fallback;
     }
 

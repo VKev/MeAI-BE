@@ -33,9 +33,10 @@ public sealed class GetAdminAiSpendOverviewQueryHandler
     [
         ("nano-banana-pro", "nano-banana-pro"),
         ("ideogram/v3-text-to-image", "ideogram/v3-text-to-image"),
-        ("veo3_fast", "veo3_fast"),
-        ("veo3", "veo3"),
-        ("veo3_quality", "veo3_quality"),
+        ("gemini-omni-video", "gemini-omni-video"),
+        ("grok-imagine-video-1-5-preview", "grok-imagine-video-1-5-preview"),
+        ("veo-3-1", "veo-3-1"),
+        ("bytedance/seedance-2", "bytedance/seedance-2"),
         ("openai/gpt-4o", "openai/gpt-4o / caption model"),
         ("gpt-4o-mini", "gpt-4o-mini / caption model")
     ];
@@ -196,8 +197,8 @@ public sealed class GetAdminAiSpendOverviewQueryHandler
                 var quote = await _pricingService.GetCostAsync(
                     CoinActionTypes.VideoGeneration,
                     video.Model,
-                    variant: null,
-                    quantity: 1,
+                    video.Variant,
+                    video.Quantity,
                     cancellationToken);
                 if (quote.IsFailure)
                 {
@@ -208,7 +209,7 @@ public sealed class GetAdminAiSpendOverviewQueryHandler
                     chat.CreatedAt.Value,
                     CoinActionTypes.VideoGeneration,
                     video.Model,
-                    1,
+                    video.Quantity,
                     quote.Value.TotalCoins,
                     IsFailed(chat.Status) ? quote.Value.TotalCoins : 0m));
             }
@@ -352,7 +353,10 @@ public sealed class GetAdminAiSpendOverviewQueryHandler
             return false;
         }
 
-        video = new VideoChatSpend(ReadString(config, "Model") ?? "veo3_fast");
+        video = new VideoChatSpend(
+            ReadString(config, "Model") ?? "gemini-omni-video",
+            ReadString(config, "BillingVariant") ?? ReadString(config, "Variant"),
+            Math.Max(1, ReadInt(config, "BillingQuantity") ?? 1));
         return true;
     }
 
@@ -444,5 +448,5 @@ public sealed class GetAdminAiSpendOverviewQueryHandler
 
     private readonly record struct ImageChatSpend(string Model, string Resolution, int ExpectedResultCount);
 
-    private readonly record struct VideoChatSpend(string Model);
+    private readonly record struct VideoChatSpend(string Model, string? Variant, int Quantity);
 }

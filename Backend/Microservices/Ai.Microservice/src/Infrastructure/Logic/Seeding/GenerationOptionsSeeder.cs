@@ -40,8 +40,23 @@ public sealed class GenerationOptionsSeeder
         var existingPresets = await _dbContext.GenerationSocialPresets
             .ToListAsync(cancellationToken);
 
+        var retiredModels = existingModels
+            .Where(item =>
+                item.DeletedAt == null &&
+                ProviderGenerationModelCatalog.IsRetiredDefaultSeedModel(item.Mode, item.ModelId))
+            .ToList();
+
+        var retiredAt = DateTimeExtensions.PostgreSqlUtcNow;
+        foreach (var retiredModel in retiredModels)
+        {
+            retiredModel.IsActive = false;
+            retiredModel.DeletedAt = retiredAt;
+            retiredModel.UpdatedAt = retiredAt;
+        }
+
         var modelAdds = ProviderGenerationModelCatalog.DefaultSeedModels
             .Where(seed => existingModels.All(item =>
+                item.DeletedAt != null ||
                 !string.Equals(item.Mode, seed.Mode, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(item.ModelId, seed.ModelId, StringComparison.OrdinalIgnoreCase)))
             .Select(ToEntity)
@@ -55,7 +70,7 @@ public sealed class GenerationOptionsSeeder
             .Select(ToEntity)
             .ToList();
 
-        if (modelAdds.Count == 0 && presetAdds.Count == 0)
+        if (modelAdds.Count == 0 && presetAdds.Count == 0 && retiredModels.Count == 0)
         {
             _logger.LogInformation("Generation options catalog already contains seed data.");
             return;
@@ -74,9 +89,10 @@ public sealed class GenerationOptionsSeeder
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Seeded {ModelCount} generation model options and {PresetCount} generation social presets.",
+            "Seeded {ModelCount} generation model options and {PresetCount} generation social presets; retired {RetiredModelCount} obsolete seeded models.",
             modelAdds.Count,
-            presetAdds.Count);
+            presetAdds.Count,
+            retiredModels.Count);
     }
 
     private static GenerationModelOption ToEntity(ProviderGenerationModelOption seed)

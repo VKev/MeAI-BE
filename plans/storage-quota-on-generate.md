@@ -92,9 +92,10 @@ Estimator phải dùng cấu hình nội bộ `GenerationStorageEstimates`, khô
 Default config v1:
 - image `1K = 5 MB`
 - image `2K = 12 MB`
-- video `veo3_fast = 150 MB`
-- video `veo3 = 250 MB`
-- video `veo3_quality = 350 MB`
+- video `gemini-omni-video = 150 MB`
+- video `grok-imagine-video-1-5-preview = 150 MB`
+- video `veo-3-1 = 250 MB`
+- video `bytedance/seedance-2 = 250 MB`
 
 Áp dụng pre-check tại:
 - `CreateChatImageCommandHandler`

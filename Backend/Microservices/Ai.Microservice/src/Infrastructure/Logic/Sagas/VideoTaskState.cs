@@ -18,7 +18,9 @@ public class VideoTaskState : SagaStateMachineInstance, ISagaVersion
 
     public string Prompt { get; set; } = null!;
 
-    public string Model { get; set; } = "veo3_fast";
+    public string Model { get; set; } = "gemini-omni-video";
+
+    public string? Variant { get; set; }
 
     public string AspectRatio { get; set; } = "16:9";
 
@@ -31,6 +33,16 @@ public class VideoTaskState : SagaStateMachineInstance, ISagaVersion
     public bool EnableTranslation { get; set; } = true;
 
     public string? Watermark { get; set; }
+
+    public string? Resolution { get; set; }
+
+    public int? Duration { get; set; }
+
+    public bool? GenerateAudio { get; set; }
+
+    public bool? ReturnLastFrame { get; set; }
+
+    public bool? WebSearch { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

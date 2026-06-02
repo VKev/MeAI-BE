@@ -11,12 +11,18 @@ public sealed record GenerateVideoCommand(
     Guid UserId,
     string Prompt,
     List<string>? ImageUrls = null,
-    string Model = "veo3_fast",
+    string Model = "gemini-omni-video",
     string? GenerationType = null,
     string AspectRatio = "16:9",
     int? Seeds = null,
     bool EnableTranslation = true,
-    string? Watermark = null) : IRequest<Result<GenerateVideoCommandResponse>>;
+    string? Watermark = null,
+    string? Variant = null,
+    string? Resolution = null,
+    int? Duration = null,
+    bool? GenerateAudio = null,
+    bool? ReturnLastFrame = null,
+    bool? WebSearch = null) : IRequest<Result<GenerateVideoCommandResponse>>;
 
 public sealed record GenerateVideoCommandResponse(Guid CorrelationId);
 
@@ -51,11 +57,17 @@ public sealed class GenerateVideoCommandHandler
             Prompt = request.Prompt,
             ImageUrls = request.ImageUrls,
             Model = request.Model,
+            Variant = request.Variant,
             GenerationType = request.GenerationType,
             AspectRatio = request.AspectRatio,
             Seeds = request.Seeds,
             EnableTranslation = request.EnableTranslation,
             Watermark = request.Watermark,
+            Resolution = request.Resolution,
+            Duration = request.Duration,
+            GenerateAudio = request.GenerateAudio,
+            ReturnLastFrame = request.ReturnLastFrame,
+            WebSearch = request.WebSearch,
             CreatedAt = DateTimeExtensions.PostgreSqlUtcNow
         };
 
@@ -71,11 +83,17 @@ public sealed class GenerateVideoCommandHandler
                 {
                     correlationId,
                     request.Model,
+                    request.Variant,
                     request.GenerationType,
                     request.AspectRatio,
                     request.Seeds,
                     request.EnableTranslation,
-                    request.Watermark
+                    request.Watermark,
+                    request.Resolution,
+                    request.Duration,
+                    request.GenerateAudio,
+                    request.ReturnLastFrame,
+                    request.WebSearch
                 },
                 request.UserId,
                 message.CreatedAt,

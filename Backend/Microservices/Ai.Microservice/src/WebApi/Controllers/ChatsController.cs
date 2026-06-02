@@ -276,7 +276,14 @@ public sealed class ChatsController : ApiController
             AspectRatio: request.AspectRatio,
             Seeds: request.Seeds,
             EnableTranslation: request.EnableTranslation,
-            Watermark: request.Watermark);
+            Watermark: request.Watermark,
+            Variant: request.Variant,
+            GenerationType: request.GenerationType,
+            Resolution: request.Resolution,
+            Duration: request.Duration,
+            GenerateAudio: request.GenerateAudio,
+            ReturnLastFrame: request.ReturnLastFrame,
+            WebSearch: request.WebSearch);
 
         var result = await _mediator.Send(command, cancellationToken);
 
@@ -448,7 +455,14 @@ public sealed record CreateChatVideoRequest(
     string? AspectRatio,
     int? Seeds,
     bool? EnableTranslation,
-    string? Watermark);
+    string? Watermark,
+    string? Variant = null,
+    string? GenerationType = null,
+    string? Resolution = null,
+    int? Duration = null,
+    bool? GenerateAudio = null,
+    bool? ReturnLastFrame = null,
+    bool? WebSearch = null);
 
 public sealed record CreateChatImageRequest(
     string? ChatSessionId,
