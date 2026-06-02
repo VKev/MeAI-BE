@@ -289,7 +289,7 @@ public sealed class CreateChatGenerationQuotaCommandTests
             .ReturnsAsync(Result.Success<UserAiConfig?>(null));
 
         storageEstimator
-            .Setup(estimator => estimator.EstimateVideoGenerationBytes("veo3_fast"))
+            .Setup(estimator => estimator.EstimateVideoGenerationBytes("gemini-omni-video"))
             .Returns(150L * 1024 * 1024);
 
         userResourceService
@@ -314,13 +314,13 @@ public sealed class CreateChatGenerationQuotaCommandTests
         pricingService
             .Setup(service => service.GetCostAsync(
                 CoinActionTypes.VideoGeneration,
-                "veo3_fast",
+                "gemini-omni-video",
                 null,
                 1,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Success(new CoinCostQuote(
                 CoinActionTypes.VideoGeneration,
-                "veo3_fast",
+                "gemini-omni-video",
                 null,
                 "per_video",
                 90m,
@@ -420,7 +420,7 @@ public sealed class CreateChatGenerationQuotaCommandTests
             .ReturnsAsync(Result.Success<UserAiConfig?>(null));
 
         storageEstimator
-            .Setup(estimator => estimator.EstimateVideoGenerationBytes("veo3_fast"))
+            .Setup(estimator => estimator.EstimateVideoGenerationBytes("gemini-omni-video"))
             .Returns(150L * 1024 * 1024);
 
         userResourceService

@@ -15,7 +15,7 @@ public sealed class CoinPricingCatalogEntry
     // "image_generation" | "image_reframe_variant" | "video_generation".
     public string ActionType { get; set; } = null!;
 
-    // Kie model identifier — "nano-banana-pro" | "veo3_fast" | "veo3" | "veo3_quality".
+    // Kie model identifier, for example "nano-banana-pro" or "gemini-omni-video".
     public string Model { get; set; } = null!;
 
     // Free-form tag to disambiguate within a model — "1K" / "2K" for image resolution,

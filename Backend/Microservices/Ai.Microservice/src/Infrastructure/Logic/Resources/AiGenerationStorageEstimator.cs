@@ -26,10 +26,10 @@ public sealed class AiGenerationStorageEstimator : IAiGenerationStorageEstimator
 
     public long EstimateVideoGenerationBytes(string model)
     {
-        var normalizedModel = string.IsNullOrWhiteSpace(model) ? "veo3_fast" : model.Trim();
+        var normalizedModel = string.IsNullOrWhiteSpace(model) ? "gemini-omni-video" : model.Trim();
         var mb = _options.VideosByModelMb.TryGetValue(normalizedModel, out var configuredMb)
             ? configuredMb
-            : _options.VideosByModelMb["veo3_fast"];
+            : _options.VideosByModelMb["gemini-omni-video"];
 
         return mb * BytesPerMb;
     }

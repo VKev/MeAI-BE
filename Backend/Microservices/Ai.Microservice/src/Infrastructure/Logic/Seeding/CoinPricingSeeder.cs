@@ -22,6 +22,7 @@ public sealed class CoinPricingSeeder
     // Model="*" is a wildcard fallback — any unseeded model falls back to this row so a
     // brand-new Kie model doesn't 400 the generation request. Admins can tweak at runtime.
     private static readonly (string ActionType, string Model, string? Variant, string Unit, decimal Cost)[] Defaults =
+    new (string ActionType, string Model, string? Variant, string Unit, decimal Cost)[]
     {
         (CoinActionTypes.ImageGeneration, "nano-banana-pro", "1K", "per_image", UsdToCoins(0.06m)),
         (CoinActionTypes.ImageGeneration, "nano-banana-pro", "2K", "per_image", UsdToCoins(0.12m)),
@@ -32,6 +33,37 @@ public sealed class CoinPricingSeeder
         (CoinActionTypes.ImageGeneration, "*", null, "per_image", UsdToCoins(0.10m)),
         (CoinActionTypes.ImageReframeVariant, "nano-banana-pro", null, "per_variant", UsdToCoins(0.06m)),
         (CoinActionTypes.ImageReframeVariant, "*", null, "per_variant", UsdToCoins(0.10m)),
+        // Default video catalog. These prices match the fixed request defaults sent by
+        // VeoVideoService: Gemini Omni 4s/720p, Veo 3.1 720p tiers, and the
+        // resolution/duration-specific Gemini Omni clips and resolution-specific per-second
+        // rates for Grok 1.5 Preview and Seedance 2.
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", null, "per_clip", UsdToCoins(0.45m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "720p:4s", "per_clip", UsdToCoins(0.45m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "720p:6s", "per_clip", UsdToCoins(0.60m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "720p:8s", "per_clip", UsdToCoins(0.75m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "720p:10s", "per_clip", UsdToCoins(0.90m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "1080p:4s", "per_clip", UsdToCoins(0.45m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "1080p:6s", "per_clip", UsdToCoins(0.60m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "1080p:8s", "per_clip", UsdToCoins(0.75m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "1080p:10s", "per_clip", UsdToCoins(0.90m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "4k:4s", "per_clip", UsdToCoins(1.05m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "4k:6s", "per_clip", UsdToCoins(1.20m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "4k:8s", "per_clip", UsdToCoins(1.35m)),
+        (CoinActionTypes.VideoGeneration, "gemini-omni-video", "4k:10s", "per_clip", UsdToCoins(1.50m)),
+        // Keep model-default rows for historical chats created before duration-aware pricing.
+        (CoinActionTypes.VideoGeneration, "grok-imagine-video-1-5-preview", null, "per_clip", UsdToCoins(0.64m)),
+        (CoinActionTypes.VideoGeneration, "grok-imagine-video-1-5-preview", "480p", "per_second", UsdToCoins(0.08m)),
+        (CoinActionTypes.VideoGeneration, "grok-imagine-video-1-5-preview", "720p", "per_second", UsdToCoins(0.14m)),
+        (CoinActionTypes.VideoGeneration, "veo-3-1", null, "per_clip", UsdToCoins(0.30m)),
+        (CoinActionTypes.VideoGeneration, "veo-3-1", "lite", "per_clip", UsdToCoins(0.15m)),
+        (CoinActionTypes.VideoGeneration, "veo-3-1", "fast", "per_clip", UsdToCoins(0.30m)),
+        (CoinActionTypes.VideoGeneration, "veo-3-1", "quality", "per_clip", UsdToCoins(1.25m)),
+        (CoinActionTypes.VideoGeneration, "bytedance/seedance-2", null, "per_clip", UsdToCoins(1.025m)),
+        (CoinActionTypes.VideoGeneration, "bytedance/seedance-2", "480p", "per_second", UsdToCoins(0.095m)),
+        (CoinActionTypes.VideoGeneration, "bytedance/seedance-2", "720p", "per_second", UsdToCoins(0.205m)),
+        (CoinActionTypes.VideoGeneration, "bytedance/seedance-2", "1080p", "per_second", UsdToCoins(0.51m)),
+        // Keep legacy rows active so older in-flight and failed chats can still resolve
+        // their original debit or refund amount.
         (CoinActionTypes.VideoGeneration, "veo3_fast", null, "per_clip", UsdToCoins(0.90m)),
         (CoinActionTypes.VideoGeneration, "veo3", null, "per_clip", UsdToCoins(5.40m)),
         (CoinActionTypes.VideoGeneration, "veo3_quality", null, "per_clip", UsdToCoins(5.40m)),
@@ -58,7 +90,24 @@ public sealed class CoinPricingSeeder
         (CoinActionTypes.DraftPostGeneration, "*", null, "per_request", GeneratedPostCoinCost.BaseCoins),
         (CoinActionTypes.FormulaGeneration, "gpt-4o-mini", null, "per_variant", UsdToCoins(0.0004m)),
         (CoinActionTypes.FormulaGeneration, "*", null, "per_variant", UsdToCoins(0.0004m))
-    };
+    }.Concat(CreateGrokPreviewPrices()).ToArray();
+
+    private static IEnumerable<(string ActionType, string Model, string? Variant, string Unit, decimal Cost)> CreateGrokPreviewPrices()
+    {
+        const decimal requiredSourceImageUsd = 0.01m;
+        foreach (var (resolution, outputUsdPerSecond) in new[] { ("480p", 0.08m), ("720p", 0.14m) })
+        {
+            for (var duration = 1; duration <= 15; duration++)
+            {
+                yield return (
+                    CoinActionTypes.VideoGeneration,
+                    "grok-imagine-video-1-5-preview",
+                    $"{resolution}:{duration}s",
+                    "per_clip",
+                    UsdToCoins((outputUsdPerSecond * duration) + requiredSourceImageUsd));
+            }
+        }
+    }
 
     private readonly MyDbContext _dbContext;
     private readonly ILogger<CoinPricingSeeder> _logger;

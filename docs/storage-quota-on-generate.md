@@ -57,9 +57,10 @@ Response:
 
 ### Video
 
-- `veo3_fast` = `150 MB`
-- `veo3` = `250 MB`
-- `veo3_quality` = `350 MB`
+- `gemini-omni-video` = `150 MB`
+- `grok-imagine-video-1-5-preview` = `150 MB`
+- `veo-3-1` = `250 MB`
+- `bytedance/seedance-2` = `250 MB`
 
 ## Khi quota không đủ
 

@@ -18,7 +18,7 @@ public sealed class VideoTask
 
     public string Prompt { get; set; } = null!;
 
-    public string Model { get; set; } = "veo3_fast";
+    public string Model { get; set; } = "gemini-omni-video";
 
     public string AspectRatio { get; set; } = "16:9";
 

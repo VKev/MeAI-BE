@@ -63,7 +63,13 @@ public class SubmitVideoTaskConsumer : IConsumer<VideoGenerationStarted>
             Seeds: message.Seeds,
             EnableTranslation: message.EnableTranslation,
             Watermark: message.Watermark,
-            CorrelationId: message.CorrelationId);
+            CorrelationId: message.CorrelationId,
+            Variant: message.Variant,
+            Resolution: message.Resolution,
+            Duration: message.Duration,
+            GenerateAudio: message.GenerateAudio,
+            ReturnLastFrame: message.ReturnLastFrame,
+            WebSearch: message.WebSearch);
 
         var result = await _veoVideoService.GenerateVideoAsync(request, context.CancellationToken);
 

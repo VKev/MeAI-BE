@@ -39,6 +39,9 @@ public static class ProviderGenerationModelCatalog
     private static readonly string[] GrokVideoRatios =
         ["2:3", "3:2", "1:1", "16:9", "9:16"];
 
+    private static readonly string[] Grok15VideoRatios =
+        ["auto", "1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"];
+
     private static readonly string[] ImageQualities = ["1K", "2K", "4K"];
 
     private static readonly string[] ImageQualities2K = ["1K", "2K"];
@@ -85,6 +88,10 @@ public static class ProviderGenerationModelCatalog
         new("kie", "image", "qwen2/image-edit", "Qwen2 Image Edit", "Qwen2 prompt-based image editing", FullImageRatios, [], false, 320),
         new("kie", "image", "wan/2-7-image", "Wan 2.7 Image", "Wan 2.7 image generation", UltraWideImageRatios, ImageQualities, true, 330),
         new("kie", "image", "wan/2-7-image-pro", "Wan 2.7 Image Pro", "Wan 2.7 high-quality image generation", UltraWideImageRatios, ImageQualities, true, 340),
+        new("kie", "video", "gemini-omni-video", "Gemini Omni Video", "Google multimodal video generation", ["16:9", "9:16"], ["720p", "1080p", "4k"], true, 10),
+        new("kie", "video", "grok-imagine-video-1-5-preview", "Grok Imagine Video 1.5 Preview", "xAI video generation with optional image guidance", Grok15VideoRatios, ["480p", "720p"], true, 20),
+        new("kie", "video", "veo-3-1", "Veo 3.1", "Google Veo 3.1 video generation with Lite, Fast, and Quality tiers", VeoDimensions, ["lite", "fast", "quality"], true, 30),
+        new("kie", "video", "bytedance/seedance-2", "Seedance 2.0", "ByteDance Seedance 2 multimodal video generation", ExtendedVideoRatios, ["480p", "720p", "1080p"], true, 40),
         new("kie", "video", "veo3_fast", "Veo 3.1 Fast", "Google - fast video generation", VeoDimensions, [], false, 10),
         new("kie", "video", "veo3", "Veo 3.1 Quality", "Google - highest fidelity video", VeoDimensions, [], false, 20),
         new("kie", "video", "veo3_lite", "Veo 3.1 Lite", "Google - cost-effective for high volume", VeoDimensions, [], false, 30),
@@ -98,7 +105,6 @@ public static class ProviderGenerationModelCatalog
         new("kie", "video", "kling/v2-1-master-image-to-video", "Kling 2.1 Master Image", "Kling master image-to-video generation", VideoRatios, [], false, 110),
         new("kie", "video", "kling/v2-1-pro", "Kling 2.1 Pro", "Kling pro image-to-video generation", VideoRatios, [], false, 120),
         new("kie", "video", "kling/v2-1-standard", "Kling 2.1 Standard", "Kling standard image-to-video generation", VideoRatios, [], false, 130),
-        new("kie", "video", "bytedance/seedance-2", "Seedance 2.0", "ByteDance Seedance 2 video generation", ExtendedVideoRatios, ["480p", "720p", "1080p"], true, 140),
         new("kie", "video", "bytedance/seedance-2-fast", "Seedance 2.0 Fast", "ByteDance fast Seedance 2 generation", ExtendedVideoRatios, ["480p", "720p"], true, 150),
         new("kie", "video", "bytedance/seedance-1.5-pro", "Seedance 1.5 Pro", "ByteDance text/image-to-video generation", ExtendedVideoRatios, ["480p", "720p", "1080p"], true, 160),
         new("kie", "video", "bytedance/v1-pro-text-to-video", "ByteDance V1 Pro", "ByteDance V1 Pro text-to-video", ExtendedVideoRatios, ["480p", "720p", "1080p"], true, 170),
@@ -125,7 +131,6 @@ public static class ProviderGenerationModelCatalog
         new("kie", "video", "happyhorse/text-to-video", "HappyHorse", "HappyHorse text-to-video generation", ["16:9", "9:16", "1:1", "4:3", "3:4"], VideoQualities, true, 380),
         new("kie", "video", "happyhorse/image-to-video", "HappyHorse Image", "HappyHorse image-to-video generation", ["16:9", "9:16", "1:1", "4:3", "3:4"], VideoQualities, true, 390),
         new("kie", "video", "happyhorse/reference-to-video", "HappyHorse Reference", "HappyHorse reference-to-video generation", ["16:9", "9:16", "1:1", "4:3", "3:4"], VideoQualities, true, 400),
-        new("kie", "video", "gemini-omni-video", "Gemini Omni Video", "Gemini Omni video generation", ["16:9", "9:16"], ["720p", "1080p", "4k"], true, 410),
         new("kie", "video", "sora-2-text-to-video", "Sora 2", "OpenAI text-to-video through Kie market", ["16:9", "9:16"], [], false, 420)
     ];
 
@@ -134,6 +139,14 @@ public static class ProviderGenerationModelCatalog
         ModelKey("image", "nano-banana-2"),
         ModelKey("image", "ideogram/v3-text-to-image"),
         ModelKey("image", "gpt-image-2-text-to-image"),
+        ModelKey("video", "gemini-omni-video"),
+        ModelKey("video", "grok-imagine-video-1-5-preview"),
+        ModelKey("video", "veo-3-1"),
+        ModelKey("video", "bytedance/seedance-2")
+    };
+
+    private static readonly HashSet<string> RetiredDefaultSeedModelKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
         ModelKey("video", "veo3_fast"),
         ModelKey("video", "veo3"),
         ModelKey("video", "veo3_lite")
@@ -163,6 +176,14 @@ public static class ProviderGenerationModelCatalog
 
     public static bool IsDefaultSeedModel(string mode, string modelId)
         => DefaultSeedModelKeys.Contains(ModelKey(mode, modelId));
+
+    public static bool IsRetiredDefaultSeedModel(string mode, string modelId)
+        => RetiredDefaultSeedModelKeys.Contains(ModelKey(mode, modelId));
+
+    public static bool IsKnownModel(string mode, string modelId)
+        => Models.Any(model =>
+            string.Equals(model.Mode, mode, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(model.ModelId, modelId, StringComparison.OrdinalIgnoreCase));
 
     private static string ModelKey(string mode, string modelId) => $"{mode}:{modelId}";
 }
