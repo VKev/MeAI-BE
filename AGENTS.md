@@ -854,6 +854,9 @@ the matching GH secret.
 - `terraform-deploy.yml` — infra-only plan/apply/destroy.
 - `build-and-push-ecr.yml` — build/push microservice images to ECR.
 - `build-and-push-dockerhub.yml` — build/push to Docker Hub.
+- `update-deployed-images.yml` — manually build/push selected ECR images, erase namespace PVC
+  data, pre-pull replacements, and recreate EKS deployments from a fresh start. Requires the
+  typed `DELETE_DEPLOYED_DATA` confirmation.
 - `bootstrap-terraform-backend.yml` — create S3/DynamoDB backend.
 - `acm-certificate.yml` — ACM cert via Cloudflare DNS.
 - Destructive: `nuke-aws-except-ecr.yml`, `erase-ecr.yml` (explicit confirmations required).
@@ -908,9 +911,11 @@ Cloudflare CDN host and belongs in Terraform/k8s deployment config, not local co
   a port or rename `/health`, update the corresponding `health_check` block in
   `Terraform-vars/*-service.auto.tfvars` and the k8s probe in
   `Backend/Kubernetes/manifests/`.
-- **Volumes that must survive a deploy**: `postgres-data`, `qdrant-data`, `rag-data`.
-  Never include them in a workflow that runs `docker compose down -v`. The ECS task
-  defs / k8s PVCs treat them as durable — match that locally.
+- **Volumes normally survive a deploy**: `postgres-data`, `qdrant-data`, `rag-data`.
+  Never include them in a routine automated workflow that runs `docker compose down -v`.
+  The manual `update-deployed-images.yml` workflow is the explicit destructive exception:
+  it deletes and recreates every PVC in the selected EKS namespace after requiring the typed
+  `DELETE_DEPLOYED_DATA` confirmation.
 
 ## 21. Security & secrets
 

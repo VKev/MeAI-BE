@@ -1,4 +1,4 @@
-name: Update Deployed EKS Images
+name: Fresh Start Deployed EKS Images
 
 on:
   workflow_dispatch:
@@ -13,32 +13,10 @@ on:
         type: string
         default: all
         required: true
-      cluster_name:
-        description: "Optional EKS cluster name. Leave empty to derive from project_name."
+      fresh_start_confirmation:
+        description: "Destructive: type DELETE_DEPLOYED_DATA to erase all namespace PVC data before rollout."
         type: string
         default: ""
-        required: false
-      namespace:
-        description: "Optional Kubernetes namespace. Leave empty to use project_name."
-        type: string
-        default: ""
-        required: false
-      rollout_timeout:
-        description: "kubectl rollout status timeout."
-        type: string
-        default: 15m
-        required: true
-      skip_missing_deployments:
-        description: "Skip services whose deployment does not exist yet."
-        type: choice
-        options: ["false", "true"]
-        default: "false"
-        required: true
-      pre_pull_images:
-        description: "Pre-pull new images on every EKS node before replacing pods."
-        type: choice
-        options: ["true", "false"]
-        default: "true"
         required: true
 
 env:
@@ -59,6 +37,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Require destructive fresh-start confirmation
+        env:
+          FRESH_START_CONFIRMATION: ${{ inputs.fresh_start_confirmation }}
+        run: |
+          set -euo pipefail
+          if [ "$FRESH_START_CONFIRMATION" != "DELETE_DEPLOYED_DATA" ]; then
+            echo "Refusing destructive rollout. Set fresh_start_confirmation to DELETE_DEPLOYED_DATA." >&2
+            exit 1
+          fi
 
       - name: Discover selected microservices
         id: get-services
@@ -373,26 +361,14 @@ jobs:
           echo "ECR_REPO_NAME=$REPO" >> "$GITHUB_ENV"
 
       - name: Resolve cluster and namespace
-        env:
-          CLUSTER_NAME_INPUT: ${{ inputs.cluster_name }}
-          NAMESPACE_INPUT: ${{ inputs.namespace }}
         run: |
           set -euo pipefail
 
-          if [ -n "$CLUSTER_NAME_INPUT" ]; then
-            CLUSTER_NAME="$CLUSTER_NAME_INPUT"
-          else
-            project_slug=$(printf '%s' "$PROJECT_NAME" | tr '_' '-')
-            prefix=$(printf '%s' "$project_slug" | cut -c1-18)
-            hash=$(printf '%s' "$PROJECT_NAME" | md5sum | cut -c1-4)
-            CLUSTER_NAME="${prefix}-${hash}-eks"
-          fi
-
-          if [ -n "$NAMESPACE_INPUT" ]; then
-            K8S_NAMESPACE="$NAMESPACE_INPUT"
-          else
-            K8S_NAMESPACE="$PROJECT_NAME"
-          fi
+          project_slug=$(printf '%s' "$PROJECT_NAME" | tr '_' '-')
+          prefix=$(printf '%s' "$project_slug" | cut -c1-18)
+          hash=$(printf '%s' "$PROJECT_NAME" | md5sum | cut -c1-4)
+          CLUSTER_NAME="${prefix}-${hash}-eks"
+          K8S_NAMESPACE="$PROJECT_NAME"
 
           echo "EKS_CLUSTER_NAME=$CLUSTER_NAME" >> "$GITHUB_ENV"
           echo "K8S_NAMESPACE=$K8S_NAMESPACE" >> "$GITHUB_ENV"
@@ -418,9 +394,8 @@ jobs:
           SERVICES: ${{ needs.discover-services.outputs.services }}
           IMAGE_TAG: ${{ github.sha }}
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          SKIP_MISSING_DEPLOYMENTS: ${{ inputs.skip_missing_deployments }}
-          PRE_PULL_IMAGES: ${{ inputs.pre_pull_images }}
-          ROLLOUT_TIMEOUT: ${{ inputs.rollout_timeout }}
+          SKIP_MISSING_DEPLOYMENTS: "false"
+          ROLLOUT_TIMEOUT: 15m
           RUN_STAMP: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
@@ -440,6 +415,9 @@ jobs:
           plan_file="$(mktemp)"
           unsorted_plan="$(mktemp)"
           strategy_dir="$(mktemp -d)"
+          replica_file="$(mktemp)"
+          pvc_snapshot="$(mktemp)"
+          pvc_manifest="$(mktemp)"
           prepull_name="meai-prepull-${RUN_STAMP}"
           prepull_manifest="$(mktemp)"
 
@@ -452,12 +430,20 @@ jobs:
             done
           }
 
+          restore_replicas() {
+            [ -s "$replica_file" ] || return 0
+            while IFS=$'\t' read -r deployment replicas; do
+              kubectl -n "$K8S_NAMESPACE" scale deployment "$deployment" --replicas="$replicas" >/dev/null 2>&1 || true
+            done < "$replica_file"
+          }
+
           cleanup_prepull() {
             kubectl -n "$K8S_NAMESPACE" delete daemonset "$prepull_name" --ignore-not-found --wait=false >/dev/null 2>&1 || true
           }
 
           cleanup() {
             cleanup_prepull
+            restore_replicas
             restore_strategies
           }
           trap cleanup EXIT
@@ -504,6 +490,49 @@ jobs:
             exit 0
           fi
 
+          echo "Scaling namespace deployments to zero before deleting persistent data..."
+          kubectl -n "$K8S_NAMESPACE" get deployments -o json \
+            | jq -r '.items[] | [.metadata.name, (.spec.replicas // 1)] | @tsv' \
+            > "$replica_file"
+
+          while IFS=$'\t' read -r deployment _; do
+            kubectl -n "$K8S_NAMESPACE" scale deployment "$deployment" --replicas=0
+          done < "$replica_file"
+
+          kubectl -n "$K8S_NAMESPACE" delete pods --all --wait=true --timeout=5m
+
+          echo "Snapshotting and deleting all namespace PVCs..."
+          kubectl -n "$K8S_NAMESPACE" get pvc -o json > "$pvc_snapshot"
+          pvc_count="$(jq '.items | length' "$pvc_snapshot")"
+
+          if [ "$pvc_count" -gt 0 ]; then
+            jq '{
+              apiVersion: "v1",
+              kind: "List",
+              items: [
+                .items[] | {
+                  apiVersion: "v1",
+                  kind: "PersistentVolumeClaim",
+                  metadata: {
+                    name: .metadata.name,
+                    namespace: .metadata.namespace,
+                    labels: (.metadata.labels // {})
+                  },
+                  spec: (.spec | del(.volumeName))
+                }
+              ]
+            }' "$pvc_snapshot" > "$pvc_manifest"
+
+            kubectl -n "$K8S_NAMESPACE" delete pvc --all --wait=true --timeout=10m
+            kubectl -n "$K8S_NAMESPACE" apply -f "$pvc_manifest"
+
+          else
+            echo "No PVCs exist in namespace $K8S_NAMESPACE."
+          fi
+
+          echo "Fresh-start storage reset complete: deleted and recreated $pvc_count PVC(s)." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
           echo "Preparing no-surge rollout strategy for selected deployments..."
           while IFS=$'\t' read -r _ service deployment container image; do
             kubectl -n "$K8S_NAMESPACE" get deployment "$deployment" -o json | jq '.spec.strategy' > "$strategy_dir/$deployment.json"
@@ -512,9 +541,8 @@ jobs:
             echo "Prepared $deployment for no-surge rollout."
           done < "$plan_file"
 
-          if [ "$PRE_PULL_IMAGES" = "true" ]; then
-            echo "Pre-pulling selected images on every schedulable node..."
-            containers_json="$(jq -Rn '
+          echo "Pre-pulling selected images on every schedulable node..."
+          containers_json="$(jq -Rn '
               [inputs | select(length > 0) | split("\t") |
                 {
                   name: ("pull-" + (.[1] | ascii_downcase | gsub("[^a-z0-9-]"; "-") | gsub("-+"; "-") | sub("^-"; "") | sub("-$"; ""))),
@@ -528,10 +556,10 @@ jobs:
                 }
               ]' < "$plan_file")"
 
-            jq -n \
-              --arg name "$prepull_name" \
-              --argjson containers "$containers_json" \
-              '{
+          jq -n \
+            --arg name "$prepull_name" \
+            --argjson containers "$containers_json" \
+            '{
                 apiVersion: "apps/v1",
                 kind: "DaemonSet",
                 metadata: {
@@ -552,12 +580,11 @@ jobs:
                     }
                   }
                 }
-              }' > "$prepull_manifest"
+            }' > "$prepull_manifest"
 
-            kubectl -n "$K8S_NAMESPACE" apply -f "$prepull_manifest"
-            kubectl -n "$K8S_NAMESPACE" rollout status "daemonset/$prepull_name" --timeout=5m
-            echo "Image pre-pull completed."
-          fi
+          kubectl -n "$K8S_NAMESPACE" apply -f "$prepull_manifest"
+          kubectl -n "$K8S_NAMESPACE" rollout status "daemonset/$prepull_name" --timeout=5m
+          echo "Image pre-pull completed."
 
           while IFS=$'\t' read -r _ service deployment container image; do
             echo "Updating $deployment/$container to $image"
@@ -587,6 +614,23 @@ jobs:
               }')"
 
             kubectl -n "$K8S_NAMESPACE" patch deployment "$deployment" --type strategic -p "$patch_payload"
-            kubectl -n "$K8S_NAMESPACE" rollout status "deployment/$deployment" --timeout="$ROLLOUT_TIMEOUT"
-            echo "| $service | $deployment | $image | rolled out |" >> "$GITHUB_STEP_SUMMARY"
+          done < "$plan_file"
+
+          echo "Restoring deployment replica counts..."
+          restore_replicas
+
+          if [ "$pvc_count" -gt 0 ]; then
+            kubectl -n "$K8S_NAMESPACE" get pvc -o name | while read -r claim; do
+              kubectl -n "$K8S_NAMESPACE" wait --for=jsonpath='{.status.phase}'=Bound "$claim" --timeout=10m
+            done
+          fi
+
+          while IFS=$'\t' read -r deployment replicas; do
+            if [ "$replicas" -gt 0 ]; then
+              kubectl -n "$K8S_NAMESPACE" rollout status "deployment/$deployment" --timeout="$ROLLOUT_TIMEOUT"
+            fi
+          done < "$replica_file"
+
+          while IFS=$'\t' read -r _ service deployment container image; do
+            echo "| $service | $deployment | $image | fresh-start rollout complete |" >> "$GITHUB_STEP_SUMMARY"
           done < "$plan_file"
