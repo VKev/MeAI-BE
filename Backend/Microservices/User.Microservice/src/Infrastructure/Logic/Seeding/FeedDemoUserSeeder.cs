@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Application.Abstractions.Storage;
 using Domain.Entities;
 using Infrastructure.Configuration;
 using Infrastructure.Context;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SharedLibrary.Authentication;
+using SharedLibrary.Common.Resources;
 
 namespace Infrastructure.Logic.Seeding;
 
@@ -16,7 +18,9 @@ public sealed class FeedDemoUserSeeder
     private const string RuntimeDirectoryName = "runtime";
     private const string StateFileName = "users.state.json";
     private const string MediaDirectoryName = "media";
+    private const string PackagedFeedSeedDataPath = "SeedData/Feed";
     private const string DefaultPassword = "12345678";
+    private const string StorageProvider = "s3";
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         WriteIndented = true,
@@ -25,6 +29,7 @@ public sealed class FeedDemoUserSeeder
 
     private readonly MyDbContext _dbContext;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IObjectStorageService _objectStorageService;
     private readonly FeedSeedOptions _options;
     private readonly DefaultUserSeedOptions _defaultUserOptions;
     private readonly AdminSeedOptions _adminSeedOptions;
@@ -33,6 +38,7 @@ public sealed class FeedDemoUserSeeder
     public FeedDemoUserSeeder(
         MyDbContext dbContext,
         IPasswordHasher passwordHasher,
+        IObjectStorageService objectStorageService,
         IOptions<FeedSeedOptions> options,
         IOptions<DefaultUserSeedOptions> defaultUserOptions,
         IOptions<AdminSeedOptions> adminSeedOptions,
@@ -40,6 +46,7 @@ public sealed class FeedDemoUserSeeder
     {
         _dbContext = dbContext;
         _passwordHasher = passwordHasher;
+        _objectStorageService = objectStorageService;
         _options = options.Value;
         _defaultUserOptions = defaultUserOptions.Value;
         _adminSeedOptions = adminSeedOptions.Value;
@@ -52,6 +59,7 @@ public sealed class FeedDemoUserSeeder
         var runtimeDirectory = Path.Combine(dataRoot, RuntimeDirectoryName);
         var statePath = Path.Combine(runtimeDirectory, StateFileName);
         Directory.CreateDirectory(runtimeDirectory);
+        DeleteStateFileIfExists(statePath);
 
         if (!_options.Enabled)
         {
@@ -59,7 +67,7 @@ public sealed class FeedDemoUserSeeder
             return;
         }
 
-        var mediaRoot = Path.Combine(dataRoot, MediaDirectoryName);
+        var mediaRoot = ResolveMediaRoot(dataRoot);
         if (!Directory.Exists(mediaRoot))
         {
             _logger.LogWarning("Feed demo user seed skipped: media directory was not found at {MediaRoot}.", mediaRoot);
@@ -68,10 +76,17 @@ public sealed class FeedDemoUserSeeder
 
         var mediaFiles = Directory
             .EnumerateFiles(mediaRoot, "*", SearchOption.AllDirectories)
-            .Select(filePath => new MediaFileDefinition(
-                RelativePath: Path.GetRelativePath(mediaRoot, filePath).Replace('\\', '/'),
-                ResourceType: InferResourceType(filePath),
-                ContentType: InferContentType(filePath)))
+            .Select(filePath =>
+            {
+                var fullPath = Path.GetFullPath(filePath);
+                var fileInfo = new FileInfo(fullPath);
+                return new MediaFileDefinition(
+                    FullPath: fullPath,
+                    RelativePath: Path.GetRelativePath(mediaRoot, fullPath).Replace('\\', '/'),
+                    ResourceType: InferResourceType(fullPath),
+                    ContentType: InferContentType(fullPath),
+                    SizeBytes: fileInfo.Length);
+            })
             .OrderBy(item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -88,7 +103,7 @@ public sealed class FeedDemoUserSeeder
             if (await TryWriteExistingSeedStateAsync(statePath, userPlans, mediaFiles, cancellationToken))
             {
                 _logger.LogInformation(
-                    "Feed demo user seed detected existing dataset and refreshed state at {StatePath}.",
+                    "Feed demo user seed detected existing dataset and refreshed S3-backed state at {StatePath}.",
                     statePath);
             }
             else
@@ -155,39 +170,38 @@ public sealed class FeedDemoUserSeeder
 
         var resources = new List<Resource>();
         var stateResources = new List<FeedSeedResourceState>();
+        var hasUploadFailure = false;
+
         foreach (var user in users.Where(item => mediaRichUsernames.Contains(item.Username)))
         {
             foreach (var mediaFile in mediaFiles)
             {
                 var resourceId = CreateDeterministicGuid($"feed-seed:resource:{user.Username}:{mediaFile.RelativePath}");
-                var link = BuildSeedMediaUrl(_options.PublicBaseUrl, mediaFile.RelativePath);
                 var createdAt = now.AddMinutes(-(resources.Count + 1));
+                var uploadResult = await UploadSeedMediaAsync(user.Id, resourceId, mediaFile, cancellationToken);
+                if (uploadResult is null)
+                {
+                    hasUploadFailure = true;
+                    continue;
+                }
 
-                resources.Add(new Resource
+                var resource = new Resource
                 {
                     Id = resourceId,
                     UserId = user.Id,
-                    Link = link,
-                    Status = "ready",
-                    ResourceType = mediaFile.ResourceType,
-                    ContentType = mediaFile.ContentType,
-                    CreatedAt = createdAt,
-                    UpdatedAt = createdAt,
-                    IsDeleted = false,
-                    DeletedAt = null
-                });
+                    CreatedAt = createdAt
+                };
 
-                stateResources.Add(new FeedSeedResourceState
-                {
-                    Id = resourceId,
-                    UserId = user.Id,
-                    FileName = Path.GetFileName(mediaFile.RelativePath),
-                    RelativePath = mediaFile.RelativePath,
-                    ResourceType = mediaFile.ResourceType,
-                    ContentType = mediaFile.ContentType,
-                    Link = link
-                });
+                ApplyUploadedStorage(resource, uploadResult, mediaFile, createdAt);
+                resources.Add(resource);
+                stateResources.Add(ToStateResource(resource, mediaFile));
             }
+        }
+
+        if (hasUploadFailure)
+        {
+            _logger.LogWarning("Feed demo user seed skipped: one or more media files failed to upload to object storage.");
+            return;
         }
 
         _dbContext.Resources.AddRange(resources);
@@ -196,15 +210,7 @@ public sealed class FeedDemoUserSeeder
         var state = new FeedSeedState
         {
             SeededAtUtc = now,
-            Users = userPlans.Select(plan => new FeedSeedUserState
-            {
-                Id = CreateDeterministicGuid($"feed-seed:user:{plan.Username}"),
-                Username = plan.Username,
-                Email = plan.Email,
-                FullName = plan.FullName,
-                ProfileKind = plan.ProfileKind,
-                HasMedia = plan.HasMedia
-            }).ToList(),
+            Users = userPlans.Select(ToStateUser).ToList(),
             Resources = stateResources
         };
 
@@ -212,7 +218,7 @@ public sealed class FeedDemoUserSeeder
         await File.WriteAllTextAsync(statePath, json, cancellationToken);
 
         _logger.LogInformation(
-            "Seeded {UserCount} feed demo users and {ResourceCount} media resources. State written to {StatePath}.",
+            "Seeded {UserCount} feed demo users and uploaded {ResourceCount} media resources to object storage. State written to {StatePath}.",
             users.Count,
             resources.Count,
             statePath);
@@ -244,49 +250,58 @@ public sealed class FeedDemoUserSeeder
             return false;
         }
 
-        var mediaRichUsers = expectedUsers
+        var expectedResources = expectedUsers
             .Where(item => item.Plan.HasMedia)
-            .ToList();
-
-        var expectedResources = mediaRichUsers
             .SelectMany(
-                item => mediaFiles.Select(mediaFile => new FeedSeedResourceState
-                {
-                    Id = CreateDeterministicGuid($"feed-seed:resource:{item.Plan.Username}:{mediaFile.RelativePath}"),
-                    UserId = item.UserId,
-                    FileName = Path.GetFileName(mediaFile.RelativePath),
-                    RelativePath = mediaFile.RelativePath,
-                    ResourceType = mediaFile.ResourceType,
-                    ContentType = mediaFile.ContentType,
-                    Link = BuildSeedMediaUrl(_options.PublicBaseUrl, mediaFile.RelativePath)
-                }))
+                item => mediaFiles.Select(mediaFile => new ExpectedFeedSeedResource(
+                    Id: CreateDeterministicGuid($"feed-seed:resource:{item.Plan.Username}:{mediaFile.RelativePath}"),
+                    UserId: item.UserId,
+                    MediaFile: mediaFile)))
             .ToList();
 
         var expectedResourceIds = expectedResources.Select(item => item.Id).ToList();
-        var existingResourceIds = await _dbContext.Resources
-            .AsNoTracking()
-            .Where(resource => !resource.IsDeleted && expectedResourceIds.Contains(resource.Id))
-            .Select(resource => resource.Id)
+        var existingResources = await _dbContext.Resources
+            .Where(resource => expectedResourceIds.Contains(resource.Id))
             .ToListAsync(cancellationToken);
 
-        if (existingResourceIds.Count != expectedResourceIds.Count)
+        if (existingResources.Count != expectedResourceIds.Count)
         {
             return false;
         }
 
+        var resourcesById = existingResources.ToDictionary(resource => resource.Id);
+        var stateResources = new List<FeedSeedResourceState>(expectedResources.Count);
+        var hasUploadFailure = false;
+
+        foreach (var expectedResource in expectedResources)
+        {
+            var resource = resourcesById[expectedResource.Id];
+            if (!await EnsureSeedResourceUploadedAsync(
+                    resource,
+                    expectedResource.UserId,
+                    expectedResource.MediaFile,
+                    cancellationToken))
+            {
+                hasUploadFailure = true;
+                continue;
+            }
+
+            stateResources.Add(ToStateResource(resource, expectedResource.MediaFile));
+        }
+
+        if (hasUploadFailure)
+        {
+            _logger.LogWarning("Feed demo user seed state refresh failed: one or more existing media resources could not be uploaded to object storage.");
+            return false;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
         var state = new FeedSeedState
         {
             SeededAtUtc = DateTime.UtcNow,
-            Users = userPlans.Select(plan => new FeedSeedUserState
-            {
-                Id = CreateDeterministicGuid($"feed-seed:user:{plan.Username}"),
-                Username = plan.Username,
-                Email = plan.Email,
-                FullName = plan.FullName,
-                ProfileKind = plan.ProfileKind,
-                HasMedia = plan.HasMedia
-            }).ToList(),
-            Resources = expectedResources
+            Users = userPlans.Select(ToStateUser).ToList(),
+            Resources = stateResources
         };
 
         var json = JsonSerializer.Serialize(state, SerializerOptions);
@@ -316,6 +331,161 @@ public sealed class FeedDemoUserSeeder
                 select resource.Id)
             .AnyAsync(cancellationToken);
     }
+
+    private async Task<StorageUploadResult?> UploadSeedMediaAsync(
+        Guid userId,
+        Guid resourceId,
+        MediaFileDefinition mediaFile,
+        CancellationToken cancellationToken)
+    {
+        await using var fileStream = File.OpenRead(mediaFile.FullPath);
+        var uploadResult = await _objectStorageService.UploadAsync(
+            new StorageUploadRequest(
+                BuildStorageKey(userId, resourceId),
+                fileStream,
+                mediaFile.ContentType,
+                fileStream.Length),
+            cancellationToken);
+
+        if (uploadResult.IsFailure)
+        {
+            _logger.LogError(
+                "Failed to upload feed demo media {RelativePath} for resource {ResourceId}: {Error}",
+                mediaFile.RelativePath,
+                resourceId,
+                uploadResult.Error.Description);
+            return null;
+        }
+
+        return uploadResult.Value;
+    }
+
+    private async Task<bool> EnsureSeedResourceUploadedAsync(
+        Resource resource,
+        Guid expectedUserId,
+        MediaFileDefinition mediaFile,
+        CancellationToken cancellationToken)
+    {
+        if (!NeedsStorageUpload(resource, mediaFile))
+        {
+            ApplySeedResourceMetadata(resource, expectedUserId, mediaFile, DateTime.UtcNow);
+            return true;
+        }
+
+        var uploadResult = await UploadSeedMediaAsync(expectedUserId, resource.Id, mediaFile, cancellationToken);
+        if (uploadResult is null)
+        {
+            return false;
+        }
+
+        resource.UserId = expectedUserId;
+        ApplyUploadedStorage(resource, uploadResult, mediaFile, DateTime.UtcNow);
+        return true;
+    }
+
+    private static void ApplyUploadedStorage(
+        Resource resource,
+        StorageUploadResult uploadResult,
+        MediaFileDefinition mediaFile,
+        DateTime updatedAt)
+    {
+        ApplySeedResourceMetadata(resource, resource.UserId, mediaFile, updatedAt);
+        resource.Link = uploadResult.Key;
+        resource.StorageProvider = StorageProvider;
+        resource.StorageBucket = uploadResult.Bucket;
+        resource.StorageRegion = uploadResult.Region;
+        resource.StorageNamespace = uploadResult.Namespace;
+        resource.StorageKey = uploadResult.Key;
+        resource.LastVerifiedAt = updatedAt;
+        resource.DeletedFromStorageAt = null;
+    }
+
+    private static void ApplySeedResourceMetadata(
+        Resource resource,
+        Guid userId,
+        MediaFileDefinition mediaFile,
+        DateTime updatedAt)
+    {
+        resource.UserId = userId;
+        resource.Status = "ready";
+        resource.ResourceType = mediaFile.ResourceType;
+        resource.ContentType = mediaFile.ContentType;
+        resource.SizeBytes = mediaFile.SizeBytes;
+        resource.OriginalFileName = Path.GetFileName(mediaFile.RelativePath);
+        resource.OriginKind = ResourceOriginKinds.UserUpload;
+        resource.IsDeleted = false;
+        resource.DeletedAt = null;
+        resource.UpdatedAt = updatedAt;
+    }
+
+    private static bool NeedsStorageUpload(Resource resource, MediaFileDefinition mediaFile)
+    {
+        if (string.IsNullOrWhiteSpace(resource.Link) || IsSeedMediaLink(resource.Link))
+        {
+            return true;
+        }
+
+        if (!string.Equals(resource.StorageProvider, StorageProvider, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(resource.StorageKey))
+        {
+            return true;
+        }
+
+        if (resource.SizeBytes != mediaFile.SizeBytes)
+        {
+            return true;
+        }
+
+        return !string.Equals(resource.ContentType, mediaFile.ContentType, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSeedMediaLink(string link)
+    {
+        if (Uri.TryCreate(link, UriKind.Absolute, out var uri))
+        {
+            return uri.AbsolutePath.StartsWith("/api/User/seed-media/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return link.StartsWith("/api/User/seed-media/", StringComparison.OrdinalIgnoreCase) ||
+               link.Contains("/api/User/seed-media/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static FeedSeedResourceState ToStateResource(Resource resource, MediaFileDefinition mediaFile) =>
+        new()
+        {
+            Id = resource.Id,
+            UserId = resource.UserId,
+            FileName = Path.GetFileName(mediaFile.RelativePath),
+            RelativePath = mediaFile.RelativePath,
+            ResourceType = mediaFile.ResourceType,
+            ContentType = mediaFile.ContentType,
+            Link = resource.Link
+        };
+
+    private static FeedSeedUserState ToStateUser(FeedSeedUserPlan plan) =>
+        new()
+        {
+            Id = CreateDeterministicGuid($"feed-seed:user:{plan.Username}"),
+            Username = plan.Username,
+            Email = plan.Email,
+            FullName = plan.FullName,
+            ProfileKind = plan.ProfileKind,
+            HasMedia = plan.HasMedia
+        };
+
+    private static void DeleteStateFileIfExists(string statePath)
+    {
+        if (File.Exists(statePath))
+        {
+            File.Delete(statePath);
+        }
+    }
+
+    private static string BuildStorageKey(Guid userId, Guid resourceId) => $"resources/{userId}/{resourceId}";
 
     private async Task<Role> GetOrCreateUserRoleAsync(DateTime now, CancellationToken cancellationToken)
     {
@@ -396,6 +566,24 @@ public sealed class FeedDemoUserSeeder
             : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredPath));
     }
 
+    private static string ResolveMediaRoot(string dataRoot)
+    {
+        var configuredMediaRoot = Path.GetFullPath(Path.Combine(dataRoot, MediaDirectoryName));
+        if (HasMediaFiles(configuredMediaRoot))
+        {
+            return configuredMediaRoot;
+        }
+
+        var packagedMediaRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, PackagedFeedSeedDataPath, MediaDirectoryName));
+        return HasMediaFiles(packagedMediaRoot) ? packagedMediaRoot : configuredMediaRoot;
+    }
+
+    private static bool HasMediaFiles(string mediaRoot)
+    {
+        return Directory.Exists(mediaRoot) &&
+               Directory.EnumerateFiles(mediaRoot, "*", SearchOption.AllDirectories).Any();
+    }
+
     private static Guid CreateDeterministicGuid(string seed)
     {
         var bytes = MD5.HashData(Encoding.UTF8.GetBytes(seed));
@@ -432,21 +620,6 @@ public sealed class FeedDemoUserSeeder
         };
     }
 
-    private static string BuildSeedMediaUrl(string publicBaseUrl, string relativePath)
-    {
-        var normalizedBaseUrl = string.IsNullOrWhiteSpace(publicBaseUrl)
-            ? "http://localhost:2406"
-            : publicBaseUrl.TrimEnd('/');
-
-        var encodedPath = string.Join(
-            "/",
-            relativePath
-                .Split('/', StringSplitOptions.RemoveEmptyEntries)
-                .Select(Uri.EscapeDataString));
-
-        return $"{normalizedBaseUrl}/api/User/seed-media/{encodedPath}";
-    }
-
     private sealed record FeedSeedUserPlan(
         string Username,
         string Email,
@@ -455,9 +628,16 @@ public sealed class FeedDemoUserSeeder
         bool HasMedia);
 
     private sealed record MediaFileDefinition(
+        string FullPath,
         string RelativePath,
         string ResourceType,
-        string ContentType);
+        string ContentType,
+        long SizeBytes);
+
+    private sealed record ExpectedFeedSeedResource(
+        Guid Id,
+        Guid UserId,
+        MediaFileDefinition MediaFile);
 
     public sealed class FeedSeedState
     {

@@ -9,4 +9,8 @@ public sealed class FeedSeedOptions
     public string DataRoot { get; set; } = "/seed-data/feed";
 
     public string PublicBaseUrl { get; set; } = "http://localhost:2406";
+
+    public int UserStateWaitTimeoutSeconds { get; set; } = 600;
+
+    public int UserStatePollIntervalSeconds { get; set; } = 2;
 }

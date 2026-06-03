@@ -16,8 +16,6 @@ public sealed partial class FeedDemoDataSeeder
     private const string RuntimeDirectoryName = "runtime";
     private const string UserStateFileName = "users.state.json";
     private const string FeedStateFileName = "feed.state.json";
-    private static readonly TimeSpan UserStateWaitTimeout = TimeSpan.FromMinutes(2);
-    private static readonly TimeSpan UserStatePollInterval = TimeSpan.FromSeconds(2);
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -58,12 +56,14 @@ public sealed partial class FeedDemoDataSeeder
             return;
         }
 
-        if (!await WaitForUserStateAsync(userStatePath, cancellationToken))
+        var userStateWaitTimeout = ResolvePositiveTimeSpan(_options.UserStateWaitTimeoutSeconds, 600);
+        var userStatePollInterval = ResolvePositiveTimeSpan(_options.UserStatePollIntervalSeconds, 2);
+        if (!await WaitForUserStateAsync(userStatePath, userStateWaitTimeout, userStatePollInterval, cancellationToken))
         {
             _logger.LogWarning(
                 "Feed demo data seed skipped: user seed state was not found at {StatePath} after waiting {TimeoutSeconds} seconds.",
                 userStatePath,
-                UserStateWaitTimeout.TotalSeconds);
+                userStateWaitTimeout.TotalSeconds);
             return;
         }
 
@@ -718,7 +718,11 @@ public sealed partial class FeedDemoDataSeeder
             : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredPath));
     }
 
-    private static async Task<bool> WaitForUserStateAsync(string statePath, CancellationToken cancellationToken)
+    private static async Task<bool> WaitForUserStateAsync(
+        string statePath,
+        TimeSpan waitTimeout,
+        TimeSpan pollInterval,
+        CancellationToken cancellationToken)
     {
         if (HasStateFileContent(statePath))
         {
@@ -726,9 +730,9 @@ public sealed partial class FeedDemoDataSeeder
         }
 
         var startedAt = DateTime.UtcNow;
-        while (DateTime.UtcNow - startedAt < UserStateWaitTimeout)
+        while (DateTime.UtcNow - startedAt < waitTimeout)
         {
-            await Task.Delay(UserStatePollInterval, cancellationToken);
+            await Task.Delay(pollInterval, cancellationToken);
             if (HasStateFileContent(statePath))
             {
                 return true;
@@ -736,6 +740,11 @@ public sealed partial class FeedDemoDataSeeder
         }
 
         return HasStateFileContent(statePath);
+    }
+
+    private static TimeSpan ResolvePositiveTimeSpan(int seconds, int fallbackSeconds)
+    {
+        return TimeSpan.FromSeconds(seconds > 0 ? seconds : fallbackSeconds);
     }
 
     private static bool HasStateFileContent(string statePath)
