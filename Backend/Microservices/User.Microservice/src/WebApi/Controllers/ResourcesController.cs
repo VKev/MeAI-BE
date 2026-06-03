@@ -24,6 +24,8 @@ namespace WebApi.Controllers;
 [Authorize]
 public sealed class ResourcesController : ApiController
 {
+    private const string PackagedFeedSeedDataPath = "SeedData/Feed";
+    private const string MediaDirectoryName = "media";
     private readonly FeedSeedOptions _feedSeedOptions;
 
     public ResourcesController(
@@ -49,7 +51,7 @@ public sealed class ResourcesController : ApiController
             });
         }
 
-        var mediaRoot = Path.Combine(ResolveDataRoot(_feedSeedOptions.DataRoot), "media");
+        var mediaRoot = ResolveMediaRoot(ResolveDataRoot(_feedSeedOptions.DataRoot));
         if (!Directory.Exists(mediaRoot))
         {
             return NotFound(new ProblemDetails
@@ -405,5 +407,23 @@ public sealed class ResourcesController : ApiController
         return Path.IsPathRooted(configuredPath)
             ? Path.GetFullPath(configuredPath)
             : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, configuredPath));
+    }
+
+    private static string ResolveMediaRoot(string dataRoot)
+    {
+        var configuredMediaRoot = Path.GetFullPath(Path.Combine(dataRoot, MediaDirectoryName));
+        if (HasMediaFiles(configuredMediaRoot))
+        {
+            return configuredMediaRoot;
+        }
+
+        var packagedMediaRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, PackagedFeedSeedDataPath, MediaDirectoryName));
+        return HasMediaFiles(packagedMediaRoot) ? packagedMediaRoot : configuredMediaRoot;
+    }
+
+    private static bool HasMediaFiles(string mediaRoot)
+    {
+        return Directory.Exists(mediaRoot) &&
+               Directory.EnumerateFiles(mediaRoot, "*", SearchOption.AllDirectories).Any();
     }
 }
