@@ -4,16 +4,9 @@ locals {
   redis_host               = "redis"
   guest_service_host       = "guest-service"
   user_service_host        = "user-service"
-  n8n_service_connect_host = var.services["n8n"].ecs_service_connect_dns_name
-  n8n_service_port         = var.services.n8n.ecs_container_port_mappings[0].container_port
 
   # Public endpoint - use Cloudflare if enabled, then CloudFront if enabled, otherwise ALB HTTP
   public_endpoint = var.use_cloudflare ? "https://${var.cloudflare_record_name == "@" ? var.domain_name : "${var.cloudflare_record_name}.${var.domain_name}"}" : (var.use_cloudfront_https ? "https://${module.cloudfront[0].cloudfront_domain_name}" : "http://${module.alb.alb_dns_name}")
-
-  # Proxy depth for n8n - CloudFront adds one more hop (CloudFront -> ALB -> Container)
-  # Without CloudFront: 1 (ALB -> Container)
-  # With CloudFront: 2 (CloudFront -> ALB -> Container)
-  n8n_proxy_depth = var.use_cloudfront_https ? 2 : 1
 
   rds_config_defaults = {
     username                = "avnadmin"
@@ -89,7 +82,7 @@ locals {
 
   ses_placeholder_map = merge(
     {
-      "TERRAFORM_AWS_REGION" = var.aws_region
+      "TERRAFORM_AWS_REGION"  = var.aws_region
       "TERRAFORM_DOMAIN_NAME" = var.domain_name
     },
     local.ses_enabled ? {

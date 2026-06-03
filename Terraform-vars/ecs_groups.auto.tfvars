@@ -21,17 +21,6 @@ ecs_service_groups = {
     ]
     dependencies = []
   }
-  server-3 = {
-    desired_count = 1
-    containers = [
-      "n8n",
-      "nginx"
-    ]
-    volumes = []
-    dependencies = [
-      "server-1"
-    ]
-  }
   server-2 = {
     desired_count = 1
     containers = [
@@ -40,8 +29,7 @@ ecs_service_groups = {
     ]
     volumes = []
     dependencies = [
-      "server-1",
-      "server-3"
+      "server-1"
     ]
   }
 }
