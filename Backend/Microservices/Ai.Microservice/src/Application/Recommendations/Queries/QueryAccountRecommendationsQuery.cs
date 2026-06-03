@@ -136,7 +136,7 @@ public sealed class QueryAccountRecommendationsQueryHandler
         "category, website, email, phone, location, " +
         "(b) a text context block describing the user's past posts and engagement, " +
         "(c) a few reference images from past posts retrieved for the question/topic, " +
-        "(d) content guidance — copywriting formulas (FAB/BAB/AIDA/etc.), viral-hook frameworks, " +
+        "(d) optional content guidance — copywriting formulas (FAB/BAB/AIDA/etc.), viral-hook frameworks, " +
         "engagement-trigger tactics, visual-design rules, platform-specific algorithm signals. " +
         "Treat the page profile as the BRAND ANCHOR — every suggestion must align with what the " +
         "page is actually about. Do not drift off-brand even if a topic would be 'trending'.\n\n" +
@@ -165,8 +165,10 @@ public sealed class QueryAccountRecommendationsQueryHandler
         "those come from the included context. When you do search, cite specific URLs and paraphrase " +
         "concisely; do NOT dump search results.\n\n" +
         "Use the images as visual evidence — describe and reference them when relevant. " +
-        "Apply the content guidance as a writing structure — pick whichever formula or hook fits " +
-        "best for the chosen topic and target platform, and call out by name which one you used. " +
+        "Treat content guidance as optional heuristics, not truth. Before using any formula, hook, " +
+        "platform rule, or algorithm advice, decide whether it actually fits this account, topic, " +
+        "audience, and target platform. If it does not fit, ignore it and say you used a direct " +
+        "account/topic-led structure instead. If a formula fits, call out by name which one you used. " +
         "Be concrete, cite which past post(s) you're drawing from, and propose actionable next steps.";
 
     private readonly IUserSocialMediaService _userSocialMediaService;
@@ -245,7 +247,8 @@ public sealed class QueryAccountRecommendationsQueryHandler
                 : new QueryRewriteResult(
                     Language: "en", Intent: "informational",
                     PrimaryQuery: request.Query, AltQueries: Array.Empty<string>(),
-                    VisualQuery: request.Query, KeyTerms: Array.Empty<string>());
+                    VisualQuery: request.Query, KeyTerms: Array.Empty<string>(),
+                    VisualQueries: new[] { request.Query });
         }
         _logger.LogInformation(
             "RAG rewriter: lang={Lang} intent={Intent} primary={Primary} alts={Alts} visual={Visual}",
@@ -460,13 +463,13 @@ public sealed class QueryAccountRecommendationsQueryHandler
         }
         if (!string.IsNullOrWhiteSpace(platformPinned?.Answer))
         {
-            userTextBuilder.AppendLine($"=== {platform.ToUpperInvariant()} platform formula mapping (always apply) ===");
+            userTextBuilder.AppendLine($"=== {platform.ToUpperInvariant()} platform formula mapping (optional; apply only if relevant) ===");
             userTextBuilder.AppendLine(platformPinned!.Answer);
             userTextBuilder.AppendLine();
         }
         if (!string.IsNullOrWhiteSpace(semanticKnowledge?.Answer))
         {
-            userTextBuilder.AppendLine("=== Content guidance matched to the question (formulas / hooks / engagement / design / algorithm) ===");
+            userTextBuilder.AppendLine("=== Optional content guidance matched to the question (formulas / hooks / engagement / design / algorithm) ===");
             userTextBuilder.AppendLine(semanticKnowledge!.Answer);
             userTextBuilder.AppendLine();
         }

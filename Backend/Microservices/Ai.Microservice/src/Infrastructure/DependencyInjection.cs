@@ -472,6 +472,10 @@ namespace Infrastructure
                 // this consumer performs RAG + LLM work and publishes realtime status.
                 x.AddConsumer<AnalysisSuggestionConsumer>();
 
+                // Async content suggestions: queue a next-post idea prompt and store
+                // the completed prompt in Notification history for FE bell reopen.
+                x.AddConsumer<ContentSuggestionConsumer>();
+
                 x.AddSagaStateMachine<VideoTaskStateMachine, VideoTaskState>()
                     .RedisRepository(r =>
                     {

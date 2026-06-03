@@ -1,10 +1,13 @@
 using Application.Abstractions.Data;
 using Application.Abstractions.SocialMedia;
 using Application.SocialMedias;
+using Application.SocialMedias.Commands;
 using Application.SocialMedias.Models;
 using Domain.Entities;
+using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Extensions;
@@ -23,13 +26,23 @@ public sealed class CreateWorkspaceSocialMediaCommandHandler
     private readonly IRepository<SocialMedia> _socialMediaRepository;
     private readonly IRepository<WorkspaceSocialMedia> _linkRepository;
     private readonly ISocialMediaProfileService _profileService;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<CreateWorkspaceSocialMediaCommandHandler> _logger;
 
-    public CreateWorkspaceSocialMediaCommandHandler(IUnitOfWork unitOfWork, ISocialMediaProfileService profileService)
+    public CreateWorkspaceSocialMediaCommandHandler(
+        IUnitOfWork unitOfWork,
+        ISocialMediaProfileService profileService,
+        IPublishEndpoint publishEndpoint,
+        ILogger<CreateWorkspaceSocialMediaCommandHandler> logger)
     {
+        _unitOfWork = unitOfWork;
         _workspaceRepository = unitOfWork.Repository<Workspace>();
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
         _linkRepository = unitOfWork.Repository<WorkspaceSocialMedia>();
         _profileService = profileService;
+        _publishEndpoint = publishEndpoint;
+        _logger = logger;
     }
 
     public async Task<Result<SocialMediaResponse>> Handle(CreateWorkspaceSocialMediaCommand request,
@@ -88,6 +101,15 @@ public sealed class CreateWorkspaceSocialMediaCommandHandler
         };
 
         await _linkRepository.AddAsync(link, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await SocialMediaPostSyncEventPublisher.PublishAsync(
+            _publishEndpoint,
+            _logger,
+            request.UserId,
+            [socialMedia],
+            cancellationToken,
+            request.WorkspaceId,
+            trigger: "workspace_link");
 
         var profileResult = await _profileService.GetUserProfileAsync(
             socialMedia.Type,

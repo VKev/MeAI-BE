@@ -104,6 +104,32 @@ public sealed class RecommendationsController : ApiController
         return StatusCode(StatusCodes.Status202Accepted, result);
     }
 
+    [HttpPost("{socialMediaId:guid}/content-suggest")]
+    [ProducesResponseType(typeof(Result<ContentSuggestionTaskResponse>), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SuggestNextContent(
+        Guid socialMediaId,
+        [FromBody] ContentSuggestionRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { Message = "Unauthorized" });
+        }
+
+        var result = await _mediator.Send(
+            new StartContentSuggestionCommand(userId, socialMediaId, request),
+            cancellationToken);
+
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return StatusCode(StatusCodes.Status202Accepted, result);
+    }
+
     [HttpGet("{socialMediaId:guid}/analysis-suggest")]
     [ProducesResponseType(typeof(Result<AnalysisSuggestionStatusResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

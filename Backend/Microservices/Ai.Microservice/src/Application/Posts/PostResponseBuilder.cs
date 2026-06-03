@@ -29,7 +29,8 @@ public sealed class PostResponseBuilder
     public async Task<IReadOnlyList<PostResponse>> BuildManyAsync(
         Guid userId,
         IReadOnlyList<Post> posts,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? workspaceId = null)
     {
         if (posts.Count == 0)
         {
@@ -74,6 +75,12 @@ public sealed class PostResponseBuilder
         var publications = await _postPublicationRepository.GetByPostIdsAsync(
             posts.Select(post => post.Id).ToList(),
             cancellationToken);
+        if (workspaceId.HasValue)
+        {
+            publications = publications
+                .Where(publication => publication.WorkspaceId == workspaceId.Value)
+                .ToList();
+        }
 
         var publicationsByPostId = publications
             .GroupBy(publication => publication.PostId)

@@ -41,7 +41,8 @@ public sealed class QueryRewriter : IQueryRewriter
         "  \"primary_query\": \"<descriptive, key-term-rich rewrite of user_prompt, in the detected language>\",\n" +
         "  \"alt_queries\":   [\"<alternative angle 1>\", \"<alternative angle 2>\"],\n" +
         "  \"visual_query\":  \"<English visually-descriptive query — what the IMAGE for this post looks like>\",\n" +
-        "  \"key_terms\":     [\"<noun phrase>\", \"<noun phrase>\", \"<noun phrase>\"]\n" +
+        "  \"key_terms\":     [\"<noun phrase>\", \"<noun phrase>\", \"<noun phrase>\"],\n" +
+        "  \"visual_queries\": [\"<web image search query 1>\", \"<web image search query 2>\", \"<web image search query 3>\"]\n" +
         "}\n\n" +
         "RULES:\n" +
         "  * language: detect from page_profile_snippet first, then user_prompt. Default \"en\".\n" +
@@ -56,7 +57,21 @@ public sealed class QueryRewriter : IQueryRewriter
         "    post about this topic. Use concrete visual nouns (\"sleek black body\",\n" +
         "    \"product photography\", \"natural lighting\"). 8-20 words.\n" +
         "  * key_terms: 3-6 distilled noun phrases (English or detected language —\n" +
-        "    pick whichever serves rerank better; English usually wins).\n\n" +
+        "    pick whichever serves rerank better; English usually wins).\n" +
+        "  * visual_queries: 3-8 concrete web IMAGE search queries. This is the exact\n" +
+        "    list the app will send to web image search, so make each item a short search\n" +
+        "    engine query, not a sentence and not an instruction. Do not include phrases\n" +
+        "    like \"create me\", \"write a post\", \"marketing video\", or \"introduce it\".\n" +
+        "  * visual_queries must split distinct visual subjects into separate queries:\n" +
+        "    product/object queries, scene/style queries, and exact external-reference\n" +
+        "    queries should be separate list items.\n" +
+        "  * If the prompt names an external reference (artist, film, music video, event,\n" +
+        "    place), include exact search queries for that reference. Do not add people,\n" +
+        "    collaborators, brands, or titles that were not present in the user prompt.\n" +
+        "  * Example: a prompt about a Sony camera and Son Tung MTP's Come My Way MV should\n" +
+        "    include queries like \"latest Sony Alpha camera product image\",\n" +
+        "    \"Sony mirrorless camera cinematic video features\", and\n" +
+        "    \"Son Tung MTP Come My Way MV\".\n\n" +
         "Output JSON ONLY. No backticks. No \"Here is the JSON:\" preamble.";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -96,10 +111,10 @@ public sealed class QueryRewriter : IQueryRewriter
             var raw = (llmResult.Answer ?? string.Empty).Trim();
             var rewrite = ParseLlmJson(raw, request.UserPrompt);
             _logger.LogInformation(
-                "QueryRewriter: lang={Language} intent={Intent} primary={PrimaryLen}ch alts={AltCount} visual={VisualLen}ch keyTerms={KeyTermCount}",
+                "QueryRewriter: lang={Language} intent={Intent} primary={PrimaryLen}ch alts={AltCount} visual={VisualLen}ch visualQueries={VisualQueryCount} keyTerms={KeyTermCount}",
                 rewrite.Language, rewrite.Intent,
                 rewrite.PrimaryQuery.Length, rewrite.AltQueries.Count,
-                rewrite.VisualQuery.Length, rewrite.KeyTerms.Count);
+                rewrite.VisualQuery.Length, rewrite.VisualQueries.Count, rewrite.KeyTerms.Count);
             return Result.Success(rewrite);
         }
         catch (Exception ex)
@@ -154,6 +169,11 @@ public sealed class QueryRewriter : IQueryRewriter
             var alts = ReadStringArray(root, "alt_queries");
             string visual = ReadString(root, "visual_query") ?? originalPrompt;
             var keyTerms = ReadStringArray(root, "key_terms");
+            var visualQueries = NormalizeStringList(ReadStringArray(root, "visual_queries"), maxItems: 8);
+            if (visualQueries.Count == 0)
+            {
+                visualQueries = NormalizeStringList(new[] { visual }, maxItems: 1);
+            }
 
             return new QueryRewriteResult(
                 Language: language.Trim().ToLowerInvariant(),
@@ -161,7 +181,8 @@ public sealed class QueryRewriter : IQueryRewriter
                 PrimaryQuery: primary.Trim(),
                 AltQueries: alts.Where(s => !string.IsNullOrWhiteSpace(s)).ToList(),
                 VisualQuery: visual.Trim(),
-                KeyTerms: keyTerms.Where(s => !string.IsNullOrWhiteSpace(s)).ToList());
+                KeyTerms: keyTerms.Where(s => !string.IsNullOrWhiteSpace(s)).ToList(),
+                VisualQueries: visualQueries);
         }
         catch (JsonException ex)
         {
@@ -220,7 +241,23 @@ public sealed class QueryRewriter : IQueryRewriter
             PrimaryQuery: originalPrompt,
             AltQueries: Array.Empty<string>(),
             VisualQuery: originalPrompt,
-            KeyTerms: Array.Empty<string>());
+            KeyTerms: Array.Empty<string>(),
+            VisualQueries: new[] { originalPrompt });
+    }
+
+    private static IReadOnlyList<string> NormalizeStringList(IEnumerable<string?> values, int maxItems)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var list = new List<string>();
+        foreach (var value in values)
+        {
+            var trimmed = value?.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed)) continue;
+            if (!seen.Add(trimmed)) continue;
+            list.Add(trimmed);
+            if (list.Count >= maxItems) break;
+        }
+        return list;
     }
 
     private static string Truncate(string s, int max)

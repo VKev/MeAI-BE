@@ -13,7 +13,10 @@ internal static class SocialMediaPostSyncEventPublisher
         ILogger logger,
         Guid userId,
         IEnumerable<SocialMedia> socialMedias,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? workspaceId = null,
+        string trigger = "oauth_callback",
+        bool removeFromWorkspace = false)
     {
         var requestedAt = DateTimeExtensions.PostgreSqlUtcNow;
 
@@ -27,7 +30,10 @@ internal static class SocialMediaPostSyncEventPublisher
                         CorrelationId = Guid.CreateVersion7(),
                         UserId = userId,
                         SocialMediaId = socialMedia.Id,
+                        WorkspaceId = workspaceId,
                         Platform = socialMedia.Type,
+                        Trigger = trigger,
+                        RemoveFromWorkspace = removeFromWorkspace,
                         RequestedAt = requestedAt
                     },
                     cancellationToken);

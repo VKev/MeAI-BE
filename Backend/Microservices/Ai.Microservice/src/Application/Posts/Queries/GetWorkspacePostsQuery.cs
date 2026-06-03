@@ -60,7 +60,11 @@ public sealed class GetWorkspacePostsQueryHandler
             request.Platform,
             cancellationToken);
 
-        var response = await _postResponseBuilder.BuildManyAsync(request.UserId, posts, cancellationToken);
+        var response = await _postResponseBuilder.BuildManyAsync(
+            request.UserId,
+            posts,
+            cancellationToken,
+            request.WorkspaceId);
         return Result.Success<IEnumerable<PostResponse>>(response);
     }
 }
