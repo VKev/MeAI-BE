@@ -66,4 +66,8 @@ public sealed record QueryRewriteResult(
     string VisualQuery,
     /// <summary>Salient noun phrases distilled from the rewrite. Appended to rerank
     /// queries to give the cross-encoder more anchors (e.g. "DJI Osmo", "mirrorless").</summary>
-    IReadOnlyList<string> KeyTerms);
+    IReadOnlyList<string> KeyTerms,
+    /// <summary>Specific web image-search queries. Unlike <see cref="VisualQuery"/>,
+    /// this can contain multiple targeted queries, e.g. one for the product and one
+    /// for a named artist/music-video reference in the same prompt.</summary>
+    IReadOnlyList<string> VisualQueries);

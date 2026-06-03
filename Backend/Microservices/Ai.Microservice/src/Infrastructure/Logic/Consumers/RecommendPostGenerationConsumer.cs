@@ -58,8 +58,9 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         "    The user wants this same post improved, not a different one.\n" +
         "  * PRESERVE the language of the original caption (auto-detect from the existing text).\n" +
         "  * PRESERVE the page name / brand voice. Match emoji density and hashtag style.\n" +
-        "  * APPLY whichever formula / hook / engagement trigger the RAG block recommends, " +
-        "    when it is consistent with the topic.\n" +
+        "  * Treat RAG formulas, hooks, and engagement triggers as optional suggestions. " +
+        "    Apply one only when it clearly improves this specific account/topic/platform. " +
+        "    If it feels generic, off-brand, too salesy, or wrong for the user's instruction, ignore it.\n" +
         "  * APPLY the user's improvement instruction faithfully when one is provided.\n" +
         "  * KEEP contact info verbatim from the page profile (URL TLDs, email locals, phone " +
         "    numbers — never rewrite or canonicalize). Drop a contact field rather than invent one.\n\n" +
@@ -90,8 +91,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         "  (a) The post's caption (current or just-improved) for tone/context; the attached image defines the exact subject for this call\n" +
         "  (b) The user's optional improvement instruction for the image\n" +
         "  (c) Only the current media item's original image attached as a reference for subject / palette / brand identity\n" +
-        "  (d) Style-knowledge for the requested style ('creative' / 'branded' / 'marketing'), " +
-        "      describing on-image text rules + visual conventions for that style\n\n" +
+        "  (d) Optional style-knowledge for the requested style ('creative' / 'branded' / 'marketing'), " +
+        "      describing on-image text rules + visual conventions that may or may not fit this post\n\n" +
         "RULES:\n" +
         "  * If this is one item in a multi-media post, ignore sibling media entirely. Do not " +
         "    create a collage, comparison, or combined scene from other carousel resources. " +
@@ -108,7 +109,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         "    inside the attached reference image itself.\n" +
         "  * Preserve the subject of the original image — same product / scene / person — unless " +
         "    the user's instruction explicitly asks to change it.\n" +
-        "  * Improve composition, lighting, palette, or text overlay quality per the style-knowledge.\n" +
+        "  * Use style-knowledge only when it fits this account, media item, platform, and user instruction. " +
+        "    Ignore any style rule that would make the regenerated image worse, generic, off-brand, or too busy.\n" +
         "  * IMPORTANT: The original/reference image is for reference only; do not make the new image " +
         "too similar. Use it for subject, palette, lighting, mood, and brand cues, then create a " +
         "new composition.\n" +
@@ -469,7 +471,8 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     PrimaryQuery: originalCaption,
                     AltQueries: Array.Empty<string>(),
                     VisualQuery: originalCaption,
-                    KeyTerms: Array.Empty<string>());
+                    KeyTerms: Array.Empty<string>(),
+                    VisualQueries: new[] { originalCaption });
             _logger.LogInformation(
                 "ImprovePost {Id}: rewriter lang={Lang} intent={Intent} primary={Primary} visual={Visual}",
                 task.Id, rewrite.Language, rewrite.Intent,
@@ -488,6 +491,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     primaryQuery = rewrite.PrimaryQuery,
                     altQueries = rewrite.AltQueries,
                     visualQuery = rewrite.VisualQuery,
+                    visualQueries = rewrite.VisualQueries,
                     keyTerms = rewrite.KeyTerms,
                 },
                 ct,
@@ -528,6 +532,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                             primaryQuery = rewrite.PrimaryQuery,
                             altQueries = rewrite.AltQueries,
                             visualQuery = rewrite.VisualQuery,
+                            visualQueries = rewrite.VisualQueries,
                             keyTerms = rewrite.KeyTerms,
                         },
                     },
@@ -555,7 +560,7 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
                     task,
                     "rag_query_completed",
                     "AI finished reading knowledge",
-                    "AI selected the account references and formulas for this improvement.",
+                    "AI selected account references and optional guidance for this improvement.",
                     new
                     {
                         query = originalCaption,
@@ -1444,13 +1449,13 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         }
         if (!string.IsNullOrWhiteSpace(ragAnswer))
         {
-            sb.AppendLine("=== RAG voice + formula context ===");
+            sb.AppendLine("=== Optional RAG voice + formula context (apply only if relevant) ===");
             sb.AppendLine(ragAnswer);
             sb.AppendLine();
         }
         if (!string.IsNullOrWhiteSpace(platformKnowledge))
         {
-            sb.AppendLine("=== Platform guidance ===");
+            sb.AppendLine("=== Optional platform guidance (apply only if relevant) ===");
             sb.AppendLine(platformKnowledge);
             sb.AppendLine();
         }
@@ -1505,13 +1510,13 @@ public sealed class RecommendPostGenerationConsumer : IConsumer<GenerateRecommen
         }
         if (!string.IsNullOrWhiteSpace(styleKnowledge))
         {
-            sb.AppendLine($"=== Style-knowledge: {style} ===");
+            sb.AppendLine($"=== Optional style-knowledge: {style} (apply only if relevant) ===");
             sb.AppendLine(styleKnowledge);
             sb.AppendLine();
         }
         if (!string.IsNullOrWhiteSpace(platformKnowledge))
         {
-            sb.AppendLine("=== Platform guidance ===");
+            sb.AppendLine("=== Optional platform guidance (apply only if relevant) ===");
             sb.AppendLine(platformKnowledge);
             sb.AppendLine();
         }

@@ -57,6 +57,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         var actionCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var resolvedPlatform = NormalizePlatform(message.Platform, message.Platform);
         string? cursor = null;
+        var workspaceId = NormalizeWorkspaceId(message.WorkspaceId);
 
         _logger.LogInformation(
             "Social media post sync started. CorrelationId: {CorrelationId}, UserId: {UserId}, SocialMediaId: {SocialMediaId}, Platform: {Platform}",
@@ -64,6 +65,55 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
             message.UserId,
             message.SocialMediaId,
             message.Platform);
+
+        if (message.RemoveFromWorkspace)
+        {
+            if (!workspaceId.HasValue)
+            {
+                _logger.LogWarning(
+                    "Workspace social media unsync skipped because WorkspaceId is missing. CorrelationId: {CorrelationId}, SocialMediaId: {SocialMediaId}",
+                    message.CorrelationId,
+                    message.SocialMediaId);
+                return;
+            }
+
+            var detachedPosts = await _postRepository.DetachSocialMediaPostsFromWorkspaceAsync(
+                message.UserId,
+                message.SocialMediaId,
+                workspaceId.Value,
+                DateTimeExtensions.PostgreSqlUtcNow,
+                cancellationToken);
+
+            await PublishWorkspaceUnsyncSuccessAsync(
+                context,
+                message,
+                resolvedPlatform,
+                detachedPosts,
+                cancellationToken);
+
+            _logger.LogInformation(
+                "Workspace social media posts detached. CorrelationId: {CorrelationId}, WorkspaceId: {WorkspaceId}, SocialMediaId: {SocialMediaId}, DetachedPosts: {DetachedPosts}",
+                message.CorrelationId,
+                workspaceId.Value,
+                message.SocialMediaId,
+                detachedPosts);
+            return;
+        }
+
+        if (workspaceId.HasValue)
+        {
+            var attachedPosts = await _postRepository.AttachSocialMediaPostsToWorkspaceAsync(
+                message.UserId,
+                message.SocialMediaId,
+                workspaceId.Value,
+                DateTimeExtensions.PostgreSqlUtcNow,
+                cancellationToken);
+
+            if (attachedPosts > 0)
+            {
+                actionCounts["attached"] = attachedPosts;
+            }
+        }
 
         for (var page = 1; page <= maxPages; page++)
         {
@@ -186,6 +236,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         var title = BuildTitle(platformPost, normalizedPlatform);
         var publishedAt = ToUtcDateTime(platformPost.PublishedAt) ?? now;
         var destinationOwnerId = ResolveDestinationOwnerId(normalizedPlatform, platformPost, message.SocialMediaId);
+        var workspaceId = NormalizeWorkspaceId(message.WorkspaceId);
 
         var publication = await _postPublicationRepository.GetBySocialMediaAndExternalContentForUpdateAsync(
             message.SocialMediaId,
@@ -228,7 +279,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
             {
                 Id = Guid.CreateVersion7(),
                 UserId = message.UserId,
-                WorkspaceId = null,
+                WorkspaceId = workspaceId,
                 CreatedAt = publishedAt
             };
 
@@ -238,7 +289,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
             {
                 Id = Guid.CreateVersion7(),
                 PostId = post.Id,
-                WorkspaceId = Guid.Empty,
+                WorkspaceId = workspaceId ?? Guid.Empty,
                 SocialMediaId = message.SocialMediaId,
                 ExternalContentId = platformPost.PlatformPostId,
                 ExternalContentIdType = ExternalContentIdType,
@@ -249,6 +300,10 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         }
 
         post.SocialMediaId = message.SocialMediaId;
+        if (workspaceId.HasValue)
+        {
+            post.WorkspaceId = workspaceId;
+        }
         post.Platform = normalizedPlatform;
         post.Title = title;
         post.Content = BuildContent(
@@ -266,6 +321,10 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         post.DeletedAt = null;
 
         publication.SocialMediaId = message.SocialMediaId;
+        if (workspaceId.HasValue)
+        {
+            publication.WorkspaceId = workspaceId.Value;
+        }
         publication.SocialMediaType = normalizedPlatform;
         publication.DestinationOwnerId = destinationOwnerId;
         publication.ContentType = postType;
@@ -302,6 +361,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
                 {
                     message.CorrelationId,
                     message.SocialMediaId,
+                    message.WorkspaceId,
                     message.Trigger,
                     platform,
                     seenPosts,
@@ -349,6 +409,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
                 {
                     message.CorrelationId,
                     message.SocialMediaId,
+                    message.WorkspaceId,
                     message.Trigger,
                     platform,
                     seenPosts,
@@ -358,6 +419,34 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
                     errorMessage,
                     failureDetails,
                     failureDetailsTruncated = failures.Count > failureDetails.Count
+                },
+                source: NotificationSourceConstants.Creator),
+            cancellationToken);
+    }
+
+    private static Task PublishWorkspaceUnsyncSuccessAsync(
+        ConsumeContext<SyncSocialMediaPostsRequested> context,
+        SyncSocialMediaPostsRequested message,
+        string platform,
+        int detachedPosts,
+        CancellationToken cancellationToken)
+    {
+        return context.Publish(
+            NotificationRequestedEventFactory.CreateForUser(
+                message.UserId,
+                NotificationTypes.SocialMediaPostSyncCompleted,
+                "Workspace posts unsynced",
+                detachedPosts == 0
+                    ? $"No {platform} posts needed to be removed from this workspace."
+                    : $"Removed {detachedPosts} {platform} posts from this workspace.",
+                new
+                {
+                    message.CorrelationId,
+                    message.SocialMediaId,
+                    message.WorkspaceId,
+                    message.Trigger,
+                    platform,
+                    detachedPosts
                 },
                 source: NotificationSourceConstants.Creator),
             cancellationToken);
@@ -398,7 +487,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
                 status: "ready",
                 resourceType: candidate.ResourceType,
                 cancellationToken,
-                workspaceId: null,
+                workspaceId: NormalizeWorkspaceId(message.WorkspaceId),
                 provenance: new ResourceProvenanceMetadata(
                     ResourceOriginKinds.SocialMediaImported,
                     OriginSourceUrl: candidate.Url));
@@ -627,6 +716,13 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         return string.IsNullOrWhiteSpace(platform)
             ? "unknown"
             : platform.Trim().ToLowerInvariant();
+    }
+
+    private static Guid? NormalizeWorkspaceId(Guid? workspaceId)
+    {
+        return workspaceId.HasValue && workspaceId.Value != Guid.Empty
+            ? workspaceId.Value
+            : null;
     }
 
     private static DateTime? ToUtcDateTime(DateTimeOffset? value)

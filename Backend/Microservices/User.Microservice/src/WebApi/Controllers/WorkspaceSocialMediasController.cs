@@ -77,6 +77,59 @@ public sealed class WorkspaceSocialMediasController : ApiController
         return Ok(result);
     }
 
+    [HttpPost("auto-link")]
+    [ProducesResponseType(typeof(Result<List<SocialMediaResponse>>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> AutoLink(
+        Guid workspaceId,
+        [FromBody] AutoLinkWorkspaceSocialMediaRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var command = new AutoLinkWorkspaceSocialMediaCommand(
+            workspaceId,
+            userId,
+            request.SocialMediaId,
+            request.Platform);
+
+        var result = await _mediator.Send(command, cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
+    [HttpPost("sync-posts")]
+    [ProducesResponseType(typeof(Result<int>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SyncPosts(
+        Guid workspaceId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new MessageResponse("Unauthorized"));
+        }
+
+        var result = await _mediator.Send(
+            new SyncWorkspaceSocialMediaPostsCommand(workspaceId, userId),
+            cancellationToken);
+        if (result.IsFailure)
+        {
+            return HandleFailure(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpDelete("{socialMediaId:guid}")]
     [ProducesResponseType(typeof(Result<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(MessageResponse), StatusCodes.Status401Unauthorized)]
@@ -110,3 +163,4 @@ public sealed class WorkspaceSocialMediasController : ApiController
 }
 
 public sealed record CreateWorkspaceSocialMediaRequest(Guid SocialMediaId);
+public sealed record AutoLinkWorkspaceSocialMediaRequest(Guid? SocialMediaId, string? Platform);

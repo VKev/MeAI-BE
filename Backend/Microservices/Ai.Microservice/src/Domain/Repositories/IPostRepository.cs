@@ -15,6 +15,18 @@ public interface IPostRepository
         Guid userId,
         Guid socialMediaId,
         CancellationToken cancellationToken);
+    Task<int> AttachSocialMediaPostsToWorkspaceAsync(
+        Guid userId,
+        Guid socialMediaId,
+        Guid workspaceId,
+        DateTime updatedAt,
+        CancellationToken cancellationToken);
+    Task<int> DetachSocialMediaPostsFromWorkspaceAsync(
+        Guid userId,
+        Guid socialMediaId,
+        Guid workspaceId,
+        DateTime updatedAt,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<Post>> GetActiveByUserIdExcludingIdsAsync(
         Guid userId,
         IReadOnlyList<Guid> excludedPostIds,

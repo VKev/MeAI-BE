@@ -33,6 +33,10 @@ public static class NotificationTypes
     public const string AiAccountAnalysisSuggestionCompleted = "ai.account_analysis_suggestion.completed";
     public const string AiAccountAnalysisSuggestionFailed = "ai.account_analysis_suggestion.failed";
 
+    public const string AiContentSuggestionProcessing = "ai.content_suggestion.processing";
+    public const string AiContentSuggestionCompleted = "ai.content_suggestion.completed";
+    public const string AiContentSuggestionFailed = "ai.content_suggestion.failed";
+
     public const string UserSubscriptionActivated = "user.subscription.activated";
     public const string UserSubscriptionRenewed = "user.subscription.renewed";
     public const string UserSubscriptionStatusChanged = "user.subscription.status_changed";

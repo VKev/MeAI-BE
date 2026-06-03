@@ -26,4 +26,5 @@ public sealed record ImageSearchHit(
     string? SourcePageUrl,
     string? Title,
     int? Width,
-    int? Height);
+    int? Height,
+    string? Query = null);

@@ -91,6 +91,156 @@ public sealed class PostRepository : IPostRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<int> AttachSocialMediaPostsToWorkspaceAsync(
+        Guid userId,
+        Guid socialMediaId,
+        Guid workspaceId,
+        DateTime updatedAt,
+        CancellationToken cancellationToken)
+    {
+        var publications = await _dbContext.Set<PostPublication>()
+            .Where(publication =>
+                publication.SocialMediaId == socialMediaId &&
+                !publication.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        var publicationPostIds = publications
+            .Select(publication => publication.PostId)
+            .Distinct()
+            .ToList();
+
+        var posts = await _dbSet
+            .Where(post =>
+                post.UserId == userId &&
+                post.DeletedAt == null &&
+                (post.SocialMediaId == socialMediaId || publicationPostIds.Contains(post.Id)))
+            .ToListAsync(cancellationToken);
+
+        var changedPostIds = new HashSet<Guid>();
+        var userPostIds = posts
+            .Select(post => post.Id)
+            .ToHashSet();
+
+        foreach (var post in posts)
+        {
+            if (post.WorkspaceId != workspaceId)
+            {
+                post.WorkspaceId = workspaceId;
+                post.UpdatedAt = updatedAt;
+                changedPostIds.Add(post.Id);
+            }
+        }
+
+        foreach (var publication in publications.Where(publication => userPostIds.Contains(publication.PostId)))
+        {
+            if (publication.WorkspaceId != workspaceId)
+            {
+                publication.WorkspaceId = workspaceId;
+                publication.UpdatedAt = updatedAt;
+                changedPostIds.Add(publication.PostId);
+            }
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return changedPostIds.Count;
+    }
+
+    public async Task<int> DetachSocialMediaPostsFromWorkspaceAsync(
+        Guid userId,
+        Guid socialMediaId,
+        Guid workspaceId,
+        DateTime updatedAt,
+        CancellationToken cancellationToken)
+    {
+        var accountPublications = await _dbContext.Set<PostPublication>()
+            .Where(publication =>
+                publication.SocialMediaId == socialMediaId &&
+                publication.WorkspaceId == workspaceId &&
+                !publication.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        var candidatePostIds = accountPublications
+            .Select(publication => publication.PostId)
+            .Distinct()
+            .ToList();
+
+        var directAccountPosts = await _dbSet
+            .Where(post =>
+                post.UserId == userId &&
+                post.SocialMediaId == socialMediaId &&
+                post.WorkspaceId == workspaceId &&
+                post.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var postId in directAccountPosts.Select(post => post.Id))
+        {
+            if (!candidatePostIds.Contains(postId))
+            {
+                candidatePostIds.Add(postId);
+            }
+        }
+
+        if (candidatePostIds.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var publication in accountPublications)
+        {
+            publication.WorkspaceId = Guid.Empty;
+            publication.UpdatedAt = updatedAt;
+        }
+
+        var remainingWorkspacePublications = await _dbContext.Set<PostPublication>()
+            .Where(publication =>
+                candidatePostIds.Contains(publication.PostId) &&
+                publication.SocialMediaId != socialMediaId &&
+                publication.WorkspaceId == workspaceId &&
+                !publication.DeletedAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        var remainingByPostId = remainingWorkspacePublications
+            .GroupBy(publication => publication.PostId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(publication => publication.PublishedAt ?? publication.CreatedAt)
+                    .ThenByDescending(publication => publication.Id)
+                    .First());
+
+        var posts = await _dbSet
+            .Where(post =>
+                candidatePostIds.Contains(post.Id) &&
+                post.UserId == userId &&
+                post.WorkspaceId == workspaceId &&
+                post.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+
+        var changedPostIds = new HashSet<Guid>(accountPublications.Select(publication => publication.PostId));
+        foreach (var post in posts)
+        {
+            if (remainingByPostId.TryGetValue(post.Id, out var remainingPublication))
+            {
+                if (post.SocialMediaId == socialMediaId)
+                {
+                    post.SocialMediaId = remainingPublication.SocialMediaId;
+                    post.Platform = remainingPublication.SocialMediaType;
+                    post.UpdatedAt = updatedAt;
+                    changedPostIds.Add(post.Id);
+                }
+
+                continue;
+            }
+
+            post.WorkspaceId = null;
+            post.UpdatedAt = updatedAt;
+            changedPostIds.Add(post.Id);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return changedPostIds.Count;
+    }
+
     public async Task<IReadOnlyList<Post>> GetActiveByUserIdExcludingIdsAsync(
         Guid userId,
         IReadOnlyList<Guid> excludedPostIds,

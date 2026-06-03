@@ -8,9 +8,13 @@ public sealed class SyncSocialMediaPostsRequested
 
     public Guid SocialMediaId { get; set; }
 
+    public Guid? WorkspaceId { get; set; }
+
     public string Platform { get; set; } = null!;
 
     public string Trigger { get; set; } = "oauth_callback";
+
+    public bool RemoveFromWorkspace { get; set; }
 
     public int PageLimit { get; set; } = 50;
 

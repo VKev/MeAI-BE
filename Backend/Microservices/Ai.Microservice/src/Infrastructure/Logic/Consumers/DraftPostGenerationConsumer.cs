@@ -44,7 +44,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         "(b) a RAG recommendation summary that already contains the page's profile (name, " +
         "introduction text, category, website, email, phone, location) AND may reference content " +
         "formulas (FAB/BAB/AIDA/etc.), viral-hook frameworks, engagement tactics, and design " +
-        "heuristics — apply whichever formula or hook the summary recommends, " +
+        "heuristics. These are optional heuristics, not rules; use them only when they fit " +
+        "the account, prompt, topic, and platform, " +
         "(c) recent post captions from the same account so you can match voice and style, and " +
         "(d) a few reference images from past posts.\n\n" +
         "LANGUAGE: Write the caption in the page's primary language. Detect this from the " +
@@ -138,6 +139,21 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         "IMPORTANT: Reference images are for reference only; do not make the generated image " +
         "too similar to any reference image. Use them for palette, lighting, mood, and brand " +
         "cues, then create a new composition. ";
+
+    private const string ReferenceImageSelectorSystemPrompt =
+        "You are selecting visual reference images for an AI social-media image or video generation request. " +
+        "You receive candidate images as attachments in the exact same order as the numbered candidate list. " +
+        "Each candidate also has search/context text: source type, title, source page, originating search query, and description. " +
+        "Choose a small balanced set that best helps the generator create the requested post.\n\n" +
+        "Selection rules:\n" +
+        "- Judge web-search candidates by BOTH the image pixels and the web-search context text. The title, source page, search query, and description tell you what the image is supposed to represent; do not choose by visual prettiness alone.\n" +
+        "- Cover distinct visual subjects/entities explicitly requested by the user. If the prompt needs both a product/technology subject and a celebrity, artist, event, MV, location, or campaign reference, select at least one strong image for each when available.\n" +
+        "- Prefer exact subject/entity matches over generic images. For example, an exact Son Tung M-TP / Come My Way MV image is more useful than another generic camera image when the prompt mentions that MV.\n" +
+        "- Avoid near-duplicates. Do not fill the set with multiple similar product shots unless the request is only about that one product.\n" +
+        "- Fresh web images are usually better for external/current subjects. Past-post/RAG images are usually better for the account's brand style. Use both when useful.\n" +
+        "- Source slot counts are guidance, not hard rules; semantic coverage wins.\n\n" +
+        "Return strict JSON only, no markdown, with this shape: " +
+        "{\"selected\":[{\"candidate_number\":1,\"coverage\":\"what visual need this covers\",\"reason\":\"why this image is useful\"}]}";
 
     /// <summary>
     /// Image-gen system prompt for <c>creative</c> — pure visual, NO text rendering.
@@ -267,11 +283,16 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         "(b) the post caption that just got written, (c) recent post images from this " +
         "account (use them to lock in palette / lighting / composition), (d) descriptions of past " +
         "video segments + transcripts when available, (e) STYLE-SPECIFIC design rules from the " +
-        "RAG knowledge base (image-design-{style}) — these are AUTHORITATIVE and must be followed, " +
+        "RAG knowledge base (image-design-{style}) — optional style heuristics that should be " +
+        "used only when relevant to this account, prompt, and target platform, " +
         "(f) the target platform, (g) the requested STYLE.\n\n" +
         "IMPORTANT: Reference images are for reference only; do not make the generated image too " +
         "similar to any reference image. Use them for palette, lighting, mood, and brand cues, " +
         "then create a new composition.\n\n" +
+        "IMPORTANT: Treat RAG formulas, platform rules, and style knowledge as suggestions. " +
+        "Evaluate fit first. If a formula or rule would make the recommendation generic, off-brand, " +
+        "too salesy, or wrong for the prompt/account, ignore it and build the brief from the caption, " +
+        "brand profile, and selected references instead.\n\n" +
         "Output STRICT JSON only — no preface, no markdown, no code fences — with these keys:\n" +
         "  \"prompt\": string. The actual image-gen prompt. Be vivid and specific. Cap ~150 words. " +
         "Describe the SUBJECT first, then composition (rule of thirds, framing, safe areas for any " +
@@ -400,7 +421,15 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
 
     private sealed record FreshTopicImageSearchOutcome(
         IReadOnlyList<Application.Abstractions.Search.ImageSearchHit> Hits,
-        Exception? Error = null);
+        Exception? Error = null,
+        IReadOnlyList<string>? Queries = null,
+        IReadOnlyList<FreshTopicImageQueryOutcome>? QueryOutcomes = null);
+
+    private sealed record FreshTopicImageQueryOutcome(
+        string Query,
+        int HitCount,
+        string? ErrorCode = null,
+        string? ErrorMessage = null);
 
     private sealed record FreshTopicImageMirrorOutcome(
         IReadOnlyList<Application.Abstractions.Search.ImageSearchHit> Hits,
@@ -408,8 +437,33 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         IReadOnlyList<object> Failures);
 
     private sealed record ReferenceImageSelectionOutcome(
-        List<string> SelectedImageUrls,
-        Exception? Error = null);
+        List<SelectedReferenceImage> SelectedImages,
+        Exception? Error = null,
+        string Strategy = "rerank")
+    {
+        public List<string> SelectedImageUrls => SelectedImages.Select(image => image.ImageUrl).ToList();
+    }
+
+    private sealed record SelectedReferenceImage(
+        string ImageUrl,
+        string Source,
+        string DescriptiveText,
+        string? Title,
+        string? SourcePageUrl,
+        string? SearchQuery,
+        double? Score,
+        int? Rank,
+        string? Coverage = null,
+        string? SelectionReason = null);
+
+    private sealed record ReferenceImageSlotAllocation(int Web, int Rag)
+    {
+        public int Total => Web + Rag;
+    }
+
+    private sealed record ScoredImageRefCandidate(ImageRefCandidate Candidate, double? Score, int Rank);
+
+    private sealed record IndexedImageRefCandidate(int CandidateNumber, int OriginalIndex, ImageRefCandidate Candidate);
 
     private sealed record StyleKnowledgeOutcome(
         string Knowledge,
@@ -628,6 +682,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         var maxReferenceImages = string.Equals(mediaType, DraftPostMediaTypes.Video, StringComparison.Ordinal)
             ? Math.Clamp(msg.MaxReferenceImages, 1, MaxVideoReferenceImages)
             : Math.Max(msg.MaxReferenceImages, 1);
+        var referenceImageSlots = AllocateReferenceImageSlots(mediaType, maxReferenceImages);
         var isAutoTopic = msg.IsAutoTopic;
 
         _logger.LogInformation(
@@ -799,7 +854,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     PrimaryQuery: recommendationQuery,
                     AltQueries: Array.Empty<string>(),
                     VisualQuery: recommendationQuery,
-                    KeyTerms: Array.Empty<string>());
+                    KeyTerms: Array.Empty<string>(),
+                    VisualQueries: new[] { recommendationQuery });
             _logger.LogInformation(
                 "DraftPost {Id}: rewriter lang={Lang} intent={Intent} primary={Primary} visual={Visual} keyTerms=[{KeyTerms}]",
                 task.Id, rewrite.Language, rewrite.Intent,
@@ -820,6 +876,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     primaryQuery = rewrite.PrimaryQuery,
                     altQueries = rewrite.AltQueries,
                     visualQuery = rewrite.VisualQuery,
+                    visualQueries = rewrite.VisualQueries,
                     keyTerms = rewrite.KeyTerms,
                     sourceQuery = recommendationQuery,
                 },
@@ -847,6 +904,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                         primaryQuery = rewrite.PrimaryQuery,
                         altQueries = rewrite.AltQueries,
                         visualQuery = rewrite.VisualQuery,
+                        visualQueries = rewrite.VisualQueries,
                         keyTerms = rewrite.KeyTerms,
                     },
                 },
@@ -863,6 +921,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     primaryQuery = rewrite.PrimaryQuery,
                     altQueries = rewrite.AltQueries,
                     visualQuery = rewrite.VisualQuery,
+                    visualQueries = rewrite.VisualQueries,
                     keyTerms = rewrite.KeyTerms,
                     provider = "recommendation-llm-web-search",
                     reason = isAutoTopic
@@ -937,7 +996,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     pastPostCandidates.Add(new ImageRefCandidate(
                         ImageUrl: staticUrl!,
                         Source: "past-post",
-                        DescriptiveText: BuildPastPostCandidateText(r)));
+                        DescriptiveText: BuildPastPostCandidateText(r),
+                        Title: string.IsNullOrWhiteSpace(r.PostId) ? "Past post image" : $"Past post {r.PostId}"));
                     if (pastPostCandidates.Count >= DefaultRerankCandidatePool) break;
                 }
 
@@ -949,7 +1009,10 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                         pastPostCandidates.Add(new ImageRefCandidate(
                             ImageUrl: frameUrl,
                             Source: "past-post-video-frame",
-                            DescriptiveText: BuildVideoFrameCandidateText(r, frameUrl)));
+                            DescriptiveText: BuildVideoFrameCandidateText(r, frameUrl),
+                            Title: string.IsNullOrWhiteSpace(r.PostId)
+                                ? "Past post video frame"
+                                : $"Past post {r.PostId} video frame"));
                         if (pastPostCandidates.Count >= DefaultRerankCandidatePool) break;
                     }
                 }
@@ -988,6 +1051,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     primaryQuery = rewrite.PrimaryQuery,
                     altQueries = rewrite.AltQueries,
                     visualQuery = rewrite.VisualQuery,
+                    visualQueries = rewrite.VisualQueries,
                     keyTerms = rewrite.KeyTerms,
                     documentIdPrefix = rag.DocumentIdPrefix,
                     answer = rag.Answer,
@@ -1083,6 +1147,12 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             // Query is the user's topic if explicit, or the auto-discovery LLM's chosen
             // topic line if not. Brave's image search runs ~$0.003 per call.
             var refImageQuery = ExtractRefImageQuery(msg.UserPrompt, isAutoTopic, rag.Answer);
+            var refImageQueries = BuildFreshTopicImageQueries(
+                refImageQuery,
+                rewrite,
+                recommendationQuery,
+                msg.UserPrompt);
+            var freshTopicCandidateLimit = CalculateFreshTopicCandidateLimit(referenceImageSlots.Web);
             await PublishThinkingAsync(
                 context,
                 task,
@@ -1092,10 +1162,19 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 new
                 {
                     query = refImageQuery,
+                    queries = refImageQueries,
+                    visualQuery = rewrite.VisualQuery,
+                    visualQueries = rewrite.VisualQueries,
+                    webReferenceSlots = referenceImageSlots.Web,
+                    ragReferenceSlots = referenceImageSlots.Rag,
+                    candidateLimit = freshTopicCandidateLimit,
                     source = "brave-image-search",
                 },
                 ct);
-            var freshRefImageOutcome = await FetchFreshTopicImageHitsAsync(refImageQuery, ct);
+            var freshRefImageOutcome = await FetchFreshTopicImageHitsAsync(
+                refImageQueries,
+                freshTopicCandidateLimit,
+                ct);
             if (freshRefImageOutcome.Error is not null)
             {
                 await PublishErrorThinkingAsync(
@@ -1108,6 +1187,8 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                     new
                     {
                         query = refImageQuery,
+                        queries = refImageQueries,
+                        queryOutcomes = freshRefImageOutcome.QueryOutcomes,
                         source = "brave-image-search",
                     },
                     ct,
@@ -1120,13 +1201,16 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 ct);
             var freshRefImageHits = freshRefImageMirrorOutcome.Hits;
             _logger.LogInformation(
-                "DraftPost {Id}: fresh-ref-image search query=\"{Query}\" → {Count} hit(s)",
-                task.Id, refImageQuery ?? "(empty)", freshRefImageHits.Count);
+                "DraftPost {Id}: fresh-ref-image search queries=[{Queries}] -> {Count} hit(s)",
+                task.Id, string.Join(" | ", refImageQueries), freshRefImageHits.Count);
             var freshTopicCandidates = freshRefImageHits
                 .Select(h => new ImageRefCandidate(
                     ImageUrl: h.ImageUrl,
                     Source: "fresh-topic",
-                    DescriptiveText: BuildFreshTopicCandidateText(h, refImageQuery)))
+                    DescriptiveText: BuildFreshTopicCandidateText(h, h.Query ?? refImageQuery),
+                    Title: h.Title,
+                    SourcePageUrl: h.SourcePageUrl,
+                    SearchQuery: h.Query ?? refImageQuery))
                 .ToList();
             for (var i = 0; i < freshTopicCandidates.Count; i++)
             {
@@ -1149,6 +1233,10 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 new
                 {
                     query = refImageQuery,
+                    queries = refImageQueries,
+                    queryOutcomes = freshRefImageOutcome.QueryOutcomes,
+                    webReferenceSlots = referenceImageSlots.Web,
+                    ragReferenceSlots = referenceImageSlots.Rag,
                     hits = freshRefImageHits,
                     mirroredImages = freshRefImageMirrorOutcome.Mirrors,
                     mirrorFailures = freshRefImageMirrorOutcome.Failures,
@@ -1158,6 +1246,9 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                         candidate.ImageUrl,
                         candidate.Source,
                         candidate.DescriptiveText,
+                        candidate.Title,
+                        candidate.SourcePageUrl,
+                        candidate.SearchQuery,
                     }).ToList(),
                 },
                 ct,
@@ -1168,20 +1259,26 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 task,
                 "reference_rerank_started",
                 "AI is choosing reference images",
-                "AI is ranking past-post and fresh-topic images against the caption and topic.",
+                "AI is selecting a balanced set of past-post and fresh-topic images for the draft.",
                 new
                 {
                     topic = refImageQuery,
                     caption,
                     visualQuery = rewrite.VisualQuery,
+                    visualQueries = rewrite.VisualQueries,
                     keyTerms = rewrite.KeyTerms,
                     cap = maxReferenceImages,
+                    webReferenceSlots = referenceImageSlots.Web,
+                    ragReferenceSlots = referenceImageSlots.Rag,
                     candidateCount = rerankCandidates.Count,
                     candidates = rerankCandidates.Select(candidate => new
                     {
                         candidate.ImageUrl,
                         candidate.Source,
                         candidate.DescriptiveText,
+                        candidate.Title,
+                        candidate.SourcePageUrl,
+                        candidate.SearchQuery,
                     }).ToList(),
                 },
                 ct);
@@ -1193,6 +1290,7 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 visualQuery: rewrite.VisualQuery,                  // ← K4 enhancement
                 keyTerms: rewrite.KeyTerms,                        // ← K4 enhancement
                 cap: maxReferenceImages,
+                allocation: referenceImageSlots,
                 cancellationToken: ct);
             if (referenceSelection.Error is not null)
             {
@@ -1208,8 +1306,11 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                         topic = refImageQuery,
                         caption,
                         visualQuery = rewrite.VisualQuery,
+                        visualQueries = rewrite.VisualQueries,
                         keyTerms = rewrite.KeyTerms,
                         cap = maxReferenceImages,
+                        webReferenceSlots = referenceImageSlots.Web,
+                        ragReferenceSlots = referenceImageSlots.Rag,
                         candidateCount = rerankCandidates.Count,
                     },
                     ct,
@@ -1221,11 +1322,19 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
                 task,
                 "reference_rerank_completed",
                 "AI chose reference images",
-                "AI selected the images that best match the draft topic and caption.",
+                "AI selected the images that best cover the draft topic, caption, and visual references.",
                 new
                 {
+                    selectionMode = referenceSelection.Strategy,
                     selectedReferenceImageUrls = imageBriefRefImageUrls,
+                    selectedReferences = referenceSelection.SelectedImages,
+                    hits = referenceSelection.SelectedImages,
+                    results = referenceSelection.SelectedImages,
                     selectedCount = imageBriefRefImageUrls.Count,
+                    selectedWebCount = referenceSelection.SelectedImages.Count(image => IsFreshTopicCandidate(image.Source)),
+                    selectedRagCount = referenceSelection.SelectedImages.Count(image => !IsFreshTopicCandidate(image.Source)),
+                    webReferenceSlots = referenceImageSlots.Web,
+                    ragReferenceSlots = referenceImageSlots.Rag,
                     candidateCount = rerankCandidates.Count,
                     cap = maxReferenceImages,
                 },
@@ -1954,12 +2063,15 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     }
 
     /// <summary>
-    /// Caps how many fresh real-world topic images we attach to the image-brief +
-    /// image-gen calls. Two is the sweet spot — enough variety for the model to
-    /// triangulate the subject, but not so many that we drown the brand's past-post
-    /// style references.
+    /// Brave image-search fan-out is bounded because it is a paid API. The final
+    /// reference count is still controlled by maxReferenceImages; these constants
+    /// only size the candidate pool before rerank/source allocation.
     /// </summary>
-    private const int MaxFreshTopicImages = 2;
+    private const int MaxFreshTopicImageQueries = 8;
+    private const int MaxFreshTopicImagesPerQuery = 3;
+    private const int MaxFreshTopicCandidatePool = 16;
+    private const int MaxReferenceSelectorCandidateImages = 24;
+    private const int ReferenceSelectorMaxOutputTokens = 700;
 
     /// <summary>
     /// Decides what to send to Brave's image search. We want a tight noun-phrase
@@ -2050,11 +2162,150 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         return s;
     }
 
+    private static ReferenceImageSlotAllocation AllocateReferenceImageSlots(string mediaType, int cap)
+    {
+        cap = Math.Max(0, cap);
+        if (cap == 0)
+        {
+            return new ReferenceImageSlotAllocation(0, 0);
+        }
+
+        if (string.Equals(mediaType, DraftPostMediaTypes.Video, StringComparison.Ordinal))
+        {
+            var webSlots = Math.Min(2, cap);
+            var ragSlots = Math.Min(1, Math.Max(0, cap - webSlots));
+            return new ReferenceImageSlotAllocation(webSlots, ragSlots);
+        }
+
+        var imageWebSlots = (int)Math.Round(cap * 0.4, MidpointRounding.AwayFromZero);
+        if (cap > 1 && imageWebSlots == 0) imageWebSlots = 1;
+        if (cap > 1 && imageWebSlots >= cap) imageWebSlots = cap - 1;
+        imageWebSlots = Math.Clamp(imageWebSlots, 0, cap);
+        return new ReferenceImageSlotAllocation(imageWebSlots, cap - imageWebSlots);
+    }
+
+    private static int CalculateFreshTopicCandidateLimit(int webReferenceSlots)
+    {
+        if (webReferenceSlots <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Clamp(webReferenceSlots * 3, webReferenceSlots, MaxFreshTopicCandidatePool);
+    }
+
+    private static IReadOnlyList<string> BuildFreshTopicImageQueries(
+        string? refImageQuery,
+        Application.Recommendations.Services.QueryRewriteResult rewrite,
+        string recommendationQuery,
+        string? userPrompt)
+    {
+        var queries = new List<string?>();
+        queries.AddRange(rewrite.VisualQueries);
+        queries.AddRange(ExtractExternalVisualReferenceQueries(userPrompt));
+
+        var normalized = NormalizeQueryList(queries, MaxFreshTopicImageQueries);
+        if (normalized.Count > 0)
+        {
+            return normalized;
+        }
+
+        // Last-resort fallback only. Keep this separate from the normal path so a
+        // good LLM-produced web-query list is not polluted by the raw user prompt.
+        return NormalizeQueryList(
+            new[]
+            {
+                rewrite.VisualQuery,
+                BuildCleanFallbackWebImageQuery(refImageQuery),
+                BuildCleanFallbackWebImageQuery(recommendationQuery),
+            },
+            MaxFreshTopicImageQueries);
+    }
+
+    private static IReadOnlyList<string> ExtractExternalVisualReferenceQueries(string? prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return Array.Empty<string>();
+        }
+
+        var queries = new List<string>();
+        foreach (Match match in Regex.Matches(
+                     prompt,
+                     @"(?:latest\s+)?(?:mv|music\s+video)\s+(?:of|by|from)\s+(?<artist>[^:;\r\n,.]+)\s*[:\-]\s*(?<title>[^.;\r\n]+)",
+                     RegexOptions.IgnoreCase))
+        {
+            var artist = CleanSearchPhrase(match.Groups["artist"].Value);
+            var title = CleanSearchPhrase(match.Groups["title"].Value);
+            if (artist.Length == 0 || title.Length == 0) continue;
+
+            queries.Add($"{artist} {title} MV");
+            queries.Add($"{title} {artist} music video");
+        }
+
+        return NormalizeQueryList(queries, 3);
+    }
+
+    private static IReadOnlyList<string> NormalizeQueryList(IEnumerable<string?> values, int maxItems)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var queries = new List<string>();
+        foreach (var value in values)
+        {
+            var query = CleanSearchPhrase(value);
+            if (query.Length == 0) continue;
+            if (!seen.Add(query)) continue;
+            queries.Add(query);
+            if (queries.Count >= maxItems) break;
+        }
+        return queries;
+    }
+
+    private static string? BuildCleanFallbackWebImageQuery(string? value)
+    {
+        var query = CleanSearchPhrase(value);
+        if (query.Length == 0)
+        {
+            return null;
+        }
+
+        return LooksLikePromptInstruction(query) ? null : query;
+    }
+
+    private static bool LooksLikePromptInstruction(string query)
+    {
+        return Regex.IsMatch(
+            query,
+            @"^\s*(please\s+)?(create|generate|make|write|draft)\s+(me\s+)?",
+            RegexOptions.IgnoreCase);
+    }
+
+    private static string CleanSearchPhrase(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var query = StripMarkdownInline(value).Trim().Trim('"', '\'', '.', '!', '?', ':', ';', ',');
+        query = Regex.Replace(query, @"\s+", " ");
+        query = Regex.Replace(
+            query,
+            @"^\s*(please\s+)?(create|generate|make|write|draft)\s+(me\s+)?(a\s+|an\s+)?((short|social|marketing|promo|promotional)\s+)?(video|image|post|content|article|caption|piece|ad|advertisement)\s*(about|on|for|of)?\s*",
+            "",
+            RegexOptions.IgnoreCase).Trim();
+        query = Regex.Replace(
+            query,
+            @"\s*,?\s*(introduce|showcase|promote|write|create|generate|make)\b.*$",
+            "",
+            RegexOptions.IgnoreCase).Trim();
+        return query.Length <= 120 ? query : query[..120];
+    }
+
     /// <summary>
-    /// Fires Brave image search and returns up to <see cref="MaxFreshTopicImages"/>
-    /// hits (with title/source URL preserved so the rerank step has descriptive text
-    /// to score against). Returns empty on null/blank query, no API key configured,
-    /// or a transport error — never throws (a search failure must not drop the draft).
+    /// Mirrors fresh-topic image hits into user resources when possible, so downstream
+    /// multimodal providers get stable, fetchable URLs instead of hot-linked search
+    /// result CDN URLs.
     /// </summary>
     private async Task<FreshTopicImageMirrorOutcome> MirrorFreshTopicImageHitsAsync(
         Guid userId,
@@ -2142,32 +2393,75 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         return new FreshTopicImageMirrorOutcome(mirroredHits, mirrors, failures);
     }
 
+    /// <summary>
+    /// Fires Brave image search for multiple targeted visual queries, dedupes results,
+    /// and returns a bounded candidate pool. Returns empty on blank queries, no API
+    /// key configured, or transport errors; a search failure must not drop the draft.
+    /// </summary>
     private async Task<FreshTopicImageSearchOutcome> FetchFreshTopicImageHitsAsync(
-        string? query,
+        IReadOnlyList<string> queries,
+        int maxResults,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(query))
+        var normalizedQueries = NormalizeQueryList(queries, MaxFreshTopicImageQueries);
+        if (normalizedQueries.Count == 0 || maxResults <= 0)
         {
-            return new FreshTopicImageSearchOutcome(Array.Empty<Application.Abstractions.Search.ImageSearchHit>());
-        }
-
-        try
-        {
-            var hits = await _imageSearchClient.SearchImagesAsync(
-                query, MaxFreshTopicImages, cancellationToken);
-            var filteredHits = hits
-                .Where(h => !string.IsNullOrWhiteSpace(h.ImageUrl))
-                .Take(MaxFreshTopicImages)
-                .ToList();
-            return new FreshTopicImageSearchOutcome(filteredHits);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Fresh-topic image search failed for query='{Query}'", query);
             return new FreshTopicImageSearchOutcome(
                 Array.Empty<Application.Abstractions.Search.ImageSearchHit>(),
-                ex);
+                Queries: normalizedQueries,
+                QueryOutcomes: Array.Empty<FreshTopicImageQueryOutcome>());
         }
+
+        var allHits = new List<Application.Abstractions.Search.ImageSearchHit>();
+        var outcomes = new List<FreshTopicImageQueryOutcome>();
+        Exception? firstError = null;
+        var perQueryLimit = Math.Clamp(
+            (int)Math.Ceiling(maxResults / (double)Math.Max(normalizedQueries.Count, 1)),
+            1,
+            MaxFreshTopicImagesPerQuery);
+
+        foreach (var query in normalizedQueries)
+        {
+            try
+            {
+                var hits = await _imageSearchClient.SearchImagesAsync(
+                    query, perQueryLimit, cancellationToken);
+                var filteredHits = hits
+                    .Where(h => !string.IsNullOrWhiteSpace(h.ImageUrl))
+                    .ToList();
+                allHits.AddRange(filteredHits);
+                outcomes.Add(new FreshTopicImageQueryOutcome(query, filteredHits.Count));
+            }
+            catch (Exception ex)
+            {
+                firstError ??= ex;
+                _logger.LogWarning(ex, "Fresh-topic image search failed for query='{Query}'", query);
+                outcomes.Add(new FreshTopicImageQueryOutcome(
+                    query,
+                    HitCount: 0,
+                    ErrorCode: ex.GetType().Name,
+                    ErrorMessage: ex.Message));
+            }
+        }
+
+        var dedupedHits = new List<Application.Abstractions.Search.ImageSearchHit>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var hit in allHits)
+        {
+            var key = !string.IsNullOrWhiteSpace(hit.ImageUrl)
+                ? hit.ImageUrl
+                : hit.SourcePageUrl ?? hit.Title ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(key)) continue;
+            if (!seen.Add(key)) continue;
+            dedupedHits.Add(hit);
+            if (dedupedHits.Count >= maxResults) break;
+        }
+
+        return new FreshTopicImageSearchOutcome(
+            dedupedHits,
+            firstError,
+            normalizedQueries,
+            outcomes);
     }
 
     /// <summary>
@@ -2178,7 +2472,10 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     private sealed record ImageRefCandidate(
         string ImageUrl,
         string Source,
-        string DescriptiveText);
+        string DescriptiveText,
+        string? Title = null,
+        string? SourcePageUrl = null,
+        string? SearchQuery = null);
 
     private static string BuildPastPostCandidateText(
         Application.Recommendations.Queries.RecommendationReference r)
@@ -2272,12 +2569,13 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         string? visualQuery,                    // ← K4 enhancement: rewriter's visual_query
         IReadOnlyList<string>? keyTerms,        // ← K4 enhancement: rewriter's key_terms
         int cap,
+        ReferenceImageSlotAllocation allocation,
         CancellationToken cancellationToken)
     {
         if (candidates.Count == 0)
         {
             _logger.LogInformation("DraftPost {Id}: rerank skipped — empty candidate pool", taskId);
-            return new ReferenceImageSelectionOutcome(new List<string>());
+            return new ReferenceImageSelectionOutcome(new List<SelectedReferenceImage>(), Strategy: "none");
         }
 
         // Compose the rerank query. Topic alone is too thin; the caption gives the
@@ -2306,14 +2604,191 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             _logger.LogInformation(
                 "DraftPost {Id}: rerank skipped — empty query; falling back to candidate order",
                 taskId);
-            return new ReferenceImageSelectionOutcome(candidates.Take(cap).Select(c => c.ImageUrl).ToList());
+            return new ReferenceImageSelectionOutcome(
+                SelectReferencesByAllocation(
+                    candidates.Select((candidate, index) => new ScoredImageRefCandidate(candidate, null, index + 1)).ToList(),
+                    cap,
+                    allocation),
+                Strategy: "candidate-order");
         }
 
-        // Multimodal: each candidate sends both its descriptive text AND its image URL,
-        // so Cohere's cross-encoder scores against the actual visual content (not just
-        // a text proxy). For past-post candidates the URL is the S3-mirrored variant
-        // (Cohere can fetch S3 just fine); for fresh-topic the URL is whatever Brave
-        // returned.
+        return await SelectReferencesBySourceAsync(
+            taskId,
+            candidates,
+            query,
+            topic,
+            caption,
+            visualQuery,
+            keyTerms,
+            cap,
+            allocation,
+            cancellationToken);
+    }
+
+    private async Task<ReferenceImageSelectionOutcome> SelectReferencesBySourceAsync(
+        Guid taskId,
+        IReadOnlyList<ImageRefCandidate> candidates,
+        string query,
+        string? topic,
+        string caption,
+        string? visualQuery,
+        IReadOnlyList<string>? keyTerms,
+        int cap,
+        ReferenceImageSlotAllocation allocation,
+        CancellationToken cancellationToken)
+    {
+        var freshCandidates = candidates
+            .Where(candidate => IsFreshTopicCandidate(candidate.Source))
+            .ToList();
+        var ragCandidates = candidates
+            .Where(candidate => !IsFreshTopicCandidate(candidate.Source))
+            .ToList();
+        var selected = new List<SelectedReferenceImage>();
+        var usedUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var strategyParts = new List<string>();
+        Exception? error = null;
+
+        var webLimit = Math.Min(allocation.Web, cap);
+        if (webLimit > 0 && freshCandidates.Count > 0)
+        {
+            var webSelection = await TrySelectReferenceImagesWithLlmAsync(
+                taskId,
+                freshCandidates,
+                query,
+                topic,
+                caption,
+                visualQuery,
+                keyTerms,
+                webLimit,
+                new ReferenceImageSlotAllocation(webLimit, 0),
+                cancellationToken);
+            if (webSelection is not null && webSelection.SelectedImages.Count > 0)
+            {
+                AddSelected(webSelection.SelectedImages, webLimit);
+                strategyParts.Add("web-llm");
+            }
+            else
+            {
+                AddSelected(SelectReferencesByCandidateOrder(freshCandidates, webLimit), webLimit);
+                strategyParts.Add("web-candidate-order-fallback");
+            }
+        }
+
+        var ragLimit = Math.Min(allocation.Rag, cap - selected.Count);
+        if (ragLimit > 0 && ragCandidates.Count > 0)
+        {
+            var ragSelection = await SelectReferenceImagesWithRerankAsync(
+                taskId,
+                ragCandidates,
+                query,
+                ragLimit,
+                "rag",
+                cancellationToken);
+            AddSelected(ragSelection.SelectedImages, ragLimit);
+            strategyParts.Add(ragSelection.Strategy);
+            error ??= ragSelection.Error;
+        }
+
+        if (selected.Count < cap)
+        {
+            var remainingRag = ragCandidates
+                .Where(candidate => !usedUrls.Contains(candidate.ImageUrl))
+                .ToList();
+            if (remainingRag.Count > 0)
+            {
+                var fill = await SelectReferenceImagesWithRerankAsync(
+                    taskId,
+                    remainingRag,
+                    query,
+                    cap - selected.Count,
+                    "rag-fill",
+                    cancellationToken);
+                AddSelected(fill.SelectedImages, cap - selected.Count);
+                strategyParts.Add(fill.Strategy);
+                error ??= fill.Error;
+            }
+        }
+
+        if (selected.Count < cap)
+        {
+            var remainingFresh = freshCandidates
+                .Where(candidate => !usedUrls.Contains(candidate.ImageUrl))
+                .ToList();
+            if (remainingFresh.Count > 0)
+            {
+                var webFill = await TrySelectReferenceImagesWithLlmAsync(
+                    taskId,
+                    remainingFresh,
+                    query,
+                    topic,
+                    caption,
+                    visualQuery,
+                    keyTerms,
+                    cap - selected.Count,
+                    new ReferenceImageSlotAllocation(cap - selected.Count, 0),
+                    cancellationToken);
+                if (webFill is not null && webFill.SelectedImages.Count > 0)
+                {
+                    AddSelected(webFill.SelectedImages, cap - selected.Count);
+                    strategyParts.Add("web-llm-fill");
+                }
+                else
+                {
+                    AddSelected(SelectReferencesByCandidateOrder(remainingFresh, cap - selected.Count), cap - selected.Count);
+                    strategyParts.Add("web-candidate-order-fill");
+                }
+            }
+        }
+
+        if (selected.Count == 0)
+        {
+            selected.AddRange(SelectReferencesByCandidateOrder(candidates, cap));
+            strategyParts.Add("candidate-order");
+        }
+
+        return new ReferenceImageSelectionOutcome(
+            selected.Take(cap).ToList(),
+            error,
+            string.Join("+", strategyParts.Distinct(StringComparer.OrdinalIgnoreCase)));
+
+        void AddSelected(IEnumerable<SelectedReferenceImage> references, int maxCount)
+        {
+            foreach (var reference in references)
+            {
+                if (selected.Count >= cap || maxCount <= 0)
+                {
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(reference.ImageUrl))
+                {
+                    continue;
+                }
+
+                if (!usedUrls.Add(reference.ImageUrl))
+                {
+                    continue;
+                }
+
+                selected.Add(reference);
+                maxCount--;
+            }
+        }
+    }
+
+    private async Task<ReferenceImageSelectionOutcome> SelectReferenceImagesWithRerankAsync(
+        Guid taskId,
+        IReadOnlyList<ImageRefCandidate> candidates,
+        string query,
+        int cap,
+        string sourceLabel,
+        CancellationToken cancellationToken)
+    {
+        if (cap <= 0 || candidates.Count == 0)
+        {
+            return new ReferenceImageSelectionOutcome(new List<SelectedReferenceImage>(), Strategy: $"{sourceLabel}-rerank");
+        }
+
         var docs = candidates
             .Select(c => new RerankDocument(Text: c.DescriptiveText, ImageUrl: c.ImageUrl))
             .ToList();
@@ -2324,21 +2799,29 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "DraftPost {Id}: rerank threw; falling back to candidate order", taskId);
+            _logger.LogWarning(
+                ex,
+                "DraftPost {Id}: {SourceLabel} rerank threw; falling back to candidate order",
+                taskId,
+                sourceLabel);
             return new ReferenceImageSelectionOutcome(
-                candidates.Take(cap).Select(c => c.ImageUrl).ToList(),
-                ex);
+                SelectReferencesByCandidateOrder(candidates, cap),
+                ex,
+                Strategy: $"{sourceLabel}-candidate-order");
         }
 
         if (scored.Count == 0)
         {
             _logger.LogWarning(
-                "DraftPost {Id}: rerank returned 0 results for {DocCount} docs; falling back to candidate order",
-                taskId, docs.Count);
-            return new ReferenceImageSelectionOutcome(candidates.Take(cap).Select(c => c.ImageUrl).ToList());
+                "DraftPost {Id}: {SourceLabel} rerank returned 0 results for {DocCount} docs; falling back to candidate order",
+                taskId,
+                sourceLabel,
+                docs.Count);
+            return new ReferenceImageSelectionOutcome(
+                SelectReferencesByCandidateOrder(candidates, cap),
+                Strategy: $"{sourceLabel}-candidate-order");
         }
 
-        // Apply threshold + cap. Log the full picture so it's easy to tune the threshold.
         var ordered = scored.OrderByDescending(r => r.Score).ToList();
         for (var i = 0; i < ordered.Count; i++)
         {
@@ -2346,24 +2829,333 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
             if (r.Index < 0 || r.Index >= candidates.Count) continue;
             var c = candidates[r.Index];
             _logger.LogInformation(
-                "DraftPost {Id}: rerank rank {Rank}/{Total} score={Score:F3} src={Source} url={Url} doc=\"{Doc}\"",
-                taskId, i + 1, ordered.Count, r.Score, c.Source,
+                "DraftPost {Id}: {SourceLabel} rerank rank {Rank}/{Total} score={Score:F3} src={Source} url={Url} doc=\"{Doc}\"",
+                taskId, sourceLabel, i + 1, ordered.Count, r.Score, c.Source,
                 c.ImageUrl[..Math.Min(c.ImageUrl.Length, 100)],
                 c.DescriptiveText[..Math.Min(c.DescriptiveText.Length, 120)]);
         }
 
         var kept = ordered
             .Where(r => r.Score >= RerankRelevanceThreshold && r.Index >= 0 && r.Index < candidates.Count)
+            .Select((r, index) => new ScoredImageRefCandidate(
+                candidates[r.Index],
+                r.Score,
+                index + 1))
             .Take(cap)
-            .Select(r => candidates[r.Index].ImageUrl)
+            .Select(candidate => ToSelectedReferenceImage(candidate))
             .ToList();
 
-        var dropped = ordered.Count - kept.Count;
         _logger.LogInformation(
-            "DraftPost {Id}: rerank kept {Kept}/{Total} (threshold={Threshold:F2}, cap={Cap}, dropped {Dropped})",
-            taskId, kept.Count, ordered.Count, RerankRelevanceThreshold, cap, dropped);
+            "DraftPost {Id}: {SourceLabel} rerank kept {Kept}/{Total} (threshold={Threshold:F2}, cap={Cap})",
+            taskId,
+            sourceLabel,
+            kept.Count,
+            ordered.Count,
+            RerankRelevanceThreshold,
+            cap);
 
-        return new ReferenceImageSelectionOutcome(kept);
+        return new ReferenceImageSelectionOutcome(kept, Strategy: $"{sourceLabel}-rerank");
+    }
+
+    private async Task<ReferenceImageSelectionOutcome?> TrySelectReferenceImagesWithLlmAsync(
+        Guid taskId,
+        IReadOnlyList<ImageRefCandidate> candidates,
+        string query,
+        string? topic,
+        string caption,
+        string? visualQuery,
+        IReadOnlyList<string>? keyTerms,
+        int cap,
+        ReferenceImageSlotAllocation allocation,
+        CancellationToken cancellationToken)
+    {
+        if (cap <= 0)
+        {
+            return new ReferenceImageSelectionOutcome(new List<SelectedReferenceImage>(), Strategy: "llm");
+        }
+
+        var indexedCandidates = candidates
+            .Select((candidate, originalIndex) => new { Candidate = candidate, OriginalIndex = originalIndex })
+            .Where(item => !string.IsNullOrWhiteSpace(item.Candidate.ImageUrl))
+            .Take(MaxReferenceSelectorCandidateImages)
+            .Select((item, displayIndex) => new IndexedImageRefCandidate(displayIndex + 1, item.OriginalIndex, item.Candidate))
+            .ToList();
+        if (indexedCandidates.Count == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var selectorResult = await _multimodalLlm.GenerateAnswerAsync(
+                new MultimodalAnswerRequest(
+                    SystemPrompt: ReferenceImageSelectorSystemPrompt,
+                    UserText: BuildReferenceImageSelectorUserText(
+                        indexedCandidates,
+                        query,
+                        topic,
+                        caption,
+                        visualQuery,
+                        keyTerms,
+                        cap,
+                        allocation),
+                    ReferenceImageUrls: indexedCandidates.Select(candidate => candidate.Candidate.ImageUrl).ToList(),
+                    MaxOutputTokens: ReferenceSelectorMaxOutputTokens,
+                    WebSearchEnabled: false),
+                cancellationToken);
+
+            var payload = ExtractJsonPayload(selectorResult.Answer ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(payload))
+            {
+                _logger.LogWarning(
+                    "DraftPost {Id}: reference image LLM selector returned no JSON; falling back to rerank",
+                    taskId);
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            if (!TryGetJsonProperty(root, "selected", out var selectedElement) ||
+                selectedElement.ValueKind != JsonValueKind.Array)
+            {
+                _logger.LogWarning(
+                    "DraftPost {Id}: reference image LLM selector JSON has no selected array; falling back to rerank",
+                    taskId);
+                return null;
+            }
+
+            var selected = new List<SelectedReferenceImage>();
+            var usedUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pick in selectedElement.EnumerateArray())
+            {
+                if (selected.Count >= cap)
+                {
+                    break;
+                }
+
+                if (pick.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                var candidateNumber = ReadJsonInt(
+                    pick,
+                    "candidate_number",
+                    "candidateNumber",
+                    "candidate_index",
+                    "candidateIndex",
+                    "index");
+                if (candidateNumber is null)
+                {
+                    continue;
+                }
+
+                var indexed = indexedCandidates.FirstOrDefault(candidate => candidate.CandidateNumber == candidateNumber.Value);
+                if (indexed is null && candidateNumber.Value >= 0 && candidateNumber.Value < indexedCandidates.Count)
+                {
+                    // Tolerate a zero-based index if the model ignores the schema.
+                    indexed = indexedCandidates[candidateNumber.Value];
+                }
+
+                if (indexed is null)
+                {
+                    continue;
+                }
+
+                var candidate = indexed.Candidate;
+                if (!usedUrls.Add(candidate.ImageUrl))
+                {
+                    continue;
+                }
+
+                var coverage = TruncateOneLine(ReadJsonString(pick, "coverage", "covers"), 180);
+                var reason = TruncateOneLine(ReadJsonString(pick, "reason", "selection_reason", "selectionReason"), 240);
+                selected.Add(ToSelectedReferenceImage(
+                    new ScoredImageRefCandidate(candidate, null, selected.Count + 1),
+                    coverage,
+                    reason));
+            }
+
+            if (selected.Count == 0)
+            {
+                _logger.LogWarning(
+                    "DraftPost {Id}: reference image LLM selector picked no valid candidates; falling back to rerank",
+                    taskId);
+                return null;
+            }
+
+            _logger.LogInformation(
+                "DraftPost {Id}: reference image LLM selector kept {Kept}/{VisibleCandidates} (cap={Cap}, webSlots={WebSlots}, ragSlots={RagSlots})",
+                taskId, selected.Count, indexedCandidates.Count, cap, allocation.Web, allocation.Rag);
+
+            return new ReferenceImageSelectionOutcome(selected, Strategy: "llm");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "DraftPost {Id}: reference image LLM selector failed; falling back to rerank", taskId);
+            return null;
+        }
+    }
+
+    private static string BuildReferenceImageSelectorUserText(
+        IReadOnlyList<IndexedImageRefCandidate> candidates,
+        string query,
+        string? topic,
+        string caption,
+        string? visualQuery,
+        IReadOnlyList<string>? keyTerms,
+        int cap,
+        ReferenceImageSlotAllocation allocation)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Select the best visual reference images for the next AI-generated social post.");
+        sb.AppendLine($"Maximum images to select: {cap}");
+        sb.AppendLine($"Source mix guidance: fresh web images={allocation.Web}, past-post/RAG images={allocation.Rag}. Use this as guidance only; coverage of requested subjects is more important.");
+        sb.AppendLine("Candidate N maps to attached image N. Return candidate_number values from this numbered list.");
+        sb.AppendLine("For web-search candidates, evaluate attached image N together with its web_search_text fields. Use the originating search_query and result title/source to identify whether the image matches the user's requested subject/entity.");
+        sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(topic))
+        {
+            sb.AppendLine("Topic/search intent:");
+            sb.AppendLine(TruncateOneLine(topic, 500));
+            sb.AppendLine();
+        }
+
+        if (!string.IsNullOrWhiteSpace(visualQuery))
+        {
+            sb.AppendLine("Visual query:");
+            sb.AppendLine(TruncateOneLine(visualQuery, 500));
+            sb.AppendLine();
+        }
+
+        if (keyTerms is { Count: > 0 })
+        {
+            sb.AppendLine("Key terms/entities:");
+            sb.AppendLine(string.Join(", ", keyTerms.Take(12)));
+            sb.AppendLine();
+        }
+
+        if (!string.IsNullOrWhiteSpace(caption))
+        {
+            sb.AppendLine("Draft caption:");
+            sb.AppendLine(TruncateOneLine(caption, 900));
+            sb.AppendLine();
+        }
+
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            sb.AppendLine("Combined selection query:");
+            sb.AppendLine(TruncateOneLine(query, 1200));
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("Candidates:");
+        foreach (var indexed in candidates)
+        {
+            var candidate = indexed.Candidate;
+            var title = TruncateOneLine(candidate.Title, 160);
+            var searchQuery = TruncateOneLine(candidate.SearchQuery, 160);
+            var sourcePage = TruncateOneLine(candidate.SourcePageUrl, 180);
+            var description = TruncateOneLine(candidate.DescriptiveText, 260);
+            sb.Append(indexed.CandidateNumber)
+                .Append(". source=")
+                .Append(candidate.Source);
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                sb.Append("; web_search_title=\"").Append(title).Append('"');
+            }
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                sb.Append("; web_search_query=\"").Append(searchQuery).Append('"');
+            }
+            if (!string.IsNullOrWhiteSpace(sourcePage))
+            {
+                sb.Append("; web_search_source_page=\"").Append(sourcePage).Append('"');
+            }
+            if (!string.IsNullOrWhiteSpace(description))
+            {
+                sb.Append("; web_search_text=\"").Append(description).Append('"');
+            }
+            sb.AppendLine();
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("Return JSON only. Pick a balanced set, not just the highest-quality-looking photos.");
+        return sb.ToString();
+    }
+
+    private static List<SelectedReferenceImage> SelectReferencesByCandidateOrder(
+        IReadOnlyList<ImageRefCandidate> candidates,
+        int cap)
+    {
+        return candidates
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate.ImageUrl))
+            .DistinctBy(candidate => candidate.ImageUrl, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Max(0, cap))
+            .Select((candidate, index) => ToSelectedReferenceImage(new ScoredImageRefCandidate(candidate, null, index + 1)))
+            .ToList();
+    }
+
+    private static List<SelectedReferenceImage> SelectReferencesByAllocation(
+        IReadOnlyList<ScoredImageRefCandidate> rankedCandidates,
+        int cap,
+        ReferenceImageSlotAllocation allocation)
+    {
+        var selected = new List<ScoredImageRefCandidate>();
+        var usedUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        AddCandidates(rankedCandidates.Where(candidate => IsFreshTopicCandidate(candidate.Candidate.Source)), allocation.Web);
+        AddCandidates(rankedCandidates.Where(candidate => !IsFreshTopicCandidate(candidate.Candidate.Source)), allocation.Rag);
+        AddCandidates(rankedCandidates, cap - selected.Count);
+
+        return selected
+            .OrderBy(candidate => candidate.Rank)
+            .Take(cap)
+            .Select(candidate => ToSelectedReferenceImage(candidate))
+            .ToList();
+
+        void AddCandidates(IEnumerable<ScoredImageRefCandidate> candidatesToAdd, int count)
+        {
+            if (count <= 0) return;
+
+            foreach (var candidate in candidatesToAdd)
+            {
+                if (selected.Count >= cap) return;
+                if (count <= 0) return;
+                if (string.IsNullOrWhiteSpace(candidate.Candidate.ImageUrl)) continue;
+                if (!usedUrls.Add(candidate.Candidate.ImageUrl)) continue;
+
+                selected.Add(candidate);
+                count--;
+            }
+        }
+    }
+
+    private static bool IsFreshTopicCandidate(string source)
+    {
+        return source.StartsWith("fresh-topic", StringComparison.OrdinalIgnoreCase) ||
+               source.Equals("web", StringComparison.OrdinalIgnoreCase) ||
+               source.Equals("web-search", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static SelectedReferenceImage ToSelectedReferenceImage(
+        ScoredImageRefCandidate scored,
+        string? coverage = null,
+        string? selectionReason = null)
+    {
+        var candidate = scored.Candidate;
+        return new SelectedReferenceImage(
+            ImageUrl: candidate.ImageUrl,
+            Source: candidate.Source,
+            DescriptiveText: candidate.DescriptiveText,
+            Title: candidate.Title,
+            SourcePageUrl: candidate.SourcePageUrl,
+            SearchQuery: candidate.SearchQuery,
+            Score: scored.Score,
+            Rank: scored.Rank,
+            Coverage: coverage,
+            SelectionReason: selectionReason);
     }
 
     /// <summary>
@@ -2405,6 +3197,17 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
         return value.Length <= max ? value : value[..max] + $"…[truncated {value.Length - max} more chars]";
+    }
+
+    private static string TruncateOneLine(string? value, int max)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var normalized = Regex.Replace(value, @"\s+", " ").Trim();
+        return normalized.Length <= max ? normalized : normalized[..max] + "...";
     }
 
     private static string BuildImagePrompt(string userPrompt)
@@ -2529,14 +3332,14 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
 
         if (!string.IsNullOrWhiteSpace(styleKnowledge))
         {
-            sb.AppendLine($"=== Image-design rules for STYLE = {style} (from knowledge base — AUTHORITATIVE) ===");
+            sb.AppendLine($"=== Optional image-design heuristics for STYLE = {style} (from knowledge base; apply only if relevant) ===");
             sb.AppendLine(styleKnowledge.Length > 3000 ? styleKnowledge[..3000] + "…" : styleKnowledge);
             sb.AppendLine();
         }
 
         if (!string.IsNullOrWhiteSpace(rag.Answer))
         {
-            sb.AppendLine("RAG recommendation summary (formulas, hooks, design heuristics already applied):");
+            sb.AppendLine("RAG recommendation summary (may include formulas/hooks/design heuristics; evaluate before applying):");
             sb.AppendLine(rag.Answer.Length > 1500 ? rag.Answer[..1500] + "…" : rag.Answer);
             sb.AppendLine();
         }
@@ -2623,6 +3426,91 @@ public sealed class DraftPostGenerationConsumer : IConsumer<GenerateDraftPostSta
         if (t.EndsWith("```"))
             t = t[..^3].TrimEnd();
         return t;
+    }
+
+    private static string? ExtractJsonPayload(string rawAnswer)
+    {
+        var trimmed = StripJsonFence(rawAnswer);
+        var objectStart = trimmed.IndexOf('{');
+        var arrayStart = trimmed.IndexOf('[');
+        var start = objectStart >= 0 && arrayStart >= 0
+            ? Math.Min(objectStart, arrayStart)
+            : Math.Max(objectStart, arrayStart);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        var end = trimmed[start] == '{'
+            ? trimmed.LastIndexOf('}')
+            : trimmed.LastIndexOf(']');
+        if (end <= start)
+        {
+            return null;
+        }
+
+        return trimmed[start..(end + 1)];
+    }
+
+    private static bool TryGetJsonProperty(JsonElement element, string propertyName, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty(propertyName, out value))
+            {
+                return true;
+            }
+
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static int? ReadJsonInt(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!TryGetJsonProperty(element, propertyName, out var value))
+            {
+                continue;
+            }
+
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
+            {
+                return number;
+            }
+
+            if (value.ValueKind == JsonValueKind.String &&
+                int.TryParse(value.GetString(), out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ReadJsonString(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (TryGetJsonProperty(element, propertyName, out var value) &&
+                value.ValueKind == JsonValueKind.String)
+            {
+                return value.GetString();
+            }
+        }
+
+        return null;
     }
 
     private static string SerializeReferences(IReadOnlyList<RecommendationReference> references)

@@ -110,7 +110,8 @@ public sealed class BraveImageSearchClient : IImageSearchClient
                     SourcePageUrl: r.Url,
                     Title: r.Title,
                     Width: r.Properties?.Width,
-                    Height: r.Properties?.Height));
+                    Height: r.Properties?.Height,
+                    Query: query));
             }
             return hits;
         }
