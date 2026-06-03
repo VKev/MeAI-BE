@@ -8,7 +8,7 @@ eks_cluster_endpoint_public_access = true
 eks_cluster_endpoint_private_access = true
 
 eks_node_instance_types = [
-  "t3.small"
+  "t3.large"
 ]
 
 eks_node_min_size = 2
@@ -34,78 +34,56 @@ k8s_resources = {
   redis = {
     replicas = 1
     requests = {
-      cpu    = "25m"
-      memory = "64Mi"
+      cpu    = "50m"
+      memory = "128Mi"
     }
     limits = {
-      cpu    = "100m"
-      memory = "128Mi"
+      cpu    = "250m"
+      memory = "256Mi"
     }
   }
   rabbitmq = {
     replicas = 1
     requests = {
-      cpu    = "100m"
-      memory = "192Mi"
-    }
-    limits = {
       cpu    = "250m"
-      memory = "320Mi"
-    }
-  }
-  n8n = {
-    replicas = 1
-    requests = {
-      cpu    = "150m"
-      memory = "256Mi"
+      memory = "512Mi"
     }
     limits = {
-      cpu    = "300m"
-      memory = "384Mi"
-    }
-  }
-  n8n_proxy = {
-    replicas = 1
-    requests = {
-      cpu    = "25m"
-      memory = "32Mi"
-    }
-    limits = {
-      cpu    = "100m"
-      memory = "64Mi"
+      cpu    = "1000m"
+      memory = "1024Mi"
     }
   }
   ai = {
     replicas = 1
     requests = {
-      cpu    = "100m"
-      memory = "192Mi"
+      cpu    = "300m"
+      memory = "512Mi"
     }
     limits = {
-      cpu    = "250m"
-      memory = "256Mi"
+      cpu    = "1000m"
+      memory = "1536Mi"
     }
   }
   user = {
     replicas = 1
     requests = {
-      cpu    = "100m"
-      memory = "192Mi"
+      cpu    = "300m"
+      memory = "512Mi"
     }
     limits = {
-      cpu    = "250m"
-      memory = "256Mi"
+      cpu    = "1000m"
+      memory = "1536Mi"
     }
   }
   apigateway = {
     replicas = 1
     requests = {
-      cpu    = "100m"
-      memory = "160Mi"
+      cpu    = "250m"
+      memory = "384Mi"
     }
     limits = {
-      cpu    = "250m"
-      memory = "256Mi"
+      cpu    = "1000m"
+      memory = "1024Mi"
     }
   }
 }
@@ -166,11 +144,11 @@ spec:
                   key: redis-password
           resources:
             requests:
-              cpu: 25m
-              memory: 64Mi
-            limits:
-              cpu: 100m
+              cpu: 50m
               memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
           command: ['sh', '-c', 'exec redis-server --requirepass "$REDIS_PASSWORD"']
           livenessProbe:
             exec:
@@ -268,11 +246,11 @@ spec:
                   key: rabbitmq-password
           resources:
             requests:
-              cpu: 100m
-              memory: 192Mi
-            limits:
               cpu: 250m
-              memory: 320Mi
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1024Mi
           livenessProbe:
             exec:
               command: ["rabbitmq-diagnostics", "-q", "ping"]
@@ -313,246 +291,6 @@ spec:
       port: 15672
       targetPort: 15672
       nodePort: 31672
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: n8n-data
-  namespace: TERRAFORM_NAMESPACE
-spec:
-  storageClassName: gp3
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: n8n
-  namespace: TERRAFORM_NAMESPACE
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: n8n
-  template:
-    metadata:
-      labels:
-        app: n8n
-    spec:
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
-        fsGroupChangePolicy: "OnRootMismatch"
-      containers:
-        - name: n8n
-          image: your-aws-id.dkr.ecr.us-east-1.amazonaws.com/dockerhub/n8nio/n8n:latest
-          env:
-            - name: N8N_HOST
-              value: "0.0.0.0"
-            - name: N8N_PORT
-              value: "5678"
-            - name: N8N_PROTOCOL
-              value: "http"
-            - name: N8N_SECURE_COOKIE
-              value: "false"
-            - name: N8N_PATH
-              value: "/n8n/"
-            - name: N8N_DB_TYPE
-              value: "postgresdb"
-            - name: N8N_DB_POSTGRESDB_HOST
-              value: "TERRAFORM_RDS_HOST_USER_N8NDB"
-            - name: N8N_DB_POSTGRESDB_PORT
-              value: "TERRAFORM_RDS_PORT_USER_N8NDB"
-            - name: N8N_DB_POSTGRESDB_DATABASE
-              value: "TERRAFORM_RDS_DB_USER_N8NDB"
-            - name: N8N_DB_POSTGRESDB_USER
-              value: "TERRAFORM_RDS_USERNAME_USER_N8NDB"
-            - name: N8N_DB_POSTGRESDB_PASSWORD
-              value: "TERRAFORM_RDS_PASSWORD_USER_N8NDB"
-            - name: GENERIC_TIMEZONE
-              value: "Asia/Ho_Chi_Minh"
-            - name: TZ
-              value: "Asia/Ho_Chi_Minh"
-            - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
-              value: "true"
-            - name: N8N_BLOCK_ENV_ACCESS_IN_NODE
-              value: "false"
-            - name: N8N_DIAGNOSTICS_ENABLED
-              value: "false"
-            - name: N8N_VERSION_NOTIFICATIONS_ENABLED
-              value: "false"
-            - name: N8N_TEMPLATES_ENABLED
-              value: "false"
-            - name: N8N_METRICS
-              value: "true"
-            - name: QUEUE_HEALTH_CHECK_ACTIVE
-              value: "true"
-            - name: NODE_OPTIONS
-              value: "--max-old-space-size=512"
-            - name: N8N_EDITOR_BASE_URL
-              value: "http://localhost:5678/n8n/"
-            - name: WEBHOOK_URL
-              value: "http://localhost:5678/n8n/"
-            - name: VUE_APP_URL_BASE_API
-              value: "http://localhost:5678/n8n/"
-            - name: BRAVE_SEARCH_API_KEY
-              value: "change-me"
-          resources:
-            requests:
-              cpu: 150m
-              memory: 256Mi
-            limits:
-              cpu: 300m
-              memory: 384Mi
-          ports:
-            - containerPort: 5678
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 5678
-            initialDelaySeconds: 20
-            periodSeconds: 15
-          readinessProbe:
-            httpGet:
-              path: /healthz
-              port: 5678
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          volumeMounts:
-            - name: n8n-data
-              mountPath: /home/node/.n8n
-      volumes:
-        - name: n8n-data
-          persistentVolumeClaim:
-            claimName: n8n-data
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: n8n
-  namespace: TERRAFORM_NAMESPACE
-spec:
-  type: ClusterIP
-  selector:
-    app: n8n
-  ports:
-    - port: 5678
-      targetPort: 5678
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: n8n-nginx-conf
-  namespace: TERRAFORM_NAMESPACE
-data:
-  nginx.conf: |
-    user  nginx;
-    worker_processes  auto;
-
-    error_log  /var/log/nginx/error.log warn;
-    pid        /var/run/nginx.pid;
-
-    events {
-        worker_connections 1024;
-    }
-
-    http {
-        include       /etc/nginx/mime.types;
-        default_type  application/octet-stream;
-
-        resolver 127.0.0.11 valid=30s ipv6=off;
-
-        map $http_upgrade $connection_upgrade {
-            default upgrade;
-            ''      close;
-        }
-
-        sendfile        on;
-        keepalive_timeout  65;
-
-        server {
-            listen 5678;
-            server_name _;
-
-            location = /       { return 302 /n8n/; }
-            location = /n8n    { return 301 /n8n/; }
-
-            location /n8n/ {
-                proxy_http_version 1.1;
-                proxy_set_header Upgrade $http_upgrade;
-                proxy_set_header Connection $connection_upgrade;
-
-                proxy_set_header Host              $http_host;
-                proxy_set_header X-Real-IP         $remote_addr;
-                proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto $scheme;
-                proxy_set_header X-Forwarded-Host  $http_host;
-                proxy_set_header X-Forwarded-Port  $server_port;
-                proxy_set_header X-Forwarded-Prefix /n8n;
-
-                proxy_read_timeout 300;
-                proxy_send_timeout 300;
-
-                rewrite ^/n8n/(.*)$ /$1 break;
-                proxy_pass http://n8n:5678/;
-            }
-        }
-    }
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: n8n-proxy
-  namespace: TERRAFORM_NAMESPACE
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: n8n-proxy
-  template:
-    metadata:
-      labels:
-        app: n8n-proxy
-    spec:
-      containers:
-        - name: nginx
-          image: your-aws-id.dkr.ecr.us-east-1.amazonaws.com/dockerhub/library/nginx:1.27-alpine
-          ports:
-            - containerPort: 5678
-          resources:
-            requests:
-              cpu: 25m
-              memory: 32Mi
-            limits:
-              cpu: 100m
-              memory: 64Mi
-          volumeMounts:
-            - name: nginx-conf
-              mountPath: /etc/nginx/nginx.conf
-              subPath: nginx.conf
-      volumes:
-        - name: nginx-conf
-          configMap:
-            name: n8n-nginx-conf
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: n8n-proxy
-  namespace: TERRAFORM_NAMESPACE
-spec:
-  type: NodePort
-  selector:
-    app: n8n-proxy
-  ports:
-    - port: 5678
-      targetPort: 5678
-      nodePort: 30578
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -641,11 +379,11 @@ spec:
               value: "<REDACTED>"
           resources:
             requests:
-              cpu: 100m
-              memory: 192Mi
+              cpu: 300m
+              memory: 512Mi
             limits:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 1000m
+              memory: 1536Mi
 ---
 apiVersion: v1
 kind: Service
@@ -813,11 +551,11 @@ spec:
               value: "<REDACTED>"
           resources:
             requests:
-              cpu: 100m
-              memory: 192Mi
+              cpu: 300m
+              memory: 512Mi
             limits:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 1000m
+              memory: 1536Mi
 ---
 apiVersion: v1
 kind: Service
@@ -894,11 +632,11 @@ spec:
               value: "60"
           resources:
             requests:
-              cpu: 100m
-              memory: 160Mi
-            limits:
               cpu: 250m
-              memory: 256Mi
+              memory: 384Mi
+            limits:
+              cpu: 1000m
+              memory: 1024Mi
 ---
 apiVersion: v1
 kind: Service

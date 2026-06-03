@@ -32,8 +32,7 @@ enable_service_connect = true
 rds = {
   user = {
     db_names = [
-      "defaultdb",
-      "n8ndb"
+      "defaultdb"
     ]
     username          = "<REDACTED>"
     engine_version    = "18.1"
