@@ -16,6 +16,17 @@ public sealed partial class FeedDemoDataSeeder
     private const string RuntimeDirectoryName = "runtime";
     private const string UserStateFileName = "users.state.json";
     private const string FeedStateFileName = "feed.state.json";
+    private static readonly string[] DeterministicMediaFileNames =
+    [
+        "landscape.gif",
+        "landscape.jpg",
+        "landscape2.jpg",
+        "landscapevideo.mp4",
+        "portailvideo.mp4",
+        "squaregif.gif",
+        "squaregif2.gif"
+    ];
+
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -58,16 +69,22 @@ public sealed partial class FeedDemoDataSeeder
 
         var userStateWaitTimeout = ResolvePositiveTimeSpan(_options.UserStateWaitTimeoutSeconds, 600);
         var userStatePollInterval = ResolvePositiveTimeSpan(_options.UserStatePollIntervalSeconds, 2);
-        if (!await WaitForUserStateAsync(userStatePath, userStateWaitTimeout, userStatePollInterval, cancellationToken))
+        FeedSeedUserStateFile? userState;
+        if (await WaitForUserStateAsync(userStatePath, userStateWaitTimeout, userStatePollInterval, cancellationToken))
+        {
+            userState = await LoadUserStateAsync(userStatePath, cancellationToken);
+        }
+        else
         {
             _logger.LogWarning(
-                "Feed demo data seed skipped: user seed state was not found at {StatePath} after waiting {TimeoutSeconds} seconds.",
+                "Feed demo data seed user state was not found at {StatePath} after waiting {TimeoutSeconds} seconds. Falling back to deterministic seed state.",
                 userStatePath,
                 userStateWaitTimeout.TotalSeconds);
-            return;
+
+            userState = BuildDeterministicUserState();
+            await WriteUserStateAsync(userStatePath, userState, cancellationToken);
         }
 
-        var userState = await LoadUserStateAsync(userStatePath, cancellationToken);
         if (userState is null || userState.Users.Count == 0)
         {
             _logger.LogWarning("Feed demo data seed skipped: user seed state is empty.");
@@ -764,6 +781,106 @@ public sealed partial class FeedDemoDataSeeder
         return await JsonSerializer.DeserializeAsync<FeedSeedUserStateFile>(stream, SerializerOptions, cancellationToken);
     }
 
+    private static async Task WriteUserStateAsync(
+        string statePath,
+        FeedSeedUserStateFile state,
+        CancellationToken cancellationToken)
+    {
+        var json = JsonSerializer.Serialize(state, SerializerOptions);
+        await File.WriteAllTextAsync(statePath, json, cancellationToken);
+    }
+
+    private static FeedSeedUserStateFile BuildDeterministicUserState()
+    {
+        var users = BuildUserPlans()
+            .Select(plan => new FeedSeedUserState
+            {
+                Id = CreateDeterministicGuid($"feed-seed:user:{plan.Username}"),
+                Username = plan.Username,
+                Email = $"{plan.Username}+seed@meai.local",
+                FullName = plan.Username.Replace('_', ' '),
+                ProfileKind = "fallback",
+                HasMedia = plan.HasMedia
+            })
+            .ToList();
+
+        var resources = users
+            .Where(user => user.HasMedia)
+            .SelectMany(user => DeterministicMediaFileNames.Select(fileName => new FeedSeedResourceState
+            {
+                Id = CreateDeterministicGuid($"feed-seed:resource:{user.Username}:{fileName}"),
+                UserId = user.Id,
+                FileName = fileName,
+                RelativePath = fileName,
+                ResourceType = InferResourceType(fileName),
+                ContentType = InferContentType(fileName),
+                Link = string.Empty
+            }))
+            .ToList();
+
+        return new FeedSeedUserStateFile
+        {
+            SeededAtUtc = DateTime.UtcNow,
+            Users = users,
+            Resources = resources
+        };
+    }
+
+    private static List<FeedSeedUserPlan> BuildUserPlans()
+    {
+        return new List<FeedSeedUserPlan>
+        {
+            new("maya_canvas", true),
+            new("leo_travelnotes", true),
+            new("sora_frames", true),
+            new("iris_motion", true),
+            new("nora_bookclub", true),
+            new("quang_nomad", true),
+            new("vera_grid", true),
+            new("zane_looplab", true),
+            new("linh_overflow_test", false),
+            new("otto_smalltalk", false),
+            new("mina_unicode", false),
+            new("kai_newline", false),
+            new("hana_numbers", false),
+            new("bao_capsule", true),
+            new("ria_quietmode", false),
+            new("tuan_minimal", true),
+            new("yuki_firstday", false),
+            new("pax_reader", false)
+        };
+    }
+
+    private static string InferResourceType(string fileName)
+    {
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        return extension switch
+        {
+            ".mp4" or ".mov" or ".webm" or ".avi" or ".mkv" => "video",
+            _ => "image"
+        };
+    }
+
+    private static string InferContentType(string fileName)
+    {
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        return extension switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".bmp" => "image/bmp",
+            ".svg" => "image/svg+xml",
+            ".mp4" => "video/mp4",
+            ".mov" => "video/quicktime",
+            ".webm" => "video/webm",
+            ".avi" => "video/x-msvideo",
+            ".mkv" => "video/x-matroska",
+            _ => "application/octet-stream"
+        };
+    }
+
     private static Guid CreateDeterministicGuid(string seed)
     {
         var bytes = MD5.HashData(Encoding.UTF8.GetBytes(seed));
@@ -828,6 +945,10 @@ public sealed partial class FeedDemoDataSeeder
         string AuthorUsername,
         string Content,
         int LikesCount = 0);
+
+    private sealed record FeedSeedUserPlan(
+        string Username,
+        bool HasMedia);
 
     public sealed class FeedSeedState
     {

@@ -10,7 +10,7 @@ public sealed class FeedSeedOptions
 
     public string PublicBaseUrl { get; set; } = "http://localhost:2406";
 
-    public int UserStateWaitTimeoutSeconds { get; set; } = 600;
+    public int UserStateWaitTimeoutSeconds { get; set; } = 180;
 
     public int UserStatePollIntervalSeconds { get; set; } = 2;
 }
