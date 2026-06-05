@@ -6,15 +6,18 @@ using Application.Posts.Queries;
 using Application.Recommendations.Commands;
 using Application.Recommendations.Models;
 using Domain.Entities;
+using MassTransit;
 using MediatR;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Contracts.Notifications;
 
 namespace Application.Recommendations.Queries;
 
 public sealed record GenerateAnalysisSuggestionQuery(
     Guid UserId,
     Guid SocialMediaId,
+    Guid CorrelationId,
     AnalysisSuggestionRequest Request) : IRequest<Result<AnalysisSuggestionResponse>>;
 
 public sealed class GenerateAnalysisSuggestionQueryHandler
@@ -36,27 +39,32 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
         "You are a senior social media analyst and content strategist. " +
         "Analyze the connected account using the supplied account analytics, recent post metrics, " +
         "retrieved RAG context from the account's posts, and marketing knowledge. " +
-        "Return practical text suggestions only. Do not invent metrics or claim access to data not provided. " +
+        "Return strict JSON only. Do not wrap it in Markdown fences. Do not invent metrics or claim access to data not provided. " +
         "Detect the account's primary language from its profile and posts, then write the entire answer in that language. " +
+        "The JSON shape must be: {\"summary\":\"one sentence\",\"cards\":[{\"title\":\"Overall diagnosis\",\"tone\":\"diagnosis\",\"points\":[\"...\"]},{\"title\":\"What is working\",\"tone\":\"positive\",\"points\":[\"...\"]},{\"title\":\"What is wrong with current posts\",\"tone\":\"warning\",\"points\":[\"...\"]},{\"title\":\"Grammar and copy fixes\",\"tone\":\"copy\",\"points\":[\"...\"]},{\"title\":\"Engagement fixes\",\"tone\":\"engagement\",\"points\":[\"...\"]},{\"title\":\"What content to create next\",\"tone\":\"ideas\",\"points\":[\"...\"]}],\"nextPostIdeas\":[{\"title\":\"...\",\"prompt\":\"...\",\"why\":\"...\"}],\"immediateAction\":\"one concrete next action\"}. " +
         "Cover these sections: Overall diagnosis, What is working, What is wrong with current posts, " +
         "Grammar and copy fixes, Engagement fixes, What content to create next, and One immediate next-post idea. " +
+        "Each card should have 2-4 concise points. nextPostIdeas should contain 2-4 ideas, including at least one bold creative idea when useful. " +
         "Be concrete: reference specific posts, metrics, captions, visual patterns, and audience signals when available. " +
         "If the data is sparse, say exactly what is missing and still give a useful next step.";
 
     private readonly IMediator _mediator;
     private readonly IRagClient _ragClient;
     private readonly IMultimodalLlmClient _multimodalLlm;
+    private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<GenerateAnalysisSuggestionQueryHandler> _logger;
 
     public GenerateAnalysisSuggestionQueryHandler(
         IMediator mediator,
         IRagClient ragClient,
         IMultimodalLlmClient multimodalLlm,
+        IPublishEndpoint publishEndpoint,
         ILogger<GenerateAnalysisSuggestionQueryHandler> logger)
     {
         _mediator = mediator;
         _ragClient = ragClient;
         _multimodalLlm = multimodalLlm;
+        _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
 
@@ -76,6 +84,14 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
         var topK = Math.Clamp(request.Request.TopK ?? DefaultTopK, 1, MaxTopK);
         var maxRagPosts = Math.Clamp(request.Request.MaxRagPosts ?? DefaultMaxRagPosts, 1, MaxRagPosts);
 
+        await PublishThinkingAsync(
+            request,
+            "account_summary_reading",
+            "AI is reading account performance",
+            "Collecting account metrics and recent posts before writing the recommendation.",
+            new { postLimit },
+            cancellationToken);
+
         var summaryResult = await _mediator.Send(
             new GetSocialMediaDashboardSummaryQuery(
                 request.UserId,
@@ -92,8 +108,30 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
         var platform = NormalizePlatform(summary.Platform);
         var prefix = $"{platform}:{request.SocialMediaId:N}:";
 
+        await PublishThinkingAsync(
+            request,
+            "account_summary_reading",
+            "AI read account performance",
+            "Recent posts and metrics are ready for analysis.",
+            new
+            {
+                platform,
+                fetchedPostCount = summary.FetchedPostCount,
+                postCount = summary.Posts.Count
+            },
+            cancellationToken,
+            phaseStatus: "completed");
+
         if (request.Request.RefreshIndex != false)
         {
+            await PublishThinkingAsync(
+                request,
+                "account_posts_indexing",
+                "AI is updating account memory",
+                "Indexing recent account posts into RAG so the analysis can use current context.",
+                new { maxRagPosts },
+                cancellationToken);
+
             var indexResult = await _mediator.Send(
                 new IndexSocialAccountPostsCommand(
                     request.UserId,
@@ -108,11 +146,41 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
 
             platform = NormalizePlatform(indexResult.Value.Platform);
             prefix = indexResult.Value.DocumentIdPrefix;
+
+            await PublishThinkingAsync(
+                request,
+                "account_posts_indexing",
+                "AI updated account memory",
+                "RAG memory is ready for this account's latest posts.",
+                new
+                {
+                    platform,
+                    documentIdPrefix = prefix
+                },
+                cancellationToken,
+                phaseStatus: "completed");
         }
 
         try
         {
+            await PublishThinkingAsync(
+                request,
+                "rag_ready_wait",
+                "AI is checking RAG readiness",
+                "Waiting for knowledge and account memory services to be available.",
+                null,
+                cancellationToken);
+
             await _ragClient.WaitForRagReadyAsync(cancellationToken);
+
+            await PublishThinkingAsync(
+                request,
+                "rag_ready_wait",
+                "RAG is ready",
+                "Knowledge and account memory are available.",
+                null,
+                cancellationToken,
+                phaseStatus: "completed");
         }
         catch (Exception ex)
         {
@@ -143,6 +211,19 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
         RagMultimodalQueryResponse rag;
         try
         {
+            await PublishThinkingAsync(
+                request,
+                "account_rag_query",
+                "AI is searching account memory",
+                "Finding relevant past posts, visuals, video frames, and post context for this account.",
+                new
+                {
+                    query = ragQuery,
+                    topK,
+                    platform
+                },
+                cancellationToken);
+
             rag = await _ragClient.MultimodalQueryAsync(
                 new RagMultimodalQueryRequest(
                     Query: ragQuery,
@@ -196,6 +277,14 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
                 OnlyNeedContext: true),
             cancellationToken);
 
+        await PublishThinkingAsync(
+            request,
+            "strategy_knowledge_lookup",
+            "AI is checking strategy knowledge",
+            "Reading page profile, content formulas, engagement triggers, and platform algorithm notes.",
+            null,
+            cancellationToken);
+
         var pageProfile = await SafeQueryAsync(profileTask, "page profile", request.SocialMediaId);
         var formulaKnowledge = await SafeQueryAsync(formulaTask, "content formulas", request.SocialMediaId);
         var engagementKnowledge = await SafeQueryAsync(engagementTask, "engagement triggers", request.SocialMediaId);
@@ -203,6 +292,38 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
 
         var references = BuildRagReferences(rag);
         var retrievalErrors = BuildRetrievalErrors(rag);
+
+        await PublishThinkingAsync(
+            request,
+            "account_rag_query",
+            "AI found account references",
+            "Relevant account memories and visual references were retrieved.",
+            new
+            {
+                referenceCount = references.Count,
+                textContextLength = rag.Text?.Context?.Length ?? 0,
+                visualCount = rag.Visual?.Count ?? 0,
+                videoCount = rag.Video?.Count ?? 0,
+                retrievalErrors = retrievalErrors.Count
+            },
+            cancellationToken,
+            phaseStatus: retrievalErrors.Count > 0 ? "warning" : "completed");
+
+        await PublishThinkingAsync(
+            request,
+            "strategy_knowledge_lookup",
+            "AI read strategy knowledge",
+            "Formula, engagement, and platform notes are ready for the final suggestion.",
+            new
+            {
+                hasProfile = !string.IsNullOrWhiteSpace(pageProfile?.Answer),
+                hasFormulas = !string.IsNullOrWhiteSpace(formulaKnowledge?.Answer),
+                hasEngagementKnowledge = !string.IsNullOrWhiteSpace(engagementKnowledge?.Answer),
+                hasAlgorithmKnowledge = !string.IsNullOrWhiteSpace(algorithmKnowledge?.Answer)
+            },
+            cancellationToken,
+            phaseStatus: "completed");
+
         var imageRefsForLlm = references
             .Select(reference => reference.ImageUrl)
             .Where(url => !string.IsNullOrWhiteSpace(url))
@@ -235,6 +356,18 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
         MultimodalAnswerResult llmResult;
         try
         {
+            await PublishThinkingAsync(
+                request,
+                "analysis_cards_generation",
+                "AI is writing analysis cards",
+                "Generating structured diagnosis, fixes, and next-content ideas for the account.",
+                new
+                {
+                    analyzedPostCount = posts.Count,
+                    imageReferenceCount = imageRefsForLlm.Count
+                },
+                cancellationToken);
+
             llmResult = await _multimodalLlm.GenerateAnswerAsync(
                 new MultimodalAnswerRequest(
                     SystemPrompt: SystemPrompt,
@@ -250,6 +383,19 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
             return Result.Failure<AnalysisSuggestionResponse>(
                 new Error("AnalysisSuggest.LlmFailed", $"Suggestion generation failed: {ex.Message}"));
         }
+
+        await PublishThinkingAsync(
+            request,
+            "analysis_cards_generation",
+            "AI finished analysis cards",
+            "Structured account recommendations are ready.",
+            new
+            {
+                outputLength = llmResult.Answer.Length,
+                webSourceCount = llmResult.Sources.Count
+            },
+            cancellationToken,
+            phaseStatus: "completed");
 
         return Result.Success(new AnalysisSuggestionResponse(
             SocialMediaId: request.SocialMediaId,
@@ -267,6 +413,57 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
             References: references,
             WebSources: llmResult.Sources.Count > 0 ? llmResult.Sources : null,
             RetrievalErrors: retrievalErrors.Count > 0 ? retrievalErrors : null));
+    }
+
+    private async Task PublishThinkingAsync(
+        GenerateAnalysisSuggestionQuery request,
+        string action,
+        string title,
+        string message,
+        object? details,
+        CancellationToken cancellationToken,
+        string phaseStatus = "processing")
+    {
+        var createdAt = DateTime.UtcNow;
+
+        try
+        {
+            await _publishEndpoint.Publish(
+                NotificationRequestedEventFactory.CreateForUser(
+                    request.UserId,
+                    NotificationTypes.AiAccountAnalysisSuggestionProcessing,
+                    title,
+                    message,
+                    new
+                    {
+                        correlationId = request.CorrelationId,
+                        socialMediaId = request.SocialMediaId,
+                        platform = "unknown",
+                        status = "Processing",
+                        taskStatus = "Processing",
+                        phaseStatus,
+                        action,
+                        details,
+                        isSuggested = false,
+                        suggestion = (string?)null,
+                        generatedAt = createdAt,
+                        completedAt = (DateTime?)null,
+                        errorCode = (string?)null,
+                        errorMessage = (string?)null,
+                        createdAt,
+                    },
+                    createdAt: createdAt,
+                    source: NotificationSourceConstants.Creator),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to publish account analysis thinking notification. CorrelationId={CorrelationId} Action={Action}",
+                request.CorrelationId,
+                action);
+        }
     }
 
     private async Task<RagQueryResponse?> SafeQueryAsync(
@@ -416,7 +613,9 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
         AppendKnowledge(builder, "Platform algorithm signals", algorithmKnowledge);
 
         builder.AppendLine("=== Output requirements ===");
-        builder.AppendLine("Write a useful analysis suggestion in text/Markdown. Include specific next content ideas, practical copy edits, grammar guidance, and engagement fixes. Do not output JSON.");
+        builder.AppendLine("Return strict JSON only. Do not output Markdown. Use this exact top-level shape:");
+        builder.AppendLine("{\"summary\":\"...\",\"cards\":[{\"title\":\"Overall diagnosis\",\"tone\":\"diagnosis\",\"points\":[\"...\"]}],\"nextPostIdeas\":[{\"title\":\"...\",\"prompt\":\"...\",\"why\":\"...\"}],\"immediateAction\":\"...\"}");
+        builder.AppendLine("Render all human-facing strings in the account's primary language. Keep points concrete and short.");
 
         return builder.ToString();
     }

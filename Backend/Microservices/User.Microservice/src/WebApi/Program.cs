@@ -62,6 +62,8 @@ builder.Services.Configure<EmailOptions>(
     builder.Configuration.GetSection("Email"));
 builder.Services.Configure<StripeOptions>(
     builder.Configuration.GetSection(StripeOptions.SectionName));
+builder.Services.Configure<SocialMediaPostSyncOptions>(
+    builder.Configuration.GetSection(SocialMediaPostSyncOptions.SectionName));
 builder.Services.Configure<BillingCurrencyOptions>(
     builder.Configuration.GetSection(BillingCurrencyOptions.SectionName));
 builder.AddDatabase();

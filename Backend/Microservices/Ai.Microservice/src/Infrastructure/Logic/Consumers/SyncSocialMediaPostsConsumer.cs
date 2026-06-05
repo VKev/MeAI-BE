@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Application.Abstractions.Resources;
 using Application.Posts.Models;
 using Application.Posts.Queries;
@@ -15,6 +16,8 @@ namespace Infrastructure.Logic.Consumers;
 
 public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPostsRequested>
 {
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> SocialMediaSyncLocks = new();
+
     private const string PublishedStatus = "published";
     private const string ExternalContentIdType = "post_id";
     private const string PostsType = "posts";
@@ -48,6 +51,32 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
     {
         var message = context.Message;
         var cancellationToken = context.CancellationToken;
+        var syncLock = SocialMediaSyncLocks.GetOrAdd(message.SocialMediaId, _ => new SemaphoreSlim(1, 1));
+
+        if (syncLock.CurrentCount == 0)
+        {
+            _logger.LogInformation(
+                "Social media post sync is waiting for an existing sync. CorrelationId: {CorrelationId}, SocialMediaId: {SocialMediaId}",
+                message.CorrelationId,
+                message.SocialMediaId);
+        }
+
+        await syncLock.WaitAsync(cancellationToken);
+        try
+        {
+            await ConsumeLockedAsync(context, message, cancellationToken);
+        }
+        finally
+        {
+            syncLock.Release();
+        }
+    }
+
+    private async Task ConsumeLockedAsync(
+        ConsumeContext<SyncSocialMediaPostsRequested> context,
+        SyncSocialMediaPostsRequested message,
+        CancellationToken cancellationToken)
+    {
         var pageLimit = Clamp(message.PageLimit, 1, MaxPageLimit, DefaultPageLimit);
         var maxPages = Clamp(message.MaxPages, 1, AbsoluteMaxPages, DefaultMaxPages);
         var seenPostIds = new HashSet<string>(StringComparer.Ordinal);
@@ -199,14 +228,17 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
 
         if (failedCount == 0)
         {
-            await PublishAccountSyncSuccessAsync(
-                context,
-                message,
-                resolvedPlatform,
-                seenPostIds.Count,
-                syncedCount,
-                actionCounts,
-                cancellationToken);
+            if (!message.SuppressSuccessNotification)
+            {
+                await PublishAccountSyncSuccessAsync(
+                    context,
+                    message,
+                    resolvedPlatform,
+                    seenPostIds.Count,
+                    syncedCount,
+                    actionCounts,
+                    cancellationToken);
+            }
         }
         else
         {
