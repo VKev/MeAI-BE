@@ -16,6 +16,7 @@ using Infrastructure.Logic.Storage;
 using Infrastructure.Logic.ApiCredentials;
 using Infrastructure.Repositories;
 using Infrastructure.Logic.Seeding;
+using Infrastructure.Logic.SocialMedia;
 using Infrastructure.Logic.Facebook;
 using Infrastructure.Logic.Instagram;
 using Infrastructure.Logic.TikTok;
@@ -58,6 +59,8 @@ namespace Infrastructure
             services.AddHttpClient("Instagram");
             services.AddScoped<IInstagramOAuthService, InstagramOAuthService>();
             services.AddScoped<ISocialMediaProfileService, Logic.SocialMedia.SocialMediaProfileService>();
+            services.AddScoped<SocialMediaPostSyncDispatcher>();
+            services.AddHostedService<SocialMediaPostSyncWorker>();
             services.AddHttpClient("ResourceFetch");
             services.AddScoped<IRemoteFileService, RemoteFileService>();
             services.AddSingleton<IObjectStorageService, S3ObjectStorageService>();

@@ -75,7 +75,7 @@ public sealed class AnalysisSuggestionConsumer : IConsumer<GenerateAnalysisSugge
         try
         {
             result = await _mediator.Send(
-                new GenerateAnalysisSuggestionQuery(message.UserId, message.SocialMediaId, request),
+                new GenerateAnalysisSuggestionQuery(message.UserId, message.SocialMediaId, message.CorrelationId, request),
                 cancellationToken);
         }
         catch (Exception ex)
