@@ -22,6 +22,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
     private const string ExternalContentIdType = "post_id";
     private const string PostsType = "posts";
     private const string ReelsType = "reels";
+    private const string TikTokType = "tiktok";
     private const int DefaultPageLimit = 50;
     private const int MaxPageLimit = 100;
     private const int DefaultMaxPages = 100;
@@ -86,6 +87,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         var actionCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var resolvedPlatform = NormalizePlatform(message.Platform, message.Platform);
         string? cursor = null;
+        var completedFullScan = false;
         var workspaceId = NormalizeWorkspaceId(message.WorkspaceId);
 
         _logger.LogInformation(
@@ -219,10 +221,47 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
                 string.IsNullOrWhiteSpace(response.NextCursor) ||
                 string.Equals(cursor, response.NextCursor, StringComparison.Ordinal))
             {
+                completedFullScan = true;
                 break;
             }
 
             cursor = response.NextCursor;
+        }
+
+        if (completedFullScan &&
+            !string.Equals(resolvedPlatform, TikTokType, StringComparison.OrdinalIgnoreCase))
+        {
+            var deletedPosts = await _postRepository.SoftDeleteMissingSocialMediaPostsAsync(
+                message.UserId,
+                message.SocialMediaId,
+                seenPostIds,
+                DateTimeExtensions.PostgreSqlUtcNow,
+                cancellationToken);
+
+            if (deletedPosts > 0)
+            {
+                actionCounts["deleted"] = deletedPosts;
+            }
+        }
+        else if (completedFullScan)
+        {
+            // TikTok's Display API only enumerates public videos. Sandbox/unaudited
+            // Direct Posts are SELF_ONLY, so an empty list cannot mean that private
+            // posts were deleted. Preserve MeAI's locally tracked TikTok posts.
+            _logger.LogInformation(
+                "TikTok sync skipped delete reconciliation because private SELF_ONLY posts are not returned by the Display API. CorrelationId: {CorrelationId}, SocialMediaId: {SocialMediaId}, SeenPublicPosts: {SeenPosts}",
+                message.CorrelationId,
+                message.SocialMediaId,
+                seenPostIds.Count);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Social media post sync skipped delete reconciliation because the account scan did not reach the final page. CorrelationId: {CorrelationId}, SocialMediaId: {SocialMediaId}, SeenPosts: {SeenPosts}, MaxPages: {MaxPages}",
+                message.CorrelationId,
+                message.SocialMediaId,
+                seenPostIds.Count,
+                maxPages);
         }
 
         _logger.LogInformation(
@@ -394,7 +433,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
     {
         return actionCounts.Any(action =>
             action.Value > 0 &&
-            action.Key is "created" or "reactivated" or "attached");
+            action.Key is "created" or "reactivated" or "attached" or "deleted");
     }
 
     private static Task PublishAccountSyncSuccessAsync(

@@ -8,6 +8,7 @@ namespace Infrastructure.Logic.Instagram;
 public sealed class InstagramPublishService : IInstagramPublishService
 {
     private const string GraphApiBaseUrl = "https://graph.facebook.com/v24.0";
+    private const int MaxCarouselItems = 10;
     private const int MediaStatusPollAttempts = 10;
     private static readonly TimeSpan MediaStatusPollDelay = TimeSpan.FromSeconds(3);
     private readonly HttpClient _httpClient;
@@ -58,6 +59,13 @@ public sealed class InstagramPublishService : IInstagramPublishService
         {
             return Result.Failure<InstagramPublishResult>(
                 new Error("Instagram.MissingMedia", "Instagram media URL is required."));
+        }
+
+        if (mediaItems.Count > MaxCarouselItems)
+        {
+            return Result.Failure<InstagramPublishResult>(
+                new Error("Instagram.TooManyMedia",
+                    $"Instagram carousel posts support up to {MaxCarouselItems} images or videos."));
         }
 
         foreach (var media in mediaItems)

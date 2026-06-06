@@ -68,7 +68,12 @@ public sealed record ThreadsPostDetails(
     string? AltText,
     string? LinkAttachmentUrl,
     string? TopicTag,
-    string? ProfilePictureUrl);
+    string? ProfilePictureUrl,
+    IReadOnlyList<ThreadsPostMediaItem>? MediaItems = null);
+
+public sealed record ThreadsPostMediaItem(
+    string Url,
+    string ResourceType);
 
 public sealed record ThreadsPostInsights(
     long? Views,

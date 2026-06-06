@@ -537,6 +537,14 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                     new Error("TikTok.MissingMedia", "TikTok publishing requires at least one image or video."));
             }
 
+            if (HasMixedImageAndVideoResources(presignedResources))
+            {
+                return Result.Failure<IReadOnlyList<(string, string)>>(
+                    new Error(
+                        "TikTok.MixedMediaUnsupported",
+                        "TikTok cannot publish images and videos together as one post. Select either images for one photo carousel or one video."));
+            }
+
             if (normalizedPostType == "reels")
             {
                 if (videoResources.Count != 1 || imageResources.Count > 0)
@@ -566,6 +574,14 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
             }
 
             var tikTokResults = new List<(string OpenId, string PublishId)>();
+
+            if (videoResources.Count > 1)
+            {
+                return Result.Failure<IReadOnlyList<(string, string)>>(
+                    new Error(
+                        "TikTok.MultipleVideosUnsupported",
+                        "TikTok cannot publish multiple videos as one post. Select one video."));
+            }
 
             foreach (var videoResource in videoResources)
             {
@@ -707,18 +723,20 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
                 new Error("Threads.InvalidToken", "Access token not found in social media metadata."));
         }
 
-        var media = presignedResources
-            .Select(resource => new ThreadsPublishMedia(
-                resource.PresignedUrl,
-                resource.ContentType ?? resource.ResourceType))
+        var unsupportedThreadsResources = presignedResources
+            .Where(resource => !IsImageResource(resource) && !IsVideoResource(resource))
             .ToList();
+        if (unsupportedThreadsResources.Count > 0)
+        {
+            return Result.Failure<IReadOnlyList<(string, string)>>(
+                new Error("Threads.UnsupportedMedia", "Unsupported media type for Threads publishing."));
+        }
 
-        var threadsResult = await _threadsPublishService.PublishAsync(
-            new ThreadsPublishRequest(
-                AccessToken: threadsAccessToken,
-                ThreadsUserId: threadsUserId,
-                Text: caption,
-                Media: media),
+        var threadsResult = await PublishThreadsResourceSetAsync(
+            threadsAccessToken,
+            threadsUserId,
+            caption,
+            presignedResources,
             cancellationToken);
 
         if (threadsResult.IsFailure)
@@ -727,7 +745,36 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         }
 
         return Result.Success<IReadOnlyList<(string, string)>>(
-            new[] { (threadsResult.Value.ThreadsUserId, threadsResult.Value.PostId) });
+            new[] { threadsResult.Value });
+    }
+
+    private async Task<Result<(string ThreadsUserId, string PostId)>> PublishThreadsResourceSetAsync(
+        string accessToken,
+        string threadsUserId,
+        string caption,
+        IReadOnlyList<UserResourcePresignResult> resources,
+        CancellationToken cancellationToken)
+    {
+        var media = resources
+            .Select(resource => new ThreadsPublishMedia(
+                resource.PresignedUrl,
+                resource.ContentType ?? resource.ResourceType))
+            .ToList();
+
+        var publishResult = await _threadsPublishService.PublishAsync(
+            new ThreadsPublishRequest(
+                AccessToken: accessToken,
+                ThreadsUserId: threadsUserId,
+                Text: caption,
+                Media: media),
+            cancellationToken);
+
+        if (publishResult.IsFailure)
+        {
+            return Result.Failure<(string, string)>(publishResult.Error);
+        }
+
+        return Result.Success((publishResult.Value.ThreadsUserId, publishResult.Value.PostId));
     }
 
     private static IReadOnlyList<Guid> ExtractResourceIds(PostContent? content)
@@ -785,6 +832,9 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
 
         return HasExtension(resource.PresignedUrl, ".mp4", ".mov", ".m4v", ".webm");
     }
+
+    private static bool HasMixedImageAndVideoResources(IReadOnlyList<UserResourcePresignResult> resources) =>
+        resources.Any(IsImageResource) && resources.Any(IsVideoResource);
 
     private static bool IsImageResource(UserResourcePresignResult resource)
     {

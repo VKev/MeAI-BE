@@ -511,7 +511,8 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
                 EmbedUrl: null,
                 DurationSeconds: null,
                 PublishedAt: ToDateTimeOffset(postDetails.Timestamp),
-                Stats: stats);
+                Stats: stats,
+                MediaItems: MapThreadsMediaItems(postDetails.MediaItems));
 
             var response = new SocialPlatformPostAnalyticsResponse(
                 SocialMediaId: request.SocialMediaId,
@@ -598,6 +599,14 @@ public sealed class GetSocialMediaPlatformPostAnalyticsQueryHandler
 
     private static IReadOnlyList<SocialPlatformPostMediaResponse>? MapFacebookMediaItems(
         IReadOnlyList<FacebookPostMediaItem>? mediaItems)
+    {
+        return mediaItems?
+            .Select(media => new SocialPlatformPostMediaResponse(media.Url, media.ResourceType))
+            .ToList();
+    }
+
+    private static IReadOnlyList<SocialPlatformPostMediaResponse>? MapThreadsMediaItems(
+        IReadOnlyList<ThreadsPostMediaItem>? mediaItems)
     {
         return mediaItems?
             .Select(media => new SocialPlatformPostMediaResponse(media.Url, media.ResourceType))

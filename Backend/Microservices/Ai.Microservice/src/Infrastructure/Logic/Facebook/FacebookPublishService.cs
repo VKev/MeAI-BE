@@ -234,6 +234,24 @@ public sealed class FacebookPublishService : IFacebookPublishService
                         "Facebook Reels require exactly one video."));
             }
         }
+        else
+        {
+            if (images.Count > 0 && videos.Count > 0)
+            {
+                return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
+                    new Error(
+                        "Facebook.MixedMediaUnsupported",
+                        "Facebook cannot publish images and videos together as one post. Select either images for one feed post or one video."));
+            }
+
+            if (videos.Count > 1)
+            {
+                return Result.Failure<IReadOnlyList<FacebookPublishResult>>(
+                    new Error(
+                        "Facebook.MultipleVideosUnsupported",
+                        "Facebook cannot publish multiple videos as one post. Select one video."));
+            }
+        }
 
         var feedResults = new List<FacebookPublishResult>();
         foreach (var page in pages)
