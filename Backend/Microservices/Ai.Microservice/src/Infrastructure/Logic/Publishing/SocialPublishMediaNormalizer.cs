@@ -344,7 +344,7 @@ public sealed class SocialPublishMediaNormalizer : ISocialPublishMediaNormalizer
         return platform switch
         {
             InstagramType => !HasCompatibleImageFormat(resource, "image/jpeg", "image/jpg", "image/png"),
-            ThreadsType => !HasCompatibleImageFormat(resource, "image/jpeg", "image/jpg", "image/png"),
+            ThreadsType => true,
             FacebookType => !HasCompatibleImageFormat(resource, "image/jpeg", "image/jpg", "image/png", "image/gif"),
             _ => false
         };

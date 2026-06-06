@@ -46,7 +46,7 @@ public sealed record TikTokCarouselPublishRequest(
     string AccessToken,
     string OpenId,
     string Caption,
-    /// <summary>Publicly accessible image URLs (JPEG/WebP, max 20 MB each).</summary>
+    /// <summary>Publicly accessible image URLs (1-35 JPEG/WebP images, max 20 MB each).</summary>
     IReadOnlyList<string> ImageUrls,
     bool? IsPrivate = null,
     TikTokCreatorInfo? CreatorInfo = null);

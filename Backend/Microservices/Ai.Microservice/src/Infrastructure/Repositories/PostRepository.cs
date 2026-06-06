@@ -11,6 +11,7 @@ namespace Infrastructure.Repositories;
 
 public sealed class PostRepository : IPostRepository
 {
+    private const string ExternalContentIdType = "post_id";
     private const string ScheduledStatus = "scheduled";
     private const string ProcessingStatus = "processing";
     private const string FailedStatus = "failed";
@@ -235,6 +236,101 @@ public sealed class PostRepository : IPostRepository
             post.WorkspaceId = null;
             post.UpdatedAt = updatedAt;
             changedPostIds.Add(post.Id);
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return changedPostIds.Count;
+    }
+
+    public async Task<int> SoftDeleteMissingSocialMediaPostsAsync(
+        Guid userId,
+        Guid socialMediaId,
+        IReadOnlySet<string> activeExternalContentIds,
+        DateTime updatedAt,
+        CancellationToken cancellationToken)
+    {
+        var activeIds = activeExternalContentIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        var missingPublications = await _dbContext.Set<PostPublication>()
+            .Where(publication =>
+                publication.SocialMediaId == socialMediaId &&
+                publication.ExternalContentIdType == ExternalContentIdType &&
+                !publication.DeletedAt.HasValue &&
+                !activeIds.Contains(publication.ExternalContentId))
+            .ToListAsync(cancellationToken);
+
+        if (missingPublications.Count == 0)
+        {
+            return 0;
+        }
+
+        var missingPublicationIds = missingPublications
+            .Select(publication => publication.Id)
+            .ToHashSet();
+
+        var postIds = missingPublications
+            .Select(publication => publication.PostId)
+            .Distinct()
+            .ToList();
+
+        foreach (var publication in missingPublications)
+        {
+            // DeletedAt is enough to hide a missing remote publication. Keep the
+            // existing status because the database check constraint has no "deleted" status.
+            publication.DeletedAt = updatedAt;
+            publication.UpdatedAt = updatedAt;
+        }
+
+        var allPostPublications = await _dbContext.Set<PostPublication>()
+            .Where(publication => postIds.Contains(publication.PostId))
+            .ToListAsync(cancellationToken);
+
+        var remainingByPostId = allPostPublications
+            .Where(publication =>
+                !publication.DeletedAt.HasValue &&
+                !missingPublicationIds.Contains(publication.Id))
+            .GroupBy(publication => publication.PostId)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(publication => publication.PublishedAt ?? publication.CreatedAt)
+                    .ThenByDescending(publication => publication.Id)
+                    .First());
+
+        var posts = await _dbSet
+            .Where(post =>
+                postIds.Contains(post.Id) &&
+                post.UserId == userId &&
+                post.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+
+        var changedPostIds = new HashSet<Guid>(postIds);
+        foreach (var post in posts)
+        {
+            if (remainingByPostId.TryGetValue(post.Id, out var remainingPublication))
+            {
+                if (post.SocialMediaId == socialMediaId)
+                {
+                    post.SocialMediaId = remainingPublication.SocialMediaId;
+                    post.Platform = remainingPublication.SocialMediaType;
+                    post.WorkspaceId = remainingPublication.WorkspaceId == Guid.Empty
+                        ? null
+                        : remainingPublication.WorkspaceId;
+                    post.UpdatedAt = updatedAt;
+                }
+
+                continue;
+            }
+
+            if (post.SocialMediaId == socialMediaId)
+            {
+                post.DeletedAt = updatedAt;
+                post.UpdatedAt = updatedAt;
+            }
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

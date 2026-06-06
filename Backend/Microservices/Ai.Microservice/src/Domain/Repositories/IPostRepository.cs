@@ -27,6 +27,12 @@ public interface IPostRepository
         Guid workspaceId,
         DateTime updatedAt,
         CancellationToken cancellationToken);
+    Task<int> SoftDeleteMissingSocialMediaPostsAsync(
+        Guid userId,
+        Guid socialMediaId,
+        IReadOnlySet<string> activeExternalContentIds,
+        DateTime updatedAt,
+        CancellationToken cancellationToken);
     Task<IReadOnlyList<Post>> GetActiveByUserIdExcludingIdsAsync(
         Guid userId,
         IReadOnlyList<Guid> excludedPostIds,

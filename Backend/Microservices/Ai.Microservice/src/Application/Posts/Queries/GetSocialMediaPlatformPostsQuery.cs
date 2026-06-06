@@ -402,7 +402,8 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
                         EmbedUrl: null,
                         DurationSeconds: null,
                         PublishedAt: ToDateTimeOffset(post.Timestamp),
-                        Stats: stats);
+                        Stats: stats,
+                        MediaItems: MapThreadsMediaItems(post.MediaItems));
                 })
                 .ToList();
 
@@ -501,6 +502,14 @@ public sealed class GetSocialMediaPlatformPostsQueryHandler
 
     private static IReadOnlyList<SocialPlatformPostMediaResponse>? MapFacebookMediaItems(
         IReadOnlyList<FacebookPostMediaItem>? mediaItems)
+    {
+        return mediaItems?
+            .Select(media => new SocialPlatformPostMediaResponse(media.Url, media.ResourceType))
+            .ToList();
+    }
+
+    private static IReadOnlyList<SocialPlatformPostMediaResponse>? MapThreadsMediaItems(
+        IReadOnlyList<ThreadsPostMediaItem>? mediaItems)
     {
         return mediaItems?
             .Select(media => new SocialPlatformPostMediaResponse(media.Url, media.ResourceType))

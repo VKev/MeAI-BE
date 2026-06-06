@@ -10,6 +10,7 @@ public sealed class ThreadsPublishService : IThreadsPublishService
 {
     private const string GraphApiBaseUrl = "https://graph.threads.net/v1.0";
     private const int MaxTextLength = 500;
+    private const int MaxCarouselItems = 20;
     private static readonly TimeSpan VideoStatusPollDelay = TimeSpan.FromSeconds(4);
     private const int VideoStatusMaxAttempts = 30;
     private readonly HttpClient _httpClient;
@@ -133,6 +134,13 @@ public sealed class ThreadsPublishService : IThreadsPublishService
         {
             return Result.Failure<ThreadsPublishResult>(
                 new Error("Threads.MissingContent", "Threads post content is empty."));
+        }
+
+        if (mediaItems.Count > MaxCarouselItems)
+        {
+            return Result.Failure<ThreadsPublishResult>(
+                new Error("Threads.TooManyMedia",
+                    $"Threads carousel posts support up to {MaxCarouselItems} images or videos."));
         }
 
         var mediaTypes = mediaItems

@@ -10,7 +10,7 @@ public sealed class ThreadsContentService : IThreadsContentService
 {
     private const string GraphApiBaseUrl = "https://graph.threads.net/v1.0";
     private const string PostFields =
-        "id,media_product_type,media_type,media_url,gif_url,permalink,username,text,timestamp,shortcode,thumbnail_url,is_quote_post,has_replies,alt_text,link_attachment_url,topic_tag,profile_picture_url";
+        "id,media_product_type,media_type,media_url,gif_url,permalink,username,text,timestamp,shortcode,thumbnail_url,is_quote_post,has_replies,alt_text,link_attachment_url,topic_tag,profile_picture_url,children{id,media_type,media_url,thumbnail_url}";
     private const string InsightsMetrics = "views,likes,replies,reposts,quotes,shares";
     private const string AccountFields = "id,username,name,threads_biography,threads_profile_picture_url,followers_count";
     // `/conversation` returns the root post + nested replies as a flat list. Meta's
@@ -324,7 +324,35 @@ public sealed class ThreadsContentService : IThreadsContentService
             AltText: post.AltText,
             LinkAttachmentUrl: post.LinkAttachmentUrl,
             TopicTag: post.TopicTag,
-            ProfilePictureUrl: post.ProfilePictureUrl);
+            ProfilePictureUrl: post.ProfilePictureUrl,
+            MediaItems: MapMediaItems(post.Children?.Data));
+    }
+
+    private static IReadOnlyList<ThreadsPostMediaItem>? MapMediaItems(IReadOnlyList<ThreadsPostDto>? children)
+    {
+        if (children is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        var items = children
+            .Select(child => new
+            {
+                Url = child.MediaUrl ?? child.GifUrl ?? child.ThumbnailUrl,
+                ResourceType = ResolveResourceType(child.MediaType)
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item.Url))
+            .Select(item => new ThreadsPostMediaItem(item.Url!, item.ResourceType))
+            .ToList();
+
+        return items.Count > 0 ? items : null;
+    }
+
+    private static string ResolveResourceType(string? mediaType)
+    {
+        return mediaType?.Contains("video", StringComparison.OrdinalIgnoreCase) == true
+            ? "video"
+            : "image";
     }
 
     private static long? GetMetric(IReadOnlyDictionary<string, long?> metrics, string name)
@@ -426,6 +454,15 @@ public sealed class ThreadsContentService : IThreadsContentService
 
         [JsonPropertyName("profile_picture_url")]
         public string? ProfilePictureUrl { get; set; }
+
+        [JsonPropertyName("children")]
+        public ThreadsChildrenDto? Children { get; set; }
+    }
+
+    private sealed class ThreadsChildrenDto
+    {
+        [JsonPropertyName("data")]
+        public ThreadsPostDto[]? Data { get; set; }
     }
 
     private sealed class ThreadsInsightsApiResponse

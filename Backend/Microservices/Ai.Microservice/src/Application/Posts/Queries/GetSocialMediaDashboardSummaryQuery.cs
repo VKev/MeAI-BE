@@ -538,7 +538,8 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
                                     ["quotes"] = liveInsights.Quotes ?? 0,
                                     ["shares"] = liveInsights.Shares ?? 0
                                 }),
-                        cachedStats));
+                        cachedStats),
+                    MediaItems: MapThreadsMediaItems(post.MediaItems));
             })
             .ToList();
 
@@ -699,6 +700,14 @@ public sealed class GetSocialMediaDashboardSummaryQueryHandler
 
     private static IReadOnlyList<SocialPlatformPostMediaResponse>? MapFacebookMediaItems(
         IReadOnlyList<FacebookPostMediaItem>? mediaItems)
+    {
+        return mediaItems?
+            .Select(media => new SocialPlatformPostMediaResponse(media.Url, media.ResourceType))
+            .ToList();
+    }
+
+    private static IReadOnlyList<SocialPlatformPostMediaResponse>? MapThreadsMediaItems(
+        IReadOnlyList<ThreadsPostMediaItem>? mediaItems)
     {
         return mediaItems?
             .Select(media => new SocialPlatformPostMediaResponse(media.Url, media.ResourceType))
