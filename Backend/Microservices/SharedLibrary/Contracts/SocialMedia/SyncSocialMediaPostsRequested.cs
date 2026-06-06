@@ -18,6 +18,8 @@ public sealed class SyncSocialMediaPostsRequested
 
     public bool SuppressSuccessNotification { get; set; }
 
+    public bool SuppressFailureNotification { get; set; }
+
     public int PageLimit { get; set; } = 50;
 
     public int MaxPages { get; set; } = 100;
