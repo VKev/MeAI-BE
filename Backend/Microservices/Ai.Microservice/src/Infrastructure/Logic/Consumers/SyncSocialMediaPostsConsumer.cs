@@ -156,17 +156,21 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
 
             if (postsResult.IsFailure)
             {
-                await PublishAccountSyncFailureAsync(
-                    context,
-                    message,
-                    resolvedPlatform,
-                    seenPostIds.Count,
-                    syncedCount,
-                    failedCount,
-                    "SocialMediaPostSync.FetchFailed",
-                    postsResult.Error.Description,
-                    failures,
-                    cancellationToken);
+                if (!message.SuppressFailureNotification)
+                {
+                    await PublishAccountSyncFailureAsync(
+                        context,
+                        message,
+                        resolvedPlatform,
+                        seenPostIds.Count,
+                        syncedCount,
+                        failedCount,
+                        "SocialMediaPostSync.FetchFailed",
+                        postsResult.Error.Description,
+                        failures,
+                        cancellationToken);
+                }
+
                 return;
             }
 
@@ -188,8 +192,11 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
                         item,
                         cancellationToken);
 
-                    syncedCount++;
                     actionCounts[syncedPost.Action] = actionCounts.GetValueOrDefault(syncedPost.Action) + 1;
+                    if (!syncedPost.IsSkipped)
+                    {
+                        syncedCount++;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -228,7 +235,8 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
 
         if (failedCount == 0)
         {
-            if (!message.SuppressSuccessNotification)
+            if (!message.SuppressSuccessNotification &&
+                HasNotifiableSyncChange(actionCounts))
             {
                 await PublishAccountSyncSuccessAsync(
                     context,
@@ -242,17 +250,20 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         }
         else
         {
-            await PublishAccountSyncFailureAsync(
-                context,
-                message,
-                resolvedPlatform,
-                seenPostIds.Count,
-                syncedCount,
-                failedCount,
-                "SocialMediaPostSync.PartialFailure",
-                $"Synced {syncedCount} {resolvedPlatform} posts, but {failedCount} posts failed.",
-                failures,
-                cancellationToken);
+            if (!message.SuppressFailureNotification)
+            {
+                await PublishAccountSyncFailureAsync(
+                    context,
+                    message,
+                    resolvedPlatform,
+                    seenPostIds.Count,
+                    syncedCount,
+                    failedCount,
+                    "SocialMediaPostSync.PartialFailure",
+                    $"Synced {syncedCount} {resolvedPlatform} posts, but {failedCount} posts failed.",
+                    failures,
+                    cancellationToken);
+            }
         }
     }
 
@@ -298,7 +309,14 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
 
             if (post.UserId != message.UserId)
             {
-                throw new InvalidOperationException("Existing publication belongs to a different user.");
+                _logger.LogInformation(
+                    "Social media post sync skipped external post already owned by another user. CorrelationId: {CorrelationId}, SocialMediaId: {SocialMediaId}, PlatformPostId: {PlatformPostId}, ExistingPostId: {ExistingPostId}",
+                    message.CorrelationId,
+                    message.SocialMediaId,
+                    platformPost.PlatformPostId,
+                    post.Id);
+
+                return new SyncedPostResult(post.Id, publication.Id, "skipped_external_owner", true);
             }
 
             action = post.DeletedAt.HasValue || publication.DeletedAt.HasValue
@@ -370,6 +388,13 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         await _postPublicationRepository.SaveChangesAsync(cancellationToken);
 
         return new SyncedPostResult(post.Id, publication.Id, action);
+    }
+
+    private static bool HasNotifiableSyncChange(IReadOnlyDictionary<string, int> actionCounts)
+    {
+        return actionCounts.Any(action =>
+            action.Value > 0 &&
+            action.Key is "created" or "reactivated" or "attached");
     }
 
     private static Task PublishAccountSyncSuccessAsync(
@@ -842,5 +867,5 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
 
     private sealed record PostSyncFailure(string PlatformPostId, string? Title, string ErrorMessage);
 
-    private sealed record SyncedPostResult(Guid PostId, Guid PublicationId, string Action);
+    private sealed record SyncedPostResult(Guid PostId, Guid PublicationId, string Action, bool IsSkipped = false);
 }

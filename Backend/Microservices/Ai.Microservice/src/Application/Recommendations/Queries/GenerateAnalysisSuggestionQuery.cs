@@ -40,7 +40,8 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
         "Analyze the connected account using the supplied account analytics, recent post metrics, " +
         "retrieved RAG context from the account's posts, and marketing knowledge. " +
         "Return strict JSON only. Do not wrap it in Markdown fences. Do not invent metrics or claim access to data not provided. " +
-        "Detect the account's primary language from its profile and posts, then write the entire answer in that language. " +
+        "Always write the entire answer in English, including every title, point, next-post prompt, why explanation, and action. " +
+        "Do not switch to the account language even when the profile, posts, or RAG context use another language. " +
         "The JSON shape must be: {\"summary\":\"one sentence\",\"cards\":[{\"title\":\"Overall diagnosis\",\"tone\":\"diagnosis\",\"points\":[\"...\"]},{\"title\":\"What is working\",\"tone\":\"positive\",\"points\":[\"...\"]},{\"title\":\"What is wrong with current posts\",\"tone\":\"warning\",\"points\":[\"...\"]},{\"title\":\"Grammar and copy fixes\",\"tone\":\"copy\",\"points\":[\"...\"]},{\"title\":\"Engagement fixes\",\"tone\":\"engagement\",\"points\":[\"...\"]},{\"title\":\"What content to create next\",\"tone\":\"ideas\",\"points\":[\"...\"]}],\"nextPostIdeas\":[{\"title\":\"...\",\"prompt\":\"...\",\"why\":\"...\"}],\"immediateAction\":\"one concrete next action\"}. " +
         "Cover these sections: Overall diagnosis, What is working, What is wrong with current posts, " +
         "Grammar and copy fixes, Engagement fixes, What content to create next, and One immediate next-post idea. " +
@@ -615,7 +616,7 @@ public sealed class GenerateAnalysisSuggestionQueryHandler
         builder.AppendLine("=== Output requirements ===");
         builder.AppendLine("Return strict JSON only. Do not output Markdown. Use this exact top-level shape:");
         builder.AppendLine("{\"summary\":\"...\",\"cards\":[{\"title\":\"Overall diagnosis\",\"tone\":\"diagnosis\",\"points\":[\"...\"]}],\"nextPostIdeas\":[{\"title\":\"...\",\"prompt\":\"...\",\"why\":\"...\"}],\"immediateAction\":\"...\"}");
-        builder.AppendLine("Render all human-facing strings in the account's primary language. Keep points concrete and short.");
+        builder.AppendLine("Render every human-facing string in English only. Keep points concrete and short.");
 
         return builder.ToString();
     }

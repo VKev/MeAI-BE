@@ -70,7 +70,8 @@ public sealed class SocialMediaPostSyncDispatcher
                     PageLimit = pageLimit,
                     MaxPages = maxPages,
                     RequestedAt = requestedAt,
-                    SuppressSuccessNotification = options.SuppressSuccessNotifications
+                    SuppressSuccessNotification = options.SuppressSuccessNotifications,
+                    SuppressFailureNotification = options.SuppressFailureNotifications
                 },
                 cancellationToken);
 

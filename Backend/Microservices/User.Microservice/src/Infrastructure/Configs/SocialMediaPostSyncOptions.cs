@@ -6,7 +6,7 @@ public sealed class SocialMediaPostSyncOptions
 
     public bool Enabled { get; set; } = true;
 
-    public int IntervalSeconds { get; set; } = 60;
+    public int IntervalSeconds { get; set; } = 3600;
 
     public int InitialDelaySeconds { get; set; } = 30;
 
@@ -17,4 +17,6 @@ public sealed class SocialMediaPostSyncOptions
     public int MaxTargetsPerRun { get; set; } = 500;
 
     public bool SuppressSuccessNotifications { get; set; } = true;
+
+    public bool SuppressFailureNotifications { get; set; } = true;
 }
