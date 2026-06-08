@@ -1,140 +1,73 @@
-# This file is automatically sanitized.
-# Run scripts/sanitize_tfvars.py after editing real tfvars.
-
-services = {
+﻿services = {
   ai = {
-    alb_target_group_port = 5001
+    alb_target_group_port     = 5001
     alb_target_group_protocol = "HTTP"
-    alb_target_group_type = "ip"
+    alb_target_group_type     = "ip"
     alb_health_check = {
-      enabled = true
-      path = "/health"
-      port = "traffic-port"
-      protocol = "HTTP"
-      matcher = "200"
-      interval = 30
-      timeout = 5
-      healthy_threshold = 2
+      enabled             = true
+      path                = "/health"
+      port                = "traffic-port"
+      protocol            = "HTTP"
+      matcher             = "200"
+      interval            = 30
+      timeout             = 5
+      healthy_threshold   = 2
       unhealthy_threshold = 3
     }
-    alb_listener_rule_priority = 12
-    alb_listener_rule_conditions = [
-      {
-              path_pattern = {
-                values = [
-                  "/api/ai",
-                  "/api/ai/*"
-                ]
-              }
-            }
-    ]
-    ecs_service_connect_dns_name = "ai-service"
+    # No direct ALB rule â€” ai-microservice is ClusterIP on EKS (ports 5001/5005
+    # are not exposed as NodePort), so a listener rule â†’ ai target group would
+    # resolve to 0 healthy targets and return 503. All /api/Ai/*, /api/AiGeneration/*,
+    # /api/post-builders/* etc. flow through the ALB default action â†’ api-gateway
+    # NodePort 32080 â†’ YARP (ApiGateway's Services__Ai__* env vars).
+    alb_listener_rule_priority   = null
+    alb_listener_rule_conditions = []
+
+    ecs_service_connect_dns_name       = "ai-service"
     ecs_service_connect_discovery_name = "ai-service"
-    ecs_service_connect_port_name = "ai"
-    ecs_container_name_suffix = "ai"
-    ecs_container_image_repository_url = "912448661136.dkr.ecr.us-east-1.amazonaws.com/vkev2406-infrastructure-khanghv2406-infrastructure-khanghv2406-ecr"
-    ecs_container_image_tag = "Ai.Microservice-latest"
-    ecs_container_cpu = 512
-    ecs_container_memory = 256
-    ecs_container_essential = true
+    ecs_service_connect_port_name      = "ai"
+    ecs_container_name_suffix          = "ai"
+    ecs_container_image_repository_url = "784180969479.dkr.ecr.ap-southeast-1.amazonaws.com/vkev2406-infra-khanghv2406v3-infrastructure-khanghv2406-ecr"
+    ecs_container_image_tag            = "Ai.Microservice-latest"
+    ecs_container_cpu                  = 512
+    ecs_container_memory               = 256
+    ecs_container_essential            = true
     ecs_container_port_mappings = [
       {
-              container_port = 5001
-              host_port = 0
-              protocol = "tcp"
-              name = "ai"
-            }
+        container_port = 5001
+        host_port      = 0
+        protocol       = "tcp"
+        name           = "ai"
+      }
     ]
+
     ecs_environment_variables = [
-      {
-              name = "ASPNETCORE_ENVIRONMENT"
-              value = "Production"
-            },
-      {
-              name = "ASPNETCORE_URLS"
-              value = "http://+:5001"
-            },
-      {
-              name = "Database__Host"
-              value = "TERRAFORM_RDS_HOST_AI_DEFAULTDB"
-            },
-      {
-              name = "Database__Port"
-              value = "TERRAFORM_RDS_PORT_AI_DEFAULTDB"
-            },
-      {
-              name = "Database__Name"
-              value = "TERRAFORM_RDS_DB_AI_DEFAULTDB"
-            },
-      {
-              name = "Database__Username"
-              value = "TERRAFORM_RDS_USERNAME_AI_DEFAULTDB"
-            },
-      {
-              name = "Database__Password"
-              value = "TERRAFORM_RDS_PASSWORD_AI_DEFAULTDB"
-            },
-      {
-              name = "Database__Provider"
-              value = "TERRAFORM_RDS_PROVIDER_AI_DEFAULTDB"
-            },
-      {
-              name = "RabbitMq__Host"
-              value = "rabbitmq"
-            },
-      {
-              name = "RabbitMq__Port"
-              value = "5672"
-            },
-      {
-              name = "RabbitMq__Username"
-              value = "rabbitmq"
-            },
-      {
-              name = "RabbitMq__Password"
-              value = "<REDACTED>"
-            },
-      {
-              name = "Redis__Host"
-              value = "redis"
-            },
-      {
-              name = "Redis__Password"
-              value = "<REDACTED>"
-            },
-      {
-              name = "Redis__Port"
-              value = "6379"
-            },
-      {
-              name = "Jwt__SecretKey"
-              value = "<REDACTED>"
-            },
-      {
-              name = "Jwt__Issuer"
-              value = "UserMicroservice"
-            },
-      {
-              name = "Jwt__Audience"
-              value = "MicroservicesApp"
-            },
-      {
-              name = "Jwt__ExpirationMinutes"
-              value = "60"
-            },
-      {
-              name = "AutoApply__Migrations"
-              value = "true"
-            }
+      { name = "ASPNETCORE_ENVIRONMENT", value = "Production" },
+      { name = "ASPNETCORE_URLS", value = "http://+:5001" },
+      { name = "Database__Host", value = "TERRAFORM_RDS_HOST_AI_AIDB" },
+      { name = "Database__Port", value = "TERRAFORM_RDS_PORT_AI_AIDB" },
+      { name = "Database__Name", value = "TERRAFORM_RDS_DB_AI_AIDB" },
+      { name = "Database__Username", value = "TERRAFORM_RDS_USERNAME_AI_AIDB" },
+      { name = "Database__Password", value = "TERRAFORM_RDS_PASSWORD_AI_AIDB" },
+      { name = "Database__Provider", value = "TERRAFORM_RDS_PROVIDER_AI_AIDB" },
+      { name = "RabbitMq__Host", value = "rabbitmq" }, # ECS Service Connect DNS
+      { name = "RabbitMq__Port", value = "5672" },
+      { name = "RabbitMq__Username", value = "rabbitmq" },
+      { name = "RabbitMq__Password", value = "0Kg04Rq08!" },
+      { name = "Redis__Host", value = "redis" },
+      { name = "Redis__Password", value = "0Kg04Rs05!" },
+      { name = "Redis__Port", value = "6379" },
+      { name = "Jwt__SecretKey", value = "YourSuperSecretKeyThatIsAtLeast32CharactersLong!@#$%^&*()" },
+      { name = "Jwt__Issuer", value = "UserMicroservice" },
+      { name = "Jwt__Audience", value = "MicroservicesApp" },
+      { name = "Jwt__ExpirationMinutes", value = "60" },
+      { name = "AutoApply__Migrations", value = "true" }
     ]
+
     ecs_container_health_check = {
-      command = [
-        "CMD-SHELL",
-        "curl -f http://localhost:5001/health || exit 1"
-      ]
-      interval = 30
-      timeout = 5
-      retries = 3
+      command     = ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
+      interval    = 30
+      timeout     = 5
+      retries     = 3
       startPeriod = 10
     }
     depends_on = []

@@ -291,6 +291,7 @@ public sealed class PublishToTargetConsumer : IConsumer<PublishToTargetRequested
         var newRows = destinations.Select(destination => new PostPublication
         {
             Id = Guid.CreateVersion7(),
+            UserId = placeholder.UserId,
             PostId = post.Id,
             WorkspaceId = placeholder.WorkspaceId,
             SocialMediaId = socialMedia.SocialMediaId,

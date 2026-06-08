@@ -241,6 +241,7 @@ public sealed class SampleDataSeeder
                 }
 
                 existingPublication.PostId = existingPost.Id;
+                existingPublication.UserId = state.UserId;
                 existingPublication.WorkspaceId = manifest.Workspace.Id;
                 existingPublication.SocialMediaId = publicationItem.SocialMediaId;
                 existingPublication.SocialMediaType = publicationItem.SocialMediaType;

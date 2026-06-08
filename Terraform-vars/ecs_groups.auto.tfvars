@@ -1,14 +1,7 @@
-# This file is automatically sanitized.
-# Run scripts/sanitize_tfvars.py after editing real tfvars.
-
-ecs_service_groups = {
+﻿ecs_service_groups = {
   server-1 = {
     desired_count = 1
-    containers = [
-      "rabbitmq",
-      "redis",
-      "user"
-    ]
+    containers    = ["rabbitmq", "redis", "user"]
     volumes = [
       {
         name      = "rabbitmq-data"
@@ -21,15 +14,11 @@ ecs_service_groups = {
     ]
     dependencies = []
   }
+
   server-2 = {
     desired_count = 1
-    containers = [
-      "ai",
-      "apigateway"
-    ]
-    volumes = []
-    dependencies = [
-      "server-1"
-    ]
+    containers    = ["guest", "apigateway"]
+    volumes       = []
+    dependencies  = ["server-1"]
   }
 }

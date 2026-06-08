@@ -1,4 +1,5 @@
 using Application.Abstractions.Data;
+using Application.SocialMedias;
 using Domain.Entities;
 using Infrastructure.Configs;
 using MassTransit;
@@ -66,6 +67,7 @@ public sealed class SocialMediaPostSyncDispatcher
                     SocialMediaId = target.SocialMediaId,
                     WorkspaceId = target.WorkspaceId,
                     Platform = target.Platform,
+                    ExternalAccountKey = target.ExternalAccountKey,
                     Trigger = ScheduledTrigger,
                     PageLimit = pageLimit,
                     MaxPages = maxPages,
@@ -110,31 +112,36 @@ public sealed class SocialMediaPostSyncDispatcher
                 equals new { WorkspaceId = workspace.Id, workspace.UserId }
             select link;
 
-        var linkedTargets = await (
+        var linkedRows = await (
             from socialMedia in socialMedias
             join link in activeWorkspaceLinks
                 on new { SocialMediaId = socialMedia.Id, socialMedia.UserId }
                 equals new { link.SocialMediaId, link.UserId }
             orderby socialMedia.UserId, socialMedia.Id, link.WorkspaceId
-            select new SocialMediaPostSyncTarget(
-                socialMedia.UserId,
-                socialMedia.Id,
-                link.WorkspaceId,
-                socialMedia.Type))
+            select new { SocialMedia = socialMedia, link.WorkspaceId })
             .ToListAsync(cancellationToken);
 
-        var unlinkedTargets = await socialMedias
+        var unlinkedRows = await socialMedias
             .Where(socialMedia => !activeWorkspaceLinks.Any(link =>
                 link.UserId == socialMedia.UserId &&
                 link.SocialMediaId == socialMedia.Id))
             .OrderBy(socialMedia => socialMedia.UserId)
             .ThenBy(socialMedia => socialMedia.Id)
-            .Select(socialMedia => new SocialMediaPostSyncTarget(
-                socialMedia.UserId,
-                socialMedia.Id,
-                null,
-                socialMedia.Type))
             .ToListAsync(cancellationToken);
+
+        var linkedTargets = linkedRows.Select(row => new SocialMediaPostSyncTarget(
+            row.SocialMedia.UserId,
+            row.SocialMedia.Id,
+            row.WorkspaceId,
+            row.SocialMedia.Type,
+            SocialMediaExternalAccountKey.Resolve(row.SocialMedia)));
+
+        var unlinkedTargets = unlinkedRows.Select(socialMedia => new SocialMediaPostSyncTarget(
+            socialMedia.UserId,
+            socialMedia.Id,
+            null,
+            socialMedia.Type,
+            SocialMediaExternalAccountKey.Resolve(socialMedia)));
 
         var maxTargets = Clamp(options.MaxTargetsPerRun, 1, 10_000, 500);
         return linkedTargets
@@ -159,5 +166,6 @@ public sealed class SocialMediaPostSyncDispatcher
         Guid UserId,
         Guid SocialMediaId,
         Guid? WorkspaceId,
-        string Platform);
+        string Platform,
+        string ExternalAccountKey);
 }

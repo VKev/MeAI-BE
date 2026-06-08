@@ -75,13 +75,6 @@ public sealed class PostResponseBuilder
         var publications = await _postPublicationRepository.GetByPostIdsAsync(
             posts.Select(post => post.Id).ToList(),
             cancellationToken);
-        if (workspaceId.HasValue)
-        {
-            publications = publications
-                .Where(publication => publication.WorkspaceId == workspaceId.Value)
-                .ToList();
-        }
-
         var publicationsByPostId = publications
             .GroupBy(publication => publication.PostId)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<PostPublication>)group.ToList());

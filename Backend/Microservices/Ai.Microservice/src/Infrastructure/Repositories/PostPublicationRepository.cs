@@ -99,6 +99,7 @@ public sealed class PostPublicationRepository : IPostPublicationRepository
     }
 
     public Task<PostPublication?> GetByExternalContentKeyForUpdateAsync(
+        Guid userId,
         string socialMediaType,
         string destinationOwnerId,
         string externalContentId,
@@ -106,6 +107,7 @@ public sealed class PostPublicationRepository : IPostPublicationRepository
     {
         return _dbSet.FirstOrDefaultAsync(
             publication =>
+                publication.UserId == userId &&
                 publication.SocialMediaType == socialMediaType &&
                 publication.DestinationOwnerId == destinationOwnerId &&
                 publication.ExternalContentId == externalContentId,

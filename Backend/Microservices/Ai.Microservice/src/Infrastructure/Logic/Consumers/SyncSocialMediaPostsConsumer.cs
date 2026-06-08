@@ -6,6 +6,7 @@ using Domain.Entities;
 using Domain.Repositories;
 using MassTransit;
 using MediatR;
+using SharedLibrary.Common.ResponseModel;
 using SharedLibrary.Common.Resources;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Contracts.Notifications;
@@ -16,7 +17,11 @@ namespace Infrastructure.Logic.Consumers;
 
 public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPostsRequested>
 {
-    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> SocialMediaSyncLocks = new();
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> ExternalAccountSyncLocks =
+        new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, CachedProviderPage> ProviderPageCache =
+        new(StringComparer.Ordinal);
+    private static readonly TimeSpan ProviderPageCacheLifetime = TimeSpan.FromMinutes(10);
 
     private const string PublishedStatus = "published";
     private const string ExternalContentIdType = "post_id";
@@ -52,14 +57,16 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
     {
         var message = context.Message;
         var cancellationToken = context.CancellationToken;
-        var syncLock = SocialMediaSyncLocks.GetOrAdd(message.SocialMediaId, _ => new SemaphoreSlim(1, 1));
+        var externalAccountKey = ResolveExternalAccountKey(message);
+        var syncLock = ExternalAccountSyncLocks.GetOrAdd(externalAccountKey, _ => new SemaphoreSlim(1, 1));
 
         if (syncLock.CurrentCount == 0)
         {
             _logger.LogInformation(
-                "Social media post sync is waiting for an existing sync. CorrelationId: {CorrelationId}, SocialMediaId: {SocialMediaId}",
+                "Social media post sync is waiting for an existing external-account sync. CorrelationId: {CorrelationId}, SocialMediaId: {SocialMediaId}, ExternalAccountKey: {ExternalAccountKey}",
                 message.CorrelationId,
-                message.SocialMediaId);
+                message.SocialMediaId,
+                externalAccountKey);
         }
 
         await syncLock.WaitAsync(cancellationToken);
@@ -148,12 +155,10 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
 
         for (var page = 1; page <= maxPages; page++)
         {
-            var postsResult = await _sender.Send(
-                new GetSocialMediaPlatformPostsQuery(
-                    message.UserId,
-                    message.SocialMediaId,
-                    cursor,
-                    pageLimit),
+            var postsResult = await GetProviderPageAsync(
+                message,
+                cursor,
+                pageLimit,
                 cancellationToken);
 
             if (postsResult.IsFailure)
@@ -226,6 +231,21 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
             }
 
             cursor = response.NextCursor;
+        }
+
+        if (workspaceId.HasValue)
+        {
+            var attachedPosts = await _postRepository.AttachSocialMediaPostsToWorkspaceAsync(
+                message.UserId,
+                message.SocialMediaId,
+                workspaceId.Value,
+                DateTimeExtensions.PostgreSqlUtcNow,
+                cancellationToken);
+
+            if (attachedPosts > 0)
+            {
+                actionCounts["attached"] = actionCounts.GetValueOrDefault("attached") + attachedPosts;
+            }
         }
 
         if (completedFullScan &&
@@ -306,6 +326,78 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         }
     }
 
+    private async Task<Result<SocialPlatformPostsResponse>> GetProviderPageAsync(
+        SyncSocialMediaPostsRequested message,
+        string? cursor,
+        int pageLimit,
+        CancellationToken cancellationToken)
+    {
+        RemoveExpiredProviderPages();
+
+        var requestedAt = message.RequestedAt == default
+            ? DateTimeExtensions.PostgreSqlUtcNow
+            : message.RequestedAt.ToUniversalTime();
+        var cacheKey = string.Join(
+            '|',
+            ResolveExternalAccountKey(message),
+            requestedAt.Ticks,
+            pageLimit,
+            cursor ?? "<first>");
+
+        var cachedPage = ProviderPageCache.GetOrAdd(
+            cacheKey,
+            _ => new CachedProviderPage(
+                DateTime.UtcNow.Add(ProviderPageCacheLifetime),
+                new Lazy<Task<Result<SocialPlatformPostsResponse>>>(
+                    () => _sender.Send(
+                        new GetSocialMediaPlatformPostsQuery(
+                            message.UserId,
+                            message.SocialMediaId,
+                            cursor,
+                            pageLimit),
+                        CancellationToken.None),
+                    LazyThreadSafetyMode.ExecutionAndPublication)));
+
+        try
+        {
+            var result = await cachedPage.Page.Value.WaitAsync(cancellationToken);
+            if (result.IsFailure)
+            {
+                ProviderPageCache.TryRemove(cacheKey, out _);
+            }
+
+            return result;
+        }
+        catch
+        {
+            ProviderPageCache.TryRemove(cacheKey, out _);
+            throw;
+        }
+    }
+
+    private static void RemoveExpiredProviderPages()
+    {
+        var now = DateTime.UtcNow;
+        foreach (var page in ProviderPageCache)
+        {
+            if (page.Value.ExpiresAtUtc <= now)
+            {
+                ProviderPageCache.TryRemove(page.Key, out _);
+            }
+        }
+    }
+
+    private static string ResolveExternalAccountKey(SyncSocialMediaPostsRequested message)
+    {
+        if (!string.IsNullOrWhiteSpace(message.ExternalAccountKey))
+        {
+            return message.ExternalAccountKey.Trim().ToLowerInvariant();
+        }
+
+        var platform = NormalizePlatform(message.Platform, message.Platform);
+        return $"{platform}:connection:{message.SocialMediaId:N}";
+    }
+
     private async Task<SyncedPostResult> SyncPostAsync(
         SyncSocialMediaPostsRequested message,
         string platform,
@@ -328,6 +420,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         if (publication is null)
         {
             publication = await _postPublicationRepository.GetByExternalContentKeyForUpdateAsync(
+                message.UserId,
                 normalizedPlatform,
                 destinationOwnerId,
                 platformPost.PlatformPostId,
@@ -368,7 +461,7 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
             {
                 Id = Guid.CreateVersion7(),
                 UserId = message.UserId,
-                WorkspaceId = workspaceId,
+                WorkspaceId = null,
                 CreatedAt = publishedAt
             };
 
@@ -377,8 +470,9 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
             publication = new PostPublication
             {
                 Id = Guid.CreateVersion7(),
+                UserId = message.UserId,
                 PostId = post.Id,
-                WorkspaceId = workspaceId ?? Guid.Empty,
+                WorkspaceId = Guid.Empty,
                 SocialMediaId = message.SocialMediaId,
                 ExternalContentId = platformPost.PlatformPostId,
                 ExternalContentIdType = ExternalContentIdType,
@@ -389,10 +483,6 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         }
 
         post.SocialMediaId = message.SocialMediaId;
-        if (workspaceId.HasValue)
-        {
-            post.WorkspaceId = workspaceId;
-        }
         post.Platform = normalizedPlatform;
         post.Title = title;
         post.Content = BuildContent(
@@ -409,11 +499,8 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
         post.UpdatedAt = now;
         post.DeletedAt = null;
 
+        publication.UserId = message.UserId;
         publication.SocialMediaId = message.SocialMediaId;
-        if (workspaceId.HasValue)
-        {
-            publication.WorkspaceId = workspaceId.Value;
-        }
         publication.SocialMediaType = normalizedPlatform;
         publication.DestinationOwnerId = destinationOwnerId;
         publication.ContentType = postType;
@@ -907,4 +994,8 @@ public sealed class SyncSocialMediaPostsConsumer : IConsumer<SyncSocialMediaPost
     private sealed record PostSyncFailure(string PlatformPostId, string? Title, string ErrorMessage);
 
     private sealed record SyncedPostResult(Guid PostId, Guid PublicationId, string Action, bool IsSkipped = false);
+
+    private sealed record CachedProviderPage(
+        DateTime ExpiresAtUtc,
+        Lazy<Task<Result<SocialPlatformPostsResponse>>> Page);
 }

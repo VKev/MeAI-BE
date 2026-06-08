@@ -21,7 +21,7 @@ public sealed class PostPublicationConfiguration : IEntityTypeConfiguration<Post
         });
 
         entity.HasIndex(
-                e => new { e.SocialMediaType, e.DestinationOwnerId, e.ExternalContentId },
+                e => new { e.UserId, e.SocialMediaType, e.DestinationOwnerId, e.ExternalContentId },
                 "ux_post_publications_external_content")
             .IsUnique();
 
@@ -36,6 +36,7 @@ public sealed class PostPublicationConfiguration : IEntityTypeConfiguration<Post
             "ix_post_publications_publish_status_last_metrics_sync_at");
 
         entity.Property(e => e.Id).HasColumnName("id");
+        entity.Property(e => e.UserId).HasColumnName("user_id");
         entity.Property(e => e.PostId).HasColumnName("post_id");
         entity.Property(e => e.WorkspaceId).HasColumnName("workspace_id");
         entity.Property(e => e.SocialMediaId).HasColumnName("social_media_id");
