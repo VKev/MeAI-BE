@@ -101,6 +101,7 @@ public sealed class PostRepository : IPostRepository
     {
         var publications = await _dbContext.Set<PostPublication>()
             .Where(publication =>
+                publication.UserId == userId &&
                 publication.SocialMediaId == socialMediaId &&
                 !publication.DeletedAt.HasValue)
             .ToListAsync(cancellationToken);
@@ -117,29 +118,46 @@ public sealed class PostRepository : IPostRepository
                 (post.SocialMediaId == socialMediaId || publicationPostIds.Contains(post.Id)))
             .ToListAsync(cancellationToken);
 
-        var changedPostIds = new HashSet<Guid>();
-        var userPostIds = posts
-            .Select(post => post.Id)
-            .ToHashSet();
+        var postIds = posts.Select(post => post.Id).ToHashSet();
+        var existingMappings = await _dbContext.Set<SocialMediaPostWorkspace>()
+            .Where(mapping =>
+                mapping.UserId == userId &&
+                mapping.WorkspaceId == workspaceId &&
+                mapping.SocialMediaId == socialMediaId &&
+                postIds.Contains(mapping.PostId))
+            .ToListAsync(cancellationToken);
 
+        var mappingsByPostId = existingMappings
+            .GroupBy(mapping => mapping.PostId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        var changedPostIds = new HashSet<Guid>();
         foreach (var post in posts)
         {
-            if (post.WorkspaceId != workspaceId)
+            if (mappingsByPostId.TryGetValue(post.Id, out var existingMapping))
             {
-                post.WorkspaceId = workspaceId;
-                post.UpdatedAt = updatedAt;
-                changedPostIds.Add(post.Id);
-            }
-        }
+                if (existingMapping.DeletedAt.HasValue)
+                {
+                    existingMapping.DeletedAt = null;
+                    existingMapping.UpdatedAt = updatedAt;
+                    changedPostIds.Add(post.Id);
+                }
 
-        foreach (var publication in publications.Where(publication => userPostIds.Contains(publication.PostId)))
-        {
-            if (publication.WorkspaceId != workspaceId)
-            {
-                publication.WorkspaceId = workspaceId;
-                publication.UpdatedAt = updatedAt;
-                changedPostIds.Add(publication.PostId);
+                continue;
             }
+
+            await _dbContext.Set<SocialMediaPostWorkspace>().AddAsync(
+                new SocialMediaPostWorkspace
+                {
+                    Id = Guid.CreateVersion7(),
+                    UserId = userId,
+                    PostId = post.Id,
+                    SocialMediaId = socialMediaId,
+                    WorkspaceId = workspaceId,
+                    CreatedAt = updatedAt
+                },
+                cancellationToken);
+            changedPostIds.Add(post.Id);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -153,19 +171,23 @@ public sealed class PostRepository : IPostRepository
         DateTime updatedAt,
         CancellationToken cancellationToken)
     {
-        var accountPublications = await _dbContext.Set<PostPublication>()
-            .Where(publication =>
-                publication.SocialMediaId == socialMediaId &&
-                publication.WorkspaceId == workspaceId &&
-                !publication.DeletedAt.HasValue)
+        var mappings = await _dbContext.Set<SocialMediaPostWorkspace>()
+            .Where(mapping =>
+                mapping.UserId == userId &&
+                mapping.SocialMediaId == socialMediaId &&
+                mapping.WorkspaceId == workspaceId &&
+                !mapping.DeletedAt.HasValue)
             .ToListAsync(cancellationToken);
 
-        var candidatePostIds = accountPublications
-            .Select(publication => publication.PostId)
+        var candidatePostIds = mappings
+            .Select(mapping => mapping.PostId)
             .Distinct()
             .ToList();
 
-        var directAccountPosts = await _dbSet
+        // Clear the old single-workspace assignment left by deployments before
+        // social_media_post_workspaces existed. Native workspace posts without a
+        // social-account sync mapping remain untouched.
+        var legacyPosts = await _dbSet
             .Where(post =>
                 post.UserId == userId &&
                 post.SocialMediaId == socialMediaId &&
@@ -173,7 +195,7 @@ public sealed class PostRepository : IPostRepository
                 post.DeletedAt == null)
             .ToListAsync(cancellationToken);
 
-        foreach (var postId in directAccountPosts.Select(post => post.Id))
+        foreach (var postId in legacyPosts.Select(post => post.Id))
         {
             if (!candidatePostIds.Contains(postId))
             {
@@ -186,28 +208,28 @@ public sealed class PostRepository : IPostRepository
             return 0;
         }
 
-        foreach (var publication in accountPublications)
+        foreach (var mapping in mappings)
         {
-            publication.WorkspaceId = Guid.Empty;
-            publication.UpdatedAt = updatedAt;
+            mapping.DeletedAt = updatedAt;
+            mapping.UpdatedAt = updatedAt;
         }
 
-        var remainingWorkspacePublications = await _dbContext.Set<PostPublication>()
-            .Where(publication =>
-                candidatePostIds.Contains(publication.PostId) &&
-                publication.SocialMediaId != socialMediaId &&
-                publication.WorkspaceId == workspaceId &&
-                !publication.DeletedAt.HasValue)
+        var removedMappingIds = mappings
+            .Select(mapping => mapping.Id)
+            .ToArray();
+
+        var remainingWorkspaceMappings = await _dbContext.Set<SocialMediaPostWorkspace>()
+            .Where(mapping =>
+                mapping.UserId == userId &&
+                candidatePostIds.Contains(mapping.PostId) &&
+                mapping.WorkspaceId == workspaceId &&
+                !mapping.DeletedAt.HasValue &&
+                !removedMappingIds.Contains(mapping.Id))
             .ToListAsync(cancellationToken);
 
-        var remainingByPostId = remainingWorkspacePublications
-            .GroupBy(publication => publication.PostId)
-            .ToDictionary(
-                group => group.Key,
-                group => group
-                    .OrderByDescending(publication => publication.PublishedAt ?? publication.CreatedAt)
-                    .ThenByDescending(publication => publication.Id)
-                    .First());
+        var remainingPostIds = remainingWorkspaceMappings
+            .Select(mapping => mapping.PostId)
+            .ToHashSet();
 
         var posts = await _dbSet
             .Where(post =>
@@ -217,25 +239,19 @@ public sealed class PostRepository : IPostRepository
                 post.DeletedAt == null)
             .ToListAsync(cancellationToken);
 
-        var changedPostIds = new HashSet<Guid>(accountPublications.Select(publication => publication.PostId));
+        var changedPostIds = new HashSet<Guid>(candidatePostIds);
         foreach (var post in posts)
         {
-            if (remainingByPostId.TryGetValue(post.Id, out var remainingPublication))
+            if (remainingPostIds.Contains(post.Id))
             {
-                if (post.SocialMediaId == socialMediaId)
-                {
-                    post.SocialMediaId = remainingPublication.SocialMediaId;
-                    post.Platform = remainingPublication.SocialMediaType;
-                    post.UpdatedAt = updatedAt;
-                    changedPostIds.Add(post.Id);
-                }
-
                 continue;
             }
 
-            post.WorkspaceId = null;
-            post.UpdatedAt = updatedAt;
-            changedPostIds.Add(post.Id);
+            if (post.SocialMediaId == socialMediaId)
+            {
+                post.WorkspaceId = null;
+                post.UpdatedAt = updatedAt;
+            }
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -415,7 +431,12 @@ public sealed class PostRepository : IPostRepository
         var includeFailedRecommendationPosts = IsFailedStatusFilter(status);
         var query = _dbSet.AsNoTracking()
             .Where(p => p.UserId == userId &&
-                        p.WorkspaceId == workspaceId &&
+                        (p.WorkspaceId == workspaceId ||
+                         _dbContext.Set<SocialMediaPostWorkspace>().Any(mapping =>
+                             mapping.UserId == userId &&
+                             mapping.WorkspaceId == workspaceId &&
+                             mapping.PostId == p.Id &&
+                             !mapping.DeletedAt.HasValue)) &&
                         (p.DeletedAt == null ||
                          (includeFailedRecommendationPosts && failedRecommendationPostIds.Contains(p.Id))));
 

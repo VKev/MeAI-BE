@@ -20,6 +20,7 @@ public interface IPostPublicationRepository
         string externalContentId,
         CancellationToken cancellationToken);
     Task<PostPublication?> GetByExternalContentKeyForUpdateAsync(
+        Guid userId,
         string socialMediaType,
         string destinationOwnerId,
         string externalContentId,

@@ -24,6 +24,7 @@ public sealed class UnpublishPostCommandTests
         var publication = new PostPublication
         {
             Id = Guid.NewGuid(),
+            UserId = userId,
             PostId = postId,
             WorkspaceId = Guid.NewGuid(),
             SocialMediaId = Guid.NewGuid(),

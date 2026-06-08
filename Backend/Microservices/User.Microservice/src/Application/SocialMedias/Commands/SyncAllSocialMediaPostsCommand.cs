@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using SharedLibrary.Common;
 using SharedLibrary.Common.ResponseModel;
+using SharedLibrary.Extensions;
 
 namespace Application.SocialMedias.Commands;
 
@@ -15,6 +16,8 @@ public sealed class SyncAllSocialMediaPostsCommandHandler
     : IRequestHandler<SyncAllSocialMediaPostsCommand, Result<int>>
 {
     private readonly IRepository<SocialMedia> _socialMediaRepository;
+    private readonly IRepository<Workspace> _workspaceRepository;
+    private readonly IRepository<WorkspaceSocialMedia> _workspaceSocialMediaRepository;
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<SyncAllSocialMediaPostsCommandHandler> _logger;
 
@@ -24,6 +27,8 @@ public sealed class SyncAllSocialMediaPostsCommandHandler
         ILogger<SyncAllSocialMediaPostsCommandHandler> logger)
     {
         _socialMediaRepository = unitOfWork.Repository<SocialMedia>();
+        _workspaceRepository = unitOfWork.Repository<Workspace>();
+        _workspaceSocialMediaRepository = unitOfWork.Repository<WorkspaceSocialMedia>();
         _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
@@ -46,15 +51,62 @@ public sealed class SyncAllSocialMediaPostsCommandHandler
             return Result.Success(0);
         }
 
-        await SocialMediaPostSyncEventPublisher.PublishAsync(
-            _publishEndpoint,
-            _logger,
-            request.UserId,
-            socialMedias,
-            cancellationToken,
-            workspaceId: null,
-            trigger: "manual_sync_all_accounts");
+        var activeWorkspaceIds = _workspaceRepository.GetAll()
+            .AsNoTracking()
+            .Where(workspace =>
+                workspace.UserId == request.UserId &&
+                !workspace.IsDeleted)
+            .Select(workspace => workspace.Id);
+
+        var workspaceLinks = await _workspaceSocialMediaRepository.GetAll()
+            .AsNoTracking()
+            .Where(link =>
+                link.UserId == request.UserId &&
+                !link.IsDeleted &&
+                activeWorkspaceIds.Contains(link.WorkspaceId))
+            .Select(link => new { link.SocialMediaId, link.WorkspaceId })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var workspaceIdsBySocialMediaId = workspaceLinks
+            .GroupBy(link => link.SocialMediaId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(link => link.WorkspaceId).Distinct().ToList());
+        var requestedAt = DateTimeExtensions.PostgreSqlUtcNow;
+
+        foreach (var socialMedia in socialMedias)
+        {
+            if (!workspaceIdsBySocialMediaId.TryGetValue(socialMedia.Id, out var workspaceIds) ||
+                workspaceIds.Count == 0)
+            {
+                await QueueSyncAsync(socialMedia, null, requestedAt, cancellationToken);
+                continue;
+            }
+
+            foreach (var workspaceId in workspaceIds)
+            {
+                await QueueSyncAsync(socialMedia, workspaceId, requestedAt, cancellationToken);
+            }
+        }
 
         return Result.Success(socialMedias.Count);
+    }
+
+    private Task QueueSyncAsync(
+        SocialMedia socialMedia,
+        Guid? workspaceId,
+        DateTime requestedAt,
+        CancellationToken cancellationToken)
+    {
+        return SocialMediaPostSyncEventPublisher.PublishAsync(
+            _publishEndpoint,
+            _logger,
+            socialMedia.UserId,
+            [socialMedia],
+            cancellationToken,
+            workspaceId,
+            trigger: "manual_sync_all_accounts",
+            requestedAt: requestedAt);
     }
 }

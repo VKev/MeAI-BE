@@ -1,4 +1,4 @@
-# This file is automatically sanitized.
+﻿# This file is automatically sanitized.
 # Run scripts/sanitize_tfvars.py after editing real tfvars.
 
 services = {
@@ -17,13 +17,17 @@ services = {
       healthy_threshold   = 2
       unhealthy_threshold = 3
     }
-    alb_listener_rule_priority         = 10
+    # No listener rule needed â€” api-gateway is already the ALB's default_listener_action
+    # target in main_alb.tf. Adding a priority-100 rule with empty conditions would
+    # either be rejected at plan time (AWS requires at least one condition per rule) or
+    # produce a duplicate forward to the same target group.
+    alb_listener_rule_priority         = null
     alb_listener_rule_conditions       = []
     ecs_service_connect_dns_name       = "api-gateway"
     ecs_service_connect_discovery_name = "api-gateway"
     ecs_service_connect_port_name      = "apigateway"
     ecs_container_name_suffix          = "apigateway"
-    ecs_container_image_repository_url = "your-aws-id.dkr.ecr.us-east-1.amazonaws.com/vkev2406-infrastructure-khanghv2406-infrastructure-khanghv2406-ecr"
+    ecs_container_image_repository_url = "784180969479.dkr.ecr.ap-southeast-1.amazonaws.com/vkev2406-infra-khanghv2406v3-infrastructure-khanghv2406-ecr"
     ecs_container_image_tag            = "ApiGateway-latest"
     ecs_container_cpu                  = 256
     ecs_container_memory               = 256
@@ -50,6 +54,10 @@ services = {
         value = "http://+:8080"
       },
       {
+        name  = "BASE_URL"
+        value = "https://vkev.me"
+      },
+      {
         name  = "Services__User__Host"
         value = "user-service"
       },
@@ -65,18 +73,9 @@ services = {
         name  = "Services__Ai__Port"
         value = "5001"
       },
-      {
-        name  = "Jwt__SecretKey"
-        value = "<REDACTED>"
-      },
-      {
-        name  = "Jwt__Issuer"
-        value = "UserMicroservice"
-      },
-      {
-        name  = "Jwt__Audience"
-        value = "MicroservicesApp"
-      },
+      { name = "Jwt__SecretKey", value = "YourSuperSecretKeyThatIsAtLeast32CharactersLong!@#$%^&*()" },
+      { name = "Jwt__Issuer", value = "UserMicroservice" },
+      { name = "Jwt__Audience", value = "MicroservicesApp" },
       {
         name  = "Jwt__ExpirationMinutes"
         value = "60"
@@ -88,6 +87,10 @@ services = {
       {
         name  = "Cors__AllowedOrigins__1"
         value = "https://your-frontend.example.com"
+      },
+      {
+        name  = "Cors__AllowedOrigins__2"
+        value = "https://vkev.me"
       }
     ]
     ecs_container_health_check = {

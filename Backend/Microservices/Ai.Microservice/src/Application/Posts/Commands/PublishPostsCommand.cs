@@ -162,6 +162,7 @@ public sealed class PublishPostsCommandHandler
                 placeholders.Add(new PostPublication
                 {
                     Id = Guid.CreateVersion7(),
+                    UserId = request.UserId,
                     PostId = post.Id,
                     WorkspaceId = workspaceId,
                     SocialMediaId = Guid.Empty,
@@ -184,6 +185,7 @@ public sealed class PublishPostsCommandHandler
                 var placeholder = new PostPublication
                 {
                     Id = publicationId,
+                    UserId = request.UserId,
                     PostId = post.Id,
                     WorkspaceId = workspaceId,
                     SocialMediaId = socialMediaId,

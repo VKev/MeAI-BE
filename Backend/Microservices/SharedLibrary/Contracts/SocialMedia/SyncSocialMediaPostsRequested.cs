@@ -12,6 +12,8 @@ public sealed class SyncSocialMediaPostsRequested
 
     public string Platform { get; set; } = null!;
 
+    public string ExternalAccountKey { get; set; } = null!;
+
     public string Trigger { get; set; } = "oauth_callback";
 
     public bool RemoveFromWorkspace { get; set; }

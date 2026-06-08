@@ -16,9 +16,10 @@ internal static class SocialMediaPostSyncEventPublisher
         CancellationToken cancellationToken,
         Guid? workspaceId = null,
         string trigger = "oauth_callback",
-        bool removeFromWorkspace = false)
+        bool removeFromWorkspace = false,
+        DateTime? requestedAt = null)
     {
-        var requestedAt = DateTimeExtensions.PostgreSqlUtcNow;
+        var batchRequestedAt = requestedAt ?? DateTimeExtensions.PostgreSqlUtcNow;
 
         foreach (var socialMedia in socialMedias)
         {
@@ -32,9 +33,10 @@ internal static class SocialMediaPostSyncEventPublisher
                         SocialMediaId = socialMedia.Id,
                         WorkspaceId = workspaceId,
                         Platform = socialMedia.Type,
+                        ExternalAccountKey = SocialMediaExternalAccountKey.Resolve(socialMedia),
                         Trigger = trigger,
                         RemoveFromWorkspace = removeFromWorkspace,
-                        RequestedAt = requestedAt
+                        RequestedAt = batchRequestedAt
                     },
                     cancellationToken);
             }

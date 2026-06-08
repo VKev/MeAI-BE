@@ -1,0 +1,82 @@
+<mxfile host="app.diagrams.net" modified="2026-06-08T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="meai-aws-eks-infra" name="MeAI AWS EKS Infrastructure">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="MeAI Terraform Infrastructure - AWS EKS + Cloudflare CDN" style="text;html=1;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1;fontColor=#111827;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="330" y="20" width="820" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="users" value="Users / Browsers&lt;br&gt;MeAI FE apps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F2FE;strokeColor=#0284C7;fontSize=14;fontStyle=1;fontColor=#0F172A;" vertex="1" parent="1">
+          <mxGeometry x="40" y="390" width="170" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="cloudflare" value="Cloudflare Zone / CDN" style="swimlane;html=1;rounded=1;fillColor=#FFF7ED;strokeColor=#F97316;fontSize=16;fontStyle=1;startSize=30;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="270" y="100" width="330" height="690" as="geometry"/>
+        </mxCell>
+        <mxCell id="cf-main" value="Cloudflare proxied CNAME&lt;br&gt;domain -&gt; ALB" style="shape=image;html=1;image=https://www.cloudflare.com/favicon.ico;imageAspect=0;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;align=center;fontSize=12;fontColor=#111827;" vertex="1" parent="cloudflare">
+          <mxGeometry x="40" y="70" width="90" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="cf-static" value="static.* proxied CNAME&lt;br&gt;Cloudflare Worker&lt;br&gt;S3 Host header proxy&lt;br&gt;cache rules + CORS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#FB923C;fontSize=12;fontColor=#111827;" vertex="1" parent="cloudflare">
+          <mxGeometry x="40" y="220" width="250" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="cf-acm" value="ACM validation records&lt;br&gt;Cloudflare DNS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#F59E0B;fontSize=12;fontColor=#111827;" vertex="1" parent="cloudflare">
+          <mxGeometry x="40" y="410" width="250" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="cf-ses" value="SES TXT + DKIM records&lt;br&gt;Cloudflare DNS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#F59E0B;fontSize=12;fontColor=#111827;" vertex="1" parent="cloudflare">
+          <mxGeometry x="40" y="530" width="250" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="aws" value="AWS Account / ap-southeast-1" style="swimlane;html=1;rounded=1;fillColor=#F8FAFC;strokeColor=#232F3E;fontSize=16;fontStyle=1;startSize=32;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="660" y="100" width="760" height="760" as="geometry"/>
+        </mxCell>
+        <mxCell id="vpc" value="VPC&lt;br&gt;public + private subnets" style="shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc;html=1;whiteSpace=wrap;fillColor=none;strokeColor=#248814;fontColor=#232F3E;fontSize=14;fontStyle=1;dashed=0;" vertex="1" parent="aws">
+          <mxGeometry x="35" y="75" width="500" height="580" as="geometry"/>
+        </mxCell>
+        <mxCell id="alb" value="Application Load Balancer&lt;br&gt;HTTPS listener&lt;br&gt;target group: NodePort 32080" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.application_load_balancer;" vertex="1" parent="vpc">
+          <mxGeometry x="205" y="55" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="eks" value="Amazon EKS&lt;br&gt;managed node group&lt;br&gt;t3.large ON_DEMAND" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#ED7100;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.eks;" vertex="1" parent="vpc">
+          <mxGeometry x="65" y="235" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="k8s" value="Kubernetes namespace: project_name&lt;br&gt;Deployments: api-gateway, user, ai, feed, notification, rag&lt;br&gt;Stateful dependencies: redis, rabbitmq, qdrant&lt;br&gt;PVCs: redis-data, rabbitmq-data, qdrant-data, rag-data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ECFDF5;strokeColor=#22C55E;fontSize=12;fontColor=#111827;align=left;spacing=10;" vertex="1" parent="vpc">
+          <mxGeometry x="180" y="220" width="280" height="135" as="geometry"/>
+        </mxCell>
+        <mxCell id="rds-user" value="RDS PostgreSQL&lt;br&gt;user instance&lt;br&gt;userdb / notificationdb / feeddb" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#3B48CC;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.rds;" vertex="1" parent="vpc">
+          <mxGeometry x="155" y="430" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="rds-ai" value="RDS PostgreSQL&lt;br&gt;ai instance&lt;br&gt;aidb" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#3B48CC;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.rds;" vertex="1" parent="vpc">
+          <mxGeometry x="315" y="430" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3" value="Amazon S3&lt;br&gt;static/media origin&lt;br&gt;presigned resources" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#277116;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;" vertex="1" parent="aws">
+          <mxGeometry x="610" y="110" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="acm" value="ACM Certificate&lt;br&gt;ALB HTTPS" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#DD3522;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.certificate_manager;" vertex="1" parent="aws">
+          <mxGeometry x="610" y="230" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="ecr" value="Amazon ECR&lt;br&gt;service images&lt;br&gt;pull-through cache" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#ED7100;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ecr;" vertex="1" parent="aws">
+          <mxGeometry x="610" y="350" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="cw" value="CloudWatch Logs" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudwatch;" vertex="1" parent="aws">
+          <mxGeometry x="610" y="470" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="iam" value="IAM + OIDC&lt;br&gt;node role + EBS CSI IRSA" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#DD3522;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.iam;" vertex="1" parent="aws">
+          <mxGeometry x="610" y="590" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="ses" value="Amazon SES&lt;br&gt;domain identity&lt;br&gt;SMTP IAM user" style="sketch=0;outlineConnect=0;fontColor=#232F3E;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ses;" vertex="1" parent="aws">
+          <mxGeometry x="610" y="690" width="78" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;strokeColor=#232F3E;endArrow=block;endFill=1;" edge="1" parent="1" source="users" target="cf-main"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="proxied HTTPS" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;strokeColor=#F97316;endArrow=block;endFill=1;" edge="1" parent="1" source="cf-main" target="alb"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="NodePort 32080" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;strokeColor=#8C4FFF;endArrow=block;endFill=1;" edge="1" parent="1" source="alb" target="k8s"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="SQL" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;strokeColor=#3B48CC;endArrow=block;endFill=1;" edge="1" parent="1" source="k8s" target="rds-user"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="SQL" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;strokeColor=#3B48CC;endArrow=block;endFill=1;" edge="1" parent="1" source="k8s" target="rds-ai"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" value="pull images" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;strokeColor=#ED7100;endArrow=block;endFill=1;" edge="1" parent="1" source="eks" target="ecr"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="logs" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;strokeColor=#E7157B;endArrow=block;endFill=1;" edge="1" parent="1" source="eks" target="cw"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" value="static/media origin fetch" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeWidth=2;strokeColor=#277116;endArrow=block;endFill=1;" edge="1" parent="1" source="cf-static" target="s3"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" value="DNS validation" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeWidth=2;strokeColor=#DD3522;endArrow=block;endFill=1;" edge="1" parent="1" source="acm" target="cf-acm"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" value="cert attached" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeWidth=2;strokeColor=#DD3522;endArrow=block;endFill=1;" edge="1" parent="1" source="acm" target="alb"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e11" value="TXT + DKIM" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeWidth=2;strokeColor=#C925D1;endArrow=block;endFill=1;" edge="1" parent="1" source="ses" target="cf-ses"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e12" value="node role / IRSA" style="edgeStyle=orthogonalEdgeStyle;html=1;dashed=1;strokeWidth=2;strokeColor=#DD3522;endArrow=block;endFill=1;" edge="1" parent="1" source="iam" target="eks"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
